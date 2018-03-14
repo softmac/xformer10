@@ -1,0 +1,358 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+#include "winver.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_APP                 ICON    DISCARDABLE     "GEMUl8R.ICO"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_GEMMENU MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&Optionen"
+    BEGIN
+        MENUITEM "&Einstellungen...\tAlt+F11",     IDM_PROPERTIES
+        MENUITEM "Erster &Start...",        IDM_FIRST
+        POPUP "Speicher &Größe", HELP
+        BEGIN
+            MENUITEM "&512KB",                       IDM_RAM512K
+            MENUITEM "&1 MB",                      IDM_RAM1M
+            MENUITEM "&2 MB",                      IDM_RAM2M
+            MENUITEM "&4 MB",                      IDM_RAM4M
+            MENUITEM "&8 MB",                      IDM_RAM8M
+            MENUITEM "14 &MB",                     IDM_RAM14M
+        END
+        POPUP "&Anzeige Optionen"
+        BEGIN
+            MENUITEM "&DirectX (Vollbild)",      IDM_DIRECTX
+            MENUITEM "&Zoom Pixel",              IDM_ZOOM
+            MENUITEM "&schneller Refresh",       IDM_FASTREFRESH
+        END
+        MENUITEM "&Sichern Einstellungen",              IDM_SAVE
+        MENUITEM SEPARATOR
+        MENUITEM "&Kaltstart\tCtrl+F12",           IDM_COLDSTART
+        MENUITEM "&Wechseln Farbe/Mono\Shift+F12", IDM_COLORMONO
+        POPUP "&Debugging"
+        BEGIN
+            MENUITEM "Debug &Modus",                 IDM_DEBUGMODE
+            MENUITEM "68000 &Debugger\tCtrl+Alt+F11", IDM_DEBUGGER
+            MENUITEM "Debug &Information",                 IDM_DEBUGINFO
+            MENUITEM "&Speicher Anzeige",             IDM_SNAPSHOT, GRAYED
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "&Über GEMULATOR...",         IDM_ABOUT
+    END
+    MENUITEM "E&nde",                       IDM_EXIT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    VK_F11,         IDM_F11,                VIRTKEY, NOINVERT
+    VK_F11,         IDM_CTRLF11,            VIRTKEY, CONTROL, NOINVERT
+    VK_F11,         IDM_PROPERTIES,         VIRTKEY, ALT, NOINVERT
+    VK_F11,         IDM_DEBUGGER,           VIRTKEY, CONTROL, ALT, NOINVERT
+    VK_F12,         IDM_COLDSTART,          VIRTKEY, CONTROL, NOINVERT
+    VK_F12,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, ALT, NOINVERT
+    VK_F12,         IDM_COLORMONO,          VIRTKEY, SHIFT, NOINVERT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOG DISCARDABLE  22, 17, 194, 145
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Gemulator96 Version 4.6"
+MENU IDR_GEMMENU
+FONT 10, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "Weiter",IDOK,63,124,68,14,WS_GROUP
+    CONTROL         114,IDC_STATIC,"Static",SS_BITMAP,0,0,193,100
+    CTEXT           "Kostenlose Upgrades erhalten Sie über die Internet Adresse http://www.emulators.com ",
+                    IDC_STATIC,11,102,172,19
+END
+
+IDD_PROPERTIES DIALOG DISCARDABLE  0, 0, 320, 239
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Einstellungen für GEMULATOR96"
+FONT 8, "MS Sans Serif"
+BEGIN
+    GROUPBOX        "Anzeige Optionen",IDC_STATIC,11,4,298,26
+    CONTROL         "Direct&X Vollbild",IDC_DIRECTX,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,15,87,10
+    CONTROL         "&Zoom pixels",IDC_ZOOMCOLOR,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,119,15,54,10
+    CONTROL         "Schneller &refresh",IDC_FASTREFRESH,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,213,15,65,10
+    LTEXT           "Das ATARI Betriebssystem wird bei Veränderung einiger Einstellungen neu gestartet. Sichern Sie also die geänderten Einstellungen vorher.",
+                    IDC_STATIC,13,35,296,17
+    GROUPBOX        "Hardware Einstellungen",IDC_STATIC,10,55,300,64
+    LTEXT           "&Modell:",IDC_STATIC,21,70,22,8
+    COMBOBOX        IDC_COMBOMODEL,55,66,94,41,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    CONTROL         "So&und",IDC_STSOUND,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,86,37,10
+    CONTROL         "Mo&nochrom",IDC_MONO,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,91,86,75,10
+    CONTROL         "Bli&tter",IDC_BLITTER,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,102,44,10
+    CONTROL         "S&hare Drucker",IDC_SHARE,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,91,102,66,10
+    LTEXT           "S&peicher:",IDC_STATIC,187,70,28,8
+    COMBOBOX        IDC_COMBOMEM,236,66,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    LTEXT           "S&erieller port:",IDC_STATIC,187,86,43,8
+    COMBOBOX        IDC_COMBOCOM,236,82,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    LTEXT           "&Drucker port:",IDC_STATIC,187,102,43,8
+    COMBOBOX        IDC_COMBOLPT,236,98,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    GROUPBOX        "Betriebssystem",IDC_STATIC,10,124,300,88
+    LTEXT           "&BS:",IDC_TOS,21,143,22,8
+    COMBOBOX        IDC_COMBOTOSLIST,49,140,247,71,CBS_DROPDOWNLIST | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "S&chnelle ST Emulation (nur TOS 2.06)",IDC_QUICKST,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,25,161,146,10
+    LTEXT           "Boot&laufwerk:",IDC_STATIC,191,161,43,8
+    COMBOBOX        IDC_BOOTLIST,238,158,58,48,CBS_DROPDOWNLIST | CBS_SORT | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Schnelle baudrate&:",IDC_QUICKBAUD,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,25,179,85,10
+    CONTROL         "Schneller B&IOS Druck",IDC_QUICKPRINT,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,119,179,85,10
+    CONTROL         "&VHD Laufwerken",IDC_VHD,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,213,179,82,10
+    CONTROL         "Installiere Macintosh ROMs auf &Karte",IDC_MACROMS,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,25,197,259,10
+    PUSHBUTTON      "&Sichern",IDSAVE,63,218,50,14
+    DEFPUSHBUTTON   "&OK",IDOK,135,218,50,14
+    PUSHBUTTON      "&Abbruch",IDCANCEL,207,218,50,14
+END
+
+IDD_CHECKSUM DIALOG DISCARDABLE  0, 0, 320, 215
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "GEMULATOR ROM Karte Einstellung"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "&Adresse :",IDC_BASETEXT,20,35,50,11
+    EDITTEXT        IDC_IOPORT,80,32,25,15,ES_WANTRETURN
+    LTEXT           "A&nzahl:",IDC_NUMBERTEXT,134,35,28,10
+    EDITTEXT        IDC_NUMBERCARDS,176,32,15,15,ES_WANTRETURN
+    PUSHBUTTON      "&Prüfe",IDSCAN,230,31,50,14
+    DEFPUSHBUTTON   "&Schließen",IDOK,230,188,50,14
+    LISTBOX         IDC_CHECKSUMLIST,17,101,290,83,LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_DIP1UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,195,
+                    62,10,10
+    CONTROL         "",IDC_DIP1DN,"Button",BS_AUTORADIOBUTTON,195,73,10,10
+    CONTROL         "",IDC_DIP2UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,205,
+                    62,10,10
+    CONTROL         "",IDC_DIP2DN,"Button",BS_AUTORADIOBUTTON,205,73,10,10
+    CONTROL         "",IDC_DIP3UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,215,
+                    62,10,10
+    CONTROL         "",IDC_DIP3DN,"Button",BS_AUTORADIOBUTTON,215,73,10,10
+    CONTROL         "",IDC_DIP4UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,225,
+                    62,10,10
+    CONTROL         "",IDC_DIP4DN,"Button",BS_AUTORADIOBUTTON,225,73,10,10
+    CONTROL         "",IDC_DIP5UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,235,
+                    62,10,10
+    CONTROL         "",IDC_DIP5DN,"Button",BS_AUTORADIOBUTTON,235,73,10,10
+    CONTROL         "",IDC_DIP6UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,245,
+                    62,10,10
+    CONTROL         "",IDC_DIP6DN,"Button",BS_AUTORADIOBUTTON,245,73,10,10
+    CONTROL         "",IDC_DIP7UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,255,
+                    62,10,10
+    CONTROL         "",IDC_DIP7DN,"Button",BS_AUTORADIOBUTTON,255,73,10,10
+    CONTROL         "",IDC_DIP8UP,"Button",BS_AUTORADIOBUTTON | WS_GROUP,265,
+                    62,10,10
+    CONTROL         "",IDC_DIP8DN,"Button",BS_AUTORADIOBUTTON,265,73,10,10
+    CTEXT           "1",IDC_DIP1,195,83,8,10
+    CTEXT           "2",IDC_DIP2,205,83,8,10
+    CTEXT           "3",IDC_DIP3,215,83,8,10
+    CTEXT           "4",IDC_DIP4,225,83,8,10
+    CTEXT           "5",IDC_DIP5,235,83,8,10
+    CTEXT           "6",IDC_DIP6,245,83,8,10
+    CTEXT           "7",IDC_DIP7,255,83,8,10
+    CTEXT           "8",IDC_DIP8,265,83,8,10
+    LTEXT           "Es muß mindestens eine GEMULATOR Steckkarte mit TOS ROMs eingebaut sein. Geben Sie die Anzahl der Karten und die Startadresse der ersten Karte an. Starten Sie den Prüfvorgang.",
+                    IDC_STATIC,10,6,300,19
+    LTEXT           "Die geprüften ROM Chips werden aufgelistet. Wenn die Liste leer ist, stellen Sie sicher, daß die Chips korrekt eingebaut sind und die eingestellte Adresse korrekt ist. Rechts finden Sie ein Schaubild, wie die Dipschalter der Karte eingestellt sein müssen.",
+                    IDC_STATIC,10,54,173,46
+    LTEXT           "Wenn die ROMs korrekt erkannt werden, drücken Sie SCHLIEßEN.",
+                    IDC_STATIC,10,193,215,15
+END
+
+IDD_FIRSTTIME DIALOG DISCARDABLE  0, 0, 320, 206
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "GEMULATOR96 Starteinstellungen"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "GEMULATOR96 kann nur mit einem Atari Betriebssystem arbeiten. Wählen Sie, ob Sie mit den TOS ROMs oder mit einem auf Disk gespeicherten Betriebssystem arbeiten wollen.",
+                    IDC_STATIC,13,7,292,20
+    LTEXT           "Wenn Sie mit einem PC mit ROM Karte(n) arbeiten, selektieren Sie den Punkt ""ROM Karten suchen"". Konfigurieren Sie die ROM Karte(n) dann über die Einstellung.",
+                    IDC_STATIC,13,29,294,22
+    LTEXT           "Wenn Sie mit MagiC/MagiC PC/TOS Images arbeiten, selektieren Sie den Punkt ""Suche Festplatte"" um auf Ihrer Festplatte zusuchen. Sie können wählen, ob auf Disketten und/oder Netzlaufwerken ebenfalls gesucht werden soll.",
+                    IDC_STATIC,13,76,294,28
+    LTEXT           "Starten Sie nun die Suche. Wenn kein Betriebssystem aufgelistet wird, überprüfen sie die ROM-Karte und/oder ob MagiC/MagiC PC/TOS korrekt installiert ist. Schließen=Ende.",
+                    IDC_STATIC,14,136,292,20
+    CONTROL         "&ROM Karte suchen",IDC_CHECKROM,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,64,57,77,10
+    PUSHBUTTON      "&Einstellung.",IDROMSET,188,53,50,14
+    CONTROL         "Suche &Festplatte",IDC_CHECKMAGIC,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,64,109,71,10
+    CONTROL         "Suche &Diskette",IDC_CHECKMAGFLOP,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,187,108,65,10
+    CONTROL         "Suche &Netzwerk",IDC_CHECKMAGNET,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,187,119,87,10
+    PUSHBUTTON      "&Suche",IDSCAN,71,181,50,14
+    COMBOBOX        IDC_COMBOTOSLIST,15,160,288,44,CBS_DROPDOWNLIST | 
+                    CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "S&chließen",IDOK,195,181,50,14
+END
+
+IDD_INFO DIALOG DISCARDABLE  22, 17, 262, 207
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Gemulator 96 Information"
+FONT 10, "MS Sans Serif"
+BEGIN
+    LTEXT           "\t\tGemulator96 Registrierkarte\r\nDie beiliegende, rückaddressierte Registrierkarte füllen Sie bitte aus, frankieren sie und schicken sie ab. Nur so erhalten Sie die neueste Informationen über Gemulator und kommen in den Genuß des Kundenservices.",
+                    IDC_STATIC,10,2,243,36
+    LTEXT           "Distribution und Support:\r\n\tCOMPO Software GmbH\r\n\tVaalserstraße 540\r\n\t52074 Aachen\r\n\Tel. 0241 83098 - Hotline 0241 876574 - Fax 0241 86922 - E-Mail COMPOSOF@POP.PI.NET",
+                    IDC_STATIC,10,40,243,44
+    LTEXT           "Hersteller:\r\n\tEMULATORS INC.\r\n\t14150 N.E. 20th Street, Suite 302\r\n\tBellevue, WA 98007  U.S.A.\r\n\tweb page http://www.emulators.com/ ",
+                    IDC_STATIC,10,90,243,44
+    LTEXT           "Tastatur Kurzbefehle Gemulator:\r\n\tF11\tSchaltet in Windows Modus\r\n\tCtl+F11\tHaupt Menü\r\n\tAlt+F11\tEinstellungen\r\n\tCtl+F12\tKaltstart Atari\r\n\tSh+F12\tWechselt Farbe/monochrom\r\n\tPgUp\tAtari ST Help Taste\r\n\tPgDn\tAtari ST Undo Taste",
+                    IDC_STATIC,10,137,166,67
+    DEFPUSHBUTTON   "OK",IDOK,197,183,32,14,WS_GROUP
+END
+
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""windows.h""\r\n"
+    "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""winver.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 141
+    END
+
+    IDD_PROPERTIES, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 220
+    END
+
+    IDD_CHECKSUM, DIALOG
+    BEGIN
+        RIGHTMARGIN, 317
+        BOTTOMMARGIN, 208
+    END
+
+    IDD_FIRSTTIME, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 313
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 204
+    END
+
+    IDD_INFO, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 204
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_BITMAP1             BITMAP  DISCARDABLE     "bitmap1.bmp"
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
