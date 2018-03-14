@@ -1,0 +1,16 @@
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Gemulator]
+"Type"=dword:00000001
+"Start"=dword:00000002
+"Group"="Extended Base"
+"ErrorControl"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Gemulator\Parameters]
+"IoPortAddress"=dword:00000240
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Gemulator\Enum]
+"0"="Root\\LEGACY_GEMUL8R\\0000"
+"Count"=dword:00000001
+"NextInstance"=dword:00000001
+

@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27428.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GIE", "GIE.vcxproj", "{74034089-02C1-4EBE-BCA6-552704FD329A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{74034089-02C1-4EBE-BCA6-552704FD329A}.Debug|x86.ActiveCfg = Debug|Win32
+		{74034089-02C1-4EBE-BCA6-552704FD329A}.Debug|x86.Build.0 = Debug|Win32
+		{74034089-02C1-4EBE-BCA6-552704FD329A}.Release|x86.ActiveCfg = Release|Win32
+		{74034089-02C1-4EBE-BCA6-552704FD329A}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {353CAC32-A934-4A7C-8540-1A623D245E3D}
+	EndGlobalSection
+EndGlobal

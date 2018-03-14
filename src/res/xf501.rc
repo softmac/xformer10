@@ -1,0 +1,315 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
+#include "winver.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_APP                 ICON    DISCARDABLE     "GEMUl8R.ICO"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_GEMMENU MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Properties...\tAlt+F11",     IDM_PROPERTIES
+        MENUITEM "D&isk Properties...\tShift+F11", IDM_DISKPROPS
+        MENUITEM "&First Time Setup...",        IDM_FIRST
+        POPUP "&Display Options"
+        BEGIN
+            MENUITEM "&Full Screen\tAlt+Enter",     IDM_DIRECTX
+            MENUITEM "&Zoom Mode",                  IDM_ZOOM
+            MENUITEM "Fast &Refresh",               IDM_FASTREFRESH
+            MENUITEM "&Skip Startup",               IDM_SKIPSTARTUP
+        END
+        POPUP "Debugging"
+        BEGIN
+            MENUITEM "Debug &Mode",                 IDM_DEBUGMODE
+            MENUITEM "&Debugger\tCtrl+Alt+F11",     IDM_DEBUGGER
+            MENUITEM "Debug &Info",                 IDM_DEBUGINFO
+            MENUITEM "Memory Snapshot",             IDM_SNAPSHOT, GRAYED
+        END
+        MENUITEM "&Save Settings",              IDM_SAVE
+        MENUITEM SEPARATOR
+        MENUITEM "&Reboot Emulator\tCtrl+F12",  IDM_COLDSTART
+        MENUITEM "&Next Mode\tAlt+F12",         IDM_TOGGLEHW
+        MENUITEM "Next &Monitor\tShift+F12",    IDM_COLORMONO
+        MENUITEM SEPARATOR
+        MENUITEM "&About...",                   IDM_ABOUT
+    END
+    MENUITEM "E&xit",                       IDM_EXIT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    VK_F11,         IDM_F11,                VIRTKEY, NOINVERT
+    VK_F11,         IDM_CTRLF11,            VIRTKEY, CONTROL, NOINVERT
+    VK_F11,         IDM_PROPERTIES,         VIRTKEY, ALT, NOINVERT
+    VK_F11,         IDM_DEBUGGER,           VIRTKEY, CONTROL, ALT, NOINVERT
+    VK_F11,         IDM_DISKPROPS,          VIRTKEY, SHIFT, NOINVERT
+    VK_F12,         IDM_COLDSTART,          VIRTKEY, CONTROL, NOINVERT
+    VK_F12,         IDM_TOGGLEHW,           VIRTKEY, ALT, NOINVERT
+    VK_F12,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, ALT, NOINVERT
+    VK_F12,         IDM_COLORMONO,          VIRTKEY, SHIFT, NOINVERT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOG DISCARDABLE  22, 17, 194, 145
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Xformer 98 version 5.02"
+MENU IDR_GEMMENU
+FONT 10, "MS Sans Serif"
+BEGIN
+    CONTROL         114,IDC_STATIC,"Static",SS_BITMAP,0,0,193,100
+    LTEXT           "&Mode:",IDC_STATIC,18,105,20,8
+    COMBOBOX        IDC_VMSELECT,42,103,133,38,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    DEFPUSHBUTTON   "&Continue",IDOK,63,124,68,14,WS_GROUP
+END
+
+IDD_PROPERTIES DIALOG DISCARDABLE  0, 0, 320, 174
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Properties"
+FONT 8, "MS Sans Serif"
+BEGIN
+    GROUPBOX        "Display",IDC_STATIC,11,4,298,26
+    CONTROL         "&Full screen",IDC_DIRECTX,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,15,81,10
+    CONTROL         "&Zoom mode",IDC_ZOOMCOLOR,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,119,15,76,10
+    CONTROL         "Fast screen &refresh",IDC_FASTREFRESH,"Button",
+                    BS_AUTOCHECKBOX | WS_TABSTOP,213,15,89,10
+    LTEXT           "The emulated operating system will be rebooted when changes are made to any of the settings below. Press Save to permanently remember these settings.",
+                    IDC_STATIC,13,35,296,17
+    GROUPBOX        "Hardware",IDC_STATIC,10,55,300,88
+    LTEXT           "M&onitor:",IDC_STATIC,21,70,32,8
+    COMBOBOX        IDC_COMBOMONITOR,59,66,109,41,CBS_DROPDOWNLIST | 
+                    WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Memory:",IDC_STATIC,187,70,28,8
+    COMBOBOX        IDC_COMBOMEM,236,66,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    CONTROL         "&Joystick",IDC_JOYSTICK,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,86,55,10
+    CONTROL         "So&und",IDC_STSOUND,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,119,86,37,10
+    LTEXT           "&Serial port:",IDC_STATIC,187,86,38,8
+    COMBOBOX        IDC_COMBOCOM,236,82,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    CONTROL         "&Cartridge",IDC_MACROMS,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,25,102,84,10
+    LTEXT           "&Printer port:",IDC_STATIC,187,102,38,8
+    COMBOBOX        IDC_COMBOLPT,236,98,60,55,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    LTEXT           "&OS:",IDC_TOS,21,124,22,8
+    COMBOBOX        IDC_COMBOTOSLIST,49,121,151,71,CBS_DROPDOWNLIST | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "S&hare printer",IDC_SHARE,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,119,102,59,10
+    PUSHBUTTON      "D&isk Properties...",IDDISKPROPS,212,120,83,14
+    PUSHBUTTON      "Sa&ve",IDSAVE,63,150,50,14
+    DEFPUSHBUTTON   "O&K",IDOK,135,150,50,14
+    PUSHBUTTON      "&Cancel",IDCANCEL,207,150,50,14
+END
+
+IDD_INFO DIALOG DISCARDABLE  22, 17, 262, 169
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Emulators Inc. Info"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "For the latest information about Xformer 98, Gemulator 98, and our other emulation products, visit http://www.emulators.com or write to us at:\r\n\tEMULATORS INC.\r\n\t14150 N.E. 20th Street, Suite 302\r\n\tBellevue, WA 98007  U.S.A.",
+                    IDC_STATIC,10,8,243,44
+    LTEXT           "The Gemulator 98 CD-ROM containing Atari 8-bit, Atari ST, and Apple Macintosh emulators can be purchased directly from Emulators Inc. VISA and MasterCard accepted. Call 206-236-0540 to order or fax 206-236-0257.",
+                    IDC_STATIC,10,56,243,30
+    LTEXT           "\tGemulator 98 CD only:\t\t\t$89.95\r\n\tGemulator 98 CD and ROM card:\t\t$149.95\r\n\nCall for current ROM prices or check with your local dealer. Atari ST, STE, Mac Plus, and Mac II ROMs are available directly from Emulators Inc.",
+                    IDC_STATIC,10,92,243,46
+    DEFPUSHBUTTON   "OK",IDOK,115,143,32,14,WS_GROUP
+END
+
+IDD_DISKS DIALOG DISCARDABLE  0, 0, 280, 125
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Disk Properties"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LISTBOX         IDC_DISKLIST,9,8,261,82,LBS_NOINTEGRALHEIGHT | 
+                    WS_VSCROLL | WS_HSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "Chan&ge...",IDCHANGEDISK,77,97,50,14
+    PUSHBUTTON      "&Close",IDOK,153,97,50,14
+END
+
+IDD_DISKMODE DIALOG DISCARDABLE  0, 0, 240, 135
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Configure Disk"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "Set the mapping for the currently selected disk:",
+                    IDC_STATIC,10,6,176,19
+    CONTROL         "&Disabled",IDC_DISABLED,"Button",BS_AUTORADIOBUTTON,32,
+                    30,43,10
+    CONTROL         "&Floppy:",IDC_FLOPPY,"Button",BS_AUTORADIOBUTTON,32,46,
+                    61,10
+    EDITTEXT        IDC_EDITFLOPPY,96,44,113,14,ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON      "&1...",IDBROWSEFLOPPY,215,44,13,14
+    CONTROL         "&SCSI device:",IDC_SCSI,"Button",BS_AUTORADIOBUTTON,32,
+                    62,60,10
+    EDITTEXT        IDC_EDITSCSI,96,60,113,14,ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON      "&2...",IDBROWSESCSI,215,60,13,14
+    CONTROL         "Disk &image file:",IDC_IMAGE,"Button",
+                    BS_AUTORADIOBUTTON,32,78,61,10
+    EDITTEXT        IDC_EDITIMAGEPATH,96,76,113,14,ES_AUTOHSCROLL | 
+                    ES_READONLY
+    PUSHBUTTON      "&3...",IDBROWSEDISK,215,76,13,14
+    DEFPUSHBUTTON   "&Close",IDOK,95,106,50,14
+END
+
+IDD_XFDEMO DIALOG DISCARDABLE  0, 0, 250, 164
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Xformer 98 Trial Demo"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "The Xformer 98 Trial Demo is a working demo of the Atari 8-bit emulator for Windows 95, 98, and NT, and is provided free of charge by Emulators Inc.\r\n\nThis demo may NOT be copied, sold, or posted on any other site without permission from Emulators Inc.",
+                    IDC_STATIC,7,7,236,46
+    LTEXT           "When using this demo, right click the mouse to bring up the main menu dialog. From there you can configure disk drive settings, hardware settings, monitor settings, and exit the program.",
+                    IDC_STATIC,7,57,236,31
+    LTEXT           "For Xformer 98 online documentation and a complete list of special key assignments and keyboard shortcuts, visit the Emulators Inc. Xformer 98 Demo web page at http://www.emulators.com/xf98demo.htm. ",
+                    IDC_STATIC,7,92,236,41
+    DEFPUSHBUTTON   "OK",IDOK,99,143,50,14
+END
+
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""windows.h""\r\n"
+    "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""winver.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 141
+    END
+
+    IDD_PROPERTIES, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 169
+    END
+
+    IDD_INFO, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 166
+    END
+
+    IDD_DISKS, DIALOG
+    BEGIN
+        RIGHTMARGIN, 277
+        BOTTOMMARGIN, 112
+    END
+
+    IDD_DISKMODE, DIALOG
+    BEGIN
+        RIGHTMARGIN, 237
+        BOTTOMMARGIN, 128
+    END
+
+    IDD_XFDEMO, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 243
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 157
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_BITMAP1             BITMAP  DISCARDABLE     "xf98.bmp"
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

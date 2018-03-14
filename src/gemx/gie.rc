@@ -1,0 +1,172 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_GIE                 ICON    DISCARDABLE     "gie.ico"
+IDI_FOLDER              ICON    DISCARDABLE     "folder.ico"
+IDI_FILE                ICON    DISCARDABLE     "file.ico"
+IDI_HARDDISK            ICON    DISCARDABLE     "harddisk.ico"
+IDI_ARROW               ICON    DISCARDABLE     "arrow.ico"
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Cursor
+//
+
+IDC_SPLITTER            CURSOR  DISCARDABLE     "splitter.cur"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDM_GIE MENU DISCARDABLE 
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Create Image File From Logical Disk",      ID_FILE_CREATEIMAGEFROMPART
+        MENUITEM "C&reate Image File From Physical Disk",     ID_FILE_CREATEIMAGEFROMDISK
+        MENUITEM "&Write Image File To Physical Disk",        ID_FILE_CREATEDISKFROMIMAGE
+        MENUITEM SEPARATOR
+        MENUITEM "P&roperties",                 ID_FILE_PROPERTIES
+        MENUITEM SEPARATOR
+        MENUITEM "&About",                      ID_FILE_ABOUT
+        MENUITEM "&Close",                      ID_FILE_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Copy as Text",               ID_EDIT_COPYASTEXT
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "Lar&ge Icons",                ID_VIEW_LARGEICONS
+        MENUITEM "S&mall Icons",                ID_VIEW_SMALLICONS
+        MENUITEM "&List",                       ID_VIEW_LIST
+        MENUITEM "&Details",                    ID_VIEW_DETAILS
+        MENUITEM SEPARATOR
+        MENUITEM "&Refresh\tF5",                ID_VIEW_REFRESH
+        MENUITEM "Select &All\tCtrl+A",         ID_VIEW_SELECTALL
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_PROGRESS DIALOG DISCARDABLE  0, 0, 225, 55
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Writing disk image to disk"
+FONT 8, "MS Sans Serif"
+BEGIN
+    LTEXT           "                         ",IDC_PROGRESSDESCRIPTION,7,7,211,20
+    CONTROL         "Progress1",IDC_PROGRESSBAR,"msctls_progress32",WS_BORDER,
+                    7,34,154,14
+    PUSHBUTTON      "Cancel",IDCANCEL,168,34,50,14
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_PROGRESS, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 218
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 48
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_FILENAMECOLUMN      "Name"
+    IDS_FILESIZECOLUMN      "Size"
+    IDS_FILEDATECOLUMN      "Modified"
+    IDS_FILETYPECOLUMN      "Type"
+    IDS_FILECRETCOLUMN      "Creator"
+    IDS_ROOTDRIVETITLE      "Directory of %s"
+    IDS_APPENDTOTITLE       " - Gemulator Explorer"
+    IDS_DEFAULTTITLE        "Gemulator Explorer"
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
