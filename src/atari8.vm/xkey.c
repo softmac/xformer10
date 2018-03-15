@@ -551,7 +551,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         break;
 
     case 0x11C:
-        scan = 0x72;    // Enter -> Enter
+	    scan = 0x72;    // Enter -> Enter
         break;
 
     case 0x152:
@@ -604,7 +604,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
             printf("clock multiplier = %u\n", clockMult);
 #endif
-			fBrakes = !fBrakes;	// toggle real time or fast as possible, clockMult is implemented though if you want to use it?
+			fBrakes = !fBrakes;	// toggle real time or fast as possible
+			DisplayStatus();
 		}
 		return TRUE;
 
@@ -716,7 +717,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, vmCur.iOS);
 			FColdbootVM();
 		}
-		
+
 		// shift F10 - coldboot and toggle cartridge on/off
 		else if (fDown && (*pbshift & wAnyShift))
 		{
@@ -726,9 +727,9 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 				ramtop = 0xC000;
 			FColdbootVM();
 		}
-		
+
 		// F10 - system reset (warm start)
-		else if (fDown)
+		else if (fDown && !(*pbshift & wAnyShift))
 		{
 			FWarmbootVM();
 		}

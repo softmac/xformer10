@@ -66,6 +66,8 @@ WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down
 BYTE bshiftSav;
 static signed short wLeftMax;
 
+#define INSTR_PER_SCAN_NO_DMA 30
+
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
     FILE *fp;
@@ -176,7 +178,7 @@ BOOL __cdecl InitAtari()
             }
 #endif
 
-        wStartScan = 8;
+        wStartScan = 10;
 
         ramtop = 0xA000;
 #if XE
@@ -577,14 +579,19 @@ BOOL __cdecl ExecuteAtari()
 			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
 			// 21 should be right for Gr.0 but for some reason 18 is.
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			wLeft = (fBrakes && (DMACTL & 3)) ? 20 : 30;	// runs faster with ANTIC turned off (all approximate)
+			wLeft = (fBrakes && (DMACTL & 3)) ? 20 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
-			// !!! Everything breaks if I don't use wLeft = 30 for scans 0-9 and 252-262, or if I move the VBI away from 251
+			// !!! Everything breaks if I move the VBI away from 251
 
-			if (wScan < 10) {
-				wLeft = 30;	// DMA should be off for the first 10 lines
+			// Scan line 0-9 are not visible, 10 lines without DMA
+			// Scan lines 10-249 are 240 visible lines
+			// Scan line 250 preps NMI, 251 is the VBLANK, without DMA
+			// Scan lines 252-261 are the rest of the scan lines, without DMA
+
+			if (wScan < wStartScan) {
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
 			else if (wScan < 250) {
@@ -594,11 +601,17 @@ BOOL __cdecl ExecuteAtari()
 				// start the NMI status early so that programs
 				// that care can see it
 				NMIST = 0x40 | 0x1F;
+
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
+				wLeftMax = wLeft;
 			}
 
 			// do the VBI! !!! You cannot change this from 251 for some reason!
 			else if (wScan == 251)
 			{
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
+				wLeftMax = wLeft;
+
 #ifndef NDEBUG
 				fDumpHW = 0;
 #endif
