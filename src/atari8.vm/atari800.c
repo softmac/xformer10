@@ -156,6 +156,8 @@ BOOL __cdecl InitAtari()
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
 
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
+
     // save shift key status
     bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
     *pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
@@ -495,13 +497,13 @@ BOOL fDumpHW;
 
 BOOL __cdecl ExecuteAtari()
 {
-	vpcandyCur = &vrgcandy[v.iVM];
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
 	fStop = 0;
 
 	do {
-		// !!! this should happen every cycle, not every 30 instructions, quick polling will return the same answer
-		//RANDOM = (RANDOM << 1) ^ 7 + (BYTE)wScan ^ regA - btick;
+		// this should happen every cycle, not every 30 instructions, but we do it here to make sure it happens
+		// fairly often on its own, plus just before it is read to make sure it's never the same twice
 		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
 		RANDOM = RANDOM17 & 0xff;
 
