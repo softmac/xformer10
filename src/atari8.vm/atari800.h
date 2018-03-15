@@ -573,8 +573,8 @@ BOOL ProcessScanLine(BOOL);
 void ForceRedraw();
 
 void __cdecl SwapMem(BYTE mask, BYTE flags, WORD pc);
-void InitBanks(void);
-void ReadROMs();
+void InitBanks(int);
+//void ReadROMs();
 
 void CchDisAsm(unsigned int *puMem);
 void CchShowRegs(void);
@@ -589,7 +589,7 @@ extern char FAR rgbXLXEBAS[], FAR rgbXLXED800[];  // XL/XE ROMs
 extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 
 #if XE
-extern char HUGE rgbXEMem[16][16384];
+extern char HUGE rgbXEMem[MAX_VM][16][16384];
 #endif // XE
 
 

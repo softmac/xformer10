@@ -162,6 +162,10 @@ BOOL __cdecl InitAtari(int iVM)
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
+	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
+	// unless Shift-F10 changes it
+	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+
     // save shift key status, why? !!! this only happens at boot time now until shutdown
     //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
     //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
@@ -204,8 +208,7 @@ BOOL __cdecl InitAtari(int iVM)
 
 	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
-    ReadROMs();
-	ReadCart(iVM);
+    ReadCart(iVM);
 
     if (!FInitSerialPort(v.rgvm[iVM].iCOM))
 		v.rgvm[iVM].iCOM = 0;
@@ -309,9 +312,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // Initialize mode display counter (banner)
 	
-	// XL and XE have built in BASIC
-	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
-
 	fBrakes = 1;	// global turbo for all instances
 	clockMult = 1;	// per instance speed-up
 
@@ -335,7 +335,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // Swap in BASIC and OS ROMs.
 
-    InitBanks();
+    InitBanks(iVM);
 	InitCart(iVM);	// after the OS and BASIC go in above, so the cartridge overrides built-in BASIC
 
 #if 0 // doesn't the OS do this?
@@ -862,7 +862,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 #endif
 
     if (addr < ramtop)
-        {
+    {
 #if 0
         printf("poking into RAM, addr = %04X, ramtop = %04X\n", addr, ramtop);
         flushall();
@@ -870,13 +870,18 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
         cpuPokeB(addr, b);
         return TRUE;
-        }
+    }
 
-    switch((addr >> 8) & 255)
-        {
-    default:
-        if (mdXLXE == md800)
-            break;
+	switch ((addr >> 8) & 255)
+	{
+	default:
+
+		// don't allow writing to cartridge memory, but do allow writing to special extended XL/XE RAM
+		if (mdXLXE == md800 ||
+			(v.rgvm[v.iVM].rgcart.fCartIn && addr < 0xC000 && addr >= 0xc000 - v.rgvm[v.iVM].rgcart.cbData))
+		{
+			break;
+		}
 
         // writing to XL/XE memory
 
@@ -1090,7 +1095,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 //        printf("addr = %04X, b = %02X\n", addr, b);
         BankCart(v.iVM, addr & 255);
         break;
-        }
+    }
 
     return TRUE;
 }
@@ -1139,7 +1144,7 @@ void ReadCart(int iVM)
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 		
-		_read(h, rgcartData, cb);
+		_read(h, rgbSwapCart[iVM], cb);
 
 		v.rgvm[iVM].rgcart.cbData = cb;
 		v.rgvm[iVM].rgcart.fCartIn = TRUE;
@@ -1151,7 +1156,23 @@ void InitCart(int iVM)
 {
 	// no cartridge
 	if (!(v.rgvm[iVM].rgcart.fCartIn))
+	{
+		// convenience for Atari 800, we can ask for BASIC to be put in
+		if (v.rgvm[iVM].bfHW == vmAtari48 && ramtop == 0xA000)
+		{
+			_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
+			ramtop = 0xA000;
+		}
+		else
+		{
+			// otherwise, the OS may try to run code for a cartridge that isn't there
+		// (zeroing all of memory would also work, but be slower)
+			rgbMem[0x9FFC] = 0x01;	// tell the OS there is no regular cartridge B inserted
+			rgbMem[0xBFFD] = 0x00;	// tell the OS there is no special cartridge A inserted
+			rgbMem[0xBFFC] = 0x01;	// tell the OS there is no regular cartridge A inserted
+		}
 		return;
+	}
 
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
@@ -1166,8 +1187,8 @@ void InitCart(int iVM)
 	{
 		// simple 4K or 8K case
 		// copy entire pages at a time
-		_fmemcpy(&rgbMem[0xC000 - (((pcart->cbData + 4095) >> 12) << 12)], rgcartData, (((pcart->cbData + 4095) >> 12) << 12));
-		ramtop = 0xA000;	// probably, right?
+		_fmemcpy(&rgbMem[0xC000 - (((pcart->cbData + 4095) >> 12) << 12)], rgbSwapCart[iVM], (((pcart->cbData + 4095) >> 12) << 12));
+		ramtop = 0xA000;
 		return;
 	}
 
@@ -1177,7 +1198,7 @@ void InitCart(int iVM)
 
 		unsigned int i;
 
-		BYTE FAR *pb = rgcartData;
+		BYTE FAR *pb = rgbSwapCart[iVM];
 
 		for (i = 0; i != cb; i += 4096)
 		{
@@ -1228,7 +1249,7 @@ void BankCart(int iVM, int iBank)
 
 		unsigned int i;
 
-		BYTE FAR *pb = rgcartData;
+		BYTE FAR *pb = rgbSwapCart[iVM];
 
 		for (i = 0; i != cb; i += 4096)
 		{

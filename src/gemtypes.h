@@ -212,7 +212,7 @@ __inline void _assert(int f, char *file, int line)
 
 // maximum number of virtual machines
 
-#define MAX_VM 16
+#define MAX_VM 108
                 
 
 //
@@ -597,14 +597,6 @@ typedef struct
     char     sz[MAX_PATH]; // path to disk image
 } VD, *PVD;
 
-typedef struct _cart
-{
-	char szName[MAX_PATH];
-	int  cbData;        // actual amount of data on the cart
-	BYTE fCartIn;		// there is a cartridge plugged in
-	char temp;			// make it the same size as a VD structure
-} CART, *PCART;
-
 //
 // VMINFO structure exported by each virtual machine module
 //
@@ -653,6 +645,14 @@ typedef struct _vminfo
 	PFNL pfnLoadState;      // load snapshot from disk and resume
 #endif
 } VMINFO, *PVMINFO;
+
+typedef struct _cart
+{
+	char szName[MAX_PATH];
+	int  cbData;        // actual amount of data on the cart
+	BYTE fCartIn;		// there is a cartridge plugged in
+	char temp;			// make it the same size as a VD structure
+} CART, *PCART;
 
 typedef struct
 {
@@ -714,10 +714,7 @@ typedef struct
 #define CART_OSS    2   // Mac65 etc.
 
 #define MAX_CART_SIZE 16384
-char rgcartData[MAX_CART_SIZE];
-
-CART rgBasic;	// special built in BASIC for XL
-char rgBasicData[8192];
+extern char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];
 
 void ReadCart();
 void InitCart(int iVM);

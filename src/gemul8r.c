@@ -2894,12 +2894,13 @@ break;
 #endif
 
        case WM_SETCURSOR:
-        if (v.fFullScreen && vi.fHaveFocus)
-            {
-            // In full screen mode, don't show mouse anywhere
+
+        if (!v.fTiling && v.fFullScreen && vi.fHaveFocus)
+        {
+            // In full screen mode (except when tiling), don't show mouse anywhere
             SetCursor(NULL);
             return TRUE;
-            }
+        }
 
 		if (vi.fHaveFocus && (LOWORD(lParam) == HTCLIENT))
 		{
@@ -3036,10 +3037,10 @@ break;
         wmId    = LOWORD(uParam);
         wmEvent = HIWORD(uParam);
 
-        switch (wmId)
-        {
-L_about:
-		// bring up our ABOUT MessageBox
+		switch (wmId)
+		{
+		L_about:
+			// bring up our ABOUT MessageBox
 		case IDM_ABOUT:
 
 			char rgch[1120], rgch2[64], rgchVer[32];
@@ -3219,7 +3220,7 @@ L_about:
 			// don't reboot, let the OS detect it as necessary
 			return 0;
 
-		// Un-init and invalidate this instance, and choose another
+			// Un-init and invalidate this instance, and choose another
 		case IDM_DELVM:
 			FUnInitVM(v.iVM);
 			memset(&v.rgvm[v.iVM], 0, sizeof(VM));	// erase the persistable data
@@ -3228,7 +3229,7 @@ L_about:
 			SelectInstance(-1);
 			break;
 
-		// unless Darek gets really busy, this should be enough VM types
+			// unless Darek gets really busy, this should be enough VM types
 		case IDM_ADDVM1:
 		case IDM_ADDVM1 + 1:
 		case IDM_ADDVM1 + 2:
@@ -3245,7 +3246,7 @@ L_about:
 		case IDM_ADDVM1 + 13:
 		case IDM_ADDVM1 + 14:
 		case IDM_ADDVM1 + 15:
-			
+
 			if (v.cVM == MAX_VM)
 				break;
 
@@ -3257,8 +3258,9 @@ L_about:
 			FAddVM(&vmi800, &vmNew);
 
 			// !!! move all this code inside FAddVM!
+			// !!! support 1200XL, etc.
 			strcpy(v.rgvm[vmNew].szModel, rgszVM[vmType]);
-			
+
 			if (vmType == 1)
 			{
 				v.rgvm[vmNew].bfHW = vmType; vmAtari48;
@@ -3282,8 +3284,8 @@ L_about:
 			FInitVM(vmNew);
 			CreateNewBitmap(vmNew);
 			SelectInstance(vmNew);
-	#endif
-			
+#endif
+
 			// now support some more
 
 			break;
@@ -3302,6 +3304,14 @@ L_about:
 		case IDM_NOCART:
 			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge and cold start
 			vi.pvmCur->rgcart.szName[0] = 0;
+
+			// Atari 800 goes back to no cartridge now (this is the best way to set ramtop = 0xC000
+			if (v.rgvm[v.iVM].bfHW == vmAtari48)
+			{
+				FUnInitVM(v.iVM);
+				FInitVM(v.iVM);
+			}
+			
 			FixAllMenus();
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 			break;
@@ -3567,6 +3577,10 @@ L_about:
 
 				assert(zl >= 0);
 				SelectInstance(zl);
+				
+				// stop tiling
+				if (v.fTiling)
+					SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
 			}
 		
             return (DefWindowProc(hWnd, message, uParam, lParam));
