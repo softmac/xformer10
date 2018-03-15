@@ -287,6 +287,10 @@ BOOL __cdecl UninitAtariDisks()
 
 BOOL __cdecl WarmbootAtari()
 {
+	// POKE 580,1 == Cold Start
+	if (rgbMem[0x244])
+		ColdbootAtari();
+
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
@@ -296,6 +300,10 @@ BOOL __cdecl WarmbootAtari()
 	fBrakes = TRUE;	// back to real time
 
 	InitSound();	// need to reset and queue audio buffers
+
+	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start
+	InitJoysticks();
+	CaptureJoysticks();
 
     return TRUE;
 }
@@ -415,10 +423,14 @@ BOOL __cdecl ColdbootAtari()
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
 
-	// seed the random number generator so it's different every time
-	RANDOM = (BYTE)qpc.QuadPart;
+	// !!! seed the random number generator so it's different every time, the real ATARI is probably seeded by the orientation
+	// of sector 1 on the floppy
+	RANDOM17 = qpc.QuadPart & 0x1ffff;
 
 	InitSound();	// Need to reset and queue audio buffers
+	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start
+	InitJoysticks();
+	CaptureJoysticks();
 
 	return TRUE;
 }
@@ -498,232 +510,241 @@ BOOL __cdecl ExecuteAtari()
 	fStop = 0;
 
 	do {
-		// !!! this is wrong
-		RANDOM = (RANDOM << 1) ^ 7 + (BYTE)wScan ^ regA - btick;
+		// !!! this should happen every cycle, not every 30 instructions, quick polling will return the same answer
+		//RANDOM = (RANDOM << 1) ^ 7 + (BYTE)wScan ^ regA - btick;
+		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
+		RANDOM = RANDOM17 & 0xff;
+
+		// when tracing, we only do 1 instruction per call, so there are some left over
+		if (wLeft == 0)
+		{
 
 #ifndef NDEBUG
-		// Display scan line here
-		if (fDumpHW) {
-			WORD PCt = cpuPeekW(0x200);
-			extern void CchDisAsm(WORD *);
-			int i;
+			// Display scan line here
+			if (fDumpHW) {
+				WORD PCt = cpuPeekW(0x200);
+				extern void CchDisAsm(WORD *);
+				int i;
 
-			printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
-				cpuPeekB(DLPC));
-			for (i = 0; i < 60; i++)
-			{
-				CchDisAsm(&PCt); printf("\n");
+				printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
+					cpuPeekB(DLPC));
+				for (i = 0; i < 60; i++)
+				{
+					CchDisAsm(&PCt); printf("\n");
+				}
+				PCt = regPC;
+				for (i = 0; i < 60; i++)
+				{
+					CchDisAsm(&PCt); printf("\n");
+				}
+				FDumpHWVM();
 			}
-			PCt = regPC;
-			for (i = 0; i < 60; i++)
-			{
-				CchDisAsm(&PCt); printf("\n");
-			}
-			FDumpHWVM();
-		}
 #endif // DEBUG
 
-		// next scan line - should really be 262.5, ugh, sigh, NTSC.
-		wScan = wScan + 1;
+			// next scan line - should really be 262.5, ugh, sigh, NTSC.
+			wScan = wScan + 1;
 
-		// we process the audio after the whole frame is done, but video during the scan line the VBLANK starts at (241)
-		if (wScan >= 262)
-		{
-			SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
-			wScan = 0;
-			wFrame++;
+			// we process the audio after the whole frame is done, but video during the scan line the VBLANK starts at (241)
+			if (wScan >= 262)
+			{
+				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
+				wScan = 0;
+				wFrame++;
 
-			static ULONGLONG cCYCLES = 0;
-			static ULONGLONG cErr = 0;
+				static ULONGLONG cCYCLES = 0;
+				static ULONGLONG cErr = 0;
 
-			// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-			const ULONGLONG cJif = 29830; // 1789790 / 60
-			ULONGLONG cCur = GetCycles() - cCYCLES;
-			while (fBrakes && ((ULONGLONG)(cJif - cErr) > cCur * clockMult)) {
-				Sleep(1);
-				cCur = GetCycles() - cCYCLES;
-			}
-			cErr = cCur - (cJif - cErr);
-			if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-			cCYCLES = GetCycles();
-		}
-
-		// hack for programs that check $D41B instead of $D40B
-		rgbMem[0xD41B] =
-			VCOUNT = (BYTE)(wScan >> 1);
-
-		ProcessScanLine(1); // renders the previous scan line
-		ProcessScanLine(0);	// prepare for new scan line, and do the DLI
-
-		// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
-		// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
-		// 21 should be right for Gr.0 but for some reason 18 is.
-		// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-		wLeft = (fBrakes && (DMACTL & 3)) ? 20 : 30;	// runs faster with ANTIC turned off (all approximate)
-		wLeftMax = wLeft;	// remember what it started at
-		//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
-
-		if (wScan < 10) {
-			wLeft = 30;	// DMA is off for the first 10 lines. Everything breaks if I put all 21 retrace lines together
-			wLeftMax = wLeft;
-		}
-		else if (wScan < 250) {
-			// business as usual
-		}
-		else if (wScan == 250) {
-			// start the NMI status early so that programs
-			// that care can see it
-			NMIST = 0x40 | 0x1F;
-		}
-
-		// do the VBI! !!! You cannot change this from 251 for some reason!
-		else if (wScan == 251)
-		{
-#ifndef NDEBUG
-			fDumpHW = 0;
-#endif
-			if (NMIEN & 0x40) {
-				// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-				// every scan line now until it's done, then resume
-				Interrupt();
-				NMIST = 0x40 | 0x1F;
-				regPC = cpuPeekW(0xFFFA);
-			}
-
-			// process joysticks before the vertical blank, just because
-			// Very slow if joysticks not installed, so skip the code
-			if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
-				JOYINFO ji;
-				MMRESULT mm = joyGetPos(0, &ji);
-				if (mm == 0) {
-
-					int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-					dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-
-					rPADATA |= 12;                  // assume joystick centered
-
-					if (dir < 0)
-						rPADATA &= ~4;              // left
-					else if (dir > 0)
-						rPADATA &= ~8;              // right
-
-					dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-					dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-
-					rPADATA |= 3;                   // assume joystick centered
-
-					if (dir < 0)
-						rPADATA &= ~1;              // up
-					else if (dir > 0)
-						rPADATA &= ~2;              // down
-
-					UpdatePorts();
-
-					if (ji.wButtons)
-						TRIG0 &= ~1;                // JOY 0 fire button down
-					else
-						TRIG0 |= 1;                 // JOY 0 fire button up
+				// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+				const ULONGLONG cJif = 29830; // 1789790 / 60
+				ULONGLONG cCur = GetCycles() - cCYCLES;
+				while (fBrakes && ((cJif - cErr) > cCur * clockMult)) {
+					Sleep(1);
+					cCur = GetCycles() - cCYCLES;
 				}
-				if (vi.rgjc[1].wNumButtons > 0)
-				{
-					mm = joyGetPos(1, &ji);
+				cErr = cCur - (cJif - cErr);
+				if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+				cCYCLES = GetCycles();
+			}
+
+			// hack for programs that check $D41B instead of $D40B
+			rgbMem[0xD41B] =
+				VCOUNT = (BYTE)(wScan >> 1);
+
+			ProcessScanLine(1); // renders the previous scan line
+			ProcessScanLine(0);	// prepare for new scan line, and do the DLI
+
+			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
+			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
+			// 21 should be right for Gr.0 but for some reason 18 is.
+			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
+			wLeft = (fBrakes && (DMACTL & 3)) ? 20 : 30;	// runs faster with ANTIC turned off (all approximate)
+			wLeftMax = wLeft;	// remember what it started at
+			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
+
+			// !!! Everything breaks if I don't use wLeft = 30 for scans 0-9 and 252-262, or if I move the VBI away from 251
+
+			if (wScan < 10) {
+				wLeft = 30;	// DMA should be off for the first 10 lines
+				wLeftMax = wLeft;
+			}
+			else if (wScan < 250) {
+				// business as usual
+			}
+			else if (wScan == 250) {
+				// start the NMI status early so that programs
+				// that care can see it
+				NMIST = 0x40 | 0x1F;
+			}
+
+			// do the VBI! !!! You cannot change this from 251 for some reason!
+			else if (wScan == 251)
+			{
+#ifndef NDEBUG
+				fDumpHW = 0;
+#endif
+				if (NMIEN & 0x40) {
+					// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+					// every scan line now until it's done, then resume
+					Interrupt();
+					NMIST = 0x40 | 0x1F;
+					regPC = cpuPeekW(0xFFFA);
+				}
+
+				// process joysticks before the vertical blank, just because
+				// Very slow if joysticks not installed, so skip the code
+				if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+					JOYINFO ji;
+					MMRESULT mm = joyGetPos(0, &ji);
 					if (mm == 0) {
 
-						int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
-						dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
+						int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+						dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
 
-						rPBDATA |= 12;                  // assume joystick centered
-
-						if (dir < 0)
-							rPBDATA &= ~4;              // left
-						else if (dir > 0)
-							rPBDATA &= ~8;              // right
-
-						dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
-						dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
-
-						rPBDATA |= 3;                   // assume joystick centered
+						rPADATA |= 12;                  // assume joystick centered
 
 						if (dir < 0)
-							rPBDATA &= ~1;              // up
+							rPADATA &= ~4;              // left
 						else if (dir > 0)
-							rPBDATA &= ~2;              // down
+							rPADATA &= ~8;              // right
+
+						dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+						dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
+
+						rPADATA |= 3;                   // assume joystick centered
+
+						if (dir < 0)
+							rPADATA &= ~1;              // up
+						else if (dir > 0)
+							rPADATA &= ~2;              // down
 
 						UpdatePorts();
 
 						if (ji.wButtons)
-							TRIG1 &= ~1;                // JOY 0 fire button down
+							TRIG0 &= ~1;                // JOY 0 fire button down
 						else
-							TRIG1 |= 1;                 // JOY 0 fire button up
+							TRIG0 |= 1;                 // JOY 0 fire button up
+					}
+					if (vi.rgjc[1].wNumButtons > 0)
+					{
+						mm = joyGetPos(1, &ji);
+						if (mm == 0) {
+
+							int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
+							dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
+
+							rPBDATA |= 12;                  // assume joystick centered
+
+							if (dir < 0)
+								rPBDATA &= ~4;              // left
+							else if (dir > 0)
+								rPBDATA &= ~8;              // right
+
+							dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
+							dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
+
+							rPBDATA |= 3;                   // assume joystick centered
+
+							if (dir < 0)
+								rPBDATA &= ~1;              // up
+							else if (dir > 0)
+								rPBDATA &= ~2;              // down
+
+							UpdatePorts();
+
+							if (ji.wButtons)
+								TRIG1 &= ~1;                // JOY 0 fire button down
+							else
+								TRIG1 |= 1;                 // JOY 0 fire button up
+						}
 					}
 				}
-			}
 
-			CheckKey();	// process the ATARI keyboard buffer
+				CheckKey();	// process the ATARI keyboard buffer
+				
+				if (fTrace)
+					ForceRedraw();	// it might do this anyway
 
-			if (fTrace)
-				ForceRedraw();	// it might do this anyway
+			// every VBI, shadow the hardware registers
+			// to their higher locations
 
-		// every VBI, shadow the hardware registers
-		// to their higher locations
+				memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
+				memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
+				memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
+				memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
 
-			memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
-			memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
-			memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
-			memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
+				memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
+				memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
+				memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
+				memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
 
-			memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
-			memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
-			memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
-			memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
+				memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
+				memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
+				memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
 
-			memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
-			memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
-			memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
+				MSG msg;
 
-			MSG msg;
-
-			if (wScanMin > wScanMac)
-			{
-				assert(0);
-				// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
-			}
-			else
-			{
-				extern void RenderBitmap();
-				RenderBitmap();	// tell Gemulator to actually draw the window
-			}
-
-			wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
-			wScanMac = 0;
-
-			// Gem window has a message, stop the loop to process it
-			if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-				fStop = fTrue;
-
-			// decrement printer timer
-
-			if (vi.cPrintTimeout && vmCur.fShare)
-			{
-				vi.cPrintTimeout--;
-				if (vi.cPrintTimeout == 0)
+				if (wScanMin > wScanMac)
 				{
-					FlushToPrinter();
-					UnInitPrinter();
+					assert(0);
+					// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
 				}
+				else
+				{
+					extern void RenderBitmap();
+					RenderBitmap();	// tell Gemulator to actually draw the window
+				}
+
+				wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
+				wScanMac = 0;
+
+				// Gem window has a message, stop the loop to process it
+				if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
+					fStop = fTrue;
+
+				// decrement printer timer
+
+				if (vi.cPrintTimeout && vmCur.fShare)
+				{
+					vi.cPrintTimeout--;
+					if (vi.cPrintTimeout == 0)
+					{
+						FlushToPrinter();
+						UnInitPrinter();
+					}
+				}
+				else
+					FlushToPrinter();
+
+				// exit to message loop after VBI always, REVIEW: any effect???
+				//fStop = fTrue;
+
 			}
-			else
-				FlushToPrinter();
-
-			// exit to message loop after VBI always, REVIEW: any effect???
-			//fStop = fTrue;
-
-		}
-		else if (wScan > 251)
-		{
-			wLeft = 30;	// for this retrace section, there will be no DMA
-			wLeftMax = wLeft;
-		}
+			else if (wScan > 251)
+			{
+				wLeft = 30;	// for this retrace section, there will be no DMA
+				wLeftMax = wLeft;
+			}
+		} // if wLeft == 0
 
 		// this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
 		if (!(regP & IBIT))
@@ -738,7 +759,7 @@ BOOL __cdecl ExecuteAtari()
 
 		// Execute about one horizontal scan line's worth of 6502 code
 		Go6502();
-		assert(wLeft == 0 || fTrace == 1);
+		//assert(wLeft == 0 || fTrace == 1);
 
 		if (fSIO) {
 			// REVIEW: need to check if PC == $E459 and if so make sure
@@ -944,10 +965,9 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
 			// we're (wScan / 262) of the way through the scan lines and (wLeftmax - wLeft) of the way through this scan line
-			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / 30) * SAMPLES_PER_VOICE / 100 / 262;
-			if (iCurSample == 799 && AUDC4 == 8)
-				iCurSample = iCurSample;
-			SoundDoneCallback(vi.rgwhdr, iCurSample);
+			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / 262;
+			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
+				SoundDoneCallback(vi.rgwhdr, iCurSample);
 		}
         break;
 

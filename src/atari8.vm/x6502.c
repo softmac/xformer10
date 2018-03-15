@@ -394,10 +394,11 @@ void WRITE_WORD(uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-#define HANDLER_END()	if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
-						// { --wLeft; regPC++; (*jump_tab_RO[READ_BYTE(regPC-1)])(pcandy); } }
-						// !!! This allowed wLeft to get much < 0 for certain opcodes
+#define HANDLER_END() --wLeft; (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
+						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
+						// !!! This allows wLeft to get much < 0 for certain opcodes, but PREPPIE crashes without it
 
+// don't let a scan line end until there's an instruction that affects the PC !!! We may do >>30 instructions!
 #define HANDLER_END_FLOW()  if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
 
 #define HANDLER(opcode) void __fastcall opcode (CANDYHW *pcandy) { \
@@ -2460,7 +2461,7 @@ void __cdecl Go6502()
 
     PackP(vpcandyCur);
 
-    //if (wLeft < 0) wLeft = 0;
+    if (wLeft < 0) wLeft = 0; // !!!
 
     wLeft += bias;
 }
