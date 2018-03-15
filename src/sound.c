@@ -18,12 +18,14 @@
 
 #define CNT_ANGLES 64
 
-static BOOL fSoundInit = FALSE; // only play new buffers in the callback when sound is active, or we hang
+// !!! when we support multiple VMs running at the same time, each will need its own static
+static int sCurBuf = -1;	// which buffer is the current one we're filling
+static int sOldSample = 0; // how much of the buffer is full already
 
 typedef struct {
-	int widthTop;	// width of each clock pulse clocking the audio (1/2 period) x 1000 for better precision
-	int widthBottom;	// current error, so it doesn't propagate
-	BOOL phase;	// are we doing the top or bottom of the square wave?
+	int widthTop;	// width of the top of each wave pulse in samples x 1000 for better precision
+	int widthBottom;	// width of the bottom of each pulse
+	BOOL phase;	// are we doing the top (or bottom) of the square wave?
 	int pos;	// how far along the width of the pulse are we?
 	BOOL skipping;	// are we skipping this top of the pulse due to poly distortion?
 } PULSE;
@@ -32,11 +34,7 @@ static int poly4, poly5, poly9, poly17;
 
 HWAVEOUT hWave;
 WAVEFORMATEX pcmwf;
-void SoundDoneCallback(LPWAVEHDR pwhdr);
-
-//
-// defines a voice (frequency, volume, distortion, and current phase)
-//
+static FILE *fp;
 
 typedef struct
 {
@@ -45,417 +43,9 @@ typedef struct
     ULONG distortion;
 } VOICE;
 
-VOICE rgvoice[4];
-
-
-void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume)
-{
-	//OutputDebugString("\nUpdate Voice\n");
-
-	// !!!
-    //if (new_frequency < 30)
-    //    new_frequency = 0;
-    //else if (new_frequency > 20000)
-    //    new_frequency = 0;
-    //else if (new_frequency > 11000)
-    //    new_frequency = 11000;
-
-	rgvoice[iVoice].frequency = new_frequency;
-    rgvoice[iVoice].volume     = new_volume;
-    rgvoice[iVoice].distortion = new_distortion;
-	
-#ifndef NDEBUG
-//	if (iVoice == 3) {
-//		char sp[100];
-//		sprintf(sp, "%llu %llu VOICE3 FREQ=%lu DIST=%lu VOL=%lu\n", GetCycles(), GetJiffies(), rgvoice[iVoice].frequency, rgvoice[iVoice].distortion, rgvoice[iVoice].volume);
-//		OutputDebugString(sp);
-//	}
-#endif
-}
-
-// old code from inside the sound callback at the top of the fn
-#if 0
-CHAR const mpxsine[CNT_ANGLES + 1] =
-{
-	0,  13,  25,  38,  49,  60,  70,  80,  90, 98, 106, 112, 117, 121, 125, 126, 127, 126, 125, 121, 117, 112, 106, 98,  90,  80, 70, 60, 49, 38, 25, 13,
-	0, -13, -25, -38, -49, -60, -70, -80, -90,-98,-106,-112,-117,-121,-125,-126,-127,-126,-125,-121,-117,-112,-106,-98, -90, -80,-70,-60,-49,-38,-25,-13,
-	0,
-};
-
-//
-// convert a phase angle (0..65535) to a sine (-127..+127)
-
-__inline int SineOfPhase(ULONG x)
-{
-	int i, w;
-
-	return ((mpxsine[(x >> 16) & (CNT_ANGLES - 1)]));
-
-	//    return mpxsine[(((x) * CNT_ANGLES) >> 16) & (CNT_ANGLES-1)];
-
-	i = (((x)* CNT_ANGLES) >> 16) & (CNT_ANGLES - 1);
-	w = ((x)* CNT_ANGLES & 65535) >> 14;
-
-	return ((mpxsine[i] * (15 - w)) + (mpxsine[i + 1] * w)) / 2;
-}
-#if 0
-
-//
-// convert phase angle into square wave
-//
-
-__inline __int16 SqrOfPhase(ULONG x)
-{
-	return ((x >> 22) & 1) ? 32767 : -32768;
-}
-
-int iC = 0, iB;
-for (iHdr = 0; iHdr < SNDBUFS; iHdr++) {
-	pwhdr = &vi.rgwhdr[iHdr];
-
-	if (vi.rgwhdr[iHdr].dwFlags & WHDR_DONE) {
-		iC++;	// break;
-		iB = iHdr;
-	}
-}
-
-#ifndef NDEBUG
-if (iC == 0) { //if (iHdr == SNDBUFS) {
-			   //if (nLast == 0 && rgvoice[3].volume == 8) {
-			   //	nF = 1;
-	char sp[100];
-	sprintf(sp, "%llu %llu FULL!\n", GetCycles(), GetJiffies());
-	OutputDebugString(sp);
-	//}
-	return;
-}
-
-if (iC == SNDBUFS) {
-	char sp[100];
-	sprintf(sp, "%llu %llu STARVING!\n", GetCycles(), GetJiffies());
-	OutputDebugString(sp);
-}
-#endif
-
-iHdr = iB; // pick a free buffer to use
-pwhdr = &vi.rgwhdr[iHdr];
-#endif
-
-#if 0
-if (nF > 0) {
-	if (rgvoice[3].volume == 8) {
-		char sp[100];
-		sprintf(sp, "%d Phew!\n", GetTickCount());
-		//OutputDebugString(sp);
-	}
-	else {
-		nF = 0;
-		char sp[100];
-		sprintf(sp, "%d Oh Shit!\n", GetTickCount());
-		//OutputDebugString(sp);
-	}
-}
-
-nLast = rgvoice[3].volume;
-if (nLast == 8) nF = 0;
-
-#endif
-
-#if 0
-DebugStr("%09d ", GetTickCount());
-DebugStr("SoundDoneCallback: pwhdr = %08X, hdr # = %d\n", pwhdr, pwhdr - vi.rgwhdr);
-#endif
-
-
-#if 0
-pwhdr->dwLoops = 99;
-pwhdr->dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
-#endif
-#if 0
-waveOutWrite(hWave, pwhdr, sizeof(WAVEHDR));
-#endif
-
-#ifdef SOFTMAC
-if (vmCur.fSound && FIsMac(vmCur.bfHW))
-{
-	int cs;
-	int i;
-	int ii;
-
-	if (vmachw.rgvia[0].vBufB & 0x80)
-		if (vmCur.bfHW < vmMacII)
-		{
-			// Mac sound disabled (VIA regB bit 7 only used on Plus/SE)
-
-			goto Lnosound;
-		}
-
-	if (vmCur.bfHW == vmMacSE)
-		ii = vi.cbRAM[0] - 0x300;
-	else
-		ii = vi.cbRAM[0] - ((vmachw.rgvia[0].vBufA & 0x08) ? 0x300 : 0x5F00);
-
-	if (vmCur.bfHW >= vmMacII)
-	{
-		cs = 7 - ((vmachw.asc.bVol >> 2) & 7);
-		// cs = 2;
-
-		// HACK! fake the startup sound
-
-		if (vmachw.iSndStart)
-		{
-			cs = 1;
-
-			for (i = 0; i < 512; i++)
-			{
-				pb[0] = PeekB(vi.eaROM[0] + vmachw.iSndStart);
-				pb[1] = PeekB(vi.eaROM[0] + vmachw.iSndStart);
-				pb += vi.woc.wChannels;
-
-				vmachw.iSndStart++;
-				vmachw.cSndStart--;
-
-				if (vmachw.cSndStart == 0)
-				{
-					vmachw.iSndStart = 0;
-					break;
-				}
-			}
-
-			for (; i < 512; i++)
-			{
-				pb[0] = 0x80;
-				pb[1] = 0x80;
-				pb += vi.woc.wChannels;
-			}
-		}
-
-		else if (vmachw.asc.bMode == 2)
-		{
-			signed char b0 = 0, b1 = 0, b2 = 0, b3 = 0;
-
-			// printf("in synth code!\n");
-
-			for (i = 0; i < 512; i++)
-			{
-				if (vmachw.asc.lFreq0)
-				{
-					b0 = vmachw.asc.rgb0[(vmachw.asc.lDisp0 >> 16) & 511] ^ 0x80;
-					vmachw.asc.lDisp0 += vmachw.asc.lFreq0 * 2;
-				}
-
-				if (vmachw.asc.lFreq1)
-				{
-					b1 = vmachw.asc.rgb1[(vmachw.asc.lDisp1 >> 16) & 511] ^ 0x80;
-					vmachw.asc.lDisp1 += vmachw.asc.lFreq1 * 2;
-				}
-
-				if (vmachw.asc.lFreq2)
-				{
-					b2 = vmachw.asc.rgb2[(vmachw.asc.lDisp2 >> 16) & 511] ^ 0x80;
-					vmachw.asc.lDisp2 += vmachw.asc.lFreq2 * 2;
-				}
-
-				if (vmachw.asc.lFreq3)
-				{
-					b3 = vmachw.asc.rgb3[(vmachw.asc.lDisp3 >> 16) & 511] ^ 0x80;
-					vmachw.asc.lDisp3 += vmachw.asc.lFreq3 * 2;
-				}
-
-#if 0
-				if (i < 4)
-					printf("b0 b1 b2 b3 = %d %d %d %d\n", b0, b1, b2, b3);
-#endif
-
-				pb[0] = 0x80 + (b0 >> cs) + (b2 >> cs);
-				pb[1] = 0x80 + (b1 >> cs) + (b3 >> cs);
-				pb += vi.woc.wChannels;
-			}
-		}
-
-		else if (vmachw.asc.bMode != 1)
-			goto Lnosound;
-
-		else
-
-		{
-
-			for (i = 0; i < 512; i++)
-			{
-				char bLeft = vmachw.rgbASC[i] ^ 0x80;
-				char bRight = vmachw.rgbASC[1024 + i] ^ 0x80;
-
-#if 0
-				if (i < 4)
-					printf("bL bR = %d %d\n", bLeft, bRight);
-#endif
-
-				pb[0] = 0x80 + (bLeft >> cs);
-				pb[1] = 0x80 + (bRight >> cs);
-				pb += vi.woc.wChannels;
-			}
-
-			vmachw.asc.bStat = 5; // empty
-
-			if (vmachw.V2Base)
-				vmachw.rgvia[1].vIFR |= 0x10;
-			else
-				vmachw.rgvia[1].vIFR |= 0x10;
-		}
-
-#if 0
-		printf("CHAN 0: %02X %02X %02X %02X ",
-			(BYTE)vmachw.rgbASC[0],
-			(BYTE)vmachw.rgbASC[1],
-			(BYTE)vmachw.rgbASC[2],
-			(BYTE)vmachw.rgbASC[3]);
-
-		printf("CHAN 1: %02X %02X %02X %02X ",
-			(BYTE)vmachw.rgbASC[0x400],
-			(BYTE)vmachw.rgbASC[0x401],
-			(BYTE)vmachw.rgbASC[0x402],
-			(BYTE)vmachw.rgbASC[0x403]);
-
-		printf("CHAN 2: %02X %02X %02X %02X ",
-			(BYTE)vmachw.rgbASC[0x800],
-			(BYTE)vmachw.rgbASC[0x801],
-			(BYTE)vmachw.rgbASC[0x802],
-			(BYTE)vmachw.rgbASC[0x803]);
-
-		printf("CHAN 3: %02X %02X %02X %02X\n",
-			(BYTE)vmachw.rgbASC[0xC00],
-			(BYTE)vmachw.rgbASC[0xC01],
-			(BYTE)vmachw.rgbASC[0xC02],
-			(BYTE)vmachw.rgbASC[0xC03]);
-#endif
-
-#if 0
-		printf("TYPE = %02X\n", *(BYTE *)&vmachw.rgbASC[0x800]);
-		printf("MODE = %02X\n", *(BYTE *)&vmachw.rgbASC[0x801]);
-		printf("CHNL = %02X\n", *(BYTE *)&vmachw.rgbASC[0x802]);
-		printf("RST  = %02X\n", *(BYTE *)&vmachw.rgbASC[0x803]);
-		printf("STAT = %02X\n", *(BYTE *)&vmachw.rgbASC[0x804]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x805]);
-		printf("VOL  = %02X\n", *(BYTE *)&vmachw.rgbASC[0x806]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x807]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x808]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x809]);
-		printf("DIR  = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80A]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80B]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80C]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80D]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80E]);
-		printf("???? = %02X\n", *(BYTE *)&vmachw.rgbASC[0x80F]);
-#endif
-
-#if 0
-		printf("DISP0= %08X\n", *(LONG *)&vmachw.rgbASC[0x810]);
-		printf("FREQ0= %08X\n", *(LONG *)&vmachw.rgbASC[0x814]);
-		printf("DISP1= %08X\n", *(LONG *)&vmachw.rgbASC[0x818]);
-		printf("FREQ1= %08X\n", *(LONG *)&vmachw.rgbASC[0x81C]);
-		printf("DISP2= %08X\n", *(LONG *)&vmachw.rgbASC[0x820]);
-		printf("FREQ2= %08X\n", *(LONG *)&vmachw.rgbASC[0x824]);
-		printf("DISP3= %08X\n", *(LONG *)&vmachw.rgbASC[0x828]);
-		printf("FREQ3= %08X\n", *(LONG *)&vmachw.rgbASC[0x82C]);
-		printf("RMASK= %08X\n", *(LONG *)&vmachw.rgbASC[0x830]);
-		printf("LMASK= %08X\n", *(LONG *)&vmachw.rgbASC[0x834]);
-#endif
-	}
-	else
-		for (i = 0; i < 370; i++)
-		{
-			char bLeft = PeekB(ii + (i << 1)) + 128;
-			char bRight = bLeft;
-
-			cs = 7 - (vmachw.rgvia[0].vBufA & 7);
-#if 0
-			* pb++ = 128 + (bLeft >> cs);
-			*pb++ = 128 + (bRight >> cs);
-#else
-			pb[0] = 128 + (bLeft >> cs);
-			pb[1] = 128 + (bRight >> cs);
-			pb += 2;
-#endif
-		}
-}
-else
-#endif // SOFTMAC
-
-#if defined(ATARIST)
-if (/* v.fSTE && vmCur.fSTESound */ 0) // STE sound not supported right now
-{
-	pb = pwhdr->lpData;
-
-	if (vsthw.rgbSTESound[0x01] & 1)
-	{
-		// play a stereo sound
-
-		ULONG base = (vsthw.rgbSTESound[0x03] << 16) | (vsthw.rgbSTESound[0x05] << 8) | (vsthw.rgbSTESound[0x07]);
-		ULONG cntr = (vsthw.rgbSTESound[0x09] << 16) | (vsthw.rgbSTESound[0x0B] << 8) | (vsthw.rgbSTESound[0x0D]);
-		ULONG end = (vsthw.rgbSTESound[0x0F] << 16) | (vsthw.rgbSTESound[0x11] << 8) | (vsthw.rgbSTESound[0x13]);
-
-		BOOL fStereo = (vsthw.rgbSTESound[0x20] & 0x80) == 0;
-		int i;
-
-		// how many 44 Khz samples we make out of one STE sample
-		int  step = 8 >> (vsthw.rgbSTESound[0x20] & 0x03);
-
-		if ((cntr >= end) || (cntr == 0))
-			cntr = base;
-
-		for (i = 0; i < SAMPLES_PER_VOICE; i += step)
-		{
-			int bLeft = PeekB(cntr) ^ 0x80;
-			int bRight;
-			int j;
-
-			if (fStereo)
-			{
-				bRight = PeekB(cntr + 1) ^ 0x80;
-				cntr += 2;
-			}
-			else
-			{
-				bRight = bLeft;
-				cntr++;
-			}
-
-			for (j = 0; j < step; j++)
-			{
-				*pb++ = (*pb + bLeft) / 2;
-				*pb++ = (*pb + bRight) / 2;
-			}
-
-			if (cntr >= end)
-			{
-				cntr = base;
-				if ((vsthw.rgbSTESound[0x01] & 2) == 0)
-				{
-					// not repeating, stop playback
-
-					vsthw.rgbSTESound[0x01] = 0;
-					cntr = 0;
-				}
-			}
-
-		} // for i
-
-		  // update counter
-
-		vsthw.rgbSTESound[0x09] = (BYTE)(cntr >> 16);
-		vsthw.rgbSTESound[0x0B] = (BYTE)(cntr >> 8);
-		vsthw.rgbSTESound[0x0D] = (BYTE)(cntr);
-
-	} // if stereo
-
-} // if ste sound
-#endif // ATARIST
-
-#if 0
-DebugStr("%09d ", GetTickCount());
-DebugStr("Calling waveOutWrite: pwhdr = %08X, hdr # = %d\n", pwhdr, pwhdr - vi.rgwhdr);
-#endif
-#endif
+// the old values to use to catch up to the present, when they have just been changed
+static VOICE rgvoice[4] = { { 0,0,0 }, { 0,0,0 }, { 0,0,0 }, { 0,0,0 } };
+static ULONG sAUDCTL = 0;
 
 void CALLBACK MyWaveOutProc(
 	HWAVEOUT  hwo,
@@ -464,66 +54,140 @@ void CALLBACK MyWaveOutProc(
 	DWORD_PTR dwParam1,
 	DWORD_PTR dwParam2)
 {
-	if (uMsg == WOM_DONE && fSoundInit) { // !!! or we hang, I'm cheating, not supposed to call waveOutWrite in callback.
-		SoundDoneCallback((LPWAVEHDR)dwParam1);	// !!! we still hang sometimes!
+#ifndef NDEBUG
+	if (uMsg == WOM_DONE) {
+		int cx = 0;
+		for (int i = 0; i < SNDBUFS; i++)
+		{
+			if (vi.rgwhdr[i].dwFlags & WHDR_DONE) cx++;
+		}
+		if (cx == SNDBUFS)
+			OutputDebugString("AUDIO GLITCH - EMPTY\n");
+
+		//char ods[100];
+		//sprintf(ods, "DONE %08x (%d free)\n", dwParam1, cx);
+		//OutputDebugString(ods);
 	}
+#endif
 }
 
-// WRITE AUDIO TO THE WAVE BUFFER 
-void SoundDoneCallback(LPWAVEHDR pwhdr)
+// WRITE SOME AUDIO TO THE WAVE BUFFER - from wherever we left off (sOldSample) to now (iCurSample). If it becomes full, play it.
+//
+void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 {
-	//OutputDebugString("SoundDoneCallback\n");
+	assert(iCurSample <= SAMPLES_PER_VOICE);
+	
+	// find a buffer to use if we haven't already
+	if (sCurBuf == -1)
+	{
+		for (int i = 0; i < SNDBUFS; i++)
+		{
+			if (pwhdr[i].dwFlags & WHDR_DONE) {
+				sCurBuf = i;
+				sOldSample = 0;	// start writing at the beginning of it
+			}
+		}
+	}
 
-	if (pwhdr == NULL) return;	// just in case
-	pwhdr->dwFlags &= ~WHDR_DONE;
-	signed char *pb = pwhdr->lpData;
+	// uh oh, no free buffers to write into (this will happen all the time when not running in real time but as fast as possible)
+	if (sCurBuf == -1) {
+#ifndef NDEBUG
+		//OutputDebugString("AUDIO GLITCH - FULL\n");
+#endif
+		return;
+	}
 
-	if (vmCur.fSound) {
+	//fprintf(fp, "SOUND[3] %d-%d f=%d v=%d d=%d\n", sOldSample, iCurSample, AUDF4, AUDC4 & 0x0f, AUDC4 >> 4);
+	
+	// nothing to write (make sure sOldSample is reset to 0 when iCurSample == 800)
+	if (iCurSample == sOldSample && sOldSample > 0) {
+#ifndef NDEBUG
+		//OutputDebugString("Sound changed so fast we dropped a sample!\n");
+#endif
+	return;
+	}
+
+	// where in the buffer to start writing
+	signed char *pb = pwhdr[sCurBuf].lpData + sOldSample * 4;
+
+	if (iCurSample < SAMPLES_PER_VOICE && AUDCTL == sAUDCTL &&
+		AUDF1 == rgvoice[0].frequency && AUDC1 == (rgvoice[0].volume | (rgvoice[0].distortion << 4)) &&
+		AUDF2 == rgvoice[1].frequency && AUDC2 == (rgvoice[1].volume | (rgvoice[1].distortion << 4)) &&
+		AUDF3 == rgvoice[2].frequency && AUDC3 == (rgvoice[2].volume | (rgvoice[2].distortion << 4)) &&
+		AUDF4 == rgvoice[3].frequency && AUDC4 == (rgvoice[3].volume | (rgvoice[3].distortion << 4)))
+	{
+		return;	// nothing has changed and this doesn't complete a buffer
+	}
+
+	if (iCurSample - sOldSample == 1 && iCurSample != SAMPLES_PER_VOICE &&
+			(AUDC4 & 0x0f) == 0 && rgvoice[3].volume > 0)
+	{
+		rgvoice[3].volume = AUDC4 & 0x0f;
+		return;	// !!! hack for MULE, which sends a single sample of noise every frame which needs to be ignored
+	}
+
+	if (iCurSample == SAMPLES_PER_VOICE && sOldSample == SAMPLES_PER_VOICE - 1 && (AUDC4 & 0x0f) > 0 && rgvoice[3].volume > 0
+				&& *(pb-4) == 0 && *(pb-3) == 0)
+	{
+		rgvoice[3].volume = 0;	// !!! hack for MULE, the single bad sample is at the end of the buffer
+	}
+
+	if (vmCur.fSound) {	// I'm not sure you *can* turn this off, but whatever
 
 		for (int i = 0; i < 4; i++) {
 			int freq;
 
-			// actual frequency is the current clock divided by 2(n+1) (x 10 for greater precision)
-			// pokey does the /n before the polys, then /2, but I don't think it matters and this is way easier
-			
-			// Channels 1 and 3 can be clocked with 1.78979 MHz, otherwise the clock is either 15700 or 63921Hz
-			if ((i == 0 && (AUDCTL & 0x40)) || (i == 2 && (AUDCTL & 0x20))) {
-				freq = 1789790 * 10 / (2 * (rgvoice[i].frequency + 1));
+			// frequency isn't relevant for volume only sound or if sound will be silent
+			// otherwise, figure out how wide to make the pulses for this voice's frequency
+			if ((rgvoice[i].distortion & 0x01) == 0 && rgvoice[i].frequency != 0 && rgvoice[i].volume != 0) {
 
-			// Channels 2 and 4 can be combined with channels 1 and 3 for 16 bit precision, clocked by any possible clock
-			// Divide by 2(n+4) for 64K or 2(n+7) for 1.79M
-			} else if (i == 1 && (AUDCTL & 0x10)) {
-				freq = ((AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700L : 63921L)) * 10 /
-						(2 * (rgvoice[i].frequency * 256 + rgvoice[i-1].frequency + ((AUDCTL & 0x40) ? 7 : 4)));
-			} else if (i == 3 && (AUDCTL & 0x08)) {
-				freq = ((AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700L : 63921L)) * 10 /
-						(2 * (rgvoice[i].frequency * 256 + rgvoice[i - 1].frequency + ((AUDCTL & 0x40) ? 7 : 4)));
-			} else {
-				freq = ((AUDCTL & 0x01) ? 15700L : 63921L) * 10 / (2 * (rgvoice[i].frequency + 1));
+				// actual frequency is the current clock divided by 2(n+1) (x 10 for greater precision)
+				// pokey does the /n before the polys, then /2, but I don't think it matters and this is way easier
+
+				// Channels 1 and 3 can be clocked with 1.78979 MHz, otherwise the clock is either 15700 or 63921Hz
+				if ((i == 0 && (sAUDCTL & 0x40)) || (i == 2 && (sAUDCTL & 0x20))) {
+					freq = 1789790 * 10 / (2 * (rgvoice[i].frequency + 1));
+
+					// Channels 2 and 4 can be combined with channels 1 and 3 for 16 bit precision, clocked by any possible clock
+					// Divide by 2(n+4) for 64K or 2(n+7) for 1.79M
+				}
+				else if (i == 1 && (sAUDCTL & 0x10)) {
+					freq = ((sAUDCTL & 0x40) ? 1789790 : ((sAUDCTL & 0x01) ? 15700L : 63921L)) * 10 /
+						(2 * (rgvoice[i].frequency * 256 + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4)));
+				}
+				else if (i == 3 && (sAUDCTL & 0x08)) {
+					freq = ((sAUDCTL & 0x20) ? 1789790 : ((sAUDCTL & 0x01) ? 15700L : 63921L)) * 10 /
+						(2 * (rgvoice[i].frequency * 256 + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4)));
+				}
+				else {
+					freq = ((sAUDCTL & 0x01) ? 15700L : 63921L) * 10 / (2 * (rgvoice[i].frequency + 1));
+				}
+
+				// recalculate the pulse width as the freq may have changed.
+				// round the total pulse width, then split the top and bottom sections into possibly different numbers (off by 1)
+				// we need this precision and 48K sampling or sound 57 == sound 58
+				// we cannot fix this by making every 10th pulse different in width by 1 for the best possible precision
+				// because that has horrible artifacting when you're doing square waves!
+				pulse[i].widthTop = (SAMPLE_RATE * 100 / freq + 5) / 10;
+				pulse[i].widthBottom = pulse[i].widthTop / 2;
+				pulse[i].widthTop -= pulse[i].widthBottom; // this may be one more than top
 			}
-
-			// recalculate the pulse width as the freq may have changed.
-			// round the total pulse width, then split the top and bottom sections into possibly different numbers (off by 1)
-			// we need this precision and 48K sampling or sound 57 == sound 58
-			// !!! we cannot fix this by making every 10th pulse different in width by 1 for the best possible precision
-			// because that has horrible artifacting when you're doing square waves!
-			pulse[i].widthTop = (SAMPLE_RATE * 100 / freq + 5) / 10;
-			pulse[i].widthBottom = pulse[i].widthTop / 2;
-			pulse[i].widthTop -= pulse[i].widthBottom; // this may be one more than top
 		}
 
-		// determine the amplitude for each sample in the buffer
-        for (int i = 0; i < SAMPLES_PER_VOICE; i++) {
+		// determine the amplitude for each sample in the buffer we need to fill now
+		for (int i = sOldSample; i < iCurSample; i++) {
 
-			int bLeft = 0;
+			int bLeft = 0;	//left channel amplitude
 			int bRight = 0;
 
+			// !!! I broke ST sound
 			if (!FIsAtari68K(vmCur.bfHW)) {
 				
 				// 1.79MHz / 44.1KHz = 40.5 shifts per audio sample. Do it 41 cuz that's a prime
 				BYTE r = RANDOM;	// randomly add an extra shift so we're not so periodic
 				r = (r >> 7) + 41;
-				for (int j = 0; j < r; j++) {
+				// !!! this is slow
+				for (int j = 0; j < 1; j++) {
 					poly4 = ((poly4 >> 1) | ((~(poly4 ^ (poly4 >> 1)) & 0x01) << 3)) & 0x000F;
 					poly5 = ((poly5 >> 1) | ((~(poly5 ^ (poly5 >> 3)) & 0x01) << 4)) & 0x001F;
 					//poly9 = ((poly9 >> 1) | (~(poly9 ^ (poly9 >> 1)) << 8)) & 0x01FF;
@@ -531,22 +195,20 @@ void SoundDoneCallback(LPWAVEHDR pwhdr)
 					poly9 = ((poly9 >> 1) | ((~((~poly9) ^ ~(poly9 >> 5)) & 0x01) << 8)) & 0x01FF;
 					poly17 = ((poly17 >> 1) | ((~((~poly17) ^ ~(poly17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
 				}
-#if 0
-            printf("poly4 = %02X, poly5 = %02X, poly9 = %03X, poly17 = %05X\n",
-                    poly4, poly5, poly9, poly17);
-#endif
+				//printf("poly4 = %02X, poly5 = %02X, poly9 = %03X, poly17 = %05X\n", poly4, poly5, poly9, poly17);
             }
 
 			// figure out each voice for this sample
 			for (int voice = 0; voice < 4; voice++) {
 
-				// Not in focus, or Gem menu is up or the sound is supposed to be silent
-				// !!! Sound still freezes annoyingly if window is dragged!
-				if (!vi.fHaveFocus || rgvoice[voice].frequency == 0 || rgvoice[voice].volume == 0)
+				// Not in focus, or this voice is silent and won't contribute
+				// !!! Sound still freezes annoyingly if window is dragged! WM_MOVING?
+				if (!vi.fHaveFocus ||
+							((rgvoice[voice].distortion & 0x01) == 0 && (rgvoice[voice].frequency == 0 || rgvoice[voice].volume == 0)))
 					continue;
 
 				// apply distortion on the positive edge transition - skip this pulse if it coincides with the relevant poly counters
-				if (pulse[voice].pos == 0 && pulse[voice].phase) {
+				if ((rgvoice[voice].distortion & 0x01) == 0 && pulse[voice].pos == 0 && pulse[voice].phase) {
 					
 					// when bit 7 is off (distortion bit 3), that pulse is gated by the low bit of the 5-bit poly
 					//5 bit poly has the opposite sense of the other counters, 1 means skip
@@ -561,51 +223,42 @@ void SoundDoneCallback(LPWAVEHDR pwhdr)
 						if ((rgvoice[voice].distortion & 4) == 0) {
 
 							// AUDCTL bit 7 chooses 9 or 17
-							if ((AUDCTL & 0x80) && ((poly9 & 1) == 0)) {
+							if ((sAUDCTL & 0x80) && ((poly9 & 1) == 0)) {
 								pulse[voice].skipping = TRUE;
 							}
-							if (!(AUDCTL & 0x80) && ((poly17 & 1) == 0)) {
+							if (!(sAUDCTL & 0x80) && ((poly17 & 1) == 0)) {
 								pulse[voice].skipping = TRUE;
 							}
-						} else if ((poly4 & 1) == 0) {
+						}
+						else if ((poly4 & 1) == 0) {
 							pulse[voice].skipping = TRUE;
 						}
 					}
+				}
 
-					// !!! support volume only sound, but we can't just update POKEY every VBLANK if we do!
-					if (rgvoice[voice].distortion & 1) {
+				// !!! support high pass filter
+
+				// volume only
+				if (rgvoice[voice].distortion & 1)
+				{
+					bLeft += ((65535 * (int)rgvoice[voice].volume / 15) - 32768);
+					pulse[voice].pos = 0;	// start a new pulse from the beginning when we're done with volume only
+				
+				// output the correct sample given what part of the pulse we're in, or if we're skipping the positive section
+				} else {
+					bLeft += (((pulse[voice].phase && !pulse[voice].skipping) ? 32767 : -32768) * (int)rgvoice[voice].volume / 15);
+					pulse[voice].pos++;
+					
+					// may be strictly bigger if the note changed on us
+					if ((pulse[voice].phase && pulse[voice].pos >= pulse[voice].widthTop) ||
+								(!pulse[voice].phase && pulse[voice].pos >= pulse[voice].widthBottom)) {
+						pulse[voice].pos = 0;
+						pulse[voice].phase = !pulse[voice].phase;
+						pulse[voice].skipping = FALSE;
 					}
-
-					// !!! support high pass filter
-
 				}
-
-				// output the correct sample given what part of the pulse we're in
-				int lev = (((pulse[voice].phase && !pulse[voice].skipping) ? 32767 : -32768) * (int)rgvoice[voice].volume / 15);
-				bLeft += lev;
-
-				//char ods[100];
-				//sprintf(ods, "%d ", lev);
-				//OutputDebugString(ods);
-
-				pulse[voice].pos++;
-				// may be strictly bigger if the note changed on us
-				if ((pulse[voice].phase && pulse[voice].pos >= pulse[voice].widthTop) ||
-							(!pulse[voice].phase && pulse[voice].pos >= pulse[voice].widthBottom)) {
-					//char ods[100];
-					//sprintf(ods, "width=%d\n", pulse[voice].pos);
-					//OutputDebugString(ods);
-					pulse[voice].pos = 0;
-					//pulse[voice].widthError = (pulse[voice].width1000 + pulse[voice].widthError) -
-					//		(int)((pulse[voice].width1000 + pulse[voice].widthError) / 1000) * 1000;
-					pulse[voice].phase = !pulse[voice].phase;
-					pulse[voice].skipping = FALSE;
-				}
-			
-				// !!! support ATARI ST?
-				// if (FIsAtari68K(vmCur.bfHW))
             }   
-
+		
             bLeft  /= 4;		// we won't let you clip, unlike the real POKEY
 			bRight = bLeft;    // mono for now			
 			*pb++ = (char)(bLeft & 0xff);
@@ -613,63 +266,72 @@ void SoundDoneCallback(LPWAVEHDR pwhdr)
 			*pb++ = (char)(bRight & 0xff);
 			*pb++ = (char)((bRight >> 8) & 0xff);
 
-#if 1
-            // !!! Whitewater sound buffer (no longer implemented)
-            //vi.pbAudioBuf[i] = bLeft;
-#endif
-        } // for each sample in the buffer
+		} // for each sample in the buffer
+
+		// next time we write audio, we'll use the new values that just got set (and triggered us being called)
+		sAUDCTL = AUDCTL;
+		rgvoice[0].frequency = AUDF1;
+		rgvoice[1].frequency = AUDF2;
+		rgvoice[2].frequency = AUDF3;
+		rgvoice[3].frequency = AUDF4;
+		rgvoice[0].volume = AUDC1 & 0x0f;
+		rgvoice[1].volume = AUDC2 & 0x0f;
+		rgvoice[2].volume = AUDC3 & 0x0f;
+		rgvoice[3].volume = AUDC4 & 0x0f;
+		rgvoice[0].distortion = AUDC1 >> 4;
+		rgvoice[1].distortion = AUDC2 >> 4;
+		rgvoice[2].distortion = AUDC3 >> 4;
+		rgvoice[3].distortion = AUDC4 >> 4;
+
     } else {
-        //memset(pb + sOldSample, 0x00, (sCurSample - sOldSample) * 2 * 2);	// 16 bit signed silence for this portion
+        memset(pb, 0x00, (iCurSample - sOldSample) * 2 * 2);	// 16 bit signed silence for this portion
     }
+
+	sOldSample = iCurSample; // next time start writing here
+
+#if 0
+	int bL;	// create some pure sound to test for audio glitches with known good data in the buffers, assumes 800 samples
+	for (int z1 = 0; z1 < 20; z1++) {
+		for (int z2 = 0; z2 < 20; z2++) {
+			bL = 32767;
+			*pb++ = (char)(bL & 0xff);
+			*pb++ = (char)((bL >> 8) & 0xff);
+			*pb++ = (char)(bL & 0xff);
+			*pb++ = (char)((bL >> 8) & 0xff);
+		}
+		for (int z2 = 0; z2 < 20; z2++) {
+			bL = -32768;
+			*pb++ = (char)(bL & 0xff);
+			*pb++ = (char)((bL >> 8) & 0xff);
+			*pb++ = (char)(bL & 0xff);
+			*pb++ = (char)((bL >> 8) & 0xff);
+		}
+	}
+#endif
 
 #if !defined(_M_ARM)
 	// we have now filled the buffer
-//	if (sCurSample == SAMPLES_PER_VOICE)
+	if (iCurSample == SAMPLES_PER_VOICE)
 	{
-		pwhdr->dwBytesRecorded = pwhdr->dwBufferLength;
-		waveOutWrite(hWave, pwhdr, sizeof(WAVEHDR));
-//		sOldSample = 0;	// start at beginning of next buffer
-//		sCurBuf = -1;	// need to find a new buffer to write to next time
-	}
-
-#ifndef NDEBUG
-//	char sp[100];
-//	sprintf(sp, "%llu %llu waveOutWrite (%d)\n", GetCycles(), GetJiffies(), 0 /*iC*/);
-//	OutputDebugString(sp);
-#endif
-#endif
-}
-
-void UpdatePokey()
-{
-	WORD freq;
-	BYTE dist, vol;
+		pwhdr[sCurBuf].dwBytesRecorded = pwhdr[sCurBuf].dwBufferLength;
+		pwhdr[sCurBuf].dwFlags &= ~WHDR_DONE;
+		waveOutWrite(hWave, &pwhdr[sCurBuf], sizeof(WAVEHDR));
 		
-	freq = (ULONG)AUDF1;
-	dist = AUDC1 >> 4;
-	vol = AUDC1 & 15;
+		//char ods[100];
+		//sprintf(ods, "Write %d %08x (t=%lld)\n", sCurBuf, &pwhdr[sCurBuf],GetJiffies());
+		//OutputDebugString(ods);
 
-	UpdateVoice(0, freq, dist, vol);
+		//unsigned char *bb = pwhdr[sCurBuf].lpData;
+		//for (int zz = 0; zz < 800; zz++)
+		//{
+		//	fprintf(fp, "%02x%02x ", bb[zz * 4 + 1], bb[zz * 4]);
+		//}
+		//fprintf(fp, "\n\n");
 
-	freq = (ULONG)AUDF2;
-	dist = AUDC2 >> 4;
-	vol = AUDC2 & 15;
-
-	UpdateVoice(1, freq, dist, vol);
-	
-	freq = (ULONG)AUDF3;
-	dist = AUDC3 >> 4;
-	vol = AUDC3 & 15;
-
-	UpdateVoice(2, freq, dist, vol);
-
-	freq = (ULONG)AUDF4;
-	dist = AUDC4 >> 4;
-	vol = AUDC4 & 15;
-
-	UpdateVoice(3, freq, dist, vol); 
+		sCurBuf = -1;	// need to find a new buffer to write to next time
+	}
+#endif
 }
-
 
 void UninitSound()
 {
@@ -678,7 +340,6 @@ void UninitSound()
         {
         int iHdr;
 
-		fSoundInit = FALSE;
         waveOutReset(hWave);
 
         for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
@@ -686,6 +347,7 @@ void UninitSound()
             waveOutUnprepareHeader(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));
             }
         waveOutClose(hWave);
+		//fclose(fp);
         }
 #endif
 
@@ -706,19 +368,12 @@ void InitSound()
 #if !defined(_M_ARM)
     iMac = waveOutGetNumDevs();
 
-#ifndef NDEBUG
-    printf("number of wave output devices = %d\n", iMac);
-#endif
-
     for (i = 0; i < iMac; i++)
         {
         DebugStr("querying output device %d\n", i);
 
         if (!waveOutGetDevCaps(i, &woc, sizeof(woc)))
             {
-#ifndef NDEBUG
-            printf("Device %d responded\n", i);
-#endif
 
             // !!! surely everybody supports 48K Stereo 16bit these days
 			// I count on that much resolution to make the pitches accurate
@@ -746,16 +401,8 @@ void InitSound()
         }
 
     if ((vi.woc.wChannels != 2))
-        {
-        // Windows 2000 bug!
-        //
-        // WDM drivers may support up to 64K channels! If anything other
-        // than one or two channels, default to 2
+        vi.woc.wChannels = 2;	// don't use any fancy surround sound or multi-channel
 
-        vi.woc.wChannels = 2;
-        }
-
-    {
     pcmwf.wFormatTag = WAVE_FORMAT_PCM;
     pcmwf.nChannels  = vi.woc.wChannels;
     pcmwf.nSamplesPerSec = SAMPLE_RATE;
@@ -769,27 +416,31 @@ void InitSound()
 		int iHdr;
 
 #ifndef NDEBUG
-		printf("opened wave device, handle = %08X\n", (unsigned int)hWave);
+		printf("opened wave device, handle = %08x\n", hWave);
 		printf("Device name %s %d %08X\n",
 			vi.woc.szPname, vi.woc.wChannels, vi.woc.dwFormats);
 #endif
-
-		fSoundInit = TRUE;
 
 		for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
 		{
 			vi.rgwhdr[iHdr].lpData = vi.rgbSndBuf[iHdr];
 			vi.rgwhdr[iHdr].dwBufferLength = SAMPLES_PER_VOICE * 4; // = * vi.woc.wChannels * vi.woc.wBitsPerSample / 8;
-			vi.rgwhdr[iHdr].dwBytesRecorded = -1;
+			vi.rgwhdr[iHdr].dwBytesRecorded = 0xffffffff;
 			vi.rgwhdr[iHdr].dwFlags = 0u;
 			vi.rgwhdr[iHdr].dwLoops = 0;
 
 			waveOutPrepareHeader(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));
-			waveOutWrite(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));	
+			if (iHdr < 2)
+			{
+				waveOutWrite(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));	// start with 2 buffers of silence to prevent glitching
+			}
+			else
+			{
+				vi.rgwhdr[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
+			}
 		}
-		
+		//fp = fopen("c:\\danny\\8bit\\out.txt", "w");
 	} else GetLastError();
-    }
 #endif
 }
 
@@ -874,7 +525,7 @@ void CaptureJoysticks(HWND hwnd)
     for (i = 0; i < 2; i++)
         {
 		mm = joySetThreshold(JOYSTICKID1 + i, (vi.rgjc[i].wXmax - vi.rgjc[i].wXmin) / 8);
-        mm = joySetCapture(hwnd, JOYSTICKID1+i, 100, TRUE);
+        //mm = joySetCapture(hwnd, JOYSTICKID1+i, 100, TRUE); // doesn't work, so we just poll
 	}
 #endif
 }

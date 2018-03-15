@@ -164,7 +164,7 @@ typedef struct
 
     WORD m_wFrame, m_wScan;
     signed short m_wLeft;
-
+	
     WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
     WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;
     BYTE m_bJoyBut;
@@ -307,15 +307,6 @@ extern WORD fBrakes;
 // Platform specific stuff
 //
 
-#ifdef HDOS16
-#define pbtick ((BYTE FAR *) 0x0040006C)
-#define pbshift ((BYTE FAR *) 0x00400017)
-#else
-#ifdef HDOS32
-#define pbtick ((BYTE FAR *) 0x0000046C)
-#define pbshift ((BYTE FAR *) 0x00000417)
-#else
-#ifdef HWIN32
 #define pbtick _pbtick()
 __inline BYTE FAR *_pbtick()
 {
@@ -325,21 +316,9 @@ __inline BYTE FAR *_pbtick()
 #define pbshift _pbshift()
 __inline BYTE FAR *_pbshift()
 {
-#if 0
-    b = ((GetKeyState(VK_SCROLL) & 0x01) ? wScrlLock : 0) |
-        ((GetKeyState(VK_CAPITAL) & 0x80) ? wCapsLock : 0) |
-        ((GetKeyState(VK_CONTROL) & 0x80) ? wCtrl : 0) |
-        ((GetKeyState(VK_SHIFT) & 0x80) ? wAnyShift : 0);
-#endif
 
     return &bshftByte;
 }
-#else
-#error
-#endif // HWIN32
-#endif // HDOS32
-#endif // HDOS16
-
 
 //
 // 6502 condition codes in P register: NV_BDIZC
@@ -589,11 +568,7 @@ int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int
 
 void InitSoundBlaster();
 
-#ifdef HWIN32
 BOOL ProcessScanLine(BOOL);
-#else
-void ProcessScanLine(BOOL);
-#endif
 void ForceRedraw();
 
 void __cdecl SwapMem(BYTE mask, BYTE flags, WORD pc);
@@ -662,23 +637,6 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b);
 // Map C runtime file i/o calls to appropriate 32-bit calls
 //
 
-#ifdef HDOS32
-// Watcom doesn't like the underscores
-
-#define _open    open
-#define _read    read
-#define _write   write
-#define _lseek   lseek
-#define _close   close
-#undef  _O_BINARY
-#define _O_BINARY O_BINARY
-#undef  _O_RDWR
-#define _O_RDWR   O_RDWR
-#undef  _O_RDONLY
-#define _O_RDONLY O_RDONLY
-#endif
-
-#ifdef HWIN32
 // Map to Win32 counterparts
 
 #define _open    _lopen
@@ -696,7 +654,6 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b);
 #define SEEK_END  FILE_END
 #undef  SEEK_SET
 #define SEEK_SET  FILE_BEGIN
-#endif
 
 #pragma intrinsic(inp)
 #pragma intrinsic(outp)

@@ -437,7 +437,7 @@ BOOL __cdecl mac_Install(PVMINFO pvmi, PVM pvm)
 void SetMacMemMode(BOOL f32)
 {
     // WARNING! Don't do any debug output here that dumps memory
-    // since we are in the middle of changing the memory state!!!!
+    // since we are in the middle of changing the memory state!!
 
 #ifndef NDEBUG
     fDebug++;
@@ -2751,7 +2751,7 @@ void UpdateT2()
         }
     else
         {
-//    printf("T2 interrupt!!!\n");
+//    printf("T2 interrupt!!\n");
         vmachw.rgvia[0].vT2Cw = 0;
         vmachw.rgvia[0].vIFR |= 0x20;
         vmachw.fTimer2Going = FALSE;
@@ -3460,7 +3460,7 @@ printf("mapped to %08X\n", *pea);
     else if (1 && (*pea >= 0x5FF00000) && (*pea < 0x5FF80000))
         {
         // 2M ROMs access $5FFxxxxx
-// printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+// printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
 
         *pea = 0xFFFFFFFF;  // Quadra 610
         mt = MT_UNUSED;
@@ -3469,7 +3469,7 @@ printf("mapped to %08X\n", *pea);
     else if ((*pea >= 0x7FF00000) && (*pea < 0x5FFFF000))
         {
         // 4M ROMs access $5FF00000
-// printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+// printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
         mt = MT_ZERO;
 
         if ((vmCur.bfHW == vmMacQ610) || (vmCur.bfHW == vmMacQ650))
@@ -3533,7 +3533,7 @@ printf("mapped to %08X\n", *pea);
 
         */
 
-// printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+// printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
         mt = MT_ZERO;
 
         if ((vmCur.bfHW == vmMacQ610) || (vmCur.bfHW == vmMacQ650))
@@ -3603,14 +3603,14 @@ printf("mapped to %08X\n", *pea);
 
             case 0x18: // ???
                 // Mac Classic II ROMs insist on writing to $50F18000
-                // printf("ACCESSING 50F18000 at PC %08X!!!\n", vpregs->PC);
+                // printf("ACCESSING 50F18000 at PC %08X!!\n", vpregs->PC);
 
                 mt = MT_ZERO;
                 break;
 
             case 0x1A: // ???
                 // LC580/LC630 ROMs write to $50F1A101 ?!?!?!?
-                // printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+                // printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
 
                 switch (PeekL(vi.eaROM[0]))
                     {
@@ -3702,7 +3702,7 @@ printf("mapped to %08X\n", *pea);
 
                 case 0x0E: // machine ID?
 #if 0
-printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
 #endif
                     *pea = 0xFFFFF320;  // value from Quadra 610
                     mt = MT_UNUSED;
@@ -3852,7 +3852,7 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
     
                 case 0x0E: // ???
                     // Mac Classic II ROMs insist on writing to $50F0E000
-                    // printf("ACCESSING 50F0E000 at PC %08X!!!\n", vpregs->PC);
+                    // printf("ACCESSING 50F0E000 at PC %08X!!\n", vpregs->PC);
 
                     mt = MT_ZERO;
                     break;
@@ -3873,14 +3873,14 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
     
                 case 0x18: // ???
                     // Mac Classic II ROMs insist on writing to $50F18000
-                    // printf("ACCESSING 50F18000 at PC %08X!!!\n", vpregs->PC);
+                    // printf("ACCESSING 50F18000 at PC %08X!!\n", vpregs->PC);
 
                     mt = MT_ZERO;
                     break;
 
                 case 0x1A: // ???
                     // LC580/LC630 ROMs write to $50F1A101 ?!?!?!?
-                    // printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
+                    // printf("ACCESSING %08X at PC %08X!!\n", *pea, vpregs->PC);
     
                     switch (PeekL(vi.eaROM[0]))
                         {
@@ -5119,7 +5119,7 @@ ULONG __cdecl old_WriteHWByte(ULONG ea, BYTE *pb)
             else if (ea == 0x1400)
                 {
 #if TRACEADB
-                printf("!!!! ");
+                printf("!! ");
                 printf("Writing %02X to VIA SR, PC = %08X\n", b, vpregs->PC);
 #endif
                 vmachw.rgvia[0].vSR = b;
@@ -6860,7 +6860,7 @@ printf("sending Y interrupt\n");
                 }
             else
                 {
-//    printf("T1 interrupt!!!\n");
+//    printf("T1 interrupt!!\n");
                 vmachw.rgvia[0].vIFR |= 0x40;
 
                 if (vmachw.rgvia[0].vACR & 0x40)

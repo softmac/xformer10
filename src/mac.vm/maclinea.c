@@ -93,7 +93,7 @@ int CallMacLineA()
             switch(PeekW(vpregs->A7 + cbAutoPop))
                 {
             default:
-                printf("_SCSI UNKNOWN %02X!!!\n", PeekW(vpregs->A7 + cbAutoPop));
+                printf("_SCSI UNKNOWN %02X!!\n", PeekW(vpregs->A7 + cbAutoPop));
                 break;
 
             case 0:
@@ -213,7 +213,7 @@ int CallMacLineA()
             default:
                 return 1;
 #if TRACESCSI
-                printf("_SCSI UNKNOWN!!!\n");
+                printf("_SCSI UNKNOWN!!\n");
 #endif
                 DbgMessageBox(NULL, "SCSI unknown!", vi.szAppName, MB_OK);
                 break;
@@ -537,7 +537,7 @@ LhandledSCSI0_2:
         case 0xA1C9:
            // printf("_Syserror %08X %08X\n", vpregs->PC, vpregs->D0);
 
-            // Mac OS 8 HACK!!!
+            // Mac OS 8 HACK!!
 
             if (vi.cbROM[0] == 0x80000)
             if (vmCur.bfCPU >= cpu68020)
@@ -964,7 +964,7 @@ Lreadfail:
 						vpregs->rgfsr.bitZ = 0;
 						vpregs->rgfsr.bitN = 1;
 #if !defined(NDEBUG) || defined(BETA) || TRACEIWM
-                        printf("I/O FAILED!!!\n");
+                        printf("I/O FAILED!!\n");
 #endif
 
 Sleep(200);

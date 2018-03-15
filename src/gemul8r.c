@@ -985,9 +985,6 @@ int CALLBACK WinMain(
     if (!v.fNoSCSI)
         FInitBlockDevLib();
 
-    // Initialize joysticks (but don't capture yet)
-    //InitJoysticks();
-
     // Now go and prompt the user with First Time Setup if necessary
 
     if (!fProps)
@@ -1109,7 +1106,7 @@ int CALLBACK WinMain(
                 switch(msg.message)
                     {
 
-				// !!! we don't seem to send these to ourself anymore
+				// we don't seem to send these to ourself anymore
 #if 0
 				case TM_JOY0FIRE:
                 case TM_JOY0MOVE:

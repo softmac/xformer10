@@ -74,7 +74,7 @@ void WriteByteToRTC()
         if ((iCMOS < 256) && (vmachw.rgbCMOS[256] & 0x80))
             {
 #if TRACERTC
-            printf("RTC: CMOS IS WRITE PROTECTED!!!\n");
+            printf("RTC: CMOS IS WRITE PROTECTED!!\n");
 #endif
             return;
             }

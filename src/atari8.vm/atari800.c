@@ -25,31 +25,18 @@ VMINFO const vmi800 =
     NULL,
     0,
     "Atari 800/800XL/130XE",
-#ifdef HWIN32
     vmAtari48C | vmAtariXLC | vmAtariXEC | vmAtari48 | vmAtariXL | vmAtariXE,
     cpu6502,
     ram48K | ram64K | ram128K,
     osAtari48 | osAtariXL | osAtariXE,
     monGreyTV | monColrTV,
     InstallAtari,
-#else
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-#endif
     InitAtari,
     UninitAtari,
     InitAtariDisks,
-#ifdef HWIN32
     MountAtariDisk,
-#endif
     UninitAtariDisks,
-#ifdef HWIN32
     UnmountAtariDisk,
-#endif
     ColdbootAtari,
     WarmbootAtari,
     ExecuteAtari,
@@ -77,8 +64,7 @@ CANDYHW *vpcandyCur = &vrgcandy[0];
 
 WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down
 BYTE bshiftSav;
-
-#ifdef HWIN32
+static signed short wLeftMax;
 
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
@@ -108,11 +94,14 @@ void DumpROM(char *filename, char *label, char *rgb, int start, int len)
     fclose(fp);
 }
 
+extern char rgbApplSoft[];
+
 void DumpROMS()
 {
     FILE *fp;
     int i, j;
 
+    DumpROM("applsoft.c", "rgbApplSoft", rgbApplSoft, 0xD000, 0x3000); // 12K
     DumpROM("atariosb.c", "rgbAtariOSB", rgbAtariOSB, 0xC800, 0x2800); // 10K
     DumpROM("atarixl5.c", "rgbXLXE5000", rgbXLXE5000, 0x5000, 0x1000); //  4K
     DumpROM("atarixlb.c", "rgbXLXEBAS",  rgbXLXEBAS,  0xA000, 0x2000); //  8K
@@ -152,8 +141,6 @@ BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
     return TRUE;
 }
 
-#endif // HWIN32
-
 BOOL __cdecl InitAtari()
 {
     static BOOL fInited;
@@ -189,11 +176,7 @@ BOOL __cdecl InitAtari()
             }
 #endif
 
-#ifdef HWIN32
         wStartScan = 8;
-#else
-        wStartScan = 27;
-#endif
 
         ramtop = 0xA000;
 #if XE
@@ -208,7 +191,6 @@ BOOL __cdecl InitAtari()
 
     ReadROMs();
 
-#ifdef HWIN32
     if (!FInitSerialPort(vmCur.iCOM))
         vmCur.iCOM = 0;
     if (!InitPrinter(vmCur.iLPT))
@@ -248,21 +230,12 @@ BOOL __cdecl InitAtari()
 //  vi.eaRAM[1] = 0;
 //  vi.cbRAM[1] = 0xC000;
 //  vi.pregs = &rgbMem[0];
-#endif
 
     return TRUE;
 }
 
 BOOL __cdecl UninitAtari()
 {
-#ifndef HWIN32
-    if (fSound)
-        {
-        InitSoundBlaster();
-        }
-#else
-//  vi.pregs = NULL;
-#endif
     *pbshift = bshiftSav;
 
     UninitAtariDisks();
@@ -272,37 +245,31 @@ BOOL __cdecl UninitAtari()
 
 BOOL __cdecl MountAtariDisk(int i)
 {
-#ifdef HWIN32
     PVD pvd = &vmCur.rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
         AddDrive(i, pvd->sz);
-#endif
 
     return TRUE;
 }
 
 BOOL __cdecl InitAtariDisks()
 {
-#ifdef HWIN32
     int i;
 
     for (i = 0; i < vmCur.ivdMac; i++)
         MountAtariDisk(i);
-#endif
 
     return TRUE;
 }
 
 BOOL __cdecl UnmountAtariDisk(int i)
 {
-#ifdef HWIN32
     PVD pvd = &vmCur.rgvd[i];
 
 	//we can't just unmount if we've asked for a disk image, the whole point is to unmount if we didn't ask for one.
     //if (pvd->dt == DISK_IMAGE)
         DeleteDrive(i);
-#endif
 
     return TRUE;
 }
@@ -310,12 +277,10 @@ BOOL __cdecl UnmountAtariDisk(int i)
 
 BOOL __cdecl UninitAtariDisks()
 {
-#ifdef HWIN32
     int i;
 
     for (i = 0; i < vmCur.ivdMac; i++)
         UnmountAtariDisk(i);
-#endif
 
     return TRUE;
 }
@@ -330,7 +295,7 @@ BOOL __cdecl WarmbootAtari()
 	countJiffies = 0; // unused
 	fBrakes = TRUE;	// back to real time
 
-	InitSound();	// !!! need to reset and queue audio buffers
+	InitSound();	// need to reset and queue audio buffers
 
     return TRUE;
 }
@@ -347,11 +312,8 @@ BOOL __cdecl ColdbootAtari()
     countJiffies = 0;	// unused
 	fBrakes = TRUE; // back to real time
 
-#if 0
-    printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
-#endif
+    //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
-#ifdef HWIN32
     if (mdXLXE == md800)
         vmCur.bfHW = (ramtop == 0xA000) ? vmAtari48C : vmAtari48;
     else if (mdXLXE == mdXL)
@@ -359,7 +321,6 @@ BOOL __cdecl ColdbootAtari()
     else
         vmCur.bfHW = (ramtop == 0xA000) ? vmAtariXEC : vmAtariXE;
     DisplayStatus();
-#endif
 
     // Swap in BASIC and OS ROMs.
 
@@ -436,13 +397,15 @@ BOOL __cdecl ColdbootAtari()
 
     // PIA
 
-    rPADATA = 255; // !!! rPBDATA and wPADATA too?
+	rPADATA = 255;
+	rPBDATA = 255;
+	wPADATA = 255;
     wPBDATA = (ramtop == 0xC000) ? 255: 253;	// !!!
     PACTL  = 60;
     PBCTL  = 60;
 	// misc.
 
-//    wStartScan = 28;
+	//wStartScan = 28;
 
 	// reset the cycle counter each cold start
 	LARGE_INTEGER qpc;
@@ -452,10 +415,10 @@ BOOL __cdecl ColdbootAtari()
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
 
-	// !!! seed the random number generator so it's different every time
+	// seed the random number generator so it's different every time
 	RANDOM = (BYTE)qpc.QuadPart;
 
-	InitSound();	// !!! Need to reset and queue audio buffers
+	InitSound();	// Need to reset and queue audio buffers
 
 	return TRUE;
 }
@@ -530,223 +493,139 @@ BOOL fDumpHW;
 
 BOOL __cdecl ExecuteAtari()
 {
-    vpcandyCur = &vrgcandy[v.iVM];
+	vpcandyCur = &vrgcandy[v.iVM];
 
-#ifndef HWIN32
-    if (!fTrace)
-        {
-        SaveVideo();
-        ForceRedraw();
-        }
-#endif
+	fStop = 0;
 
-    fStop = 0;
-
-    do {
+	do {
 		// !!! this is wrong
-        RANDOM = (RANDOM << 1) ^ 7 + (BYTE)wScan ^ regA - btick;
-
-		// if there were any 6502 instructions left to do, skip all this to finish them off now before proceeding to next scan line
-		assert(wLeft == 0); // but this never happens
-		if (wLeft == 0) {
-            // Display scan line here
-
-#ifdef HWIN32
-            // This helps with choppy sound as it allows the next
-            // sound to start before we go render the scan line
-            // SoundDoneCallback();
-#endif
+		RANDOM = (RANDOM << 1) ^ 7 + (BYTE)wScan ^ regA - btick;
 
 #ifndef NDEBUG
-            if (fDumpHW) {
-                WORD PCt = cpuPeekW(0x200);
-                extern void CchDisAsm(WORD *);
-                int i;
+		// Display scan line here
+		if (fDumpHW) {
+			WORD PCt = cpuPeekW(0x200);
+			extern void CchDisAsm(WORD *);
+			int i;
 
-                printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
-                    cpuPeekB(DLPC));
-                for (i = 0; i < 60; i++)
-                    {
-                    CchDisAsm(&PCt); printf("\n");
-                    }
-                PCt = regPC;
-                for (i = 0; i < 60; i++)
-                    {
-                    CchDisAsm(&PCt); printf("\n");
-                    }
-                FDumpHWVM();
-            }
-#endif // DEBUG
-			
-            // next scan line - !!! should really be 262.5, ugh, sigh, NTSC.
-            wScan = wScan+1;
-            if (wScan >= 262)
-                wScan = 0;
-
-            // hack for programs that check $D41B instead of $D40B
-            rgbMem[0xD41B] =
-            VCOUNT = (BYTE)(wScan >> 1);
-
-			ProcessScanLine(1); // renders the previous scan line
-			ProcessScanLine(0);	// prepare for new scan line, and do the DLI
-
-            // Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
-			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus
-			// !!! 21 should be right for Gr.0 but for some reason 18 is
-			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-            wLeft = (fBrakes && (DMACTL & 3)) ? 20 : 30;	// runs faster with ANTIC turned off (all approximate)
-            //wLeft *= clockMult;
-
-			if (wScan < 250) {
-#if 0
-				// send 1/120 of a second of audio twice - once after POKEY is updated in the VBI and once here, half way to the next VBI
-				if (wScan == 125) {
-					SoundDoneCallback();
-					SoundDoneCallback();
-				}
-#endif
-
-			} else if (wScan == 250) {
-                // start the NMI status early so that programs
-                // that care can see it
-                NMIST = 0x40 | 0x1F;
-			
-			// do the VBI!
+			printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
+				cpuPeekB(DLPC));
+			for (i = 0; i < 60; i++)
+			{
+				CchDisAsm(&PCt); printf("\n");
 			}
-			else if (wScan == 251) {
+			PCt = regPC;
+			for (i = 0; i < 60; i++)
+			{
+				CchDisAsm(&PCt); printf("\n");
+			}
+			FDumpHWVM();
+		}
+#endif // DEBUG
+
+		// next scan line - should really be 262.5, ugh, sigh, NTSC.
+		wScan = wScan + 1;
+
+		// we process the audio after the whole frame is done, but video during the scan line the VBLANK starts at (241)
+		if (wScan >= 262)
+		{
+			SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
+			wScan = 0;
+			wFrame++;
+
+			static ULONGLONG cCYCLES = 0;
+			static ULONGLONG cErr = 0;
+
+			// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+			const ULONGLONG cJif = 29830; // 1789790 / 60
+			ULONGLONG cCur = GetCycles() - cCYCLES;
+			while (fBrakes && ((ULONGLONG)(cJif - cErr) > cCur * clockMult)) {
+				Sleep(1);
+				cCur = GetCycles() - cCYCLES;
+			}
+			cErr = cCur - (cJif - cErr);
+			if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+			cCYCLES = GetCycles();
+		}
+
+		// hack for programs that check $D41B instead of $D40B
+		rgbMem[0xD41B] =
+			VCOUNT = (BYTE)(wScan >> 1);
+
+		ProcessScanLine(1); // renders the previous scan line
+		ProcessScanLine(0);	// prepare for new scan line, and do the DLI
+
+		// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
+		// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
+		// 21 should be right for Gr.0 but for some reason 18 is.
+		// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
+		wLeft = (fBrakes && (DMACTL & 3)) ? 20 : 30;	// runs faster with ANTIC turned off (all approximate)
+		wLeftMax = wLeft;	// remember what it started at
+		//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
+
+		if (wScan < 10) {
+			wLeft = 30;	// DMA is off for the first 10 lines. Everything breaks if I put all 21 retrace lines together
+			wLeftMax = wLeft;
+		}
+		else if (wScan < 250) {
+			// business as usual
+		}
+		else if (wScan == 250) {
+			// start the NMI status early so that programs
+			// that care can see it
+			NMIST = 0x40 | 0x1F;
+		}
+
+		// do the VBI! !!! You cannot change this from 251 for some reason!
+		else if (wScan == 251)
+		{
 #ifndef NDEBUG
-				fDumpHW = 0;
+			fDumpHW = 0;
 #endif
-#if 0
-				// a bunch of old debug spew to show how fast we're running, horrible resolution!
-				countJiffies++;
-				if ((countJiffies % 180) == 0) {
-					ULONG lastMs = Getms(), currMs, delta;
-					static ULONG lastInstr;
-					ULONG kHz;
+			if (NMIEN & 0x40) {
+				// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+				// every scan line now until it's done, then resume
+				Interrupt();
+				NMIST = 0x40 | 0x1F;
+				regPC = cpuPeekW(0xFFFA);
+			}
 
-					QueryTickCtr();
-					currMs = Getms();
+			// process joysticks before the vertical blank, just because
+			// Very slow if joysticks not installed, so skip the code
+			if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+				JOYINFO ji;
+				MMRESULT mm = joyGetPos(0, &ji);
+				if (mm == 0) {
 
-					delta = currMs - lastMs;
+					int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+					dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
 
-#if !defined(NDEBUG)
-					printf("Getms = %d, delta = %d\n", Getms(), delta);
-#endif
+					rPADATA |= 12;                  // assume joystick centered
 
-					printf("guest time: %3dh %02dm %02ds    ",
-						countJiffies / (3600 * 60),
-						(countJiffies / 3600) % 60,
-						(countJiffies / 60) % 60);
+					if (dir < 0)
+						rPADATA &= ~4;              // left
+					else if (dir > 0)
+						rPADATA &= ~8;              // right
 
-					printf("Minstrs: %6d    ", countInstr / 1000000);
+					dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+					dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
 
-					if (delta)
-					{
-						kHz = clockMult * 1790 * 3000 / delta;
+					rPADATA |= 3;                   // assume joystick centered
 
-						printf("%4u kips    ", (countInstr - lastInstr) / delta);
-						printf("effective 6502 clock speed = %4d.%02d MHz\n", kHz / 1000, (kHz % 1000 / 10));
-
-						lastInstr = countInstr;
-					}
-
-					else
-						printf("\n");
-
-				}
-#endif
-				if (NMIEN & 0x40) {
-					// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-					// every scan line now until it's done, then resume
-					Interrupt();
-					NMIST = 0x40 | 0x1F;
-					regPC = cpuPeekW(0xFFFA);
-				}
-
-#ifndef HWIN32
-				// check joysticks before keyboard in case user is pressing
-				// a keyboard cursor key
-
-				if (!(wFrame & 3) && fJoy)
-				{
-					MyReadJoy();
-
-					rPADATA = 255;
-
-					if (wJoy0XCal)
-					{
-						// if joystick 0 present
-
-						if ((wJoy0XCal - 50) > wJoy0X)
-							rPADATA &= ~4;              // left
-
-						else if ((wJoy0XCal + 50) < wJoy0X)
-							rPADATA &= ~8;              // right
-
-						if ((wJoy0YCal - 50) > wJoy0Y)
-							rPADATA &= ~1;              // up
-
-						else if ((wJoy0YCal + 50) < wJoy0Y)
-							rPADATA &= ~2;              // down
-					}
-
-					if (wJoy1XCal)
-					{
-						// if joystick 1 present
-
-						if ((wJoy1XCal - 10) > wJoy1X)
-							rPADATA &= ~0x40;              // left
-
-						else if ((wJoy1XCal + 10) < wJoy1X)
-							rPADATA &= ~0x80;              // right
-
-						if ((wJoy1YCal - 10) > wJoy1Y)
-							rPADATA &= ~0x10;              // up
-
-						else if ((wJoy1YCal + 10) < wJoy1Y)
-							rPADATA &= ~0x20;              // down
-					}
-
-					TRIG0 = ((bJoyBut & 0x30) != 0x30) ? 0 : 1;
-					TRIG1 = ((bJoyBut & 0xC0) != 0xC0) ? 0 : 1;
+					if (dir < 0)
+						rPADATA &= ~1;              // up
+					else if (dir > 0)
+						rPADATA &= ~2;              // down
 
 					UpdatePorts();
+
+					if (ji.wButtons)
+						TRIG0 &= ~1;                // JOY 0 fire button down
+					else
+						TRIG0 |= 1;                 // JOY 0 fire button up
 				}
-#else
-				// process joysticks before the vertical blank, just because !!!
-				if (vmCur.fJoystick) {
-					JOYINFO ji;
-					MMRESULT mm = joyGetPos(0, &ji);
-					if (mm == 0) {
-
-						int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-						dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-
-						rPADATA |= 12;                  // assume joystick centered
-
-						if (dir < 0)
-							rPADATA &= ~4;              // left
-						else if (dir > 0)
-							rPADATA &= ~8;              // right
-
-						dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-						dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-
-						rPADATA |= 3;                   // assume joystick centered
-
-						if (dir < 0)
-							rPADATA &= ~1;              // up
-						else if (dir > 0)
-							rPADATA &= ~2;              // down
-
-						UpdatePorts();
-
-						if (ji.wButtons)
-							TRIG0 &= ~1;                // JOY 0 fire button down
-						else
-							TRIG0 |= 1;                 // JOY 0 fire button up
-					}
+				if (vi.rgjc[1].wNumButtons > 0)
+				{
 					mm = joyGetPos(1, &ji);
 					if (mm == 0) {
 
@@ -778,162 +657,75 @@ BOOL __cdecl ExecuteAtari()
 							TRIG1 |= 1;                 // JOY 0 fire button up
 					}
 				}
-#endif // !HWIN32
+			}
 
-				CheckKey();
+			CheckKey();	// process the ATARI keyboard buffer
 
-				wFrame++;
+			if (fTrace)
+				ForceRedraw();	// it might do this anyway
 
-#if 0 // !!! doesn't seem to be necessary
-				if (/* fBrakes && */ (CHBASE != 224) && !(wFrame % 3))
+		// every VBI, shadow the hardware registers
+		// to their higher locations
+
+			memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
+			memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
+			memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
+			memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
+
+			memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
+			memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
+			memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
+			memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
+
+			memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
+			memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
+			memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
+
+			MSG msg;
+
+			if (wScanMin > wScanMac)
+			{
+				assert(0);
+				// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
+			}
+			else
+			{
+				extern void RenderBitmap();
+				RenderBitmap();	// tell Gemulator to actually draw the window
+			}
+
+			wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
+			wScanMac = 0;
+
+			// Gem window has a message, stop the loop to process it
+			if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
+				fStop = fTrue;
+
+			// decrement printer timer
+
+			if (vi.cPrintTimeout && vmCur.fShare)
+			{
+				vi.cPrintTimeout--;
+				if (vi.cPrintTimeout == 0)
 				{
-					// if using redefined characters then force a full
-					// screen redraw once in a while in case the
-					// character set is being changed on the fly
-					// as in Boulder Dash.
-
-					// !!! Where is the right place to do this? Every VBI? Every scan line?
-
-					static long chksum;
-					long newchk = 0;
-					int i;
-
-					for (i = 0; i < 256; i++)
-						newchk += (long)cpuPeekB((CHBASE << 8) + i + i);
-
-					if (newchk != chksum)
-					{
-						chksum = newchk;
-						ForceRedraw();
-					}
+					FlushToPrinter();
+					UnInitPrinter();
 				}
-				else
-#endif
+			}
+			else
+				FlushToPrinter();
 
-					if (fTrace)
-					{
-						ForceRedraw();
-					}
+			// exit to message loop after VBI always, REVIEW: any effect???
+			//fStop = fTrue;
 
-				// !!! Sounds that go on and off within one frame will not be noticed!
-				if (fSoundOn) {
-					UpdatePokey();
-					//OutputDebugString("UpdatePokey\n");
-				}
+		}
+		else if (wScan > 251)
+		{
+			wLeft = 30;	// for this retrace section, there will be no DMA
+			wLeftMax = wLeft;
+		}
 
-				// every VBI, shadow the hardware registers
-				// to their higher locations
-
-				memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
-				memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
-				memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
-				memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
-
-				memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
-				memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
-				memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
-				memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
-
-				memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
-				memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
-				memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
-
-#ifdef HWIN32
-				{
-					MSG msg;
-
-					// after POKEY gets new values, play one frame of audio to last until the next VBI
-					// SoundDoneCallback();
-
-#ifdef NDEBUG
-					if ((wFrame % 3) == 0)	// !!! 20 fps was all old video cards could do
-#endif
-					{
-						if (wScanMin > wScanMac) // !!! kill these variables
-						{
-							// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
-						}
-						else
-						{
-							extern void RenderBitmap();
-							RenderBitmap();	// tell Gemulator to actually draw the window
-						}
-
-						//UpdateOverlay(); // not implemented right now
-
-						wScanMin = 9999;	// screen not dirty anymore
-						wScanMac = 0;
-					}
-
-					// Gem window has a message, stop the loop to process it
-					if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-						fStop = fTrue;
-
-					// decrement printer timer
-
-					if (vi.cPrintTimeout && vmCur.fShare)
-					{
-						vi.cPrintTimeout--;
-						if (vi.cPrintTimeout == 0)
-						{
-							FlushToPrinter();
-							UnInitPrinter();
-						}
-					}
-					else
-						FlushToPrinter();
-				}
-#endif
-
-				//cVBI++;	// count how many VBI's we've done altogether
-
-				static ULONGLONG cCYCLES = 0;
-				static ULONGLONG cErr = 0;
-
-				// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-				const ULONGLONG cJif = 29830; // 1789790 / 60
-				ULONGLONG cCur = GetCycles() - cCYCLES;
-				while (fBrakes && ((ULONGLONG)(cJif - cErr) > cCur * clockMult)) {
-					Sleep(1);
-					cCur = GetCycles() - cCYCLES;
-				}
-				cErr = cCur - (cJif - cErr);
-				if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-				cCYCLES = GetCycles();
-
-#if 0
-				if (fBrakes && cVBI >= 3) {
-					while (btick == *pbtick) {
-#ifdef HWIN32
-						MSG msg;
-
-						//SoundDoneCallback();
-
-						if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-							fStop = fTrue;
-
-						//Sleep(10);
-#endif
-					}
-
-					btick = *pbtick;
-					cVBI = 0;
-					//                    WaitForVRetrace();
-				}
-#endif
-
-				
-				// exit to message loop after VBI always, REVIEW: any effect??? !!! inefficient?
-				//fStop = fTrue;
-
-			// !!! only bump if ANTIC is ON
-			} else if (wScan > 251) {
-                wLeft = wLeft | (wLeft >> 2);
-            }
-
-        } // if wLeft == 0
-
-        // this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
+		// this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
 		if (!(regP & IBIT))
 		{
 			if (IRQST != 255)
@@ -944,22 +736,18 @@ BOOL __cdecl ExecuteAtari()
 			}
 		}
 
-        // Execute about one horizontal scan line's worth of 6502 code
+		// Execute about one horizontal scan line's worth of 6502 code
 		Go6502();
+		assert(wLeft == 0 || fTrace == 1);
 
-        if (fSIO) {
-            // REVIEW: need to check if PC == $E459 and if so make sure
-            // XL/XE ROMs are swapped in, otherwise ignore
-            fSIO = 0;
-            SIOV();
-        }
+		if (fSIO) {
+			// REVIEW: need to check if PC == $E459 and if so make sure
+			// XL/XE ROMs are swapped in, otherwise ignore
+			fSIO = 0;
+			SIOV();
+		}
 
     } while (!fTrace && !fStop);
-
-#ifndef HWIN32
-    if (!fTrace)
-        RestoreVideo();
-#endif
 
     return FALSE;
 }
@@ -968,17 +756,6 @@ BOOL __cdecl ExecuteAtari()
 //
 // Stubs
 //
-
-#ifndef HWIN32
-
-BOOL __cdecl KeyAtari(ULONG l)
-{
-    // do nothing, keyboard is polled
-
-    return TRUE;
-}
-
-#endif
 
 BOOL __cdecl DumpRegsAtari()
 {
@@ -1129,10 +906,8 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
 //            printf("CONSOL %02X %02X\n", bOld, b);
 
-#ifdef HWIN32
             if (!vi.fWinNT)
-#endif
-            if ((bOld ^ b) & 8)
+	            if ((bOld ^ b) & 8)
                 {
                 // toggle speaker state (mask out lowest bit?)
 
@@ -1148,23 +923,32 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
         rgbMem[writePOKEY+addr] = b;
 
         if (addr == 10)
-            {
+        {
             // SKRES
 
             SKSTAT |=0xE0;
-            }
+        }
         else if (addr == 13)
-            {
+        {
             // SEROUT
 
             IRQST &= ~(IRQEN & 0x18);
-            }
+        }
         else if (addr == 14)
-            {
+        {
             // IRQEN
 
             IRQST |= ~b;
-            }
+        }
+		else if (addr <= 8)
+		{
+			// AUDFx, AUDCx or AUDCTL have changed - write some sound
+			// we're (wScan / 262) of the way through the scan lines and (wLeftmax - wLeft) of the way through this scan line
+			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / 30) * SAMPLES_PER_VOICE / 100 / 262;
+			if (iCurSample == 799 && AUDC4 == 8)
+				iCurSample = iCurSample;
+			SoundDoneCallback(vi.rgwhdr, iCurSample);
+		}
         break;
 
     case 0xD3:      // PIA
