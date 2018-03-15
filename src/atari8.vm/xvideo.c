@@ -745,7 +745,7 @@ Lrender:
     if (sl.hscrol != psl->hscrol) rgfChanged |= fFineScroll;
 
     if (sl.fpmg   |  psl->fpmg)   rgfChanged |= fPMG;
-
+	
 #if 0
     if (rgfChanged & fPMG)
         {
@@ -753,10 +753,11 @@ Lrender:
         }
 #endif
 
-    // HACK! HACK! render everything all the time until the screen
+    // !!! HACK! HACK! render everything all the time until the screen
     // corruption is figured out
-
-    rgfChanged |= fAll;
+    // !!! This makes it OK to not check CHBASE all the time in ExecuteAtari()
+	// !!! only do this if CHBASE changed for that scan line, we don't cache CHBASE per scan line
+	rgfChanged |= fAll;
 
     // Even if rgfChanged is 0 at this point, we have to check the 10 to 48
     // data bytes associated with this scan line. If it is the first scan line
@@ -1842,7 +1843,7 @@ LdrawPM23:
         ShowCountDownLine();
         }
 
-#ifndef NDEBUG
+#if 0 // !!! rainbow #ifndef NDEBUG
 
     // display the collision registers on each scan line
     //

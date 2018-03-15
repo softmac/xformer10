@@ -1468,7 +1468,8 @@ HANDLER(op81)
 
 HANDLER(op84)
 {
-    EA_zp(pcandy);
+ 
+   EA_zp(pcandy);
     WRITE_BYTE(regEA, regY);
     HANDLER_END();
 }
@@ -2452,7 +2453,730 @@ void __cdecl Go6502()
         if (t != t2) printf("BAD FLAGS STATE\n");
 #endif
 
+#if 1
         (*jump_tab_RO[READ_BYTE(regPC++)])(vpcandyCur);
+#else
+        switch(READ_BYTE(regPC++))
+            {
+        default:
+            __assume(0);
+            break;
+
+        case 0x02:
+        case 0x03:
+        case 0x04:
+        case 0x07:
+        case 0x0B:
+        case 0x0C:
+        case 0x0F:
+        case 0x12:
+        case 0x13:
+        case 0x14:
+        case 0x17:
+        case 0x1A:
+        case 0x1B:
+        case 0x1C:
+        case 0x1F:
+        case 0x22:
+        case 0x23:
+        case 0x27:
+        case 0x2B:
+        case 0x2F:
+        case 0x32:
+        case 0x33:
+        case 0x34:
+        case 0x37:
+        case 0x3A:
+        case 0x3B:
+        case 0x3C:
+        case 0x3F:
+        case 0x42:
+        case 0x43:
+        case 0x44:
+        case 0x47:
+        case 0x4B:
+        case 0x4F:
+        case 0x52:
+        case 0x53:
+        case 0x54:
+        case 0x57:
+        case 0x5A:
+        case 0x5B:
+        case 0x5C:
+        case 0x5F:
+        case 0x62:
+        case 0x63:
+        case 0x64:
+        case 0x67:
+        case 0x6B:
+        case 0x6F:
+        case 0x72:
+        case 0x73:
+        case 0x74:
+        case 0x77:
+        case 0x7A:
+        case 0x7B:
+        case 0x7C:
+        case 0x7F:
+        case 0x80:
+        case 0x82:
+        case 0x83:
+        case 0x87:
+        case 0x89:
+        case 0x8B:
+        case 0x8F:
+        case 0x92:
+        case 0x93:
+        case 0x97:
+        case 0x9B:
+        case 0x9C:
+        case 0x9E:
+        case 0x9F:
+        case 0xA3:
+        case 0xA7:
+        case 0xAB:
+        case 0xAF:
+        case 0xB2:
+        case 0xB3:
+        case 0xB7:
+        case 0xBB:
+        case 0xBF:
+        case 0xC2:
+        case 0xC3:
+        case 0xC7:
+        case 0xCB:
+        case 0xCF:
+        case 0xD2:
+        case 0xD3:
+        case 0xD4:
+        case 0xD7:
+        case 0xDA:
+        case 0xDB:
+        case 0xDC:
+        case 0xDF:
+        case 0xE2:
+        case 0xE3:
+        case 0xE7:
+        case 0xEB:
+        case 0xEF:
+        case 0xF2:
+        case 0xF3:
+        case 0xF4:
+        case 0xF7:
+        case 0xFA:
+        case 0xFB:
+        case 0xFC:
+        case 0xFF:
+            printf("unknown opcode at PC %04X is %02X\n", regPC-1, READ_BYTE(regPC-1));
+            wLeft = 0;
+            regPC = 0;
+            break;
+
+        case 0x00:   // BRK
+            op00();
+            break;
+
+        case 0x01:   // ORA (zp,X)
+            op01();
+            break;
+
+        case 0x05:   // ORA zp
+            op05();
+            break;
+
+        case 0x06:   // ASL zp
+            op06();
+            break;
+
+        case 0x08:   // PHP
+            op08();
+            break;
+
+        case 0x09:   // ORA #
+            op09();
+            break;
+
+        case 0x0A:   // ASL A
+            op0A();
+            break;
+
+        case 0x0D:   // ORA abs
+            op0D();
+            break;
+
+        case 0x0E:   // ASL abs
+            op0E();
+            break;
+
+        case 0x10:   // BPL rel8
+            op10();
+            break;
+
+        case 0x11:   // ORA (zp),Y
+            op11();
+            break;
+
+        case 0x15:   // ORA zp,Y
+            op15();
+            break;
+
+        case 0x16:   // ASL zp,Y
+            op16();
+            break;
+
+        case 0x18:   // CLC
+            op18();
+            break;
+
+        case 0x19:   // ORA abs,Y
+            op19();
+            break;
+
+        case 0x1D:   // ORA abs,X
+            op1D();
+            break;
+
+        case 0x1E:   // ASL abs,X
+            op1E();
+            break;
+
+        case 0x20:   // JSR abs
+            op20();
+            break;
+
+        case 0x21:   // AND (zp,X)
+            op21();
+            break;
+
+        case 0x24:   // BIT zp
+            op24();
+            break;
+
+        case 0x25:   // AND zp
+            op25();
+            break;
+
+        case 0x26:   // ROL zp
+            op26();
+            break;
+
+        case 0x28:   // PLP
+            op28();
+            break;
+
+        case 0x29:   // AND #
+            op29();
+            break;
+
+        case 0x2A:   // ROL A
+            op2A();
+            break;
+
+        case 0x2C:   // BIT abs
+            op2C();
+            break;
+
+        case 0x2D:   // AND abs
+            op2D();
+            break;
+
+        case 0x2E:   // ROL abs
+            op2E();
+            break;
+
+        case 0x30:   // BMI rel8
+            op30();
+            break;
+
+        case 0x31:   // AND (zp),Y
+            op31();
+            break;
+
+        case 0x35:   // AND zp,X
+            op35();
+            break;
+
+        case 0x36:   // ROL zp,X
+            op36();
+            break;
+
+        case 0x38:   // SEC
+            op38();
+            break;
+
+        case 0x39:   // AND abs,Y
+            op39();
+            break;
+
+        case 0x3D:   // AND abs,X
+            op3D();
+            break;
+
+        case 0x3E:   // ROL abs,X
+            op3E();
+            break;
+
+        case 0x40:   // RTI
+            op40();
+            break;
+
+        case 0x41:   // EOR (zp,X)
+            op41();
+            break;
+
+        case 0x45:   // EOR zp
+            op45();
+            break;
+
+        case 0x46:   // LSR zp
+            op46();
+            break;
+
+        case 0x48:   // PHA
+            op48();
+            break;
+
+        case 0x49:   // EOR #
+            op49();
+            break;
+
+        case 0x4A:   // LSR A
+            op4A();
+            break;
+
+        case 0x4C:   // JMP abs
+            op4C();
+            break;
+
+        case 0x4D:   // EOR abs
+            op4D();
+            break;
+
+        case 0x4E:   // LSR abs
+            op4E();
+            break;
+
+        case 0x50:   // BVC rel8
+            op50();
+            break;
+
+        case 0x51:   // EOR (zp),Y
+            op51();
+            break;
+
+        case 0x55:   // EOR zp,X
+            op55();
+            break;
+
+        case 0x56:   // LSR zp,X
+            op56();
+            break;
+
+        case 0x58:   // CLI
+            op58();
+            break;
+
+        case 0x59:   // EOR abs,Y
+            op59();
+            break;
+
+        case 0x5D:   // EOR abs,X
+            op5D();
+            break;
+
+        case 0x5E:   // LSR abs,X
+            op5E();
+            break;
+
+        case 0x60:   // RTS
+            op60();
+            break;
+
+        case 0x61:   // ADC (zp,X)
+            op61();
+            break;
+
+        case 0x65:   // ADC zp
+            op65();
+            break;
+
+        case 0x66:   // ROR zp
+            op66();
+            break;
+
+        case 0x68:   // PLA
+            op68();
+            break;
+
+        case 0x69:   // ADC #
+            op69();
+            break;
+
+        case 0x6A:   // ROR A
+            op6A();
+            break;
+
+        case 0x6C:   // JMP (abs)
+            op6C();
+            break;
+
+        case 0x6D:   // ADC abs
+            op6D();
+            break;
+
+        case 0x6E:   // ROR abs
+            op6E();
+            break;
+
+        case 0x70:   // BVS rel8
+            op70();
+            break;
+
+        case 0x71:   // ADC (zp),Y
+            op71();
+            break;
+
+        case 0x75:   // ADC zp,X
+            op75();
+            break;
+
+        case 0x76:   // ROR zp,X
+            op76();
+            break;
+
+        case 0x78:   // SEI
+            op78();
+            break;
+
+        case 0x79:   // ADC abs,Y
+            op79();
+            break;
+
+        case 0x7D:   // ADC abs,X
+            op7D();
+            break;
+
+        case 0x7E:   // ROR abs,X
+            op7E();
+            break;
+
+        case 0x81:   // STA (zp),Y
+            op81();
+            break;
+
+        case 0x84:   // STY zp
+            op84();
+            break;
+
+        case 0x85:   // STA zp
+            op85();
+            break;
+
+        case 0x86:   // STX zp
+            op86();
+            break;
+
+        case 0x88:   // DEY
+            op88();
+            break;
+
+        case 0x8A:   // TXA
+            op8A();
+            break;
+
+        case 0x8C:   // STY abs
+            op8C();
+            break;
+
+        case 0x8D:   // STA abs
+            op8D();
+            break;
+
+        case 0x8E:   // STX abs
+            op8E();
+            break;
+
+        case 0x90:   // BCC rel8
+            op90();
+            break;
+
+        case 0x91:   // STA (zp),Y
+            op91();
+            break;
+
+        case 0x94:   // STY zp,X
+            op94();
+            break;
+
+        case 0x95:   // STA zp,X
+            op95();
+            break;
+
+        case 0x96:   // STX zp,X
+            op96();
+            break;
+
+        case 0x98:   // TYA
+            op98();
+            break;
+
+        case 0x99:   // STA abs,Y
+            op99();
+            break;
+
+        case 0x9A:   // TXS
+            op9A();
+            break;
+
+        case 0x9D:   // STA abs,X
+            op9D();
+            break;
+
+        case 0xA0:   // LDY #
+            opA0();
+            break;
+
+        case 0xA1:   // LDA (zp,X)
+            opA1();
+            break;
+
+        case 0xA2:   // LDX #
+            opA2();
+            break;
+
+        case 0xA4:   // LDY zp
+            opA4();
+            break;
+
+        case 0xA5:   // LDA zp
+            opA5();
+            break;
+
+        case 0xA6:   // LDX zp
+            opA6();
+            break;
+
+        case 0xA8:   // TAY
+            opA8();
+            break;
+
+        case 0xA9:   // LDA #
+            opA9();
+            break;
+
+        case 0xAA:   // TAX
+            opAA();
+            break;
+
+        case 0xAC:   // LDY abs
+            opAC();
+            break;
+
+        case 0xAD:   // LDA abs
+            opAD();
+            break;
+
+        case 0xAE:   // LDX abs
+            opAE();
+            break;
+
+        case 0xB1:   // LDA (zp),Y
+            opB1();
+            break;
+
+        case 0xB0:   // BCS rel8
+            opB0();
+            break;
+
+        case 0xB4:   // LDY zp,X
+            opB4();
+            break;
+
+        case 0xB5:   // LDA zp,X
+            opB5();
+            break;
+
+        case 0xB6:   // LDX zp,Y
+            opB6();
+            break;
+
+        case 0xB8:   // CLV
+            opB8();
+            break;
+
+        case 0xB9:   // LDA abs,Y
+            opB9();
+            break;
+
+        case 0xBA:   // TSX
+            opBA();
+            break;
+
+        case 0xBC:   // LDY abs,X
+            opBC();
+            break;
+
+        case 0xBD:   // LDA abs,X
+            opBD();
+            break;
+
+        case 0xBE:   // LDX abs,X
+            opBE();
+            break;
+
+        case 0xC0:   // CPY #
+            opC0();
+            break;
+
+        case 0xC1:   // CMP (zp,X)
+            opC1();
+            break;
+
+        case 0xC4:   // CPY zp
+            opC4();
+            break;
+
+        case 0xC5:   // CMP zp
+            opC5();
+            break;
+
+        case 0xC6:   // DEC zp
+            opC6();
+            break;
+
+        case 0xC8:   // INY
+            opC8();
+            break;
+
+        case 0xC9:   // CMP #
+            opC9();
+            break;
+
+        case 0xCA:   // DEX
+            opCA();
+            break;
+
+        case 0xCC:   // CPY abs
+            opCC();
+            break;
+
+        case 0xCD:   // CMP abs
+            opCD();
+            break;
+
+        case 0xCE:   // DEC abs
+            opCE();
+            break;
+
+        case 0xD0:   // BNE rel8
+            opD0();
+            break;
+
+        case 0xD1:   // CMP (zp),Y
+            opD1();
+            break;
+
+        case 0xD5:   // CMP zp,X
+            opD5();
+            break;
+
+        case 0xD6:   // DEC zp,X
+            opD6();
+            break;
+
+        case 0xD8:   // CLD
+            opD8();
+            break;
+
+        case 0xD9:   // CMP abs,Y
+            opD9();
+            break;
+
+        case 0xDD:   // CMP abs,X
+            opDD();
+            break;
+
+        case 0xDE:   // DEC abs,X
+            opDE();
+            break;
+
+        case 0xE0:   // CPX #
+            opE0();
+            break;
+
+        case 0xE1:   // SBC (zp,X)
+            opE1();
+            break;
+
+        case 0xE4:   // CPX zp
+            opE4();
+            break;
+
+        case 0xE5:   // SBC zp
+            opE5();
+            break;
+
+        case 0xE6:   // INC zp
+            opE6();
+            break;
+
+        case 0xE8:   // INX
+            opE8();
+            break;
+
+        case 0xE9:   // SBC #
+            opE9();
+            break;
+
+        case 0xEA:   // NOP
+            opEA();
+            break;
+
+        case 0xEC:   // CPX abs
+            opEC();
+            break;
+
+        case 0xED:   // SBC abs
+            opED();
+            break;
+
+        case 0xEE:   // INC abs
+            opEE();
+            break;
+
+        case 0xF0:   // BEQ rel8
+            opF0();
+            break;
+
+        case 0xF1:   // SBC (zp),Y
+            opF1();
+            break;
+
+        case 0xF5:   // SBC zp,X
+            opF5();
+            break;
+
+        case 0xF6:   // INC zp,X
+            opF6();
+            break;
+
+        case 0xF8:   // SED
+            opF8();
+            break;
+
+        case 0xF9:   // SBC abs,Y
+            opF9();
+            break;
+
+        case 0xFD:   // SBC abs,X
+            opFD();
+            break;
+
+        case 0xFE:   // INC abs,X
+            opFE();
+            break;
+            }
+#endif
         } while (wLeft > 0);
 
     PackP(vpcandyCur);

@@ -16,6 +16,9 @@
 
 #ifdef XFORMER
 
+// CheckKey() is called during the vertical blank to process the keyboard buffer which is filled
+// by KeyAtari() in response to windows messages for keys, mouse, joystick
+//
 void CheckKey()
 {
     BYTE scan = 0;
@@ -55,7 +58,7 @@ void CheckKey()
         ch   = vvmi.rgbKeybuf[vvmi.keytail++];
         vvmi.keytail &= 1023;
 
-        DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
+		DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
         if ((vvmi.keytail & 1) || (vvmi.keyhead & 1))
             vvmi.keytail = vvmi.keyhead = 0;
@@ -74,7 +77,7 @@ void CheckKey()
 #endif
 
     shift = *pbshift & (wScrlLock | wCapsLock | wCtrl | wAnyShift);
-    fBrakes = (shift & wScrlLock);
+	//fBrakes = (shift & wScrlLock);	// using PGUP since modern keyboards don't have scroll lock anymore
     shift &= ~wScrlLock;
 
     if (shift & wCapsLock)
@@ -178,7 +181,7 @@ void CheckKey()
             goto lookit2;
 
         case 0x49:
-            // Page Up (scroll window down)
+            // Page Up (scroll window down) !!! not put in the buffer, this won't execute (GEM special fn key - BRAKES)
 Lpup:
             if (wStartScan > 0)
                 wStartScan--;
@@ -186,7 +189,7 @@ Lpup:
             return;
 
         case 0x51:
-            // Page Down (scroll window up)
+            // Page Down (scroll window up) !!! not put in the buffer, this won't execute (GEM special fn key - FIRE)
 Lpdown:
             if (wStartScan < 55)
                 wStartScan++;
@@ -370,10 +373,10 @@ LshiftF12:
         FColdbootVM();
         return;
 
-    case 0x99: // Page Up
+    case 0x99: // Page Up - never put in the keyboard buffer !!!
         goto Lpup;
 
-    case 0xA1: // Page Down
+    case 0xA1: // Page Down - never put in the keyboard buffer !!!
         goto Lpdown;
 
     case 0x77: // Control + Home
@@ -554,7 +557,7 @@ lookit2:
 
 #ifdef HWIN32
 
-// Process a Windows keystroke. The parameter lParam is broken up as follows:
+// Helper function for KeyAtari() to process a Windows keystroke. The parameter lParam is broken up as follows:
 //
 // bits 0..15  - repeat count
 // bits 16..23 - scan code
@@ -701,8 +704,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     case 0x150:
         if (*pbshift & wCtrl)
             scan += 0x50;   // cursor keys
-        else
-            {
+        else 
+		{ // !!! Darek, do you still brace like this?
             // joystick emulation
 
             static BYTE mpJoyBit[9] = { 1, 1, 1, 4, 4, 8, 8, 8, 2 };
@@ -713,7 +716,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
                 rPADATA |= mpJoyBit[scan - 0x48];
             UpdatePorts();
             return TRUE;
-            }
+        }
         break;
 
     case 0x147:
@@ -725,19 +728,21 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         break;
 
     case 0x149:         // Page Up
-        // toggle higher clock speed
+						// toggle higher clock speed
 
         if (fDown)
-            {
+        {
+#if 0
             clockMult++;
 
             if (clockMult > 64)
                 clockMult = 1;
 
             printf("clock multiplier = %u\n", clockMult);
-            }
-
-        return TRUE;
+#endif
+			fBrakes = !fBrakes;	// !!! toggle real time or fast as possible, clockMult is implemented though if you want to use it
+		}
+		return TRUE;
 
     case 0x151:         // Page Dn
         if (fDown)
@@ -860,17 +865,14 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     return TRUE;
 }
 
-
+// Process Thread messages for keys and joystick, and Windows messages for keybaord, mouse, and joystick
 //
-// Process Windows messages for keybaord, mouse, and joystick
-//
-
 BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
 {
     switch (message)
         {
     default:
-        Assert(FALSE);
+        //Assert(FALSE);
         break;
 
     case WM_SYSKEYDOWN:
@@ -883,59 +885,9 @@ BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
         return !FKeyMsg800(hWnd, message, uParam, lParam);
         break;
 
-    case WM_MOUSEMOVE:
-        {
-        int dir = (LOWORD(lParam) - (vsthw.xpix * vi.fXscale) / 2) / (vsthw.xpix / 4);
-
-        rPADATA |= 12;                  // assume joystick centered
-
-        if (dir < 0)
-            rPADATA &= ~4;              // left
-        else if (dir > 0)
-            rPADATA &= ~8;              // right
-
-        dir = (HIWORD(lParam) - (vsthw.ypix * vi.fYscale) / 2) / (vsthw.ypix / 4);
-
-        rPADATA |= 3;                   // assume joystick centered
-
-        if (dir < 0)
-            rPADATA &= ~1;              // up
-        else if (dir > 0)
-            rPADATA &= ~2;              // down
-
-        UpdatePorts();
-        return TRUE;
-        }
-
-    case MM_JOY1MOVE:
-        {
-        int dir = (LOWORD(lParam) - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-        dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-// printf("X dir = %d\n", dir);
-
-        rPADATA |= 12;                  // assume joystick centered
-
-        if (dir < 0)
-            rPADATA &= ~4;              // left
-        else if (dir > 0)
-            rPADATA &= ~8;              // right
-
-        dir = (HIWORD(lParam) - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-        dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-// printf("Y dir = %d\n", dir);
-
-        rPADATA |= 3;                   // assume joystick centered
-
-        if (dir < 0)
-            rPADATA &= ~1;              // up
-        else if (dir > 0)
-            rPADATA &= ~2;              // down
-
-        UpdatePorts();
-        return TRUE;
-        }
-
-    case TM_JOY0FIRE:
+// !!! we don't seem to use these custom thread messages any more
+#if 0
+	case TM_JOY0FIRE:
         if (uParam)
             TRIG0 &= ~1;                // JOY 0 fire button down
         else
@@ -952,8 +904,10 @@ printf("joy0move %d %d\n", uParam, lParam);
 
         UpdatePorts();
         return TRUE;
+#endif
 
-    case MM_JOY1BUTTONDOWN:
+	// mouse moves will send these joystick messages, even though we don't use joystick callbacks
+	case MM_JOY1BUTTONDOWN:
     case MM_JOY1BUTTONUP:
         if (uParam & JOY_BUTTON1)
             TRIG0 &= ~1;                // JOY 0 fire button down
@@ -961,7 +915,37 @@ printf("joy0move %d %d\n", uParam, lParam);
             TRIG0 |= 1;                 // JOY 0 fire button up
         return TRUE;
 
-    case MM_JOY2MOVE:
+		// !!! Is it OK that I am totally breaking the non-WIN32 or non 8 bit emulation case?
+#if 0
+	case MM_JOY1MOVE:
+	{
+		int dir = (LOWORD(lParam) - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+		dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
+		// printf("X dir = %d\n", dir);
+
+		rPADATA |= 12;                  // assume joystick centered
+
+		if (dir < 0)
+			rPADATA &= ~4;              // left
+		else if (dir > 0)
+			rPADATA &= ~8;              // right
+
+		dir = (HIWORD(lParam) - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+		dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
+		// printf("Y dir = %d\n", dir);
+
+		rPADATA |= 3;                   // assume joystick centered
+
+		if (dir < 0)
+			rPADATA &= ~1;              // up
+		else if (dir > 0)
+			rPADATA &= ~2;              // down
+
+		UpdatePorts();
+		return TRUE;
+	}
+
+	case MM_JOY2MOVE:
         {
         int dir = (LOWORD(lParam) - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
         dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
@@ -996,8 +980,36 @@ printf("joy0move %d %d\n", uParam, lParam);
         else
             TRIG1 |= 1;                 // JOY 1 fire button up
         return TRUE;
+#endif
 
-    case WM_LBUTTONDOWN:
+// mouse simulates (poorly) a joystick and just confuses apps because mouse moves to start GEM get passed to the app
+// and get stuck not centred.
+#if 0
+	case WM_MOUSEMOVE:
+	{
+		int dir = (LOWORD(lParam) - (vsthw.xpix * vi.fXscale) / 2) / (vsthw.xpix / 4);
+
+		rPADATA |= 12;                  // assume joystick centered
+
+		if (dir < 0)
+			rPADATA &= ~4;              // left
+		else if (dir > 0)
+			rPADATA &= ~8;              // right
+
+		dir = (HIWORD(lParam) - (vsthw.ypix * vi.fYscale) / 2) / (vsthw.ypix / 4);
+
+		rPADATA |= 3;                   // assume joystick centered
+
+		if (dir < 0)
+			rPADATA &= ~1;              // up
+		else if (dir > 0)
+			rPADATA &= ~2;              // down
+		
+		UpdatePorts();
+		return TRUE;
+	}
+
+	case WM_LBUTTONDOWN:
         TRIG0 &= ~1;                // JOY 0 fire button down
         return TRUE;
 
@@ -1009,7 +1021,8 @@ printf("joy0move %d %d\n", uParam, lParam);
     case WM_RBUTTONUP:
         // return FMouseMsgST(hWnd, message, uParam, LOWORD(lParam), HIWORD(lParam));
         break;
-        }
+#endif
+		}
 
     return FALSE;
 }

@@ -779,6 +779,10 @@ extern PROPS v;
 REGS vregs;             // 680x0 commonly used registers and TLB structures
 #endif
 
+#define SAMPLE_RATE 48000
+#define SNDBUFS     3
+#define SAMPLES_PER_VOICE SAMPLE_RATE / 60	// !!! 1/60th of a second, one buffer per VBI
+
 typedef struct
 {
     BOOL fWin32s;       // true if on Win32s, otherwise Win32
@@ -810,6 +814,9 @@ typedef struct
         __int64 llTicks;// QueryPerformanceCounter() result
         ULONG rglTicks[2];
         };
+
+	ULONGLONG qpcCold;
+	ULONGLONG qpfCold;
 
     ULONG lms;          // 32-bit millisecond counter
     ULONG lEclk;        // 32-bit E clock counter
@@ -854,11 +861,11 @@ typedef struct
 
     int  cPrintTimeout; // counts down to 0, when 0, closes LPT port
 
-    int  fWaveOutput;   // true if suitable wave output device found
-    int  iWaveOutput;   // if fWaveOutput, the identifier of the device
-    WAVEOUTCAPS woc;    // wave output capabilities structure
-    WAVEHDR rgwhdr[16]; // sound buffers
-    char rgbSndBuf[16][512*2];// sound buffer data (512 samples each in stereo)
+	WAVEOUTCAPS woc;    // wave output capabilities structure
+	int  fWaveOutput;   // true if suitable wave output device found
+	int  iWaveOutput;   // if fWaveOutput, the identifier of the device
+	WAVEHDR rgwhdr[SNDBUFS]; // sound buffers
+	char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2 * 2];// sound buffer data
 
     HANDLE hROMCard;    // on NT, the handle to the Gemulator device
     unsigned ioPort;    // current port being scanned
@@ -1093,12 +1100,14 @@ BOOL FWriteSerialPort(BYTE b);
 // sound.c
 
 void TestSound(void);
-void SoundDoneCallback(void);
-void UpdateVoice(int iVoice, ULONG new_frequency, ULONG new_volume, BOOL new_distortion);
+//void SoundDoneCallback(void);
+//void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
-void CaptureJoysticks();
+void CaptureJoysticks(HWND hwnd);
 void ReleaseJoysticks();
 void InitMIDI();
+void InitSound();
+void UninitSound();
 
 // blitter.c
 
@@ -1168,7 +1177,7 @@ void MarkAllPagesClean(void);
 // Our custom printf which maps to the Windows equivalent
 //
 
-int __cdecl printf(const char *format, ...);
+//int __cdecl printf(const char *format, ...);
 
 #ifndef NDEBUG
 #define DbgMessageBox(a,b,c,d) (fDebug ? MessageBox(a,b,c,d) : printf("%s\n", (b)))
@@ -1825,6 +1834,9 @@ extern _declspec(dllimport) ICpuExec cpi68K;
 #define TM_JOY0MOVE            (WM_APP+5)
 #define TM_TOGGLEROM           (WM_APP+6)
 #define TM_TOGGLECOLOR         (WM_APP+7)
+
+ULONGLONG GetCycles();
+ULONGLONG GetJiffies();
 
 #pragma hdrstop
 

@@ -176,7 +176,7 @@ typedef struct
     WORD m_fStop;
     WORD m_wStartScan, m_wScanMin, m_wScanMac;
 
-    WORD m_fJoy, m_fSound, m_fAutoStart;
+    WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
     // virtual guest vertical blanks ("jiffies")
 
@@ -254,7 +254,7 @@ extern CANDYHW vrgcandy[MAXOSUsable], *vpcandyCur;
 #define wScanMin      CANDY_STATE(wScanMin)
 #define wScanMac      CANDY_STATE(wScanMac)
 #define fJoy          CANDY_STATE(fJoy)
-#define fSound        CANDY_STATE(fSound)
+#define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)
 #define countJiffies  CANDY_STATE(countJiffies)
 #define countInstr    CANDY_STATE(countInstr)
@@ -588,8 +588,6 @@ void _SIO_Calibrate(void);
 int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
 
 void InitSoundBlaster();
-void DoSound(BYTE voice, WORD freq, BYTE dist, BYTE vol);
-void UpdatePokey();
 
 #ifdef HWIN32
 BOOL ProcessScanLine(BOOL);

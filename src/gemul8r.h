@@ -13,7 +13,7 @@
 ***************************************************************************/
 
 // uncomment to undefine NDEBUG, which will turn on a lot of debug spew
-// #undef NDEBUG
+//#undef NDEBUG
 
 //
 // There are the builds flags which determines the version of the product
