@@ -701,7 +701,9 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
             CONSOL |= 0x04;
         return TRUE;
 
-	case 0x44: // F10		
+	case 0x44: // F10
+
+//#if 0	// hacky, changed our idea of current VM, but didn't even properly change the VM
 		// CTL+F10 - cycle through VMs 800->XL->XE
 		if (fDown && (*pbshift & wCtrl))
 		{
@@ -716,10 +718,11 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			vmCur.iOS = mdXLXE;
 			vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, vmCur.iOS);
 			FColdbootVM();
-		}
+		} else
+//#endif
 
 		// shift F10 - coldboot and toggle cartridge on/off
-		else if (fDown && (*pbshift & wAnyShift))
+		if (fDown && (*pbshift & wAnyShift))
 		{
 			if (ramtop == 0xC000)
 				ramtop = 0xA000;

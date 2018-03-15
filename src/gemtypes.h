@@ -86,6 +86,7 @@
 // Basic Types
 //
 
+#if 0
 #ifndef VOID        // copied from winnt.h
 #define VOID void
 typedef char CHAR;
@@ -101,6 +102,7 @@ typedef unsigned short int WORD;
 typedef unsigned short int USHORT;
 typedef unsigned long int  ULONG;
 typedef int                BOOL;
+#endif
 #endif
 
 typedef void           (__cdecl *PFN) (int x, ...);
@@ -120,7 +122,7 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 #define k1G     (0x40000000)
 #define k2G     (0x80000000)
 
-// the size of an 8 bit screen
+// the size of an 8 bit screen - used only by XFORMER mode
 #define X8 352
 #define Y8 240
 
@@ -167,11 +169,7 @@ __inline void _assert(int f, char *file, int line)
             }
         else if (ret == 4)
             {
-#if _MSC_VER >= 1300
             __debugbreak();
-#else
-            __asm { int 3 };
-#endif
             }
         }
 }
@@ -180,17 +178,8 @@ __inline void _assert(int f, char *file, int line)
 
 #else  // NDEBUG
 
-#if _MSC_VER >= 1300
 #define DebugStr __noop
-#else
-#define DebugStr 0 &&
-#endif
-
-#if _MSC_VER >= 1200
 #define Assert(f) (__assume(f))
-#else
-#define Assert(f) (0)
-#endif
 
 #endif // NDEBUG
 
@@ -207,6 +196,8 @@ __inline void _assert(int f, char *file, int line)
 
 
 #define HERTZ CLOCKS_PER_SEC
+
+// !!! these need to be way higher now
 
 // maximum 9 cards with 7 sets of ROMs each
 
@@ -741,11 +732,10 @@ typedef struct
     BOOL             :1;    // reserved (deprecated)
     BOOL     fSaveOnExit:1; // 0 = normal, 1 = save INI file on exit
     BOOL     fHibrOnExit:1; // 0 = normal, 1 = hibernate on exit
-    BOOL                 :1;// reserved (deprecated)
+	BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
     BOOL     fZoomColor:1;  // 0 = normal, 1 = zoom low rez and medium rez
     BOOL     fFullScreen:1; // 0 = normal, 1 = display in full screen mode
-	BOOL     fTiling:1;     // 0 = normal, 1 - tile the display
-    BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
+	BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
 

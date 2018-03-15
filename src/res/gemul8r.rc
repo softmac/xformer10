@@ -43,7 +43,7 @@ IDR_GEMMENU MENU PRELOAD DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
-		POPUP "&Add VM"
+		POPUP "&New VM"
 		BEGIN
 			MENUITEM "ATARI 800", IDM_ADDVM		// example, will be populated
 		END

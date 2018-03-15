@@ -54,7 +54,7 @@ BOOL FAddVM(PVMINFO pvmi, int *pi)
             break;
         }
 
-    // did not find an empty slot, can be grow v.cVM?
+    // did not find an empty slot, can we grow v.cVM?
 
     if (i == v.cVM)
         {

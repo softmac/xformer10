@@ -148,7 +148,7 @@ BOOL __cdecl InitAtari()
     static BOOL fInited;
     BYTE bshiftSav;
 
-	// reset the cycle counter now and each cold start (cold start is too late to only do it then)
+	// reset the cycle counter now and each cold start (we need to use it now, before the 1st cold start)
 	LARGE_INTEGER qpc;
 	QueryPerformanceCounter(&qpc);
 	vi.qpcCold = qpc.QuadPart;	// reset real time
@@ -166,28 +166,20 @@ BOOL __cdecl InitAtari()
     countInstr = 1;	// not used?
 
     if (!fInited)
-        {
-#ifdef H32BIT
+    {
         extern void * jump_tab[512];
         extern void * jump_tab_RO[256];
         unsigned i;
 
         for (i = 0 ; i < 256; i++)
-            {
+        {
             jump_tab[i] = jump_tab_RO[i];
-            }
-#endif
+        }
 
         wStartScan = 10;
 
-        ramtop = 0xA000;
-#if XE
-        mdXLXE = mdXE;
-#else
-        mdXLXE = mdXL;
-#endif
         fInited = TRUE;
-        }
+    }
 
     InitAtariDisks();
 
@@ -298,7 +290,7 @@ BOOL __cdecl WarmbootAtari()
     regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 50*4;	// delay for banner messages
     QueryTickCtr();
-	countJiffies = 0; // unused
+	//countJiffies = 0;
 	fBrakes = TRUE;	// back to real time
 
 	InitSound();	// need to reset and queue audio buffers
@@ -315,12 +307,13 @@ BOOL __cdecl ColdbootAtari()
     unsigned addr;
 	//OutputDebugString("\n\nCOLD START\n\n");
 
-    // Initialize mode display counter
+    // Initialize mode display counter (banner)
 
 	cntTick = 50*4;
     QueryTickCtr();
-    countJiffies = 0;	// unused
-	fBrakes = TRUE; // back to real time
+    //countJiffies = 0;
+	
+	fBrakes = TRUE; // go back to real time
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -358,7 +351,8 @@ BOOL __cdecl ColdbootAtari()
 
     // CTIA/GTIA
 
-    CONSOL = ((mdXLXE != md800) && (ramtop == 0xC000)) ? 3 : 7;
+	// CONSOL not read yet.
+	CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7; // let an XL detect basic or not
     PAL = 14;
     TRIG0 = 1;
     TRIG1 = 1;
@@ -413,9 +407,6 @@ BOOL __cdecl ColdbootAtari()
     wPBDATA = (ramtop == 0xC000) ? 255: 253;	// !!!
     PACTL  = 60;
     PBCTL  = 60;
-	// misc.
-
-	//wStartScan = 28;
 
 	// reset the cycle counter each cold start
 	LARGE_INTEGER qpc;
