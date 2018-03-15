@@ -780,8 +780,8 @@ REGS vregs;             // 680x0 commonly used registers and TLB structures
 #endif
 
 #define SAMPLE_RATE 48000
-#define SNDBUFS     3
-#define SAMPLES_PER_VOICE SAMPLE_RATE / 60	// !!! 1/60th of a second, one buffer per VBI
+#define SNDBUFS     6
+#define SAMPLES_PER_VOICE SAMPLE_RATE / 60	// 1/60th of a second, one buffer per VBI
 
 typedef struct
 {
@@ -1099,8 +1099,8 @@ BOOL FWriteSerialPort(BYTE b);
 
 // sound.c
 
-void TestSound(void);
-//void SoundDoneCallback(void);
+//void TestSound(void);
+void SoundDoneCallback(LPWAVEHDR, int);
 //void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
 void CaptureJoysticks(HWND hwnd);

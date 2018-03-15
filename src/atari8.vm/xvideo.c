@@ -753,10 +753,10 @@ Lrender:
         }
 #endif
 
-    // !!! HACK! HACK! render everything all the time until the screen
+    // HACK! HACK! render everything all the time until the screen
     // corruption is figured out
     // !!! This makes it OK to not check CHBASE all the time in ExecuteAtari()
-	// !!! only do this if CHBASE changed for that scan line, we don't cache CHBASE per scan line
+	// only do this if CHBASE changed for that scan line, we don't cache CHBASE per scan line
 	rgfChanged |= fAll;
 
     // Even if rgfChanged is 0 at this point, we have to check the 10 to 48
@@ -1843,7 +1843,7 @@ LdrawPM23:
         ShowCountDownLine();
         }
 
-#if 0 // !!! rainbow #ifndef NDEBUG
+#if 0 // rainbow #ifndef NDEBUG
 
     // display the collision registers on each scan line
     //

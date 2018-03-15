@@ -180,8 +180,9 @@ void CheckKey()
             KBCODE = 0xB4;
             goto lookit2;
 
+#if 0 // these char's are never put in our buffer
         case 0x49:
-            // Page Up (scroll window down) !!! not put in the buffer, this won't execute (GEM special fn key - BRAKES)
+            // Page Up (scroll window down) not put in the buffer, this won't execute (GEM special fn key - BRAKES)
 Lpup:
             if (wStartScan > 0)
                 wStartScan--;
@@ -189,12 +190,13 @@ Lpup:
             return;
 
         case 0x51:
-            // Page Down (scroll window up) !!! not put in the buffer, this won't execute (GEM special fn key - FIRE)
+            // Page Down (scroll window up) not put in the buffer, this won't execute (GEM special fn key - FIRE)
 Lpdown:
             if (wStartScan < 55)
                 wStartScan++;
             ForceRedraw();
             return;
+#endif
             }
         }
 
@@ -373,11 +375,13 @@ LshiftF12:
         FColdbootVM();
         return;
 
-    case 0x99: // Page Up - never put in the keyboard buffer !!!
+#if 0
+    case 0x99: // Page Up - never put in the keyboard buffer
         goto Lpup;
 
-    case 0xA1: // Page Down - never put in the keyboard buffer !!!
+    case 0xA1: // Page Down - never put in the keyboard buffer
         goto Lpdown;
+#endif
 
     case 0x77: // Control + Home
         scan = 0x47;
@@ -705,7 +709,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         if (*pbshift & wCtrl)
             scan += 0x50;   // cursor keys
         else 
-		{ // !!! Darek, do you still brace like this?
+		{ // !! Darek, do you still brace like this?
             // joystick emulation
 
             static BYTE mpJoyBit[9] = { 1, 1, 1, 4, 4, 8, 8, 8, 2 };
@@ -740,7 +744,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
             printf("clock multiplier = %u\n", clockMult);
 #endif
-			fBrakes = !fBrakes;	// !!! toggle real time or fast as possible, clockMult is implemented though if you want to use it
+			fBrakes = !fBrakes;	// toggle real time or fast as possible, clockMult is implemented though if you want to use it?
 		}
 		return TRUE;
 
@@ -885,7 +889,7 @@ BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
         return !FKeyMsg800(hWnd, message, uParam, lParam);
         break;
 
-// !!! we don't seem to use these custom thread messages any more
+// we don't use these custom thread messages
 #if 0
 	case TM_JOY0FIRE:
         if (uParam)
@@ -915,7 +919,6 @@ printf("joy0move %d %d\n", uParam, lParam);
             TRIG0 |= 1;                 // JOY 0 fire button up
         return TRUE;
 
-		// !!! Is it OK that I am totally breaking the non-WIN32 or non 8 bit emulation case?
 #if 0
 	case MM_JOY1MOVE:
 	{
