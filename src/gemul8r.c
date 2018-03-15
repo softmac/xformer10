@@ -751,7 +751,7 @@ int CALLBACK WinMain(
     // Now that the app data directory is set up, it is ok to read the INI file
 
     ClearSystemPalette();
-    InitProperties();
+    InitProperties();	// !!! creates one of every possible different VM on startup
 
     // Save the instance handle in static variable, which will be used in
     // many subsequence calls from this application to Windows.
@@ -910,7 +910,8 @@ int CALLBACK WinMain(
 
     // Try to load previously saved properties, need to do this to get saved window
     // position and fNoDirectX
-
+	// also initializes the global persistable PROPS structure to the default set of VMs created in InitProperties (not persisted right now)
+	// current VM is set to 0
     fProps = LoadProperties(NULL);
 
 #ifdef XFORMER
@@ -923,7 +924,7 @@ int CALLBACK WinMain(
 		lpCmdLine[strlen(lpCmdLine) - 1] = 0;	// get rid of the trailing "
 		strcpy(vmCur.rgvd[0].sz, lpCmdLine+1); // replace disk 1 image with the argument (sans ")
 		//v.fSkipStartup = TRUE;	// and go straight to running it
-		vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use the disk image
+		vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use this disk image in VM 0
 	}
 #endif
 
@@ -995,19 +996,35 @@ int CALLBACK WinMain(
 	//CheckMenuItem(vi.hMenu, IDM_CART, ramtop == 0xA000 ? MF_CHECKED : MF_UNCHECKED);
 
 	// Initialize the virtual disk menu items
+	
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
 	mii.fMask = MIIM_STRING;
 	char mNew[MAX_PATH+10];
 	mii.dwTypeData = mNew;
-	sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-	sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-	sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-	sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+
+	if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+	{
+		sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+		sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+	}
+	else // TODO prefix other kinds of virtual drives appropriately
+	{
+		sprintf(mNew, "%s...", vi.pvmCur->rgvd[0].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		sprintf(mNew, "%s...", vi.pvmCur->rgvd[1].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		sprintf(mNew, "%s...", vi.pvmCur->rgvd[2].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+		sprintf(mNew, "%s...", vi.pvmCur->rgvd[3].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+	}
 
     // Make the window visible; update its client area; and return "success"
 
@@ -1029,17 +1046,17 @@ int CALLBACK WinMain(
             MAKEINTRESOURCE(IDD_FIRSTTIME), // dlg resource to use
             NULL,          // parent handle
             FirstTimeProc);
-#endif // ATARIST
 
         // This will prevent the First Time Setup from popping up again
-
         SaveProperties(NULL);
-        }
+#endif // ATARIST
+	}
 
+	// Initialize the current instance (or first valid one found) by asking the current VM to cold start
+	// !!! the first time you switch to a VM is when it cold starts, it's our global non-persistable INSTANCE data
+	// that knows if we need a cold start or not (fInited)
     if (!FToggleMacAtari(v.iVM, TRUE) && !FToggleMacAtari((unsigned)(-1), TRUE))
         return -1;
-
-    //vmCur.fColdReset = TRUE;
 
 	{
     int l;
@@ -1098,7 +1115,7 @@ int CALLBACK WinMain(
     FlashWindowEx(&fi);
 
     // Allow the screen thread to complete the timing calibration
-
+	// !!! WTF?
     Sleep(900);
 
     fi.dwFlags = FLASHW_STOP;
@@ -1165,7 +1182,7 @@ int CALLBACK WinMain(
             }
 
         // Check if VM needs to reset
-
+		// !!! Why wait so long to do it?
         if (vmCur.fColdReset)
             {
             void ColdStart();
@@ -1211,10 +1228,9 @@ int CALLBACK WinMain(
 
             if (FIsAtari8bit(vmCur.bfHW))
                 {
-                // if tiling, advance to the next VM
-
 #if 0
-                if (v.fFullScreen && !v.fZoomColor)
+				// if tiling, advance to the next VM, but this is not how to do it
+				if (v.fTiling)
                     FToggleMacAtari((unsigned)(-1), TRUE);
 #endif
                 }
@@ -1226,7 +1242,7 @@ int CALLBACK WinMain(
 
             WaitMessage();
             }
-        }
+        } // forever
 
     // Reset tick resolution
 
@@ -3025,7 +3041,10 @@ L_about:
 			mii.fMask = MIIM_STRING;
 			char mNew[MAX_PATH + 10];
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+                sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+			else
+				sprintf(mNew, "%s...", vi.pvmCur->rgvd[0].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
 
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
@@ -3041,7 +3060,10 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+				sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+			else
+				sprintf(mNew, "%s...", vi.pvmCur->rgvd[1].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
 
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
@@ -3057,7 +3079,10 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+				sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+			else
+				sprintf(mNew, "%s...", vi.pvmCur->rgvd[2].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
 
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
@@ -3073,7 +3098,10 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+				sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+			else
+				sprintf(mNew, "%s...", vi.pvmCur->rgvd[3].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
 
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
