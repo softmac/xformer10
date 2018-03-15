@@ -19,17 +19,18 @@
 
 // instance globals
 
-PROPS v;            // properties currently in use
-INST vi;
-VMINST vrgvmi[MAXOSUsable];
+PROPS v;            // global properties
+VMINFO *vpvm;		// current instance, part of the persistable stuff
+
+INST vi;			
+VMINST vrgvmi[MAX_VM];	// not persistable
 // __declspec(thread) VMINST vmi;
-VMINFO *vpvm;
 ICpuExec *vpci;
 
 BOOL fDebug;
 
 // forward references
-BOOL SelectInstance(unsigned iVM, BOOL fRefresh);
+BOOL SelectInstance(unsigned iVM);
 
 #include "shellapi.h"
 
@@ -1112,9 +1113,27 @@ int CALLBACK WinMain(
 	// also initializes the global persistable PROPS structure to the default set of VMs created in InitProperties (not persisted right now)
 	// current VM is set to 0
     fProps = LoadProperties(NULL);
+	if (!fProps)
+	{
+		CreateAllVMs();	// couldn't load anything, we need at least 1 VM... why not make them all?
+						// Now go and prompt the user with First Time Setup if necessary
+
+#if defined(ATARIST) || defined(SOFTMAC)
+		if (!AutoConfigure(FALSE))
+			DialogBox(vi.hInst,       // current instance
+				MAKEINTRESOURCE(IDD_FIRSTTIME), // dlg resource to use
+				NULL,          // parent handle
+				FirstTimeProc);
+
+		// This will prevent the First Time Setup from popping up again
+		SaveProperties(NULL);
+#endif // ATARIST
+	}
 
 	// Initialize the current instance (or first valid one found)
-	SelectInstance(v.iVM, FALSE);
+	SelectInstance(v.iVM);
+
+	//FixAllMenus();
 
 #ifdef XFORMER
 	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
@@ -1201,11 +1220,8 @@ int CALLBACK WinMain(
     if (!vi.hWnd)
         return (FALSE);
 
-	// make sure the menus look right
-	FixAllMenus();
-
     // Make the window visible; update its client area; and return "success"
-
+	SetMenu(vi.hWnd, vi.hMenu);
     ShowWindow(vi.hWnd, nCmdShow); // Show the window
     UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
 
@@ -1213,22 +1229,6 @@ int CALLBACK WinMain(
 
     if (!v.fNoSCSI)
         FInitBlockDevLib();
-
-    // Now go and prompt the user with First Time Setup if necessary
-
-    if (!fProps)
-        {
-#if defined(ATARIST) || defined(SOFTMAC)
-        if (!AutoConfigure(FALSE))
-        DialogBox(vi.hInst,       // current instance
-            MAKEINTRESOURCE(IDD_FIRSTTIME), // dlg resource to use
-            NULL,          // parent handle
-            FirstTimeProc);
-
-        // This will prevent the First Time Setup from popping up again
-        SaveProperties(NULL);
-#endif // ATARIST
-	}
 
 	int l;
 
@@ -1355,10 +1355,10 @@ int CALLBACK WinMain(
 		// !!! Why wait so long to do it?
         if (vmCur.fColdReset)
             {
-            void ColdStart();
+            void ColdStart(int);
 
             vmCur.fColdReset = FALSE;
-            ColdStart();
+            ColdStart(v.iVM);
 
 			if (v.fDebugMode)
                 vi.fDebugBreak = TRUE;
@@ -1398,11 +1398,10 @@ int CALLBACK WinMain(
 
             if (FIsAtari8bit(vmCur.bfHW))
                 {
-#if 0
-				// if tiling, advance to the next VM, but this is not how to do it
+
+				// !!! run all the instances at the same time in tiling mode
 				if (v.fTiling)
-                    SelectInstance(v.iVM + 1, TRUE);
-#endif
+                    SelectInstance(v.iVM + 1);
                 }
             }
 
@@ -1449,7 +1448,7 @@ Lquit:
 
 ****************************************************************************/
 
-BOOL SetBitmapColors()
+BOOL SetBitmapColors(int iVM)
 {
     int i;
 
@@ -1472,34 +1471,36 @@ BOOL SetBitmapColors()
                 vsthw.rgrgb[i].rgbBlue = 0xFF;
                 vsthw.rgrgb[i].rgbReserved = 0;
                 }
-            SetDIBColorTable(vvmi.hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
             }
         else
-            SetDIBColorTable(vvmi.hdcMem, 0, 2,   vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 2,   vsthw.rgrgb);
 
         return TRUE;
         }
 
-    if (FIsAtari8bit(vmCur.bfHW))
+    if (FIsAtari8bit(v.rgvm[iVM].bfHW))
         {
         extern BYTE rgbRainbow[];
 
-        if (vmCur.bfMon == monGreyTV) for (i = 0; i < 256; i++)
+        if (v.rgvm[iVM].bfMon == monGreyTV)
+			for (i = 0; i < 256; i++)
             {
-            vsthw.rgrgb[i].rgbRed =
-            vsthw.rgrgb[i].rgbGreen =
-            vsthw.rgrgb[i].rgbBlue =
-             (rgbRainbow[i*3] + (rgbRainbow[i*3] >> 2)) +
-             (rgbRainbow[i*3+1]  + (rgbRainbow[i*3+1] >> 2)) +
-             (rgbRainbow[i*3+2]  + (rgbRainbow[i*3+2] >> 2));
-            vsthw.rgrgb[i].rgbReserved = 0;
+				vsthw.rgrgb[i].rgbRed =
+				vsthw.rgrgb[i].rgbGreen =
+				vsthw.rgrgb[i].rgbBlue =
+				 (rgbRainbow[i*3] + (rgbRainbow[i*3] >> 2)) +
+				 (rgbRainbow[i*3+1]  + (rgbRainbow[i*3+1] >> 2)) +
+				 (rgbRainbow[i*3+2]  + (rgbRainbow[i*3+2] >> 2));
+				vsthw.rgrgb[i].rgbReserved = 0;
             }
-        else for (i = 0; i < 256; i++)
+        else 
+			for (i = 0; i < 256; i++)
             {
-            vsthw.rgrgb[i].rgbRed = (rgbRainbow[i*3] << 2) | (rgbRainbow[i*3] >> 5);
-            vsthw.rgrgb[i].rgbGreen = (rgbRainbow[i*3+1] << 2) | (rgbRainbow[i*3+1] >> 5);
-            vsthw.rgrgb[i].rgbBlue = (rgbRainbow[i*3+2] << 2) | (rgbRainbow[i*3+2] >> 5);
-            vsthw.rgrgb[i].rgbReserved = 0;
+				vsthw.rgrgb[i].rgbRed = (rgbRainbow[i*3] << 2) | (rgbRainbow[i*3] >> 5);
+				vsthw.rgrgb[i].rgbGreen = (rgbRainbow[i*3+1] << 2) | (rgbRainbow[i*3+1] >> 5);
+				vsthw.rgrgb[i].rgbBlue = (rgbRainbow[i*3+2] << 2) | (rgbRainbow[i*3+2] >> 5);
+				vsthw.rgrgb[i].rgbReserved = 0;
 
 #if 0
             //
@@ -1535,23 +1536,23 @@ BOOL SetBitmapColors()
 		if (vi.fInDirectXMode)
 			;//FChangePaletteEntries(0, 256, vsthw.rgrgb);
         else
-            SetDIBColorTable(vvmi.hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
         return TRUE;
         }
 
-    if (FIsMac(vmCur.bfHW) && (vsthw.planes == 8))
+    if (FIsMac(v.rgvm[iVM].bfHW) && (vsthw.planes == 8))
         {
 		if (vi.fInDirectXMode)
 			;// FChangePaletteEntries(0, 256, vsthw.rgrgb);
         else
-            SetDIBColorTable(vvmi.hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
         return TRUE;
         }
 
 	if (vi.fInDirectXMode)
 		;// FChangePaletteEntries(10, 16, vsthw.rgrgb);
     else
-        SetDIBColorTable(vvmi.hdcMem, 10, 16, vsthw.rgrgb);
+        SetDIBColorTable(vrgvmi[iVM].hdcMem, 10, 16, vsthw.rgrgb);
     return TRUE;
 }
 
@@ -1629,7 +1630,7 @@ BOOL FCreateOurPalette()
 
 ****************************************************************************/
 
-BOOL CreateNewBitmap()
+BOOL CreateNewBitmap(int iVM)
 {
     RECT rect;
     ULONG x;
@@ -1642,7 +1643,7 @@ PrintScreenStats(); printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%
 #endif
 
     // Interlock to make sure video thread is not touching memory
-
+    // !!! Yikes
     while (0 != InterlockedCompareExchange(&vi.fVideoEnabled, FALSE, TRUE))
         Sleep(10);
 
@@ -1651,22 +1652,22 @@ PrintScreenStats(); printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%
     UninitDrawing(!v.fFullScreen);
     vi.fInDirectXMode = FALSE;
 
-    if (vvmi.hbmOld)
+    if (vrgvmi[iVM].hbmOld)
         {
-        SelectObject(vvmi.hdcMem, vvmi.hbmOld);
-        vvmi.hbmOld = NULL;
+        SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
+        vrgvmi[iVM].hbmOld = NULL;
         }
 
-    if (vvmi.hbm)
+    if (vrgvmi[iVM].hbm)
         {
-        DeleteObject(vvmi.hbm);
-        vvmi.hbm = NULL;
+        DeleteObject(vrgvmi[iVM].hbm);
+        vrgvmi[iVM].hbm = NULL;
         }
 
-    if (vvmi.hdcMem)
+    if (vrgvmi[iVM].hdcMem)
         {
-        DeleteDC(vvmi.hdcMem);
-        vvmi.hdcMem = NULL;
+        DeleteDC(vrgvmi[iVM].hdcMem);
+        vrgvmi[iVM].hdcMem = NULL;
         }
 
     // initialize to some initial state, will be set further below
@@ -1874,7 +1875,7 @@ Ltryagain:
         vi.sy = vsthw.ypix * vi.fYscale;
         }
 
-    if (vsthw.fMono && !FIsAtari8bit(vmCur.bfHW) && !v.fNoMono)
+    if (vsthw.fMono && !FIsAtari8bit(v.rgvm[iVM].bfHW) && !v.fNoMono)
         {
         // create a monochrome bitmap, Win32s compatible code
 
@@ -1914,35 +1915,18 @@ Ltryagain:
         }
 
     // Create offscreen bitmap
+	// !!! and never destroy it ???
 
-    vvmi.hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw.bmiHeader,
-        DIB_RGB_COLORS, &vpvmi->pvBits, NULL, 0);
-    vvmi.hdcMem = CreateCompatibleDC(vi.hdc);
+    vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw.bmiHeader,
+        DIB_RGB_COLORS, &(vrgvmi[iVM].pvBits), NULL, 0);
+    vrgvmi[iVM].hdcMem = CreateCompatibleDC(vi.hdc);
 
-    vvmi.hbmOld = SelectObject(vvmi.hdcMem, vvmi.hbm);
+    vrgvmi[iVM].hbmOld = SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbm);
 
-    SetBitmapColors();
+    SetBitmapColors(iVM);
     //FCreateOurPalette();
 
 // PrintScreenStats(); printf("Entering CreateNewBitmap: leaving critical section\n");
-
-    if (v.fFullScreen)
-    {
-        // Get rid of the title bar and menu and maximize
-		ShowWindow(vi.hWnd, SW_MAXIMIZE); // this has to go first or it might not work!
-		SetMenu(vi.hWnd, NULL);
-        ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
-		SetWindowLong(vi.hWnd, GWL_STYLE, l & ~(WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
-	}
-	else
-	{
-        // Enable title bar and menu
-		ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
-		SetMenu(vi.hWnd, vi.hMenu);
-		SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
-		ShowWindow(vi.hWnd, SW_RESTORE);	// this has to go last or the next maximize doesn't work!
-	}
-
 
 #if 0
     v.rectWinPos = rectSav; // restore saved window position
@@ -2021,7 +2005,7 @@ Ltryagain:
 
 // PrintScreenStats(); printf("Entering CreateNewBitmap: after window adjustments\n");
 
-    DisplayStatus();
+    // DisplayStatus();
     // Sleep(20);   // give other windows a chance to redraw
 
     InvalidateRect(vi.hWnd, NULL, 0);
@@ -2033,9 +2017,9 @@ Ltryagain:
     vi.fVideoEnabled = TRUE;
 
 #ifdef XFORMER
-    if (FIsAtari8bit(vmCur.bfHW))
+    if (FIsAtari8bit(v.rgvm[iVM].bfHW))
         {
-        ForceRedraw();
+        //ForceRedraw();
         }
 #endif
 
@@ -2165,7 +2149,7 @@ BOOL FToggleMonitor()
     vsthw.fMono = FMonoFromBf(vmCur.bfMon);
 
 #if 1
-      SetBitmapColors();
+      SetBitmapColors(v.iVM);
 //    FCreateOurPalette();
 #endif
 
@@ -2188,7 +2172,7 @@ BOOL FToggleMonitor()
 // Right now hard coded to toggle Atari 8-bit/Atari ST/Mac modes
 //
 
-BOOL SelectInstance(unsigned iVM, BOOL fRefresh)
+BOOL SelectInstance(unsigned iVM)
 {
 	assert(v.cVM);
 
@@ -2224,9 +2208,6 @@ BOOL SelectInstance(unsigned iVM, BOOL fRefresh)
         vvmi.fInited = TRUE;
         }
 
-    if (fRefresh)
-        CreateNewBitmap();
-
 	FixAllMenus();
 
     return TRUE;
@@ -2236,7 +2217,7 @@ BOOL SelectInstance(unsigned iVM, BOOL fRefresh)
 // Reboot the current VM
 //
 
-void ColdStart()
+void ColdStart(int iVM)
 {
 	
     ShowWindowsMouse();
@@ -2244,28 +2225,28 @@ void ColdStart()
 
     // User may have just mucked with Properties
 
-    vsthw.fMono = FMonoFromBf(vmCur.bfMon);
+    vsthw.fMono = FMonoFromBf(v.rgvm[iVM].bfMon);
 
     // make sure RAM setting not corrupted!
     // if it is, select the smaller RAM setting of the VM
 
-    if ((vmCur.bfRAM & vmCur.pvmi->wfRAM) == 0)
-        vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, 0);
+    if ((v.rgvm[iVM].bfRAM & v.rgvm[iVM].pvmi->wfRAM) == 0)
+        v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, 0);
 
-    vi.cbRAM[0] = CbRamFromBf(vmCur.bfRAM);
-    vi.eaROM[0] = osCur.eaOS;
-    vi.cbROM[0] = osCur.cbOS;
+    vi.cbRAM[0] = CbRamFromBf(v.rgvm[iVM].bfRAM);
+    vi.eaROM[0] = v.rgosinfo[v.rgvm[iVM].iOS].eaOS;
+    vi.cbROM[0] = v.rgosinfo[v.rgvm[iVM].iOS].cbOS;
 
-    vvmi.keyhead = vvmi.keytail = 0;
+    vrgvmi[iVM].keyhead = vrgvmi[iVM].keytail = 0;
     vi.fVMCapture = FALSE;
 
-    if (FIsMac(vmCur.bfHW))
+    if (FIsMac(v.rgvm[iVM].bfHW))
         {
         vsthw.planes = 1;
         vsthw.xpix = 512;
         vsthw.ypix = 342;
         }
-    else if (FIsAtari8bit(vmCur.bfHW))
+    else if (FIsAtari8bit(v.rgvm[iVM].bfHW))
         {
         vsthw.planes = 8;
         vsthw.xpix = X8;
@@ -2285,7 +2266,7 @@ void ColdStart()
         }
 
     PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
-    PatBlt(vvmi.hdcMem, 0, 0, 4096, 2048, BLACKNESS);
+    PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
 
 #if _ENGLISH
         SetWindowText(vi.hWnd, "Rebooting...");
@@ -2303,9 +2284,10 @@ void ColdStart()
 
     MarkAllPagesClean();
 
-    FUnInitVM();
+    FUnInitVM(v.iVM);
     vi.fExecuting = FALSE;
-    vi.fExecuting = FInitVM() && CreateNewBitmap() && FColdbootVM();
+    vi.fExecuting = /* FInitVM(v.iVM) && CreateNewBitmap(v.iVM) && */ FColdbootVM(v.iVM);
+	DisplayStatus();	// show Darek's banner
 
 #if !defined(NDEBUG)
     fDebug++;
@@ -2372,8 +2354,8 @@ void ColdStart()
         printf("ROM ver  = $%04X\n", vmPeekW(vi.eaROM[0]+8));
         printf("ROM subv = $%04X\n", vmPeekW(vi.eaROM[0]+18));
         }
-    printf("CPU type = %s\n", (long)PchFromBfRgSz(vi.fFake040 ? cpu68040 : vmCur.bfCPU, rgszCPU));
-//    printf("CPU real = %s\n", (long)PchFromBfRgSz(vmCur.bfCPU, rgszCPU));
+    printf("CPU type = %s\n", (long)PchFromBfRgSz(vi.fFake040 ? cpu68040 : v.rgvm[iVM].bfCPU, rgszCPU));
+//    printf("CPU real = %s\n", (long)PchFromBfRgSz(v.rgvm[iVM].bfCPU, rgszCPU));
     fDebug--;
 #endif
 
@@ -2391,7 +2373,7 @@ void ColdStart()
         }
 }
 
-
+#if 0
 BOOL FVerifyMenuOption()
 {
     if (!vi.fExecuting)
@@ -2455,6 +2437,7 @@ void UpdateMenuCheckmarks()
     EnableMenuItem(vi.hMenu, IDM_ZAPCMOS,    FIsMac(vmCur.bfHW) ? MF_ENABLED : MF_GRAYED);
 
 }
+#endif
 
 int PrintScreenStats()
 {
@@ -2649,7 +2632,20 @@ LRESULT CALLBACK WndProc(
             vsthw.ypix = Y8;	// was 200
             }
 
-        CreateNewBitmap();
+		// now that we have a DC, and have set vsthw.xpix/ypix, make all the bitmaps for the instances
+		for (int iVM = 0; iVM < v.cVM; iVM++)
+		{
+			if (v.rgvm[iVM].fValidVM)
+				CreateNewBitmap(iVM);
+		}
+
+		// if we were saved in fullscreen mode, then actually go into fullscreen
+		if (v.fFullScreen) {
+			v.fFullScreen = FALSE;
+			// vi.hWnd won't be set until this WM_CREATE finishes
+			// and other stuff isn't set up yet, so don't Send the message immediately
+			PostMessage(hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+		}
 
 //        SetTimer(hWnd, 0, 100, NULL);
 
@@ -2716,14 +2712,19 @@ LRESULT CALLBACK WndProc(
         printf("WM_DISPLAY x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
 
         if (vi.fInDirectXMode)
-          {
+        {
             RECT Rect;
 
             SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
             AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
-          }
-        CreateNewBitmap();
+        }
+
+		for (int iVM = 0; iVM < MAX_VM; iVM++)
+		{
+			CreateNewBitmap(iVM);	// fix every instance's bitmap
+		}
+
    //   return 0;
         break;
 
@@ -2927,7 +2928,7 @@ break;
 //        if (LOWORD(uParam))  // fACtivate)
         if (LOWORD(uParam) != WA_INACTIVE)
         {
-            CreateNewBitmap();
+            //CreateNewBitmap();
         }
 
         else if (vi.fInDirectXMode)
@@ -2939,7 +2940,7 @@ break;
             UninitDrawing(TRUE);
             vi.fInDirectXMode = FALSE;
 
-            CreateNewBitmap();
+            CreateNewBitmap(v.iVM);
             }
 
         break;
@@ -3167,10 +3168,10 @@ L_about:
 				"x64",
 #elif defined(_M_IX86)
 				"x86",
-#elif defined(_M_IX86)
+#elif defined(_M_IX86)	// !!! _M_ARM
 				"ARM",
 #else
-				"",
+				"",		// !!! ARM64
 #endif
 				oi.dwMajorVersion, oi.dwMinorVersion,
 				oi.dwBuildNumber & 65535,
@@ -3183,21 +3184,35 @@ L_about:
 		case IDM_FULLSCREEN:
 			v.fFullScreen = !v.fFullScreen;
 			CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
-			
-			// remove title bar and menus and such
-			CreateNewBitmap();
+
+			if (v.fFullScreen)
+			{
+				// Get rid of the title bar and menu and maximize
+				ShowWindow(vi.hWnd, SW_MAXIMIZE); // this has to go first or it might not work!
+				SetMenu(vi.hWnd, NULL);
+				ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
+				SetWindowLong(vi.hWnd, GWL_STYLE, l & ~(WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
+			}
+			else
+			{
+				// Enable title bar and menu
+				ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
+				SetMenu(vi.hWnd, vi.hMenu);
+				SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
+				ShowWindow(vi.hWnd, SW_RESTORE);	// this has to go last or the next maximize doesn't work!
+			}
+
 			break; // !!! the VM sees the ENTER keystroke
 
 		case IDM_STRETCH:
 			v.fZoomColor = !v.fZoomColor;
 			CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
-			CreateNewBitmap();
+			DisplayStatus(); // affects title bar
 			break;
 
 		case IDM_TILE:
 			v.fTiling = !v.fTiling;
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
-			CreateNewBitmap();
 			break;
 
 		case IDM_COLORMONO:
@@ -3209,11 +3224,11 @@ L_about:
 
 		// Un-init and invalidate this instance, and choose another
 		case IDM_DELVM:
-			FUnInitVM();
+			FUnInitVM(v.iVM);
 			memset(&v.rgvm[v.iVM], 0, sizeof(VM));	// erase the persistable data
 			vvmi.fInited = FALSE;	// invalidate the non-persistable data
 			v.cVM--;
-			SelectInstance(-1, TRUE);
+			SelectInstance(-1);
 			break;
 
 		// !!! unless Darek gets really busy, this should be enough VM types
@@ -3267,7 +3282,9 @@ L_about:
 			}
 
 			// and now go to that instance!
-			SelectInstance(vmNew, FALSE);
+			FInitVM(vmNew);
+			CreateNewBitmap(vmNew);
+			SelectInstance(vmNew);
 	#endif
 			
 			// !!! now support some more
@@ -3279,7 +3296,7 @@ L_about:
 
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgcart.szName, FALSE, 1))
 			{
-				ReadCart();
+				ReadCart(v.iVM);
 				FixAllMenus();
 				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 			}
@@ -3298,8 +3315,8 @@ L_about:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(0);
-				FMountDiskVM(0);
+				FUnmountDiskVM(v.iVM, 0);
+				FMountDiskVM(v.iVM, 0);
 				FixAllMenus();
 			}
 			break;
@@ -3308,8 +3325,8 @@ L_about:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(1);
-				FMountDiskVM(1);
+				FUnmountDiskVM(v.iVM, 1);
+				FMountDiskVM(v.iVM, 1);
 				FixAllMenus();
 			}
 			break;
@@ -3318,8 +3335,8 @@ L_about:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(2);
-				FMountDiskVM(2);
+				FUnmountDiskVM(v.iVM, 2);
+				FMountDiskVM(v.iVM, 2);
 				FixAllMenus();
 			}
 			break;
@@ -3328,8 +3345,8 @@ L_about:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(3);
-				FMountDiskVM(3);
+				FUnmountDiskVM(v.iVM, 3);
+				FMountDiskVM(v.iVM, 3);
 				FixAllMenus();
 			}
 			break;
@@ -3338,28 +3355,28 @@ L_about:
 		case IDM_D1U:
 			strcpy(vi.pvmCur->rgvd[0].sz, "");
 			vi.pvmCur->rgvd[0].dt = DISK_NONE;
-			FUnmountDiskVM(0);
+			FUnmountDiskVM(v.iVM, 0);
 			FixAllMenus();
 			break;
 
 		case IDM_D2U:
 			strcpy(vi.pvmCur->rgvd[1].sz, "");
 			vi.pvmCur->rgvd[1].dt = DISK_NONE;
-			FUnmountDiskVM(1);
+			FUnmountDiskVM(v.iVM, 1);
 			FixAllMenus();
 			break;
 		
 		case IDM_D3U:
 			strcpy(vi.pvmCur->rgvd[2].sz, "");
 			vi.pvmCur->rgvd[2].dt = DISK_NONE;
-			FUnmountDiskVM(2);
+			FUnmountDiskVM(v.iVM, 2);
 			FixAllMenus();
 			break;
 		
 		case IDM_D4U:
 			strcpy(vi.pvmCur->rgvd[3].sz, "");
 			vi.pvmCur->rgvd[3].dt = DISK_NONE;
-			FUnmountDiskVM(3);
+			FUnmountDiskVM(v.iVM, 3);
 			FixAllMenus();
 			break;		
 		
@@ -3368,6 +3385,7 @@ L_about:
             return 0;
             break;
 
+#if 0
         case IDM_PROPERTIES:
             DialogBox(vi.hInst,
                 MAKEINTRESOURCE(IDD_PROPERTIES),
@@ -3376,6 +3394,7 @@ L_about:
             if (!FIsAtari8bit(vmCur.bfHW))
                 AddToPacket(FIsMac(vmCur.bfHW) ? 0xDF : 0xB8);  // Alt  key up
             break;
+#endif
 
         case IDM_COLDSTART:
             // have some default values so as to force a default bitmap
@@ -3395,7 +3414,7 @@ L_about:
 #endif
 
             // On the Mac, refresh the Mac floppy disk drives
-
+			// !!! This is disabled now, bring it back?
             if (FIsMac(vmCur.bfHW))
                 {
 #ifdef SOFTMAC
@@ -3404,14 +3423,14 @@ L_about:
 #endif
                 // vsthw.fMediaChange = fTrue;
 
-                FUnmountDiskVM(8);
-                FMountDiskVM(8);
+                FUnmountDiskVM(v.iVM, 8);
+                FMountDiskVM(v.iVM, 8);
                 }
             else
 
             // if the mouse is captured in window, release it
             // otherwise capture it
-
+			// !!! disabled right now, why was this only for !MAC?
             if (vi.fGEMMouse && !vi.fInDirectXMode)
                 {
                 ShowWindowsMouse();
@@ -3425,13 +3444,14 @@ L_about:
             break;
 
         case IDM_TOGGLEHW:
-            SelectInstance(v.iVM + 1, TRUE);
+            SelectInstance(v.iVM + 1);
             return 0;
             break;
 
+#if 0
         case IDM_CTRLF11:
 #if 0
-            {
+		{
             POINT pt;
 
             vi.fHaveFocus = TRUE;  // HACK
@@ -3460,6 +3480,7 @@ L_about:
             return 0;
             break;
 #endif
+#endif
 
         case IDM_DEBUGGER:
             ShowWindowsMouse();
@@ -3468,6 +3489,7 @@ L_about:
             return 0;
             break;
 
+#if 0
         case IDM_DISKPROPS:
             DialogBox(vi.hInst,       // current instance
                 MAKEINTRESOURCE(IDD_DISKS), // dlg resource to use
@@ -3477,10 +3499,11 @@ L_about:
                 AddToPacket(FIsMac(vmCur.bfHW) ? 0xF1 : 0xAA);  // Shift key up
             return 0;
             break;
+#endif
 
         case IDM_DIRECTX:
             v.fFullScreen = !v.fFullScreen;
-            CreateNewBitmap();
+            CreateNewBitmap(v.iVM);
 
             if (FIsMac(vmCur.bfHW))
                 {
@@ -3546,7 +3569,7 @@ L_about:
 				}
 
 				assert(zl >= 0);
-				SelectInstance(zl, TRUE);
+				SelectInstance(zl);
 			}
 		
             return (DefWindowProc(hWnd, message, uParam, lParam));
@@ -3735,7 +3758,7 @@ L_about:
 						(yPos >= y) && (yPos < y + vsthw.ypix * vi.fYscale))
 					{
 						v.fTiling = FALSE;
-						SelectInstance(iVM, TRUE);
+						SelectInstance(iVM);
 					}
 				}
 			}
@@ -3816,7 +3839,7 @@ L_about:
             SelectObject(vvmi.hdcMem, vvmi.hbmOld);
             DeleteObject(vvmi.hbm);
             DeleteDC(vvmi.hdcMem);
-            FUnInitVM();
+            FUnInitVM(v.iVM);
             }
         FInitSerialPort(0);
         ShowCursor(TRUE);
@@ -4049,7 +4072,7 @@ void UpdateMode(HWND hDlg)
     SendDlgItemMessage(hDlg, IDC_VMSELECT, XB_SETCURSEL, j, 0);
 }
 
-
+#if 0
 /****************************************************************************
 
     FUNCTION: About(HWND, UINT, WPARAM, LPARAM)
@@ -4241,7 +4264,7 @@ LRESULT CALLBACK About(
                 if (iVM != v.iVM)
                     {
                     if (FVerifyMenuOption())
-                        SelectInstance(iVM, TRUE);
+                        SelectInstance(iVM);
                     }
 
                 if (wmId == IDC_BUTDELMODE)
@@ -4276,7 +4299,7 @@ LRESULT CALLBACK About(
                                 break;
                             }
 
-                        SelectInstance(iVM, TRUE);
+                        SelectInstance(iVM);
                         }
                     }
 
@@ -4518,7 +4541,7 @@ LRESULT CALLBACK About(
                 break;
 
             case IDM_TOGGLEHW:
-                if (SelectInstance(v.iVM + 1, TRUE))
+                if (SelectInstance(v.iVM + 1))
                     {
                     EndDialog(hDlg, TRUE);    // Exit the dialog
                     }
@@ -5011,6 +5034,7 @@ LRESULT CALLBACK About(
 
     lParam; // This will prevent 'unused formal parameter' warnings
 }
+#endif
 
 //
 //   FUNCTION: OpenTheFile(HWND hwnd, HWND hwndEdit)

@@ -316,7 +316,7 @@ void ReadROMs()
 #ifndef NDEBUG
 			printf("reading ATARIOSB.ROM\n");
 #endif
-			_read(h, rgbAtariOSB, 10240);
+			_read(h, rgbAtariOSB, 10240);	// !!! one copy for all instances
 			_close(h);
 		}
 	}
@@ -331,7 +331,7 @@ void ReadROMs()
 #ifndef NDEBUG
 			printf("reading ATARIBAS.ROM\n");
 #endif
-			_read(h, rgBasicData, 8192);
+			_read(h, rgBasicData, 8192);	// !!! one copy for all instances
 			_close(h);
 		}
 
@@ -344,7 +344,7 @@ void ReadROMs()
 #ifndef NDEBUG
 			printf("reading ATARIXL.ROM\n");
 #endif
-			_read(h, rgbXLXEC000, 16384);
+			_read(h, rgbXLXEC000, 16384);	// !!! one copy for all instances
 			_close(h);
 		}
 	}

@@ -222,7 +222,6 @@ __inline void _assert(int f, char *file, int line)
 #include "blocklib\blockdev.h"
 #include "memlib\memlib.h"
 #include "res\resource.h"
-#include "vm.h"
 #include "cpu.h"
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -606,6 +605,55 @@ typedef struct _cart
 	char temp;			// make it the same size as a VD structure
 } CART, *PCART;
 
+//
+// VMINFO structure exported by each virtual machine module
+//
+
+typedef struct _vminfo
+{
+	PFNL pfnVm;             // function to handle VM operations
+	ULONG ver;              // version
+	BYTE *pchModel;         // default verbose name for this VM
+	ULONG wfHW;             // bit vector of supported hardware models
+	ULONG wfCPU;            // bit vector of supported CPUs
+	ULONG wfRAM;            // bit vector of supported RAM sizes
+	ULONG wfROM;            // bit vector of supported ROM chips
+	ULONG wfMon;            // bit vector of supported monitors
+	PFNL pfnInstall;        // VM installation (one time init)
+	PFNL pfnInit;           // VM initialization (switch to this VM)
+	PFNL pfnUnInit;         // VM uninit (switch away from VM)
+	PFNL pfnInitDisks;      // VM disk initialization
+#ifdef HWIN32
+	PFNL pfnMountDisk;      // VM disk initialization
+#endif
+	PFNL pfnUnInitDisks;    // VM disk uninitialization
+#ifdef HWIN32
+	PFNL pfnUnmountDisk;    // VM disk uninitialization
+#endif
+	PFNL pfnColdboot;       // VM resets hardware (coldboot)
+	PFNL pfnWarmboot;       // VM resets hardware (warmboot)
+	PFNL pfnExec;           // VM execute code
+	PFNL pfnTrace;          // Execute one single instruction in the VM
+	PFNL pfnWinMsg;         // handles Windows messages
+	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
+	PFNL pfnDumpHW;         // dumps hardware state
+	PFNL pfnDisasm;         // Disassemble code in VM as ASCII
+	PFNL pfnReadHWByte;     // reads a byte from the VM
+	PFNL pfnReadHWWord;     // reads a word from the VM
+	PFNL pfnReadHWLong;     // reads a long from the VM
+	PFNL pfnWriteHWByte;    // writes a byte to the VM
+	PFNL pfnWriteHWWord;    // writes a word to the VM
+	PFNL pfnWriteHWLong;    // writes a long to the VM
+#ifdef HWIN32
+	PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
+	PFNL pfnUnlockBlock;    // release memory block in VM
+	PFNP pfnMapAddress;     // convert virtual machine address to flat address
+	PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
+	PFNL pfnSaveState;      // save snapshot to disk
+	PFNL pfnLoadState;      // load snapshot from disk and resume
+#endif
+} VMINFO, *PVMINFO;
+
 typedef struct
 {
     // virtual machine descriptor
@@ -672,8 +720,8 @@ CART rgBasic;	// special built in BASIC for XL
 char rgBasicData[8192];
 
 void ReadCart();
-void InitCart();
-void BankCart();
+void InitCart(int iVM);
+void BankCart(int iVM, int i);
 
 BOOL FAddVM(PVMINFO pvmi, int *pi);
 
@@ -699,7 +747,7 @@ typedef struct VMINST
     BYTE rgbKeybuf[1024];   // circular keyboard buffer
 } VMINST, *PVMINST;
 
-extern VMINST vrgvmi[MAXOSUsable];
+extern VMINST vrgvmi[MAX_VM];
 
 #define vpvmi ((VMINST *)&vrgvmi[v.iVM])
 #define vvmi  (*(VMINST *)&vrgvmi[v.iVM])
@@ -789,6 +837,8 @@ typedef struct
 } PROPS;
 
 extern PROPS v;
+
+#include "vm.h"	// after definition of PROPS
 
 // In SoftMac 2000 we add the global path setting for ROM file images.
 // This is aliased off the end of rgosinfo for backward compatibility
@@ -1080,8 +1130,8 @@ ULONG CallGEMDOS();
 
 // gemul8r.c
 
-void UpdateMenuCheckmarks();
-BOOL FVerifyMenuOption();
+//void UpdateMenuCheckmarks();
+//BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(void);
 
 BOOL OpenThePath(HWND hWnd, char *psz);
@@ -1171,7 +1221,7 @@ void mon();
 
 BOOL CenterWindow (HWND, HWND);
 LRESULT CALLBACK Properties(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK About  (HWND, UINT, WPARAM, LPARAM);
+//LRESULT CALLBACK About  (HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK Info   (HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK DisksDlg(HWND, UINT, WPARAM, LPARAM);

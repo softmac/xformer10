@@ -60,12 +60,14 @@ BEGIN
         MENUITEM SEPARATOR
 		MENUITEM "&Reboot VM\tCtrl+F12", IDM_COLDSTART
 		MENUITEM SEPARATOR
-		MENUITEM "&Open Session...", IDM_OPEN
+#if 0 // !!! TODO
+	    MENUITEM "&Open Session...", IDM_OPEN
 		MENUITEM "&Save Session As...", IDM_SAVE
 		MENUITEM SEPARATOR
 		MENUITEM "&Import ATARI DOS File...", IDM_IMPORTDOS
 		MENUITEM "&Export ATARI DOS File...", IDM_EXPORTDOS
 		MENUITEM SEPARATOR
+#endif
 		MENUITEM "E&xit", IDM_EXIT
 		MENUITEM SEPARATOR
 		MENUITEM "M.U.L.E.", IDM_VM1
@@ -82,7 +84,7 @@ BEGIN
 	BEGIN
 		MENUITEM "&Full Screen\tAlt+Enter", IDM_FULLSCREEN
 		MENUITEM "&Stretch Mode\tF5", IDM_STRETCH
-		MENUITEM "&Tile All VMs", IDM_TILE
+		MENUITEM "&Tile All VMs\tF11", IDM_TILE
 		MENUITEM SEPARATOR
 		MENUITEM "Switch &Monitors\tShift+F12", IDM_COLORMONO
 
@@ -180,6 +182,7 @@ IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE
 BEGIN
     VK_F5,          IDM_STRETCH,            VIRTKEY, NOINVERT
     VK_RETURN,		IDM_FULLSCREEN,			VIRTKEY, CONTROL, NOINVERT
+	VK_F11,			IDM_TILE,				VIRTKEY, NOINVERT
 	VK_F12,			IDM_COLDSTART,			VIRTKEY, CONTROL, NOINVERT
 	VK_F12,			IDM_COLORMONO,			VIRTKEY, SHIFT, NOINVERT
 	VK_F12,			IDM_TOGGLEHW,			VIRTKEY, ALT, NOINVERT
@@ -194,6 +197,7 @@ BEGIN
     VK_F12,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, ALT, NOINVERT
 END
 
+#if 0
 /////////////////////////////////////////////////////////////////////////////
 //
 // Dialog
@@ -216,7 +220,6 @@ BEGIN
     DEFPUSHBUTTON   "&Continue",IDOK,154,149,35,14
 END
 
-#if 0
 IDD_PROPERTIES DIALOG DISCARDABLE  0, 0, 320, 200
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Properties"
@@ -426,7 +429,7 @@ END
 
 #endif    // APSTUDIO_INVOKED
 
-
+#if 0
 /////////////////////////////////////////////////////////////////////////////
 //
 // DESIGNINFO
@@ -459,7 +462,7 @@ BEGIN
     END
 END
 #endif    // APSTUDIO_INVOKED
-
+#endif // 0
 
 /////////////////////////////////////////////////////////////////////////////
 //

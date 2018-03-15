@@ -62,8 +62,9 @@ CANDYHW vrgcandy[MAXOSUsable];
 
 CANDYHW *vpcandyCur = &vrgcandy[0];
 
+//BYTE bshiftSav;	// !!! was a local too
+
 WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down
-BYTE bshiftSav;
 static signed short wLeftMax;
 
 #define INSTR_PER_SCAN_NO_DMA 30
@@ -111,6 +112,8 @@ void DumpROMS()
     DumpROM("atarixlo.c", "rgbXLXED800", rgbXLXED800, 0xD800, 0x2800); // 10K
 }
 
+// not called when loading from disk, only when creating one from scratch
+//
 BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
 {
     // initialize the default Atari 8-bit VM
@@ -143,11 +146,14 @@ BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
     return TRUE;
 }
 
-BOOL __cdecl InitAtari()
+// Initialize a VM... not necessarily the current one
+//
+BOOL __cdecl InitAtari(int iVM)
 {
     static BOOL fInited;
-    BYTE bshiftSav;
+//	BYTE bshiftSav; // !!! already a global with that name!
 
+#if 0
 	// reset the cycle counter now and each cold start (we need to use it now, before the 1st cold start)
 	LARGE_INTEGER qpc;
 	QueryPerformanceCounter(&qpc);
@@ -155,19 +161,18 @@ BOOL __cdecl InitAtari()
 	LARGE_INTEGER qpf;
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
+#endif
 
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-    // save shift key status
-    bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
-    *pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
+    // save shift key status !!! why?
+    //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
+    //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
+	//*pbshift |= wScrlLock;
+    
+	//countInstr = 1;
 
-    *pbshift |= wScrlLock;
-    fBrakes = 1;
-    clockMult = 1;
-    countInstr = 1;	// not used?
-
-    if (!fInited)
+    if (!fInited) // static, only 1 instance needs to do this
     {
         extern void * jump_tab[512];
         extern void * jump_tab_RO[256];
@@ -183,18 +188,17 @@ BOOL __cdecl InitAtari()
         fInited = TRUE;
     }
 
-    InitAtariDisks();
     ReadROMs();
-	ReadCart();
+	ReadCart(iVM);
 
-    if (!FInitSerialPort(vmCur.iCOM))
-        vmCur.iCOM = 0;
-    if (!InitPrinter(vmCur.iLPT))
-        vmCur.iLPT = 0;
+    if (!FInitSerialPort(v.rgvm[iVM].iCOM))
+		v.rgvm[iVM].iCOM = 0;
+    if (!InitPrinter(v.rgvm[iVM].iLPT))
+		v.rgvm[iVM].iLPT = 0;
 
 	fSoundOn = TRUE;
   
-    switch(vmCur.bfHW)
+    switch(v.rgvm[iVM].bfHW)
     {
 		default:
 			mdXLXE = md800;
@@ -211,9 +215,7 @@ BOOL __cdecl InitAtari()
 			break;
     }
 
-	ramtop = 0xC000;
-	
-    vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, mdXLXE);
+	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
 //  vi.pbRAM[0] = &rgbMem[0xC000-1];
 //  vi.eaRAM[0] = 0;
@@ -225,18 +227,18 @@ BOOL __cdecl InitAtari()
     return TRUE;
 }
 
-BOOL __cdecl UninitAtari()
+BOOL __cdecl UninitAtari(int iVM)
 {
-    *pbshift = bshiftSav;
+    //*pbshift = bshiftSav; // !!!
 
-    UninitAtariDisks();
+    UninitAtariDisks(iVM);
     return TRUE;
 }
 
 
-BOOL __cdecl MountAtariDisk(int i)
+BOOL __cdecl MountAtariDisk(int iVM, int i)
 {
-    PVD pvd = &vmCur.rgvd[i];
+    PVD pvd = &v.rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
         AddDrive(i, pvd->sz);
@@ -244,38 +246,40 @@ BOOL __cdecl MountAtariDisk(int i)
     return TRUE;
 }
 
-BOOL __cdecl InitAtariDisks()
+BOOL __cdecl InitAtariDisks(int iVM)
 {
     int i;
 
-    for (i = 0; i < vmCur.ivdMac; i++)
-        MountAtariDisk(i);
+    for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
+        MountAtariDisk(iVM, i);
 
     return TRUE;
 }
 
-BOOL __cdecl UnmountAtariDisk(int i)
+BOOL __cdecl UnmountAtariDisk(int iVM, int i)
 {
-    PVD pvd = &vmCur.rgvd[i];
+    PVD pvd = &v.rgvm[iVM].rgvd[i];
 
-	//we can't just unmount if we've asked for a disk image, the whole point is to unmount if we didn't ask for one.
-    //if (pvd->dt == DISK_IMAGE)
+		//we can't just unmount if we've asked for a disk image, the whole point is to unmount if we didn't ask for one.
+		//if (pvd->dt == DISK_IMAGE)
         DeleteDrive(i);
 
     return TRUE;
 }
 
 
-BOOL __cdecl UninitAtariDisks()
+BOOL __cdecl UninitAtariDisks(int iVM)
 {
     int i;
 
-    for (i = 0; i < vmCur.ivdMac; i++)
-        UnmountAtariDisk(i);
+    for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
+        UnmountAtariDisk(iVM, i);
 
     return TRUE;
 }
 
+// can only happen to the current instance (I hope)
+//
 BOOL __cdecl WarmbootAtari()
 {
 	// POKE 580,1 == Cold Start
@@ -292,19 +296,28 @@ BOOL __cdecl WarmbootAtari()
 
 	InitSound();	// need to reset and queue audio buffers
 
-	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start
+	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	InitJoysticks();
 	CaptureJoysticks();
 
     return TRUE;
 }
 
-BOOL __cdecl ColdbootAtari()
+BOOL __cdecl ColdbootAtari(int iVM)
 {
     unsigned addr;
 	//OutputDebugString("\n\nCOLD START\n\n");
 
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
     // Initialize mode display counter (banner)
+	
+	ramtop = 0xC000;	// will change if cart detected
+
+	fBrakes = 1;	// global turbo for all instances
+	clockMult = 1;	// per instance speed-up
+
+	InitAtariDisks(iVM);
 
 	cntTick = 50*4;
     QueryTickCtr();
@@ -315,17 +328,17 @@ BOOL __cdecl ColdbootAtari()
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
     if (mdXLXE == md800)
-        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
+        v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
     else if (mdXLXE == mdXL)
-        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
+		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
     else
-        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
-    DisplayStatus();
+		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
+    //DisplayStatus(); this might not be the active instance
 
     // Swap in BASIC and OS ROMs.
 
     InitBanks();
-	InitCart();	// after the OS and BASIC go in above, so the cartridge overrides built-in BASIC
+	InitCart(iVM);	// after the OS and BASIC go in above, so the cartridge overrides built-in BASIC
 
 #if 0 // doesn't the OS do this?
     // initialize memory up to ramtop
@@ -420,7 +433,7 @@ BOOL __cdecl ColdbootAtari()
 	RANDOM17 = qpc.QuadPart & 0x1ffff;
 
 	InitSound();	// Need to reset and queue audio buffers
-	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start
+	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	InitJoysticks();
 	CaptureJoysticks();
 
@@ -556,6 +569,10 @@ BOOL __cdecl ExecuteAtari()
 				cErr = cCur - (cJif - cErr);
 				if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
 				cCYCLES = GetCycles();
+
+				// exit each frame to let the next VM run
+				if (v.fTiling)
+					fStop = fTrue;
 			}
 
 			// hack for programs that check $D41B instead of $D40B
@@ -737,9 +754,6 @@ BOOL __cdecl ExecuteAtari()
 				}
 				else
 					FlushToPrinter();
-
-				// exit to message loop after VBI always, REVIEW: any effect???
-				//fStop = fTrue;
 
 			}
 			else if (wScan > 251)
@@ -1077,7 +1091,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
     case 0xD5:      // Cartridge bank select
 //        printf("addr = %04X, b = %02X\n", addr, b);
-        BankCart(addr & 255);
+        BankCart(v.iVM, addr & 255);
         break;
         }
 
@@ -1105,9 +1119,9 @@ void UpdatePorts()
         PORTB = wPBDDIR;
 }
 
-void ReadCart()
+void ReadCart(int iVM)
 {
-	char *pch = vi.pvmCur->rgcart.szName;
+	char *pch = v.rgvm[iVM].rgcart.szName;
 
 	int h;
 	int cb = 0;
@@ -1128,21 +1142,21 @@ void ReadCart()
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 		
-		_read(h, rgcartData, cb);
+		_read(h, rgcartData, cb);	// !!! shit
 
-		vi.pvmCur->rgcart.cbData = cb;
-		vi.pvmCur->rgcart.fCartIn = TRUE;
+		v.rgvm[iVM].rgcart.cbData = cb;
+		v.rgvm[iVM].rgcart.fCartIn = TRUE;
 	}
 	_close(h);
 }
 
-void InitCart()
+void InitCart(int iVM)
 {
 	// no cartridge
-	if (!(vi.pvmCur->rgcart.fCartIn))
+	if (!(v.rgvm[iVM].rgcart.fCartIn))
 		return;
 
-	PCART pcart = &(vi.pvmCur->rgcart);
+	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
 
 	//printf("pcart = %08X\n", pcart);
@@ -1193,9 +1207,9 @@ void InitCart()
 }
 
 
-void BankCart(int iBank)
+void BankCart(int iVM, int iBank)
 {
-	PCART pcart = &(vi.pvmCur->rgcart);
+	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
 
 	//    printf("bank select = %d\n", iBank);
@@ -1203,7 +1217,7 @@ void BankCart(int iBank)
 	if (ramtop == 0xC000)
 		return;
 
-	if (!(vi.pvmCur->rgcart.fCartIn))
+	if (!(v.rgvm[iVM].rgcart.fCartIn))
 		return;
 
 	if (cb <= 8192)

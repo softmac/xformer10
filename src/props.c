@@ -93,49 +93,55 @@ BOOL FAddVM(PVMINFO pvmi, int *pi)
 
 BOOL InitProperties()
 {
-    memset(&v, 0, sizeof(v));
+	memset(&v, 0, sizeof(v));
 
-    v.fPrivate = fTrue;         // new style settings
-    v.wMagic      = 0x82201233; // some unique value
+	v.fPrivate = fTrue;         // new style settings
+	v.wMagic = 0x82201233; // some unique value
 
-    // all fields default to 0 or fFalse except for these...
+	// all fields default to 0 or fFalse except for these...
 
-    v.cb          = sizeof(PROPS);
-    v.ioBaseAddr  = 0x240;
-    v.cCards      = 1;
+	v.cb = sizeof(PROPS);
+	v.ioBaseAddr = 0x240;
+	v.cCards = 1;
 
-    v.fNoDDraw    = 2;      // on NT 4.0 some users won't be able to load DirectX
-    v.fZoomColor  = fFalse; // make the window large
-    v.fNoMono     = fTrue;  // in case user is running an ATI video card
-    v.fSaveOnExit = fTrue;  // automatically save settings on exit
+	v.fNoDDraw = 2;      // on NT 4.0 some users won't be able to load DirectX
+	v.fZoomColor = fFalse; // make the window large
+	v.fNoMono = fTrue;  // in case user is running an ATI video card
+	v.fSaveOnExit = fTrue;  // automatically save settings on exit
 
-    // check for original Windows 95 which had buggy ASPI drivers
+	// check for original Windows 95 which had buggy ASPI drivers
 
-    OSVERSIONINFO oi;
-    
-    oi.dwOSVersionInfoSize = sizeof(oi);
-    GetVersionEx(&oi);
+	OSVERSIONINFO oi;
 
-    switch(oi.dwPlatformId)
-        {
-    default:
-//    case VER_PLATFORM_WIN32_WINDOWS:
-        if ((oi.dwBuildNumber & 0xFFFF) == 950)
-            v.fNoSCSI = TRUE;   // Windows 95 has boned SCSI support
-        break;
+	oi.dwOSVersionInfoSize = sizeof(oi);
+	GetVersionEx(&oi);
 
-    case VER_PLATFORM_WIN32s:
-    case VER_PLATFORM_WIN32_NT:
-           break;
-        }
-    
-    // Initialize default ROM directory to current directory
+	switch (oi.dwPlatformId)
+	{
+	default:
+		//    case VER_PLATFORM_WIN32_WINDOWS:
+		if ((oi.dwBuildNumber & 0xFFFF) == 950)
+			v.fNoSCSI = TRUE;   // Windows 95 has boned SCSI support
+		break;
 
-    strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
+	case VER_PLATFORM_WIN32s:
+	case VER_PLATFORM_WIN32_NT:
+		break;
+	}
 
+	// Initialize default ROM directory to current directory
+
+	strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
+
+	return TRUE;
+}
+
+// !!! Add a menu item to actually do this
+BOOL CreateAllVMs()
+{
 	int vmNew;
 
-// start with some default VM's if there's nothing saved yet (usually this will get replaced)
+	// make one of everything at the same time
 #ifdef XFORMER
 
     // initialize the default Atari 8-bit VMs
@@ -146,18 +152,26 @@ BOOL InitProperties()
     v.rgvm[vmNew].bfRAM = ram48K;
     strcpy(v.rgvm[vmNew].szModel, rgszVM[1]);
 
+	// Init the instance and create it's HDC for drawing.
+	FInitVM(vmNew);
+
     FAddVM(&vmi800, &vmNew);
     v.rgvm[vmNew].bfHW = vmAtariXL;
     v.rgvm[vmNew].iOS  = 1;
     v.rgvm[vmNew].bfRAM = ram64K;
     strcpy(v.rgvm[vmNew].szModel, rgszVM[2]);
 
-    FAddVM(&vmi800, &vmNew);
+	// Init the instance and create it's HDC for drawing.
+	FInitVM(vmNew);
+
+	FAddVM(&vmi800, &vmNew);
     v.rgvm[vmNew].bfHW = vmAtariXE;
     v.rgvm[vmNew].iOS  = 2;
     v.rgvm[vmNew].bfRAM = ram128K;
     strcpy(v.rgvm[vmNew].szModel, rgszVM[3]);
 
+	// Init the instance and create it's HDC for drawing.
+	FInitVM(vmNew);
 #endif
 
 #ifdef ATARIST
@@ -349,8 +363,13 @@ LTryAgain:
 #endif // SOFTMAC2
 
 		v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
+
+		// we just loaded an instance off disk. Init it.
 		if (v.rgvm[i].fValidVM)
+		{
 			v.cVM++;
+			FInitVM(i);
+		}
 	}
 	
 	if (strlen((char *)&v.rgchGlobalPath) == 0)
@@ -376,9 +395,8 @@ LTryAgain:
         v.fPrivate = fTrue;
         }
     
-    return f;
+    return f && v.cVM;	// must have an instance loaded to count as success
 }
-
 
 //
 // If properties are dirty, prompt user to save properties to INI or registry
@@ -408,7 +426,13 @@ BOOL SaveProperties(HWND hOwner)
     return f;
 }
 
+BOOL SaveState(BOOL fSave)
+{
+	return TRUE;
+}
 
+
+#if 0
 void ListBootDrives(HWND hDlg)
 {
     // Stuff description of all detected ROMs to given dialog box
@@ -445,11 +469,6 @@ void ListBootDrives(HWND hDlg)
         rgch[0] = 'A' + i;
         SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_ADDSTRING, 0, (LPARAM)rgch);
         }
-}
-
-BOOL SaveState(BOOL fSave)
-{
-    return TRUE;
 }
 
 
@@ -1491,5 +1510,6 @@ LRESULT CALLBACK ChooseProc(
 
     return (FALSE); // Didn't process the message
 }
+#endif
 
 

@@ -27,55 +27,6 @@
 extern "C" {
 #endif
 
-//
-// VMINFO structure exported by each virtual machine module
-//
-
-typedef struct _vminfo
-{
-    PFNL pfnVm;             // function to handle VM operations
-    ULONG ver;              // version
-    BYTE *pchModel;         // default verbose name for this VM
-    ULONG wfHW;             // bit vector of supported hardware models
-    ULONG wfCPU;            // bit vector of supported CPUs
-    ULONG wfRAM;            // bit vector of supported RAM sizes
-    ULONG wfROM;            // bit vector of supported ROM chips
-    ULONG wfMon;            // bit vector of supported monitors
-    PFNL pfnInstall;        // VM installation (one time init)
-    PFNL pfnInit;           // VM initialization (switch to this VM)
-    PFNL pfnUnInit;         // VM uninit (switch away from VM)
-    PFNL pfnInitDisks;      // VM disk initialization
-#ifdef HWIN32
-    PFNL pfnMountDisk;      // VM disk initialization
-#endif
-    PFNL pfnUnInitDisks;    // VM disk uninitialization
-#ifdef HWIN32
-    PFNL pfnUnmountDisk;    // VM disk uninitialization
-#endif
-    PFNL pfnColdboot;       // VM resets hardware (coldboot)
-    PFNL pfnWarmboot;       // VM resets hardware (warmboot)
-    PFNL pfnExec;           // VM execute code
-    PFNL pfnTrace;          // Execute one single instruction in the VM
-    PFNL pfnWinMsg;         // handles Windows messages
-    BOOL (__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
-    PFNL pfnDumpHW;         // dumps hardware state
-    PFNL pfnDisasm;         // Disassemble code in VM as ASCII
-    PFNL pfnReadHWByte;     // reads a byte from the VM
-    PFNL pfnReadHWWord;     // reads a word from the VM
-    PFNL pfnReadHWLong;     // reads a long from the VM
-    PFNL pfnWriteHWByte;    // writes a byte to the VM
-    PFNL pfnWriteHWWord;    // writes a word to the VM
-    PFNL pfnWriteHWLong;    // writes a long to the VM
-#ifdef HWIN32
-    PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
-    PFNL pfnUnlockBlock;    // release memory block in VM
-    PFNP pfnMapAddress;     // convert virtual machine address to flat address
-    PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
-    PFNL pfnSaveState;      // save snapshot to disk
-    PFNL pfnLoadState;      // load snapshot from disk and resume
-#endif
-} VMINFO, *PVMINFO;
-
 enum
 {
     VM_GET_VERSION,         // version of this VM
@@ -120,7 +71,6 @@ enum
 
 extern VMINFO *vpvm;
 
-
 // a VM address
 
 #ifdef HWIN32
@@ -137,57 +87,47 @@ typedef unsigned short int  ADDR;
 // which return a BYTE or WORD.
 //
 
+// some functions can operate on any instance, and they take a parameter (which instance)
+// and need to look at the state of that instance, not vpvm (the current one)
+
 BOOL __inline FInstallVM()
 {
     return vpvm->pfnInstall(0);
 }
 
-BOOL __inline FInitVM()
+BOOL __inline FInitVM(int iVM)
 {
-    if (vpvm == NULL)
+    if (v.rgvm[iVM].pvmi->pfnInit == NULL)
         return FALSE;
 
-    if (vpvm->pfnInit == NULL)
-        return FALSE;
-
-    return vpvm->pfnInit(0);
+    return v.rgvm[iVM].pvmi->pfnInit(iVM);
 }
 
-BOOL __inline FUnInitVM()
+BOOL __inline FUnInitVM(int iVM)
 {
-    if (vpvm == NULL)
+    if (v.rgvm[iVM].pvmi->pfnUnInit == NULL)
         return TRUE;
 
-    if (vpvm->pfnUnInit == NULL)
-        return TRUE;
-
-    return vpvm->pfnUnInit(0);
+    return v.rgvm[iVM].pvmi->pfnUnInit(iVM);
 }
 
-BOOL __inline FInitDisksVM()
+BOOL __inline FInitDisksVM(int iVM)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnInitDisks(0);
+	// why do we all of a sudden trust pfnInitDisks not to be NULL?
+    return v.rgvm[iVM].pvmi->pfnInitDisks(iVM);
 }
 
-BOOL __inline FUnInitDisksVM()
+BOOL __inline FUnInitDisksVM(int iVM)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnUnInitDisks(0);
+    return v.rgvm[iVM].pvmi->pfnUnInitDisks(iVM);
 }
 
-BOOL __inline FColdbootVM()
+BOOL __inline FColdbootVM(int iVM)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnColdboot(0);
+    return v.rgvm[iVM].pvmi->pfnColdboot(iVM);
 }
 
+// so far, this only gets called on the current instance
 BOOL __inline FWarmbootVM()
 {
     if (vpvm == NULL)
@@ -196,27 +136,20 @@ BOOL __inline FWarmbootVM()
     return vpvm->pfnWarmboot(0);
 }
 
+// so far, this only gets called on the current instance
 BOOL __inline FExecVM(int fStep, int fCont)
 {
     return vpvm->pfnExec(fStep, fCont);
 }
 
-#ifdef HWIN32
-
-BOOL __inline FMountDiskVM(int i)
+BOOL __inline FMountDiskVM(int iVM, int i)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnMountDisk(i);
+    return v.rgvm[iVM].pvmi->pfnMountDisk(iVM, i);
 }
 
-BOOL __inline FUnmountDiskVM(int i)
+BOOL __inline FUnmountDiskVM(int iVM, int i)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnUnmountDisk(i);
+    return v.rgvm[iVM].pvmi->pfnUnmountDisk(i);
 }
 
 BOOL __inline FWinMsgVM(HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)
@@ -354,8 +287,6 @@ __inline BYTE * MapWritableAddressVM(ULONG ea)
 {
     return vpvm->pfnMapAddressRW(ea);
 }
-
-#endif  // HWIN32
 
 
 #ifdef __cplusplus
