@@ -7,20 +7,23 @@
 #define IDR_ACCEL                       104
 #define IDR_GEMMENU                     105
 
-#define IDM_ADDVM                       40201
+#define IDM_ADDVM1                      40150 // and leave room for all the different possible VM types
+
 #define IDM_DELVM                       40202
 #define IDM_DELALL                      40203
 #define IDM_COLDSTART                   40204
-#define IDM_RENAME                      40205
 #define IDM_OPEN                        40206
 #define IDM_SAVE                        40207
 #define IDM_IMPORTDOS                   40208
 #define IDM_EXPORTDOS                   40209
 #define IDM_EXIT                        40220
 
+#define IDM_VM1							41999	// leave lots of room for many more before this one
+
 #define IDM_FULLSCREEN                  40231
 #define IDM_STRETCH                     40232
 #define IDM_TILE                        40237
+#define IDM_COLORMONO                   40032
 #define IDM_D1                          40238
 #define IDM_D2                          40239
 #define IDM_D3                          40242
@@ -30,8 +33,10 @@
 #define IDM_D3U                         40246
 #define IDM_D4U                         40247
 #define IDM_CART                        40248
+#define IDM_NOCART						40249
+#define IDM_CARTSEP						40250
 
-#define IDM_ABOUT                       40249
+#define IDM_ABOUT                       40260
 
 // legacy
 #define IDSCAN                          10
@@ -128,16 +133,16 @@
 #define IDC_LBCHOOSE                    1181
 #define IDM_LOADINI                     40001
 #define IDM_SAVEINI                     40002
-#define IDM_SAVE                        40003
+//#define IDM_SAVE                        40003
 #define IDM_SAVESTATE                   40004
 #define IDM_LOADSTATE                   40005
 #define IDM_HYBERNATE                   40006
-#define IDM_EXIT                        40007
+//#define IDM_EXIT                        40007
 #define IDM_SAVEONEXIT                  40008
 #define IDM_HYBONEXIT                   40009
-#define IDM_ABOUT                       40020
-#define IDM_COLDSTART                   40031
-#define IDM_COLORMONO                   40032
+//#define IDM_ABOUT                       40020
+//#define IDM_COLDSTART                   40031
+//#define IDM_COLORMONO                   40032
 #define IDM_F11                         40037
 #define IDM_DISKPROPS                   40038
 #define IDM_FASTREFRESH                 40039

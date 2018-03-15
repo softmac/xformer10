@@ -114,7 +114,6 @@ BOOL InitProperties()
 
     // check for original Windows 95 which had buggy ASPI drivers
 
-    {
     OSVERSIONINFO oi;
     
     oi.dwOSVersionInfoSize = sizeof(oi);
@@ -132,26 +131,26 @@ BOOL InitProperties()
     case VER_PLATFORM_WIN32_NT:
            break;
         }
-    }
-
+    
     // Initialize default ROM directory to current directory
 
     strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
     // create default 5 virtual machines
 
+// start with some default VM's if there's nothing saved yet (usually this will get replaced)
 #ifdef XFORMER
 
     // initialize the default Atari 8-bit VMs
 
     FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtari48C;
+    v.rgvm[v.cVM-1].bfHW = vmAtari48;
     v.rgvm[v.cVM-1].iOS  = 0;
     v.rgvm[v.cVM-1].bfRAM = ram48K;
     strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[1]);
 
     FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtariXLC;
+    v.rgvm[v.cVM-1].bfHW = vmAtariXL;
     v.rgvm[v.cVM-1].iOS  = 1;
     v.rgvm[v.cVM-1].bfRAM = ram64K;
     strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[2]);
@@ -159,7 +158,7 @@ BOOL InitProperties()
     // Third is the 130XE
 
     FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtariXEC;
+    v.rgvm[v.cVM-1].bfHW = vmAtariXE;
     v.rgvm[v.cVM-1].iOS  = 2;
     v.rgvm[v.cVM-1].bfRAM = ram128K;
     strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[3]);
@@ -301,56 +300,69 @@ LTryAgain:
         f = fTrue;
         }
 
-    // pointers need to be refreshed
+    // non-persistable pointers need to be refreshed
+	// and only use VM's that we can handle in this build
 
-    {
-    int i;
-
-    for (i = 0; i < MAX_VM; i++)
-        {
-        v.rgvm[i].pvmi = NULL;
+	int i;
+	v.cVM = 0;
+	for (i = 0; i < MAX_VM; i++)
+	{
+		v.rgvm[i].pvmi = NULL;
 
 #ifdef XFORMER
-        if (FIsAtari8bit(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmi800;
+		// old saved PROPERTIES used out of date VMs
+		if (v.rgvm[i].bfHW == vmAtari48C)
+			v.rgvm[i].bfHW = vmAtari48;
+		if (v.rgvm[i].bfHW == vmAtariXLC)
+			v.rgvm[i].bfHW = vmAtariXL;
+		if (v.rgvm[i].bfHW == vmAtariXEC)
+			v.rgvm[i].bfHW = vmAtariXE;
+
+		if (FIsAtari8bit(v.rgvm[i].bfHW)) {
+			v.rgvm[i].pvmi = (PVMINFO)&vmi800;
+			//			if (i == 0) {
+			//				v.rgvm[i].iOS = 0;
+			//				v.rgvm[i].bfRAM = ram48K;
+			//				v.rgvm[i].bfHW = 1;
+			//			}
+		}
 #endif
 
 #ifdef ATARIST
-        if (FIsAtari68K(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiST;
+		if (FIsAtari68K(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiST;
 #endif
 
 #ifdef SOFTMAC
-        if (FIsMac16(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiMac;
+		if (FIsMac16(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiMac;
 #endif
 
 #ifdef SOFTMAC2
-        if (FIsMac68020(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiMacII;
+		if (FIsMac68020(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiMacII;
 
-        if (FIsMac68030(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+		if (FIsMac68030(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 
-        if (FIsMac68040(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+		if (FIsMac68040(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 #ifdef POWERMAC
-        if (FIsMacPPC(v.rgvm[i].bfHW))
-            v.rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
+		if (FIsMacPPC(v.rgvm[i].bfHW))
+			v.rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
 #endif // POWERMAC
 #endif // SOFTMAC2
 
-        v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);
-        v.rgvm[i].fValidVM = !(v.rgvm[i].pvmi == NULL);
-        }
-    }
-
-    if (strlen((char *)&v.rgchGlobalPath) == 0)
+		v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
+		v.rgvm[i].fValidVM = !(v.rgvm[i].pvmi == NULL);
+		if (v.rgvm[i].fValidVM)
+			v.cVM++;
+	}
+	
+	if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
     SetCurrentDirectory(rgch);
-
-    v.cVM = MAX_VM;
 
     if (v.iVM >= v.cVM)
         v.iVM = 0;
@@ -836,7 +848,7 @@ void ListVirtualDrives(HWND hDlg)
         else
             {
             // Atari 8-bit has 9 drives
-
+			// !!! only 8 now, don't execute this and crash
             sprintf(rgch, "Atari 8-bit disk drive D%c: ", '1' + i);
             }
 

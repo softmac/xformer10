@@ -122,9 +122,12 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 #define k1G     (0x40000000)
 #define k2G     (0x80000000)
 
-// the size of an 8 bit screen - used only by XFORMER mode
+
+#ifdef XFORMER
+// the size of an 8 bit screen
 #define X8 352
 #define Y8 240
+#endif
 
 //
 // Byte swapping macros
@@ -368,7 +371,7 @@ enum
     vmAtariXL  = 0x00000002,
     vmAtariXE  = 0x00000004,
 
-    // Atari 8-bit machines with cartridge
+    // Atari 8-bit machines with cartridge - no longer used, but we need to read in old PROPERTIES that use them
 
     vmAtari48C = 0x00000080,
     vmAtariXLC = 0x00000100,
@@ -432,7 +435,7 @@ extern char const * const rgszVM[];
 
 // vmwMask is set to the vm bits that are supported by a given build
 
-#define vmw8bit  (vmAtari48 | vmAtariXL | vmAtariXE | vmAtari48C | vmAtariXLC | vmAtariXEC)
+#define vmw8bit  (vmAtari48 | vmAtariXL | vmAtariXE /*| vmAtari48C | vmAtariXLC | vmAtariXEC*/)
 #define vmwST    (vmAtariST | vmAtariSTE)
 #define vmwSTTT  (vmwST     | vmAtariTT)
 #define vmwSTET  (vmAtariSTE | vmAtariTT)
@@ -595,6 +598,14 @@ typedef struct
     char     sz[MAX_PATH]; // path to disk image
 } VD, *PVD;
 
+typedef struct _cart
+{
+	char szName[MAX_PATH];
+	int  cbData;        // actual amount of data on the cart
+	BYTE fCartIn;		// there is a cartridge plugged in
+	char temp;			// make it the same size as a VD structure
+} CART, *PCART;
+
 typedef struct
 {
     // virtual machine descriptor
@@ -637,8 +648,32 @@ typedef struct
     ULONG    bfRAM;         // current RAM size (bit index into rgfRAM)
     int      iOS;           // current OS index (varies by VM)
     int      ivdMac;        // maximum index into rgvd
-    VD       rgvd[9];       // disk descriptors
-} VM, *PVM;
+
+#ifdef XFORMER
+	VD		 rgvd[8];		// disk descriptors
+	CART	 rgcart;		// 8 disks and a cartridge for 8 bit
+#else
+	VD		 rgvd[9];		// disk descriptors
+#endif
+	} VM, *PVM;
+
+//
+// Cartridge stuff
+//
+
+#define CART_8K     0
+#define CART_16K    1
+#define CART_OSS    2   // Mac65 etc.
+
+#define MAX_CART_SIZE 16384
+char rgcartData[MAX_CART_SIZE];
+
+CART rgBasic;	// special built in BASIC for XL
+char rgBasicData[8192];
+
+void ReadCart();
+void InitCart();
+void BankCart();
 
 BOOL FAddVM(PVMINFO pvmi, int *pi);
 
@@ -688,7 +723,7 @@ typedef struct
     OSINFO   rgosinfo[MAXOS];
     unsigned cOS;           // count of valid OSes, or 0
 
-    unsigned iVM;           // 0 = Atari 8-bit, 1 = Atari ST, 2 = Mac
+    unsigned iVM;           // our current instance
     unsigned cVM;           // total number of valid VM entries
     VM       rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
 
@@ -845,7 +880,7 @@ typedef struct
     HMENU hMenu;        // pop-up menu handle
     HDC  hdc;           // hdc of screen
     ULONG cbScan;       // bytes per scan in DIB section
-    HPALETTE hpal;      // palette for color modes 
+    HPALETTE hpal;      // palette for color modes - obsolete
     LONG fVideoEnabled; // set to allow video refresh or bitmap change, zero means busy
     BOOL fVideoWrite;   // set by exception handler, cleared by video refresh
     HANDLE hVideoThread; // handle of video thread
@@ -1120,8 +1155,8 @@ void UninitDrawing(BOOL fFinal);
 BYTE *LockSurface(int *);
 void UnlockSurface();
 void ClearSurface();
-BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
-BOOL FCyclePalette(BOOL fForward);
+//BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
+//BOOL FCyclePalette(BOOL fForward);
 
 // xatari.c
 void ForceRedraw();
@@ -1143,7 +1178,7 @@ LRESULT CALLBACK DisksDlg(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK FirstTimeProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK ChooseProc(HWND, UINT, WPARAM, LPARAM);
 void DisplayStatus();
-BOOL FCreateOurPalette();
+//BOOL FCreateOurPalette();
 BOOL SetBitmapColors();
 
 // counter stuff
@@ -1208,8 +1243,8 @@ typedef struct _sthw
     int   planes;       // number of bit planes (ST mode)
     BOOL fMono;         // true if emulating mono (using the mono bitmap)
 
-    BOOL fColPal;       // color palette is changing
-    ULONG iColPal;      // color palette index (0..767)
+//    BOOL fColPal;       // color palette is changing
+//    ULONG iColPal;      // color palette index (0..767)
 
 // VIDEO chip
 
@@ -1468,7 +1503,7 @@ typedef struct _sthw
     union
         {
         RGBQUAD rgrgb[256];
-        PALETTEENTRY rgpe[256];
+        //PALETTEENTRY rgpe[256];
         ULONG    lrgb[256];
         };
 
