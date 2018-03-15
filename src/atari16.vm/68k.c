@@ -1520,7 +1520,7 @@ void DumpDMA(int byte0, int byte1, int byte2, int byte3, int byte4, int byte5)
     switch(byte0 & 0x1F)
         {
     default:
-        DebugStr("Unknown command!!!");
+        DebugStr("Unknown command!!");
         break;
 
     case 0:

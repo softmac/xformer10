@@ -558,13 +558,13 @@ Lbadread:
 
     case 0x55:
 #if TRACESCSI
-        printf("MODE SELECT 10 - NOT IMPLEMENTED!!!\n");
+        printf("MODE SELECT 10 - NOT IMPLEMENTED!!\n");
 #endif
         break;
 
     case 0x5A:
 #if TRACESCSI
-        printf("MODE SENSE 10 - NOT IMPLEMENTED!!!\n");
+        printf("MODE SENSE 10 - NOT IMPLEMENTED!!\n");
 #endif
         break;
 
@@ -673,7 +673,7 @@ Lbadread:
         // mode select, used by Mac OS disk format
 
 #if TRACESCSI
-        printf("MODE SELECT 6 - NOT IMPLEMENTED!!!\n");
+        printf("MODE SELECT 6 - NOT IMPLEMENTED!!\n");
 #endif
         goto goodHD;
 
@@ -1074,7 +1074,7 @@ void WriteMacSCSI(ULONG ea, BYTE b)
         {
         int i;
 
-        printf("\nSCSI cmd to ID %d = $%02X !!!!!!!!!!\n", id, vsthw.byte0);
+        printf("\nSCSI cmd to ID %d = $%02X !!\n", id, vsthw.byte0);
         printf("Raw command =");
 
         if (id == 0)

@@ -350,19 +350,19 @@ ULONG QueryTickCtr()
 
 ULONGLONG GetCycles()
 {
-    LARGE_INTEGER qpc;
-    QueryPerformanceCounter(&qpc);
-    qpc.QuadPart -= vi.qpcCold;
-    ULONGLONG a = (qpc.QuadPart * 178979ULL);
-    ULONGLONG b = (vi.qpfCold / 10ULL);
-    ULONGLONG c = a / b;
-    return c;
+	LARGE_INTEGER qpc;
+	QueryPerformanceCounter(&qpc);
+	qpc.QuadPart -= vi.qpcCold;
+	ULONGLONG a = (qpc.QuadPart * 178979ULL);
+	ULONGLONG b = (vi.qpfCold / 10ULL);
+	ULONGLONG c = a / b;
+	return c;
 }
 
 ULONGLONG GetJiffies()
 {
-    ULONGLONG c = GetCycles() / 29833;
-    return c;
+	ULONGLONG c = GetCycles() / 29833;
+	return c;
 }
 
 //
@@ -912,19 +912,6 @@ int CALLBACK WinMain(
 
     fProps = LoadProperties(NULL);
 
-#ifdef XFORMER
-    // TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
-    // and select an existing VM of the appropriate hardware type or create a new VM of that type
-    // For now just support for Atari 8-bit VMs and presume the disk image is an .ATR/XFD image
-
-    if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine)>2))
-    {
-        lpCmdLine[strlen(lpCmdLine) - 1] = 0;    // get rid of the trailing "
-        strcpy(vmCur.rgvd[0].sz, lpCmdLine+1); // replace disk 1 image with the argument (sans ")
-        v.fSkipStartup = TRUE;    // and go straight to running it
-    }
-#endif
-
     // DirectX can fragment address space, so only preload if user wants to
 
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
@@ -999,8 +986,7 @@ int CALLBACK WinMain(
         FInitBlockDevLib();
 
     // Initialize joysticks (but don't capture yet)
-
-    InitJoysticks();
+    //InitJoysticks();
 
     // Now go and prompt the user with First Time Setup if necessary
 
@@ -1122,7 +1108,10 @@ int CALLBACK WinMain(
 
                 switch(msg.message)
                     {
-                case TM_JOY0FIRE:
+
+				// !!! we don't seem to send these to ourself anymore
+#if 0
+				case TM_JOY0FIRE:
                 case TM_JOY0MOVE:
                     if (vi.fExecuting)
                         FWinMsgVM(vi.hWnd, message, uParam, lParam);
@@ -1139,7 +1128,8 @@ int CALLBACK WinMain(
                         FWinMsgVM(vi.hWnd, WM_KEYUP,
                             uParam, (lParam << 16) | 0xC0000001);
                     break;
-                    }
+#endif
+				}
 
                 // don't pass thread message to window handler
                 continue;
@@ -1163,7 +1153,7 @@ int CALLBACK WinMain(
             vmCur.fColdReset = FALSE;
             ColdStart();
 
-            if (v.fDebugMode)
+			if (v.fDebugMode)
                 vi.fDebugBreak = TRUE;
             }
 
@@ -2038,6 +2028,7 @@ loop:
 
 void ColdStart()
 {
+	
     ShowWindowsMouse();
     SetWindowsMouse(0);
 
@@ -2422,6 +2413,8 @@ LRESULT CALLBACK WndProc(
         SetBkMode(vi.hdc, TRANSPARENT);
 
         FCreateOurPalette();
+		InitJoysticks();
+		CaptureJoysticks(hWnd);
 
         if (!FIsAtari8bit(vmCur.bfHW))
             {
@@ -2730,7 +2723,7 @@ break;
         else if (FIsAtari68K(vmCur.bfHW))
             {
             vi.fRefreshScreen = TRUE;
-            CaptureJoysticks();
+            //CaptureJoysticks(); you can't do multiple capture/release's so keep capture through the life of window
             AddToPacket(0x9D);  // Ctrl key up
             AddToPacket(0xB8);  // Alt  key up
             }
@@ -2740,8 +2733,8 @@ break;
             ControlKeyUp8();
             ForceRedraw();
 #endif
-            CaptureJoysticks();
-            }
+			//CaptureJoysticks(); you can't do multiple capture/release's so keep capture through the life of window
+		}
 
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
         return 0;
@@ -2756,8 +2749,8 @@ break;
         vi.fInDirectXMode = FALSE;
 #endif
 
-        ShowWindowsMouse();
-        ReleaseJoysticks();
+		ShowWindowsMouse();
+        //ReleaseJoysticks();
         ReleaseCapture();
 
 #if !defined(NDEBUG)
@@ -3197,6 +3190,7 @@ L_about:
     case WM_DESTROY:  // message: window being destroyed
 
         vi.fQuitting = TRUE;
+		ReleaseJoysticks();
 
         // release DirectX mode
         MarkAllPagesClean();
@@ -3809,9 +3803,9 @@ LRESULT CALLBACK About(
 
                 sprintf(rgch, "%s Community Release\n"
                     "Darek's Classic Computer Emulator.\n"
-                    "Version 9.90 - built on %s\n"
+                    "Version 9.21 - built on %s\n"
                     "%2d-bit %s release.\n\n"
-                    "Copyright (C) 1986-2018 Darek Mihocka.\n"
+                    "Copyright (C) 1986-2013 Darek Mihocka.\n"
                     "All Rights Reserved.\n\n"
 
 #ifdef XFORMER

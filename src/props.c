@@ -759,7 +759,6 @@ LRESULT CALLBACK Properties(
                     }
 
                 CreateNewBitmap();
-                InitSound(0);
 
                 return (TRUE);
                 break;

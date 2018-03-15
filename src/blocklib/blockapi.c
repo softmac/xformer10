@@ -559,7 +559,7 @@ BOOL FAddSectorsToCache(PDI pdi, BYTE *pb, ULONG sec, ULONG count)
             if (pdi->dc[i].pb_dc && (pdi->dc[i].sec_dc == sec + isec))
                 {
                 // sector was already cached, update cached data
-                // should be the same!!!
+                // should be the same!!
 
                 Assert(!memcmp(pdi->dc[i].pb_dc, pb + isec * pdi->cbSector,
                      pdi->cbSector));

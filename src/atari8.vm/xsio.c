@@ -248,7 +248,7 @@ void InitSIOV(int argc, char **argv)
 #ifndef NDEBUG
             printf("sound activated\n");
 #endif
-            fSound = TRUE;
+            fSoundOn = TRUE;
 #ifndef HWIN32
             InitSoundBlaster();
 #endif

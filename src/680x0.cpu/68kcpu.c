@@ -598,7 +598,7 @@ static BOOL FTranslateGuestAddress(ULONG *paddr, BOOL fWrite)
             }
         }
 
-#if 0   // NYI!!!
+#if 0   // NYI!!
 
     // Check if 68040 translation enabled
 
@@ -2469,7 +2469,7 @@ static void __inline Normalize(unsigned char *rgb)
         unsigned long c;
 
 #if TRACEFPU
-        printf("DENORMALIZED EXTENDED NUMBER!!!!\n");
+        printf("DENORMALIZED EXTENDED NUMBER!!\n");
 #endif
 
         c = (rgl[0] & 0x80000000);
@@ -2533,7 +2533,7 @@ static void PushFPMdEa(int md, ULONG ea)
         BOOL fSM = 0, fSE = 0, fYY = 0;
 
 #if TRACEFPU
-        printf("LOADING BCD NUMBER!!!!\n");
+        printf("LOADING BCD NUMBER!!\n");
 #endif
 
         fSM = (rgb[0] & 0x80) != 0;
@@ -2792,7 +2792,7 @@ static void PopFPMdEa(int md, ULONG ea, int k)
         k = ((int)(k << 25)) >> 25;
 
 #if TRACEFPU
-        printf("SAVING BCD NUMBER!!!!\n");
+        printf("SAVING BCD NUMBER!!\n");
 #endif
 
         __asm lea   eax,d
@@ -3257,7 +3257,7 @@ LBaseToX:
 
     default:
 #if TRACEFPU
-        printf("UNIMPLEMENTED MODE %02X!!!\n", mode);
+        printf("UNIMPLEMENTED MODE %02X!!\n", mode);
 #endif
         break;
         }
@@ -3862,7 +3862,7 @@ Larithm:
         ULONG *plreg = &vpregs->D0;
 
 #if TRACEFPU
-        printf("in Fcc code!!! eamode = %02X, F = %d\n", xword & 63, f);
+        printf("in Fcc code!! eamode = %02X, F = %d\n", xword & 63, f);
 #endif
 
         if ((instr & 38) == 0x08)
@@ -4894,7 +4894,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 TCR!!!\n");
+                    printf("68040 TCR!!\n");
 #endif
                     plctr = &vpregs2->TCR;
                     break;
@@ -4903,7 +4903,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 ITT0!!!\n");
+                    printf("68040 ITT0!!\n");
 #endif
                     plctr = &vpregs2->ITT[0];
                     break;
@@ -4912,7 +4912,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 ITT1!!!\n");
+                    printf("68040 ITT1!!\n");
 #endif
                     plctr = &vpregs2->ITT[1];
                     break;
@@ -4921,7 +4921,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 DTT0!!!\n");
+                    printf("68040 DTT0!!\n");
 #endif
                     plctr = &vpregs2->DTT[0];
                     break;
@@ -4930,7 +4930,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 DTT1!!!\n");
+                    printf("68040 DTT1!!\n");
 #endif
                     plctr = &vpregs2->DTT[1];
                     break;
@@ -4939,7 +4939,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 MMUSR!!!\n");
+                    printf("68040 MMUSR!!\n");
 #endif
                     plctr = &vpregs2->MMUSR;
                     break;
@@ -4948,7 +4948,7 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 URP!!!\n");
+                    printf("68040 URP!!\n");
 #endif
                     plctr = &vpregs2->URP40;
                     break;
@@ -4957,13 +4957,13 @@ BOOL __cdecl TrapHook(int vector)
 #if TRACE040
                     m68k_DumpRegs();
                     m68k_DumpHistory(160);
-                    printf("68040 SRP!!!\n");
+                    printf("68040 SRP!!\n");
 #endif
                     plctr = &vpregs2->SRP40;
                     break;
                     }
 
-                DebugStr("Handling MOVEC!!!\n");
+                DebugStr("Handling MOVEC!!\n");
 
                 if (instr & 1)
                     *plctr ^= (*plreg ^ *plctr) & wfMask;
@@ -5097,7 +5097,7 @@ printf("PC: %08X  @PC-2: %08X\n", vpregs->PC, PeekL(vpregs->PC-2));
 
          //   fTracing++;
             lBreakpoint = vpregs->PC + 2;
-        printf("\n\nSTARTING FPU TRACE!!!\n\n");
+        printf("\n\nSTARTING FPU TRACE!!\n\n");
             }
 
 #if 0
@@ -5192,7 +5192,7 @@ printf("PC: %08X  @PC-2: %08X\n", vpregs->PC, PeekL(vpregs->PC-2));
             }
 
 #if TRACETRAP
-        printf("NOT AN FPU!!!\n");
+        printf("NOT AN FPU!!\n");
 #endif
 
 #ifndef NDEBUG
@@ -5928,7 +5928,7 @@ ULONG __cdecl mppc_StepPPC(int count)
         (void *)vpregs->opcodesRW[(vpregs->EAX << 16) | (vpregs->EBX)],
         sizeof(IDEF)))
         {
-        printf("ERROR: rgopcodes[opcode] does not match FindInstrDef!!!\n");
+        printf("ERROR: rgopcodes[opcode] does not match FindInstrDef!!\n");
         }
 #endif
 
