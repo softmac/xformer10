@@ -38,7 +38,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 
 
 //
-// Add a new virtual machine to v.rgvm
+// Add a new virtual machine to v.rgvm - return which instance it found
 //
 
 BOOL FAddVM(PVMINFO pvmi, int *pi)
@@ -47,25 +47,22 @@ BOOL FAddVM(PVMINFO pvmi, int *pi)
     BOOL f;
 
     // first try to find an empty slot in the rgvm array
-
-    for (i = 0; i < v.cVM; i++)
-        {
+    for (i = 0; i < MAX_VM; i++)
+    {
         if (!v.rgvm[i].fValidVM)
             break;
-        }
+    }
 
-    // did not find an empty slot, can we grow v.cVM?
+    // did not find an empty slot!
+	if (i == MAX_VM)
+	{
+		assert(FALSE);
+		return FALSE;
+	}
 
-    if (i == v.cVM)
-        {
-        if (v.cVM == MAX_VM)
-            return FALSE;
+    // i is now an index to an empty VM
 
-        v.cVM++;
-        }
-
-    // i is now an index to an empty VM and v.cVM is sized appropriately
-
+	v.cVM++;
     if (pi)
         *pi = i;
 
@@ -136,32 +133,30 @@ BOOL InitProperties()
 
     strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
-    // create default 5 virtual machines
+	int vmNew;
 
 // start with some default VM's if there's nothing saved yet (usually this will get replaced)
 #ifdef XFORMER
 
     // initialize the default Atari 8-bit VMs
 
-    FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtari48;
-    v.rgvm[v.cVM-1].iOS  = 0;
-    v.rgvm[v.cVM-1].bfRAM = ram48K;
-    strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[1]);
+    FAddVM(&vmi800, &vmNew);
+    v.rgvm[vmNew].bfHW = vmAtari48;
+    v.rgvm[vmNew].iOS  = 0;
+    v.rgvm[vmNew].bfRAM = ram48K;
+    strcpy(v.rgvm[vmNew].szModel, rgszVM[1]);
 
-    FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtariXL;
-    v.rgvm[v.cVM-1].iOS  = 1;
-    v.rgvm[v.cVM-1].bfRAM = ram64K;
-    strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[2]);
+    FAddVM(&vmi800, &vmNew);
+    v.rgvm[vmNew].bfHW = vmAtariXL;
+    v.rgvm[vmNew].iOS  = 1;
+    v.rgvm[vmNew].bfRAM = ram64K;
+    strcpy(v.rgvm[vmNew].szModel, rgszVM[2]);
 
-    // Third is the 130XE
-
-    FAddVM(&vmi800, NULL);
-    v.rgvm[v.cVM-1].bfHW = vmAtariXE;
-    v.rgvm[v.cVM-1].iOS  = 2;
-    v.rgvm[v.cVM-1].bfRAM = ram128K;
-    strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[3]);
+    FAddVM(&vmi800, &vmNew);
+    v.rgvm[vmNew].bfHW = vmAtariXE;
+    v.rgvm[vmNew].iOS  = 2;
+    v.rgvm[vmNew].bfRAM = ram128K;
+    strcpy(v.rgvm[vmNew].szModel, rgszVM[3]);
 
 #endif
 
@@ -318,7 +313,7 @@ LTryAgain:
 		if (v.rgvm[i].bfHW == vmAtariXEC)
 			v.rgvm[i].bfHW = vmAtariXE;
 
-		if (FIsAtari8bit(v.rgvm[i].bfHW)) {
+		if (v.rgvm[i].fValidVM && FIsAtari8bit(v.rgvm[i].bfHW)) {
 			v.rgvm[i].pvmi = (PVMINFO)&vmi800;
 			//			if (i == 0) {
 			//				v.rgvm[i].iOS = 0;
@@ -354,7 +349,6 @@ LTryAgain:
 #endif // SOFTMAC2
 
 		v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
-		v.rgvm[i].fValidVM = !(v.rgvm[i].pvmi == NULL);
 		if (v.rgvm[i].fValidVM)
 			v.cVM++;
 	}
@@ -363,11 +357,6 @@ LTryAgain:
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
     SetCurrentDirectory(rgch);
-
-    if (v.iVM >= v.cVM)
-        v.iVM = 0;
-
-    vi.pvmCur = &v.rgvm[v.iVM]; // update vmCur any time v.iVM changes!
 
     // If we just imported an old style INI file with global VM settings
     // initialize the private VM settings to default values

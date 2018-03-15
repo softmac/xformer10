@@ -29,7 +29,7 @@ ICpuExec *vpci;
 BOOL fDebug;
 
 // forward references
-BOOL FToggleMacAtari(unsigned iVM, BOOL fRefresh);
+BOOL SelectInstance(unsigned iVM, BOOL fRefresh);
 
 #include "shellapi.h"
 
@@ -106,7 +106,8 @@ static char const * const rgszMode[] =
     };
 
 // check the cartridge then the first disk for a filename that can be our instance name
-CreateInstanceName(int i, LPSTR lpInstName, int cLen)
+// string must have enough space for MAX_PATH
+CreateInstanceName(int i, LPSTR lpInstName)
 {
 	LPSTR lp = NULL;
 	int z;
@@ -127,8 +128,7 @@ CreateInstanceName(int i, LPSTR lpInstName, int cLen)
 		if (lp[z] == '\\') break;
 	}
 
-	strncpy(lpInstName, &lp[z+1], cLen);
-	lpInstName[cLen - 1] = 0;
+	sprintf(lpInstName, "%s - %s", v.rgvm[i].szModel, lp + z + 1);
 }
 
 /****************************************************************************
@@ -174,9 +174,9 @@ void DisplayStatus()
 
     }
 #else
-	char pInstname[20];
-	CreateInstanceName(v.iVM, pInstname, 20);
-    sprintf(rgch0, "%s - %s - %s", vi.szAppName, vmCur.szModel, pInstname);
+	char pInstname[MAX_PATH];
+	CreateInstanceName(v.iVM, pInstname);
+    sprintf(rgch0, "%s - %s", vi.szAppName, pInstname);
 #endif
 
     if (vi.fExecuting)
@@ -708,6 +708,8 @@ void CreateVMMenu()
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
 	char mNew[MAX_PATH + 10];
+	BOOL fNeedHotKey = FALSE;
+	int zLast = -1;
 
 	int iFound = 0;
 	for (z = MAX_VM - 1; z >= 0; z--)
@@ -719,8 +721,11 @@ void CreateVMMenu()
 			{
 				mii.fMask = MIIM_STRING;
 				mii.dwTypeData = mNew;
-				CreateInstanceName(z, mNew, MAX_PATH + 10);	// get a name for it
+				CreateInstanceName(z, mNew);	// get a name for it
 				SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
+				CheckMenuItem(vi.hMenu, IDM_VM1, (z == v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check the current one
+				if (z == v.iVM)
+					fNeedHotKey = TRUE;	// we're the last instance, put the hot key label on the first one (the last we'll find)
 				iFound++;
 			}
 			// lower VMs go before IDM_V1 in the menu
@@ -729,16 +734,144 @@ void CreateVMMenu()
 				mii.fMask = MIIM_STRING | MIIM_ID;
 				mii.wID = IDM_VM1 - iFound;
 				mii.dwTypeData = mNew;
-				CreateInstanceName(z, mNew, MAX_PATH + 10);	// get a name for it
+				CreateInstanceName(z, mNew);	// get a name for it
 				DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);	// erase the old one
 				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before here
+				CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check the current one
+				zLast = z;
+
+				// add the hotkey "Alt+F12" to the next instance
+				if (z == v.iVM)
+				{
+					mii.fMask = MIIM_STRING;
+					mii.dwTypeData = mNew;
+					GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+					strcat(mNew, "\tAlt+F12");
+					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
+				}
 				iFound++;
 			}
 		}
 	}
+
+	// add the hotkey "Alt+F12" to the first instance
+	if (fNeedHotKey && zLast >= 0)
+	{
+		mii.fMask = MIIM_STRING;
+		mii.dwTypeData = mNew;
+		GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+		strcat(mNew, "\tAlt+F12");
+		SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
+	}
+
 	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);	// in case we're fixing the menus because one was deleted, this will still be hanging around
 }
 
+void FixAllMenus()
+{
+	// not implemented yet
+	EnableMenuItem(vi.hMenu, IDM_SAVE, MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_OPEN, MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
+
+	// Initialize the menus
+	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
+	CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
+	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
+
+	// Initialize the virtual disk menu items
+
+	MENUITEMINFO mii;
+	mii.cbSize = sizeof(mii);
+	mii.fMask = MIIM_STRING;
+	char mNew[MAX_PATH + 10];
+	mii.dwTypeData = mNew;
+
+	if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+	{
+		sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+
+		if (vi.pvmCur->rgcart.fCartIn)
+		{
+			sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
+			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
+		}
+		else
+		{
+			sprintf(mNew, "&Cartridge...");
+			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
+		}
+
+		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn) ? 0 : MF_GRAYED);
+	}
+	else // TODO prefix other kinds of virtual drives appropriately
+	{
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+
+		EnableMenuItem(vi.hMenu, IDM_CART, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
+	}
+
+	// can't delete the last one
+	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1) ? 0 : MF_GRAYED);
+
+#if 0 // delete all VMs not supported
+	// grey out some things if there are no VMs at all
+	//EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
+#endif
+
+	// List all the valid VMs under the FILE menu
+	CreateVMMenu();
+
+	// Now put all the possible different VM types into the menu
+
+	int zz = 0;
+	#ifdef XFORMER	// offer the 8 bit choices
+	for (; zz < 3; zz++)
+	{
+		// Atari 800 / XL / XE
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_STRING;
+		mii.dwTypeData = mNew;
+		strcpy(mNew, rgszVM[zz + 1]);
+		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // give a proper name to the sample menu item
+		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM) ? MF_GRAYED : MF_ENABLED);	// grey it if there are too many
+	}
+	#endif
+
+	// TODO: now do the non-8 bit choices
+
+	for (; zz < 9; zz++)
+	{
+		DeleteMenu(vi.hMenu, IDM_ADDVM1 + zz, 0); // we don't need these
+	}
+
+	DisplayStatus();
+}
 
 /****************************************************************************
 
@@ -769,7 +902,7 @@ int CALLBACK WinMain(
 {
     RECT rect;
     MSG msg;
-    BOOL fProps;
+    BOOL fProps = FALSE;
 
 	// create the thread's message queue
 
@@ -980,6 +1113,9 @@ int CALLBACK WinMain(
 	// current VM is set to 0
     fProps = LoadProperties(NULL);
 
+	// Initialize the current instance (or first valid one found)
+	SelectInstance(v.iVM, FALSE);
+
 #ifdef XFORMER
 	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
 	// and select an existing VM of the appropriate hardware type or create a new VM of that type
@@ -1065,90 +1201,8 @@ int CALLBACK WinMain(
     if (!vi.hWnd)
         return (FALSE);
 
-	// Initialize the menus
-	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
-	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
-	
-	// Initialize the virtual disk menu items
-	
-	MENUITEMINFO mii;
-	mii.cbSize = sizeof(mii);
-	mii.fMask = MIIM_STRING;
-	char mNew[MAX_PATH+10];
-	mii.dwTypeData = mNew;
-
-	if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-	{
-		sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
-
-		if (vi.pvmCur->rgcart.fCartIn)
-		{
-			sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
-			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
-		}
-		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn) ? 0 : MF_GRAYED);
-	}
-	else // TODO prefix other kinds of virtual drives appropriately
-	{
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
-
-		EnableMenuItem(vi.hMenu, IDM_CART, MF_GRAYED);
-		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
-	}
-
-	// grey out some things if there are no VMs at all
-	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
-
-	// List all the valid VMs under the FILE menu
-	CreateVMMenu();
-
-	// Now put all the possible different VM types into the menu
-
-	int zz = 0;
-#ifdef XFORMER	// offer the 8 bit choices
-	for (; zz < 3; zz++)
-	{
-		// Atari 800 / XL / XE
-		mii.cbSize = sizeof(mii);
-		mii.fMask = MIIM_STRING;
-		mii.dwTypeData = mNew;
-		strcpy(mNew, rgszVM[zz + 1]);
-		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // give a proper name to the sample menu item
-	}
-#endif
-
-	// TODO: now do the non-8 bit choices
-
-	for (; zz < 9; zz++)
-	{
-		DeleteMenu(vi.hMenu, IDM_ADDVM1 + zz, 0); // we don't need these
-	}
-
+	// make sure the menus look right
+	FixAllMenus();
 
     // Make the window visible; update its client area; and return "success"
 
@@ -1176,21 +1230,13 @@ int CALLBACK WinMain(
 #endif // ATARIST
 	}
 
-	// Initialize the current instance (or first valid one found) by asking the current VM to cold start
-	// !!! the first time you switch to a VM is when it cold starts, it's our global non-persistable INSTANCE data
-	// that knows if we need a cold start or not (fInited)
-    if (!FToggleMacAtari(v.iVM, TRUE) && !FToggleMacAtari((unsigned)(-1), TRUE))
-        return -1;
-
-	{
-    int l;
+	int l;
 
     vi.hIdleThread  = CreateThread(NULL, 4096, (void *)IdleThread, 0, 0, &l);
 #if defined(ATARIST) || defined(SOFTMAC)
     vi.hVideoThread = NULL; // CreateThread(NULL, 4096, (void *)ScreenThread, 0, 0, &l);
 #endif // ATARIST
-    }
-
+    
     // create a frame buffer in shared memory
 
     vi.hFrameBuf = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
@@ -1355,7 +1401,7 @@ int CALLBACK WinMain(
 #if 0
 				// if tiling, advance to the next VM, but this is not how to do it
 				if (v.fTiling)
-                    FToggleMacAtari((unsigned)(-1), TRUE);
+                    SelectInstance(v.iVM + 1, TRUE);
 #endif
                 }
             }
@@ -2142,37 +2188,36 @@ BOOL FToggleMonitor()
 // Right now hard coded to toggle Atari 8-bit/Atari ST/Mac modes
 //
 
-BOOL FToggleMacAtari(unsigned iVM, BOOL fRefresh)
+BOOL SelectInstance(unsigned iVM, BOOL fRefresh)
 {
-    BOOL fLoop = (iVM == -1);
+	assert(v.cVM);
 
-    if (v.cVM == 0)
-        return FALSE;
+	if (v.cVM == 0)
+		return FALSE;
 
-    if (fLoop)
-        iVM = v.iVM + 1;
+	// go to the next one, not a particular one
+	if (iVM == -1)
+		iVM = v.iVM++;
 
-loop:
-    // wrap around to first VM
+	if (iVM >= v.cVM)
+		iVM = 0;
 
-    if (iVM >= v.cVM)
-        iVM = 0;
+	int old = iVM;
 
-    if (!v.rgvm[iVM].fValidVM)
-        {
-        iVM++;
-        goto loop;
-        }
+	while (!v.rgvm[iVM].fValidVM)
+	{
+		iVM = (iVM + 1) % MAX_VM;
+		if (iVM == old) break;
+	}
 
-    // there is a valid ROM, go switch VMs
+	assert(v.rgvm[iVM].fValidVM);
 
-//  FUnInitVM();
-
-    v.iVM = iVM;
-    vi.pvmCur = &v.rgvm[v.iVM];    // update vmCur / vmiCur any time v.iVM changes!
+	v.iVM = iVM;
+	vi.pvmCur = &v.rgvm[v.iVM];
     vi.pvmiCur = &vrgvmi[v.iVM];
     vpvm = vmCur.pvmi;
 
+	// Needs a cold start?
     if (!vvmi.fInited)
         {
         vmCur.fColdReset = TRUE;
@@ -2181,6 +2226,8 @@ loop:
 
     if (fRefresh)
         CreateNewBitmap();
+
+	FixAllMenus();
 
     return TRUE;
 }
@@ -2470,15 +2517,15 @@ void RenderBitmap()
 
 		int x, y, iVM = -1; // v.iVM;
 
-		for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
+		for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
 		{
-			for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
+			for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
 			{
-				// advance to the next valid bitmap
+					// advance to the next valid bitmap
 
 				do
 				{
-					iVM = (iVM + 1) % MAXOSUsable;
+					iVM = (iVM + 1) % MAX_VM;
 					// printf("hdcMem[%d] = %p, %p\n", iVM, vrgvmi[iVM].hdcMem, vrgvmi[iVM].pvBits);
 				} while (vrgvmi[iVM].hdcMem == NULL);
 
@@ -2992,7 +3039,7 @@ break;
         wmEvent = HIWORD(uParam);
 
         switch (wmId)
-            {
+        {
 L_about:
 		// bring up our ABOUT MessageBox
 		case IDM_ABOUT:
@@ -3160,8 +3207,72 @@ L_about:
 			// don't reboot, let the OS detect it as necessary
 			return 0;
 
-			MENUITEMINFO mii;
-			char mNew[MAX_PATH + 10];
+		// Un-init and invalidate this instance, and choose another
+		case IDM_DELVM:
+			FUnInitVM();
+			memset(&v.rgvm[v.iVM], 0, sizeof(VM));	// erase the persistable data
+			vvmi.fInited = FALSE;	// invalidate the non-persistable data
+			v.cVM--;
+			SelectInstance(-1, TRUE);
+			break;
+
+		// !!! unless Darek gets really busy, this should be enough VM types
+		case IDM_ADDVM1:
+		case IDM_ADDVM1 + 1:
+		case IDM_ADDVM1 + 2:
+		case IDM_ADDVM1 + 3:
+		case IDM_ADDVM1 + 4:
+		case IDM_ADDVM1 + 5:
+		case IDM_ADDVM1 + 6:
+		case IDM_ADDVM1 + 7:
+		case IDM_ADDVM1 + 8:
+		case IDM_ADDVM1 + 9:
+		case IDM_ADDVM1 + 10:
+		case IDM_ADDVM1 + 11:
+		case IDM_ADDVM1 + 12:
+		case IDM_ADDVM1 + 13:
+		case IDM_ADDVM1 + 14:
+		case IDM_ADDVM1 + 15:
+			
+			if (v.cVM == MAX_VM)
+				break;
+
+			int vmType = wmId - IDM_ADDVM1 + 1;
+			int vmNew;
+
+#ifdef XFORMER
+			// create a new VM of the appropriate type
+			FAddVM(&vmi800, &vmNew);
+
+			// !!! perhaps move all this code inside FAddVM?
+			strcpy(v.rgvm[vmNew].szModel, rgszVM[vmType]);
+			
+			if (vmType == 1)
+			{
+				v.rgvm[vmNew].bfHW = vmType; vmAtari48;
+				v.rgvm[vmNew].iOS = 0;
+				v.rgvm[vmNew].bfRAM = ram48K;
+			}
+			else if (vmType == 2)
+			{
+				v.rgvm[vmNew].bfHW = vmAtariXL;
+				v.rgvm[vmNew].iOS = 1;
+				v.rgvm[vmNew].bfRAM = ram64K;
+			}
+			else if (vmType == 3)
+			{
+				v.rgvm[vmNew].bfHW = vmAtariXE;
+				v.rgvm[vmNew].iOS = 2;
+				v.rgvm[vmNew].bfRAM = ram128K;
+			}
+
+			// and now go to that instance!
+			SelectInstance(vmNew, FALSE);
+	#endif
+			
+			// !!! now support some more
+
+			break;
 
 #ifdef XFORMER
 		case IDM_CART:
@@ -3169,17 +3280,7 @@ L_about:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgcart.szName, FALSE, 1))
 			{
 				ReadCart();
-
-				EnableMenuItem(vi.hMenu, IDM_NOCART, 0);
-				
-				// fix the name of this menu item
-				mii.cbSize = sizeof(mii);
-				mii.fMask = MIIM_STRING;
-				mii.dwTypeData = mNew;
-				sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
-				SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
-
-				CreateVMMenu();	// fix the FILE menu
+				FixAllMenus();
 				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 			}
 			break;
@@ -3187,16 +3288,7 @@ L_about:
 		case IDM_NOCART:
 			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge and cold start
 			vi.pvmCur->rgcart.szName[0] = 0;
-			EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
-			
-			// fix the name of this menu item
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			sprintf(mNew, "&Cartridge...");
-			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
-			
-			CreateVMMenu();	// fix the FILE menu
+			FixAllMenus();
 			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 			break;
 
@@ -3208,20 +3300,7 @@ L_about:
 				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(0);
 				FMountDiskVM(0);
-
-				// Fix the virtual disk menu items
-				mii.cbSize = sizeof(mii);
-				mii.fMask = MIIM_STRING;
-				mii.dwTypeData = mNew;
-				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-					sprintf(mNew, "&D1: %s...", vi.pvmCur->rgvd[0].sz);
-				else
-					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
-				SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-				EnableMenuItem(vi.hMenu, IDM_D1U, 0);
-
-				DisplayStatus(); // this could change the title of the window
-				CreateVMMenu();	// and also the FILE menu
+				FixAllMenus();
 			}
 			break;
 
@@ -3231,17 +3310,7 @@ L_about:
 				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(1);
 				FMountDiskVM(1);
-
-				// Initialize the virtual disk menu items
-				mii.cbSize = sizeof(mii);
-				mii.fMask = MIIM_STRING;
-				mii.dwTypeData = mNew;
-				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-					sprintf(mNew, "&D2: %s...", vi.pvmCur->rgvd[1].sz);
-				else
-					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
-				SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-				EnableMenuItem(vi.hMenu, IDM_D2U, 0);
+				FixAllMenus();
 			}
 			break;
 
@@ -3251,17 +3320,7 @@ L_about:
 				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(2);
 				FMountDiskVM(2);
-
-				// Initialize the virtual disk menu items
-				mii.cbSize = sizeof(mii);
-				mii.fMask = MIIM_STRING;
-				mii.dwTypeData = mNew;
-				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-					sprintf(mNew, "&D3: %s...", vi.pvmCur->rgvd[2].sz);
-				else
-					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
-				SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-				EnableMenuItem(vi.hMenu, IDM_D3U, 0);
+				FixAllMenus();
 			}
 			break;
 
@@ -3271,17 +3330,7 @@ L_about:
 				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(3);
 				FMountDiskVM(3);
-
-				// Initialize the virtual disk menu items
-				mii.cbSize = sizeof(mii);
-				mii.fMask = MIIM_STRING;
-				mii.dwTypeData = mNew;
-				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-					sprintf(mNew, "&D4: %s...", vi.pvmCur->rgvd[3].sz);
-				else
-					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
-				SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-				EnableMenuItem(vi.hMenu, IDM_D4U, 0);
+				FixAllMenus();
 			}
 			break;
 
@@ -3290,62 +3339,29 @@ L_about:
 			strcpy(vi.pvmCur->rgvd[0].sz, "");
 			vi.pvmCur->rgvd[0].dt = DISK_NONE;
 			FUnmountDiskVM(0);
-			
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-			EnableMenuItem(vi.hMenu, IDM_D1U, MF_GRAYED);
-
-			DisplayStatus(); // this could change the title of the window
-			CreateVMMenu();	// and also the FILE menu
+			FixAllMenus();
 			break;
 
 		case IDM_D2U:
 			strcpy(vi.pvmCur->rgvd[1].sz, "");
 			vi.pvmCur->rgvd[1].dt = DISK_NONE;
 			FUnmountDiskVM(1);
-			
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-			EnableMenuItem(vi.hMenu, IDM_D2U, MF_GRAYED);
+			FixAllMenus();
 			break;
 		
 		case IDM_D3U:
 			strcpy(vi.pvmCur->rgvd[2].sz, "");
 			vi.pvmCur->rgvd[2].dt = DISK_NONE;
 			FUnmountDiskVM(2);
-			
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-			EnableMenuItem(vi.hMenu, IDM_D3U, MF_GRAYED);
+			FixAllMenus();
 			break;
 		
 		case IDM_D4U:
 			strcpy(vi.pvmCur->rgvd[3].sz, "");
 			vi.pvmCur->rgvd[3].dt = DISK_NONE;
 			FUnmountDiskVM(3);
-			
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-			EnableMenuItem(vi.hMenu, IDM_D4U, MF_GRAYED);
-			break;
-				
-		
+			FixAllMenus();
+			break;		
 		
 		case IDM_LOADSTATE:
             SaveState(FALSE);
@@ -3409,7 +3425,7 @@ L_about:
             break;
 
         case IDM_TOGGLEHW:
-            FToggleMacAtari((unsigned)(-1), TRUE);
+            SelectInstance(v.iVM + 1, TRUE);
             return 0;
             break;
 
@@ -3512,8 +3528,30 @@ L_about:
         // all of these are currently disabled:
 
         default:
+
+			// We have asked to switch to a certain VM
+			if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM)
+			{
+				int iVM = IDM_VM1 - wmId;	// we want the VM this far from the end
+				int zl;
+
+				// find the VM that far from the end
+				for (zl = v.cVM - 1; zl >= 0; zl--)
+				{
+					if (v.rgvm[zl].fValidVM) {
+						if (iVM == 0)
+							break;
+						iVM--;
+					}
+				}
+
+				assert(zl >= 0);
+				SelectInstance(zl, TRUE);
+			}
+		
             return (DefWindowProc(hWnd, message, uParam, lParam));
-            }
+        
+		} // switch WM_COMMAND
 
         return 0;
         break;
@@ -3608,7 +3646,7 @@ L_about:
         if (vi.fExecuting && vi.fGEMMouse && !vi.fInDirectXMode &&
               !v.fNoTwoBut &&
               (!FIsAtari68K(vmCur.bfHW) || (uParam & MK_LBUTTON) ) )
-            {
+        {
             // both buttons are being pressed, left first and now right
             // so bring back the Windows mouse cursor after sending
             // an upclick
@@ -3619,12 +3657,13 @@ L_about:
             ShowWindowsMouse();
             return 0;
             break;
-            }
+        }
 
+#if 0
         // if the Windows mouse is visible OR we're in DirectX mode, go straight to the dialog
         if (!v.fNoTwoBut)
         if (!vi.fGEMMouse || (vi.fInDirectXMode && (!FIsAtari68K(vmCur.bfHW) || (uParam & MK_LBUTTON))))
-		    {
+        {
             // fall through into F11 / both mouse button case
 
     case WM_CONTEXTMENU:
@@ -3633,7 +3672,8 @@ L_about:
                 hWnd,          // parent handle
                 About);
             break;
-            }
+        }
+#endif
 
         // fall through into WM_LBUTTONDOWN case
 
@@ -3645,26 +3685,61 @@ L_about:
 #endif
 
         if (FIsAtari8bit(vmCur.bfHW))
-            {
+		{
 #if !defined(NDEBUG)
             printf("LBUTTONDOWN\n");
 #endif
-            return FWinMsgVM(hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
-            return 0;
-            }
+            FWinMsgVM(hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
+			// continue to do Tiling code
+        }
+		else
+		{
+			if (!vi.fVMCapture)
+				return FWinMsgVM(hWnd, message, uParam, lParam);
 
-        if (!vi.fVMCapture)
-            return FWinMsgVM(hWnd, message, uParam, lParam);
+			if (vi.fExecuting && vi.fVMCapture && !vi.fGEMMouse)
+			{
+				// either mouse button was pressed
+				// so give special message to activate mouse
 
-        if (vi.fExecuting && vi.fVMCapture && !vi.fGEMMouse)
-            {
-            // either mouse button was pressed
-            // so give special message to activate mouse
+				ShowGEMMouse();
+				return 0;
+				break;
+			}
+		}
 
-            ShowGEMMouse();
-            return 0;
-            break;
-            }
+		// in Tile Mode, click on an instance to bring it up.
+		if (v.fTiling && message == WM_LBUTTONDOWN)
+		{
+			// !!! make sure this works on multimon, GET_X_LPARAM is not defined
+			int xPos = LOWORD(lParam);
+			int yPos = HIWORD(lParam);
+
+			RECT rect;
+			GetClientRect(vi.hWnd, &rect);
+
+			int x, y, iVM = -1;
+
+			for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
+			{
+				for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
+				{
+					// advance to the next valid bitmap
+
+					do
+					{
+						iVM = (iVM + 1) % MAX_VM;
+					} while (vrgvmi[iVM].hdcMem == NULL);
+
+					if ((xPos >= x) && (xPos < x + vsthw.xpix * vi.fXscale) &&
+						(yPos >= y) && (yPos < y + vsthw.ypix * vi.fYscale))
+					{
+						v.fTiling = FALSE;
+						SelectInstance(iVM, TRUE);
+					}
+				}
+			}
+		}
 
         // fall through into generic mouse cases
 
@@ -4166,7 +4241,7 @@ LRESULT CALLBACK About(
                 if (iVM != v.iVM)
                     {
                     if (FVerifyMenuOption())
-                        FToggleMacAtari(iVM, TRUE);
+                        SelectInstance(iVM, TRUE);
                     }
 
                 if (wmId == IDC_BUTDELMODE)
@@ -4201,7 +4276,7 @@ LRESULT CALLBACK About(
                                 break;
                             }
 
-                        FToggleMacAtari(iVM, TRUE);
+                        SelectInstance(iVM, TRUE);
                         }
                     }
 
@@ -4214,7 +4289,7 @@ LRESULT CALLBACK About(
                         {
                         int i;
 
-                        if (FAddVM(vmCur.pvmi, &i))
+						if (FAddVM(vmCur.pvmi, &i))
                             {
                             v.rgvm[i] = v.rgvm[iVM];
                             v.rgvm[i].szModel[0] = '+';
@@ -4443,7 +4518,7 @@ LRESULT CALLBACK About(
                 break;
 
             case IDM_TOGGLEHW:
-                if (FToggleMacAtari((unsigned)(-1), TRUE))
+                if (SelectInstance(v.iVM + 1, TRUE))
                     {
                     EndDialog(hDlg, TRUE);    // Exit the dialog
                     }
