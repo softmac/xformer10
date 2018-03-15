@@ -13,7 +13,7 @@
 
 ****************************************************************************/
 
-#define _NO_CRT_STDIO_INLINE
+//#define _NO_CRT_STDIO_INLINE
 
 #include "gemtypes.h" // main include file
 
@@ -1272,7 +1272,6 @@ int CALLBACK WinMain(
         }
 #endif
 
-	// !!!
     {
     FLASHWINFO fi;
 
@@ -1284,9 +1283,10 @@ int CALLBACK WinMain(
 
     FlashWindowEx(&fi);
 
-    // Allow the screen thread to complete the timing calibration
-	// !!! WTF?
-    Sleep(900);
+#ifndef NDEBUG
+    // Allow the screen thread to complete the debug timing calibration
+    //Sleep(900);
+#endif
 
     fi.dwFlags = FLASHW_STOP;
     FlashWindowEx(&fi);
@@ -1351,8 +1351,7 @@ int CALLBACK WinMain(
                 }
             }
 
-        // Check if VM needs to reset
-		// !!! Why wait so long to do it?
+        // Check if VM needs to reset, avoid doing it too early
         if (vmCur.fColdReset)
             {
             void ColdStart(int);
@@ -1399,7 +1398,7 @@ int CALLBACK WinMain(
             if (FIsAtari8bit(vmCur.bfHW))
                 {
 
-				// !!! run all the instances at the same time in tiling mode
+				// run all the instances at the same time in tiling mode
 				if (v.fTiling)
                     SelectInstance(v.iVM + 1);
                 }
@@ -1423,13 +1422,15 @@ Lquit:
 {
  int i;
 
+#ifndef NDEBUG
  for (i = 0; i < MAXOSUsable; i++)
  {
  // printf("vmi %2d: pvBits = %08p\n", vrgvmi[i]);
  }
+#endif
 }
 
-    // clear the share memory thread ID
+    // cloud support - clear the share memory thread ID
     *(DWORD *)&vi.pbFrameBuf[1280*720] = 0;
 
     return (msg.wParam); // Returns the value from PostQuitMessage
@@ -1643,7 +1644,6 @@ PrintScreenStats(); printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%
 #endif
 
     // Interlock to make sure video thread is not touching memory
-    // !!! Yikes
     while (0 != InterlockedCompareExchange(&vi.fVideoEnabled, FALSE, TRUE))
         Sleep(10);
 
@@ -1915,7 +1915,6 @@ Ltryagain:
         }
 
     // Create offscreen bitmap
-	// !!! and never destroy it ???
 
     vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw.bmiHeader,
         DIB_RGB_COLORS, &(vrgvmi[iVM].pvBits), NULL, 0);
@@ -2183,7 +2182,7 @@ BOOL SelectInstance(unsigned iVM)
 	if (iVM == -1)
 		iVM = v.iVM++;
 
-	if (iVM >= v.cVM)
+	if (iVM >= MAX_VM)
 		iVM = 0;
 
 	int old = iVM;
@@ -2219,7 +2218,6 @@ BOOL SelectInstance(unsigned iVM)
 
 void ColdStart(int iVM)
 {
-	
     ShowWindowsMouse();
     SetWindowsMouse(0);
 
@@ -2633,7 +2631,7 @@ LRESULT CALLBACK WndProc(
             }
 
 		// now that we have a DC, and have set vsthw.xpix/ypix, make all the bitmaps for the instances
-		for (int iVM = 0; iVM < v.cVM; iVM++)
+		for (int iVM = 0; iVM < MAX_VM; iVM++)
 		{
 			if (v.rgvm[iVM].fValidVM)
 				CreateNewBitmap(iVM);
@@ -2689,8 +2687,7 @@ LRESULT CALLBACK WndProc(
         if (vi.fInDirectXMode)
           {
             RECT Rect;
-			// !!! I don't trust this
-            SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+			SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
             AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
           }
@@ -3231,7 +3228,7 @@ L_about:
 			SelectInstance(-1);
 			break;
 
-		// !!! unless Darek gets really busy, this should be enough VM types
+		// unless Darek gets really busy, this should be enough VM types
 		case IDM_ADDVM1:
 		case IDM_ADDVM1 + 1:
 		case IDM_ADDVM1 + 2:
@@ -3259,7 +3256,7 @@ L_about:
 			// create a new VM of the appropriate type
 			FAddVM(&vmi800, &vmNew);
 
-			// !!! perhaps move all this code inside FAddVM?
+			// !!! move all this code inside FAddVM!
 			strcpy(v.rgvm[vmNew].szModel, rgszVM[vmType]);
 			
 			if (vmType == 1)
@@ -3287,7 +3284,7 @@ L_about:
 			SelectInstance(vmNew);
 	#endif
 			
-			// !!! now support some more
+			// now support some more
 
 			break;
 
@@ -3314,7 +3311,7 @@ L_about:
 		case IDM_D1:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(v.iVM, 0);
 				FMountDiskVM(v.iVM, 0);
 				FixAllMenus();
@@ -3324,7 +3321,7 @@ L_about:
 		case IDM_D2:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(v.iVM, 1);
 				FMountDiskVM(v.iVM, 1);
 				FixAllMenus();
@@ -3334,7 +3331,7 @@ L_about:
 		case IDM_D3:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(v.iVM, 2);
 				FMountDiskVM(v.iVM, 2);
 				FixAllMenus();
@@ -3344,7 +3341,7 @@ L_about:
 		case IDM_D4:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
 				FUnmountDiskVM(v.iVM, 3);
 				FMountDiskVM(v.iVM, 3);
 				FixAllMenus();
@@ -3414,7 +3411,7 @@ L_about:
 #endif
 
             // On the Mac, refresh the Mac floppy disk drives
-			// !!! This is disabled now, bring it back?
+			// This msg is disabled now, TODO fix it
             if (FIsMac(vmCur.bfHW))
                 {
 #ifdef SOFTMAC
@@ -3430,7 +3427,7 @@ L_about:
 
             // if the mouse is captured in window, release it
             // otherwise capture it
-			// !!! disabled right now, why was this only for !MAC?
+			// TODO disabled right now, why was this only for !MAC?
             if (vi.fGEMMouse && !vi.fInDirectXMode)
                 {
                 ShowWindowsMouse();
@@ -3559,7 +3556,7 @@ L_about:
 				int zl;
 
 				// find the VM that far from the end
-				for (zl = v.cVM - 1; zl >= 0; zl--)
+				for (zl = MAX_VM - 1; zl >= 0; zl--)
 				{
 					if (v.rgvm[zl].fValidVM) {
 						if (iVM == 0)
@@ -3734,7 +3731,7 @@ L_about:
 		// in Tile Mode, click on an instance to bring it up.
 		if (v.fTiling && message == WM_LBUTTONDOWN)
 		{
-			// !!! make sure this works on multimon, GET_X_LPARAM is not defined
+			// make sure this works on multimon, GET_X_LPARAM is not defined
 			int xPos = LOWORD(lParam);
 			int yPos = HIWORD(lParam);
 
@@ -4055,7 +4052,7 @@ void UpdateMode(HWND hDlg)
 
     SendDlgItemMessage(hDlg, IDC_VMSELECT, XB_RESETCONTENT, 0, 0);
 
-    for (i = 0; i < v.cVM; i++)
+    for (i = 0; i < MAX_VM; i++)
         {
         if (v.rgvm[i].fValidVM)
             {
@@ -4572,7 +4569,6 @@ LRESULT CALLBACK About(
                 UpdateMenuCheckmarks();
                 break;
 
-			// !!! not in UI
             case IDM_SKIPSTARTUP:
                 v.fSkipStartup = !v.fSkipStartup;
                 UpdateMenuCheckmarks();
