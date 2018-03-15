@@ -703,7 +703,7 @@ int CALLBACK WinMain(
     MSG msg;
     BOOL fProps;
 
-    // create the thread's message queue
+	// create the thread's message queue
 
     PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -911,6 +911,19 @@ int CALLBACK WinMain(
     // position and fNoDirectX
 
     fProps = LoadProperties(NULL);
+
+#ifdef XFORMER
+	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
+	// and select an existing VM of the appropriate hardware type or create a new VM of that type
+	// For now just support for Atari 8-bit VMs and presume the disk image is an .ATR/XFD image
+
+	if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine)>2))
+	{
+		lpCmdLine[strlen(lpCmdLine) - 1] = 0;	// get rid of the trailing "
+		strcpy(vmCur.rgvd[0].sz, lpCmdLine+1); // replace disk 1 image with the argument (sans ")
+		v.fSkipStartup = TRUE;	// and go straight to running it
+	}
+#endif
 
     // DirectX can fragment address space, so only preload if user wants to
 
@@ -2055,8 +2068,8 @@ void ColdStart()
     else if (FIsAtari8bit(vmCur.bfHW))
         {
         vsthw.planes = 8;
-        vsthw.xpix = 320;
-        vsthw.ypix = 240;
+        vsthw.xpix = X8;
+        vsthw.ypix = Y8;
         }
     else if (vsthw.fMono)
         {
@@ -2289,9 +2302,10 @@ int ShutdownDetected()
 
 void RenderBitmap()
 {
-    RECT rect;
+	RECT rect, rect2;
 
     GetClientRect(vi.hWnd, &rect);
+	GetWindowRect(vi.hWnd, &rect2);
 
 #if !defined(NDEBUG)
 //  printf("rnb: rect = %d %d %d %d\n", rect.left, rect.top, rect.right, rect.bottom);
@@ -2305,7 +2319,7 @@ void RenderBitmap()
         StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
             vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
         }
-    else if (v.fFullScreen)
+    else if (v.fTiling)
         {
         // Tiling
 
@@ -2331,7 +2345,7 @@ void RenderBitmap()
         }
     else
         {
-        // Integer scaling
+        // Integer scaling !!! support fullscreen version
 
         int x, y, scale;
 
@@ -2410,9 +2424,7 @@ LRESULT CALLBACK WndProc(
         SetBkMode(vi.hdc, TRANSPARENT);
 
         FCreateOurPalette();
-		InitJoysticks();
-		CaptureJoysticks(hWnd);
-
+		
         if (!FIsAtari8bit(vmCur.bfHW))
             {
             // create a default monochrome bitmap
@@ -2427,8 +2439,8 @@ LRESULT CALLBACK WndProc(
             // create a default 256-color bitmap
 
             vsthw.planes = 8;
-            vsthw.xpix = 320;
-            vsthw.ypix = 200;
+            vsthw.xpix = X8;
+            vsthw.ypix = Y8;	// was 200
             }
 
         CreateNewBitmap();
@@ -2519,6 +2531,7 @@ LRESULT CALLBACK WndProc(
             lprect->left, lprect->top, lprect->right - lprect->left, lprect->bottom - lprect->top);
 
 break;
+#if 0
         if ((vsthw.xpix == 0) || (vsthw.ypix == 0))
             return 0;
 
@@ -2539,7 +2552,8 @@ break;
         printf("WM_SIZING #2: x = %d, y = %d, w = %d, h = %d\n",
             lprect->left, lprect->top, lprect->right - lprect->left, lprect->bottom - lprect->top);
         break;
-        }
+#endif
+	}
 #endif
 
 #if 1
@@ -2547,8 +2561,12 @@ break;
         {
         LPMINMAXINFO lpmm = (LPMINMAXINFO)lParam;
 
-        int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2;
-        int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);
+		RECT rc1, rc2;
+		GetWindowRect(hWnd, &rc1);
+		GetClientRect(hWnd, &rc2);
+
+		int thickX = rc1.right - rc1.left - (rc2.right - rc2.left); // (SM_CXSIZEFRAME) * 2;
+		int thickY = rc1.bottom - rc1.top - (rc2.bottom - rc2.top); // GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);
         int scaleX = 1, scaleY = ((vsthw.xpix) >= (vsthw.ypix * 3)) ? 2 : 1;
 
 #if !defined(NDEBUG)
@@ -2563,17 +2581,25 @@ break;
             lpmm->ptMaxTrackSize.y);
 #endif
 
-        lpmm->ptMinTrackSize.x = max(vsthw.xpix * scaleX, 640) + thickX;
-        lpmm->ptMinTrackSize.y = max(vsthw.ypix * scaleY, 480) + thickY;
+		if (FIsAtari8bit(vmCur.bfHW)) {
+			lpmm->ptMinTrackSize.x = max(vsthw.xpix * scaleX, X8 * 2) + thickX;
+			lpmm->ptMinTrackSize.y = max(vsthw.ypix * scaleY, Y8 * 2) + thickY;
+		}
+		else
+		{
+			lpmm->ptMinTrackSize.x = max(vsthw.xpix * scaleX, 640) + thickX;
+			lpmm->ptMinTrackSize.y = max(vsthw.ypix * scaleY, 480) + thickY;
+		}
         break;
 
+#if 0
         if ((vsthw.xpix == 0) || (vsthw.ypix == 0))
             return 0;
 
         if (v.fFullScreen && vi.fHaveFocus)
             return 0;
 
-        while (((max(vsthw.xpix * (scaleX + 1), 320) + thickX) < lpmm->ptMaxTrackSize.x) &&
+        while (((max(vsthw.xpix * (scaleX + 1), X8) + thickX) < lpmm->ptMaxTrackSize.x) &&
                ((max(vsthw.ypix * (scaleX + 1) * scaleY, 200) + thickY) < lpmm->ptMaxTrackSize.y))
             {
             scaleX++;
@@ -2591,7 +2617,8 @@ break;
 #endif
 
         break;
-        }
+#endif
+		}
         return 0;
 #endif
 
@@ -2720,7 +2747,6 @@ break;
         else if (FIsAtari68K(vmCur.bfHW))
             {
             vi.fRefreshScreen = TRUE;
-            //CaptureJoysticks(); you can't do multiple capture/release's so keep capture through the life of window
             AddToPacket(0x9D);  // Ctrl key up
             AddToPacket(0xB8);  // Alt  key up
             }
@@ -2730,7 +2756,6 @@ break;
             ControlKeyUp8();
             ForceRedraw();
 #endif
-			//CaptureJoysticks(); you can't do multiple capture/release's so keep capture through the life of window
 		}
 
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
@@ -2747,7 +2772,6 @@ break;
 #endif
 
 		ShowWindowsMouse();
-        //ReleaseJoysticks();
         ReleaseCapture();
 
 #if !defined(NDEBUG)
@@ -3002,20 +3026,32 @@ L_about:
             // Alt+Enter toggles windowed/full screen mode
             // This also toggles the menu bar on and off
             //
-            // Cycles through four modes:
+            // Cycles through five modes:
             //
-            //  v.fFS v.fZm
-            //  ===== =====
-            //    0     0     menu bar, center guest in window
-            //    0     1     menu bar, scale guest to full window
-            //    1     0     no menu bar, tile guest in window
-            //    1     1     no menu bar, scale guest to full window
+            //  v.fFS v.fZm v.fT
+            //  ===== ===== ====
+            //    0     0    0    menu bar, center guest in window
+            //    0     1    0    menu bar, scale guest to full window
+            //    1     0    0    no menu bar, centre guest in window
+            //    1     1    0    no menu bar, scale guest to full window
+			//    1     0    1    tile window
 
-            if (v.fZoomColor)
-                v.fFullScreen = !v.fFullScreen;
+			if (v.fZoomColor && v.fFullScreen) {
+				v.fTiling = TRUE;
+				v.fZoomColor = FALSE;
+			}
+			else if (v.fTiling)
+			{
+				v.fTiling = FALSE;
+				v.fFullScreen = FALSE;
+			}
+			else
+			{
+				if (v.fZoomColor)
+					v.fFullScreen = !v.fFullScreen;
 
-            v.fZoomColor = !v.fZoomColor;
-
+				v.fZoomColor = !v.fZoomColor;
+			}
             CreateNewBitmap();
             return 0;
             }
@@ -3076,27 +3112,14 @@ L_about:
         // if the Windows mouse is visible OR we're in DirectX mode, go straight to the dialog
         if (!v.fNoTwoBut)
         if (!vi.fGEMMouse || (vi.fInDirectXMode && (!FIsAtari68K(vmCur.bfHW) || (uParam & MK_LBUTTON))))
-            {
-#if 0
-            POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-
-            ClientToScreen(hWnd, &pt);
-            DisplayStatus();
-            UpdateMenuCheckmarks();
-            TrackPopupMenu(vi.hMenu, TPM_LEFTALIGN, pt.x+8, pt.y+8, 0, hWnd, NULL);
-            DisplayStatus();
-            return 0;
-            break;
-#else
-
-           // fall through into F11 / both mouse button case
+		    {
+            // fall through into F11 / both mouse button case
 
     case WM_CONTEXTMENU:
             DialogBox(vi.hInst,       // current instance
                 MAKEINTRESOURCE(IDD_ABOUTBOX), // dlg resource to use
                 hWnd,          // parent handle
                 About);
-#endif
             break;
             }
 
@@ -3187,6 +3210,8 @@ L_about:
     case WM_DESTROY:  // message: window being destroyed
 
         vi.fQuitting = TRUE;
+		
+		UninitSound();
 		ReleaseJoysticks();
 
         // release DirectX mode
@@ -3800,9 +3825,9 @@ LRESULT CALLBACK About(
 
                 sprintf(rgch, "%s Community Release\n"
                     "Darek's Classic Computer Emulator.\n"
-                    "Version 9.21 - built on %s\n"
+                    "Version 9.90 - built on %s\n"
                     "%2d-bit %s release.\n\n"
-                    "Copyright (C) 1986-2013 Darek Mihocka.\n"
+                    "Copyright (C) 1986-2018 Darek Mihocka.\n"
                     "All Rights Reserved.\n\n"
 
 #ifdef XFORMER
@@ -3920,6 +3945,7 @@ LRESULT CALLBACK About(
 
             case IDM_ZOOM:
                 v.fZoomColor = !v.fZoomColor;
+				v.fTiling = FALSE;
             //  CreateNewBitmap();
                 UpdateMenuCheckmarks();
                 break;
@@ -3934,6 +3960,7 @@ LRESULT CALLBACK About(
                 UpdateMenuCheckmarks();
                 break;
 
+			// !!! not in UI
             case IDM_SKIPSTARTUP:
                 v.fSkipStartup = !v.fSkipStartup;
                 UpdateMenuCheckmarks();

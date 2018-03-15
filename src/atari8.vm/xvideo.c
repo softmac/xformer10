@@ -38,13 +38,14 @@ BYTE const * const rgszModes[6] =
     " ATARI 130XE + CARTRIDGE",
     };
 
-#ifdef HWIN32
-#define vcbScan 320
-#define wcScans 240
-#else
-#define vcbScan 320
-#define wcScans 200
-#endif
+#define vcbScan X8
+#define wcScans Y8
+#define NTSCx 512
+#define NARROWx 256
+#define NORMALx 320
+#define WIDEx 384
+
+BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
 
 void ShowCountDownLine()
 {
@@ -56,18 +57,7 @@ void ShowCountDownLine()
         {
         BYTE *pch;
         int cch;
-#ifdef HDOS16
-        __segment videomem = 0xA000;
-        BYTE __based(videomem) *qch = 0;
-#else
-#ifdef HDOS32
-        BYTE *qch = 0xA0000;
-#else
-#ifdef HWIN32
         BYTE *qch = vvmi.pvBits;
-#endif // HWIN32
-#endif // HDOS32
-#endif // HDOS16
         BYTE colfg;
 
         if (cntTick < 2)
@@ -89,7 +79,7 @@ void ShowCountDownLine()
         colfg = ((wFrame >> 2) << 4) + i + i;
         colfg = (((wFrame >> 2) + i) << 4) + 8;
 
-        for (cch = 0; cch < 40; cch++)
+        for (cch = 0; cch < X8 >> 3; cch++)
             {
             BYTE b = *pch ? *pch - ' ' : 0;
 
@@ -143,7 +133,7 @@ void DrawPlayers(WORD NEAR *pw)
             continue;
 
         qw = pw;
-        qw += (pmg.hposp[i] - 48);
+        qw += (pmg.hposp[i] - ((NTSCx-X8)>>2));
 
         cw = mpsizecw[ pmg.sizep[i] & 3];
 
@@ -183,7 +173,7 @@ void DrawPlayers(WORD NEAR *pw)
             continue;
 
         qw = pw;
-        qw += (pmg.hposp[i] - 48);
+		qw += (pmg.hposp[i] - ((NTSCx - X8) >> 2));
 
         cw = mpsizecw[ pmg.sizep[i] & 3];
 
@@ -247,7 +237,7 @@ void DrawMissiles(WORD NEAR *pw, int fFifth)
             continue;
 
         qw = (WORD NEAR *)pw;
-        qw += (pmg.hposm[i] - 48);
+        qw += (pmg.hposm[i] - ((NTSCx-X8)>>2));
 
         cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
 
@@ -308,7 +298,7 @@ Ldm:
             continue;
 
         qw = (WORD NEAR *)pw;
-        qw += (pmg.hposm[i] - 48);
+        qw += (pmg.hposm[i] - ((NTSCx-X8) >> 2));
 
         cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
 
@@ -414,7 +404,6 @@ void ProcessScanLine(BOOL fRender)
 
     int i, j;
     static WORD rgfChanged = 0;
-    BYTE rgpix[512];
 
     SL *psl = &rgsl[0];
 
@@ -529,18 +518,18 @@ void ProcessScanLine(BOOL fRender)
         Assert(FALSE);
         break;
 
-    case 0:
+    case 0:	// playfield off
         sl.modelo = 0;
         cbWidth = 0;
         cbDisp = cbWidth;
         break;
-    case 1:
+    case 1: // narrow playfield
         cbWidth = mpMdBytes[sl.modelo];
         cbDisp = cbWidth;
         if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling
             cbWidth |= (cbWidth >> 2);
         break;
-    case 2:
+    case 2: // normal playfield
         cbWidth = mpMdBytes[sl.modelo];
         cbDisp = cbWidth | (cbWidth >> 2);
         if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling
@@ -548,9 +537,9 @@ void ProcessScanLine(BOOL fRender)
         else
             cbWidth |= (cbWidth >> 2);
         break;
-    case 3:
+    case 3: // wide playfield
         cbWidth = mpMdBytes[sl.modelo];
-        cbDisp = cbWidth | (cbWidth >> 2);
+        cbDisp = cbWidth | (cbWidth >> 1);
         cbWidth |= (cbWidth >> 1);
         break;
         }
@@ -689,18 +678,7 @@ Lrender:
     sl.colpfX = COLPFX;
     pmg.colpmX = COLPMX;
 
-#if 0
-#ifdef HDOS16ORDOS32
-    if ((wScan < (wStartScan-scans)) || (wScan >= (wStartScan+wcScans)))
-        goto Lnextscan;
-#endif
-#endif
-
-#ifdef HDOS16ORDOS32
-    if ((wScan < 16) || (wScan >= 240))
-#else
-    if ((wScan < 8) || (wScan >= 248))
-#endif
+    if ((wScan < wStartScan) || (wScan >= wStartScan + wcScans))
         goto Lnextscan;
 
     rgfChanged = 0;
@@ -802,19 +780,7 @@ Lrender:
         {
         // redraw scan line
 
-#ifdef HDOS16
-        __segment videomem = 0xA000;
-        BYTE __based(videomem) *qch0 = 0;
-#else
-#ifdef HDOS32
-        BYTE *qch0 = 0xA0000;
-#else
-#ifdef HWIN32
         BYTE *qch0 = vvmi.pvBits;
-#endif // HWIN32
-#endif // HDOS32
-#endif // HDOS16
-
         BYTE FAR *qch = qch0;
 
         BYTE b1, b2;
@@ -823,17 +789,14 @@ Lrender:
 
 #ifndef NDEBUG
         // show current stack
-
-        qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
+        // !!! annoying debug pixels near top of screen qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
 #endif
 
-#ifdef HWIN32
         if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
             {
             wScanMin = min(wScanMin, (wScan - wStartScan));
             wScanMac = max(wScanMac, (wScan - wStartScan) + 1);
             }
-#endif
 
         if (sl.fpmg)
             {
@@ -843,9 +806,7 @@ Lrender:
             // rgpix to actual colors on the screen, applying priorities
             // in the process.
 
-            qch = &rgpix[96];
-            _fmemset(&rgpix[64], 0, 32);
-            _fmemset(&rgpix[416], 0, 32);
+            qch = &rgpix[(NTSCx-X8)>>1];	// first visible screen NTSC pixel
             _fmemset(rgpix, 0, sizeof(rgpix));
 
             sl.colbk  = bfBK;
@@ -857,15 +818,29 @@ Lrender:
         else
             qch += (wScan - wStartScan) * vcbScan;
 
+		// narrow playfield
         if ((sl.modelo >= 2) && ((sl.dmactl & 3) == 1))
-            {
+        {
             if (rgfChanged & (fPMG|fDmactl|fModelo|fColbk))
                 {
-                memset(qch,sl.colbk,32);
-                memset(qch+288,sl.colbk,32);
+                memset(qch,sl.colbk,(X8-NARROWx)>>1);		// background colour before
+                memset(qch+X8-((X8-NARROWx)>>1),sl.colbk,(X8-NARROWx)>>1);	// background colour after
                 }
-            qch += 32;
-            }
+            qch += (X8-NARROWx)>>1;
+        }
+		
+		// normal playfield is 320 wide
+		if ((sl.modelo >= 2) && ((sl.dmactl & 3) == 2))
+		{
+			if (rgfChanged & (fPMG | fDmactl | fModelo | fColbk))
+			{
+				memset(qch, sl.colbk, (X8 - NORMALx) >> 1);		// background colour before
+				memset(qch + X8-((X8-NORMALx)>>1), sl.colbk, (X8 - NORMALx) >> 1);	// background colour after
+			}
+			qch += (X8 - NORMALx) >> 1;
+		}
+	
+		// wide playfield takes up the whole width
 
         rgfChanged &= ~fDisp;
 
@@ -880,7 +855,7 @@ Lrender:
 
             // just draw a blank scan line
 
-            _fmemset(qch, sl.colbk, 320);
+            _fmemset(qch, sl.colbk, X8);
             break;
 
         case 2:
@@ -940,7 +915,6 @@ Lrender:
 
                 memset(rgch,col2,8);
 
-#ifndef ASM
                 if (b2 & 0x80)
                     rgch[0] = col1;
 
@@ -964,45 +938,6 @@ Lrender:
 
                 if (b2 & 0x01)
                     rgch[7] = col1;
-#else // ASM
-                _asm {
-                    mov   al,b2
-                    mov   ah,col1
-
-                    test  al,128
-                    je    short l280
-                    mov   [rgch],ah
-l280:
-                    test  al,64
-                    je    short l240
-                    mov   [rgch+1],ah
-l240:
-                    test  al,32
-                    je    short l220
-                    mov   [rgch+2],ah
-l220:
-                    test  al,16
-                    je    short l210
-                    mov   [rgch+3],ah
-l210:
-                    test  al,8
-                    je    short l208
-                    mov   [rgch+4],ah
-l208:
-                    test  al,4
-                    je    short l204
-                    mov   [rgch+5],ah
-l204:
-                    test  al,2
-                    je    short l202
-                    mov   [rgch+6],ah
-l202:
-                    test  al,1
-                    je    short l201
-                    mov   [rgch+7],ah
-l201:
-                    }
-#endif // ASM
 
                 _fmemcpy(qch,rgch,8);
                 }
@@ -1666,23 +1601,12 @@ l201:
 
     if (sl.fpmg)
         {
-#ifdef HDOS16
-        __segment videomem = 0xA000;
-        BYTE __based(videomem) *qch = 0;
-#else
-#ifdef HDOS32
-        BYTE *qch = 0xA0000;
-#else
-#ifdef HWIN32
         BYTE *qch = vvmi.pvBits;
-#endif // HWIN32
-#endif // HDOS32
-#endif // HDOS16
 
-        // now set the bits in rgpix corresponding to players and missiles
-
-        DrawPlayers((WORD NEAR *)(rgpix+96));
-        DrawMissiles((WORD NEAR *)(rgpix+96), sl.prior & 16);
+		// now set the bits in rgpix corresponding to players and missiles
+		// missiles go underneath the players, at least in Ms. Pacman. !!! RIVERAID breaks if missiles drawn first, no missile collision
+		DrawPlayers((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
+		DrawMissiles((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);
 
 #ifndef NDEBUG
     if (0)
@@ -1713,11 +1637,10 @@ l201:
         if (sl.modelo > 15)
             sl.prior = 1;
 
-        for (i = 0; i < 320; i++)
+        for (i = 0; i < X8; i++)
             {
-            BYTE b = rgpix[i+96];
+            BYTE b = rgpix[i+((NTSCx - X8)>>1)];
 
-#if 1
             if (b == 0)
                 {
                 // just background
@@ -1828,7 +1751,6 @@ LdrawPM23:
                     break;
                     }
                 }
-#endif
 
             qch[i] = b;
             }
@@ -1843,7 +1765,7 @@ LdrawPM23:
         ShowCountDownLine();
         }
 
-#if 0 // rainbow #ifndef NDEBUG
+#if 0 // !!! rainbow #ifndef NDEBUG
 
     // display the collision registers on each scan line
     //
@@ -1851,18 +1773,7 @@ LdrawPM23:
     // $D000 in the GTIA chip
 
     {
-#ifdef HDOS16
-    __segment videomem = 0xA000;
-    BYTE __based(videomem) *qch = 0;
-#else
-#ifdef HDOS32
-    BYTE *qch = 0xA0000;
-#else
-#ifdef HWIN32
     BYTE *qch = vvmi.pvBits;
-#endif // HWIN32
-#endif // HDOS32
-#endif // HDOS16
 
     int i;
 

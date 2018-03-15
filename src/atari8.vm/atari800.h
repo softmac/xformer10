@@ -18,7 +18,7 @@
 
 #include "common.h"
 
-
+static int RANDOM17;	// full 17 bit poly counter, the lower 8 bits are RANDOM
 //
 // Scan line structure
 //

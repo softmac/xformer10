@@ -120,6 +120,10 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 #define k1G     (0x40000000)
 #define k2G     (0x80000000)
 
+// the size of an 8 bit screen
+#define X8 352
+#define Y8 240
+
 //
 // Byte swapping macros
 //
@@ -740,6 +744,7 @@ typedef struct
     BOOL                 :1;// reserved (deprecated)
     BOOL     fZoomColor:1;  // 0 = normal, 1 = zoom low rez and medium rez
     BOOL     fFullScreen:1; // 0 = normal, 1 = display in full screen mode
+	BOOL     fTiling:1;     // 0 = normal, 1 - tile the display
     BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
@@ -1103,7 +1108,7 @@ BOOL FWriteSerialPort(BYTE b);
 void SoundDoneCallback(LPWAVEHDR, int);
 //void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
-void CaptureJoysticks(HWND hwnd);
+void CaptureJoysticks();
 void ReleaseJoysticks();
 void InitMIDI();
 void InitSound();
@@ -1176,7 +1181,6 @@ void MarkAllPagesClean(void);
 //
 // Our custom printf which maps to the Windows equivalent
 //
-
 //int __cdecl printf(const char *format, ...);
 
 #ifndef NDEBUG
