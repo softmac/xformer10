@@ -62,7 +62,7 @@ CANDYHW vrgcandy[MAXOSUsable];
 
 CANDYHW *vpcandyCur = &vrgcandy[0];
 
-//BYTE bshiftSav;	// !!! was a local too
+//BYTE bshiftSav;	// was a local too
 
 WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down
 static signed short wLeftMax;
@@ -148,7 +148,7 @@ BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
 BOOL __cdecl InitAtari(int iVM)
 {
     static BOOL fInited;
-//	BYTE bshiftSav; // !!! already a global with that name!
+//	BYTE bshiftSav; // already a global with that name!
 
 #if 0
 	// reset the cycle counter now and each cold start (we need to use it now, before the 1st cold start)
@@ -162,7 +162,7 @@ BOOL __cdecl InitAtari(int iVM)
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-    // save shift key status !!! why?
+    // save shift key status, why? !!! this only happens at boot time now until shutdown
     //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
     //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
 	//*pbshift |= wScrlLock;
@@ -185,6 +185,25 @@ BOOL __cdecl InitAtari(int iVM)
         fInited = TRUE;
     }
 
+	switch (v.rgvm[iVM].bfHW)
+	{
+	default:
+		mdXLXE = md800;
+		break;
+
+	case vmAtariXL:
+		//case vmAtariXLC:
+		mdXLXE = mdXL;
+		break;
+
+	case vmAtariXE:
+		//case vmAtariXEC:
+		mdXLXE = mdXE;
+		break;
+	}
+
+	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
+
     ReadROMs();
 	ReadCart(iVM);
 
@@ -194,26 +213,7 @@ BOOL __cdecl InitAtari(int iVM)
 		v.rgvm[iVM].iLPT = 0;
 
 	fSoundOn = TRUE;
-  
-    switch(v.rgvm[iVM].bfHW)
-    {
-		default:
-			mdXLXE = md800;
-			break;
-
-		case vmAtariXL:
-		//case vmAtariXLC:
-			mdXLXE = mdXL;
-			break;
-
-		case vmAtariXE:
-		//case vmAtariXEC:
-			mdXLXE = mdXE;
-			break;
-    }
-
-	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
-
+    
 //  vi.pbRAM[0] = &rgbMem[0xC000-1];
 //  vi.eaRAM[0] = 0;
 //  vi.cbRAM[0] = 0xC000;
@@ -226,7 +226,7 @@ BOOL __cdecl InitAtari(int iVM)
 
 BOOL __cdecl UninitAtari(int iVM)
 {
-    //*pbshift = bshiftSav; // !!!
+    //*pbshift = bshiftSav;
 
     UninitAtariDisks(iVM);
     return TRUE;
@@ -309,7 +309,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // Initialize mode display counter (banner)
 	
-	ramtop = 0xC000;	// will change if cart detected
+	// XL and XE have built in BASIC
+	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
 
 	fBrakes = 1;	// global turbo for all instances
 	clockMult = 1;	// per instance speed-up
@@ -425,7 +426,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
 
-	// !!! seed the random number generator so it's different every time, the real ATARI is probably seeded by the orientation
+	// seed the random number generator so it's different every time, the real ATARI is probably seeded by the orientation
 	// of sector 1 on the floppy
 	RANDOM17 = qpc.QuadPart & 0x1ffff;
 
@@ -610,7 +611,7 @@ BOOL __cdecl ExecuteAtari()
 				wLeftMax = wLeft;
 			}
 
-			// do the VBI! !!! You cannot change this from 251 for some reason!
+			// do the VBI!
 			else if (wScan == 251)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
@@ -852,8 +853,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
     addr &= 65535;
     b &= 255; // just to be sure
 
-    // this is an ugly hack to keep wLeft from getting stuck
-	// !!! 
+    // this is an ugly hack to keep wLeft from getting stuck 
     //if (wLeft > 1)
     //    wLeft--;
 
@@ -1139,7 +1139,7 @@ void ReadCart(int iVM)
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 		
-		_read(h, rgcartData, cb);	// !!! shit
+		_read(h, rgcartData, cb);
 
 		v.rgvm[iVM].rgcart.cbData = cb;
 		v.rgvm[iVM].rgcart.fCartIn = TRUE;
