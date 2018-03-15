@@ -928,7 +928,7 @@ HANDLER(op20)
     PushWord(pcandy, regPC - 1);
 
     regPC = regEA;
-
+	
     if ((regPC == 0xE459) && ((mdXLXE == 0) || (wPBDATA & 1)))
         {
         // this is our SIO hook!
@@ -1373,6 +1373,7 @@ HANDLER(op6C)
 {
     EA_abs(pcandy);
     regPC = READ_WORD(regEA);
+
     HANDLER_END_FLOW();
 }
 
@@ -1719,7 +1720,7 @@ HANDLER(opAC)
 HANDLER(opAD)
 {
     EA_abs(pcandy);
-    LDA_com(pcandy);
+	LDA_com(pcandy);
     HANDLER_END();
 }
 

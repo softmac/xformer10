@@ -703,17 +703,15 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 	case 0x44: // F10
 
-#if 0
-		// shift F10 - coldboot and toggle cartridge on/off
+		// shift F10 - shortcut to toggle ATARI BASIC and reboot
 		if (fDown && (*pbshift & wAnyShift))
 		{
 			if (ramtop == 0xC000)
 				ramtop = 0xA000;
 			else
 				ramtop = 0xC000;
-			FColdbootVM();
+			FColdbootVM(v.iVM);
 		} else
-#endif
 
 		// F10 - system reset (warm start)
 		if (fDown && !(*pbshift & wAnyShift))
