@@ -97,14 +97,11 @@ void DumpROM(char *filename, char *label, char *rgb, int start, int len)
     fclose(fp);
 }
 
-extern char rgbApplSoft[];
-
 void DumpROMS()
 {
     FILE *fp;
     int i, j;
 
-    DumpROM("applsoft.c", "rgbApplSoft", rgbApplSoft, 0xD000, 0x3000); // 12K
     DumpROM("atariosb.c", "rgbAtariOSB", rgbAtariOSB, 0xC800, 0x2800); // 10K
     DumpROM("atarixl5.c", "rgbXLXE5000", rgbXLXE5000, 0x5000, 0x1000); //  4K
     DumpROM("atarixlb.c", "rgbXLXEBAS",  rgbXLXEBAS,  0xA000, 0x2000); //  8K

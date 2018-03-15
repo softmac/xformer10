@@ -657,7 +657,6 @@
     <ClCompile Include="src\Romcard.c" />
     <ClCompile Include="src\serial.c" />
     <ClCompile Include="src\sound.c" />
-    <ClCompile Include="src\atari8.vm\applsoft.c" />
     <ClCompile Include="src\atari8.vm\atari800.c" />
     <ClCompile Include="src\atari8.vm\atarikey.c" />
     <ClCompile Include="src\atari8.vm\atariosb.c" />
