@@ -25,7 +25,7 @@ VMINFO const vmi800 =
     NULL,
     0,
     "Atari 800/800XL/130XE",
-    vmAtari48C | vmAtariXLC | vmAtariXEC | vmAtari48 | vmAtariXL | vmAtariXE,
+    /* vmAtari48C | vmAtariXLC | vmAtariXEC |*/ vmAtari48 | vmAtariXL | vmAtariXE,
     cpu6502,
     ram48K | ram64K | ram128K,
     osAtari48 | osAtariXL | osAtariXE,
@@ -121,11 +121,11 @@ BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
     pvm->iOS = 0;
     pvm->bfMon = monColrTV;
     pvm->bfRAM  = ram48K;
-    pvm->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);
+    pvm->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
 
     pvm->rgvd[0].dt = DISK_IMAGE;
 
-    strcpy(pvm->rgvd[0].sz, "DOS25.XFD");
+    strcpy(pvm->rgvd[0].sz, "DOS25.XFD");	// broken default probably won't get used anyway
 
     // fake in the Atari 8-bit OS entires
 
@@ -182,8 +182,8 @@ BOOL __cdecl InitAtari()
     }
 
     InitAtariDisks();
-
     ReadROMs();
+	ReadCart();
 
     if (!FInitSerialPort(vmCur.iCOM))
         vmCur.iCOM = 0;
@@ -191,31 +191,26 @@ BOOL __cdecl InitAtari()
         vmCur.iLPT = 0;
 
 	fSoundOn = TRUE;
-
-    {
-    BOOL fCart = (vmCur.bfHW > vmAtariXE);
-
+  
     switch(vmCur.bfHW)
-        {
-    default:
-        mdXLXE = md800;
-        break;
+    {
+		default:
+			mdXLXE = md800;
+			break;
 
-    case vmAtariXL:
-    case vmAtariXLC:
-        mdXLXE = mdXL;
-        break;
+		case vmAtariXL:
+		//case vmAtariXLC:
+			mdXLXE = mdXL;
+			break;
 
-    case vmAtariXE:
-    case vmAtariXEC:
-        mdXLXE = mdXE;
-        break;
-        }
-
-	// !!! support other cartridges besides BASIC, and right cartridges?
-    ramtop = fCart ? 0xA000 : 0xC000;
+		case vmAtariXE:
+		//case vmAtariXEC:
+			mdXLXE = mdXE;
+			break;
     }
 
+	ramtop = 0xC000;
+	
     vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, mdXLXE);
 
 //  vi.pbRAM[0] = &rgbMem[0xC000-1];
@@ -318,24 +313,26 @@ BOOL __cdecl ColdbootAtari()
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
     if (mdXLXE == md800)
-        vmCur.bfHW = (ramtop == 0xA000) ? vmAtari48C : vmAtari48;
+        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
     else if (mdXLXE == mdXL)
-        vmCur.bfHW = (ramtop == 0xA000) ? vmAtariXLC : vmAtariXL;
+        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
     else
-        vmCur.bfHW = (ramtop == 0xA000) ? vmAtariXEC : vmAtariXE;
+        vmCur.bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
     DisplayStatus();
 
     // Swap in BASIC and OS ROMs.
 
     InitBanks();
-//     ReadCart();
+	InitCart();	// after the OS and BASIC go in above, so the cartridge overrides built-in BASIC
 
+#if 0 // doesn't the OS do this?
     // initialize memory up to ramtop
 
     for (addr = 0; addr < ramtop; addr++)
         {
         cpuPokeB(addr,0xAA);
         }
+#endif
 
     // initialize the 6502
 
@@ -1104,6 +1101,135 @@ void UpdatePorts()
         }
     else
         PORTB = wPBDDIR;
+}
+
+void ReadCart()
+{
+	char *pch = vi.pvmCur->rgcart.szName;
+
+	int h;
+	int cb = 0;
+	long l;
+
+	h = _open(pch, _O_BINARY | _O_RDONLY);
+	if (h != -1)
+	{
+#ifndef NDEBUG
+		printf("reading %s\n", pch);
+#endif
+
+		l = _lseek(h, 0L, SEEK_END);
+		cb = min(l, MAX_CART_SIZE);
+		// !!! assert or something if the cartridge is too big
+		l = _lseek(h, 0L, SEEK_SET);
+
+		//      printf("size of %s is %d bytes\n", pch, cb);
+		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
+		
+		_read(h, rgcartData, cb);
+
+		vi.pvmCur->rgcart.cbData = cb;
+		vi.pvmCur->rgcart.fCartIn = TRUE;
+	}
+	_close(h);
+}
+
+void InitCart()
+{
+	// no cartridge
+	if (!(vi.pvmCur->rgcart.fCartIn))
+		return;
+
+	PCART pcart = &(vi.pvmCur->rgcart);
+	unsigned int cb = pcart->cbData;
+
+	//printf("pcart = %08X\n", pcart);
+	//printf("pb    = %08X\n", pcart->pbData);
+
+//	if (ramtop == 0xC000)
+//		return;
+
+	if (cb <= 8192)
+	{
+		// simple 4K or 8K case
+		// copy entire pages at a time
+		_fmemcpy(&rgbMem[0xC000 - (((pcart->cbData + 4095) >> 12) << 12)], rgcartData, (((pcart->cbData + 4095) >> 12) << 12));
+		ramtop = 0xA000;	// probably, right?
+		return;
+	}
+
+	if (cb == 16384)
+	{
+		// Super cart??
+
+		unsigned int i;
+
+		BYTE FAR *pb = rgcartData;
+
+		for (i = 0; i != cb; i += 4096)
+		{
+			if ((pb[i + 4095] >= 0xA0) && (pb[i + 4095] <= 0xBF))
+			{
+				// This is the 'fixed' bank
+
+				_fmemcpy(&rgbMem[0xB000], pb + i, 4096);
+				//printf("fixed bank = %04X\n", i);
+				//gets("  ");
+			}
+
+			if (pb[i + 4095] == 0x00)
+			{
+				// This is the default bank
+
+				_fmemcpy(&rgbMem[0xA000], pb + i, 4096);
+				//printf("default bank = %04X\n", i);
+				//gets("  ");
+			}
+		}
+		ramtop = 0xA000;
+	}
+}
+
+
+void BankCart(int iBank)
+{
+	PCART pcart = &(vi.pvmCur->rgcart);
+	unsigned int cb = pcart->cbData;
+
+	//    printf("bank select = %d\n", iBank);
+
+	if (ramtop == 0xC000)
+		return;
+
+	if (!(vi.pvmCur->rgcart.fCartIn))
+		return;
+
+	if (cb <= 8192)
+	{
+		return;
+	}
+
+	if (cb == 16384)
+	{
+		// Super cart??
+
+		unsigned int i;
+
+		BYTE FAR *pb = rgcartData;
+
+		for (i = 0; i != cb; i += 4096)
+		{
+			if (pb[i + 4095] == i)
+			{
+				// This is the selected bank
+
+				_fmemcpy(&rgbMem[0xA000], pb + i, 4096);
+			}
+			else
+			{
+			}
+		}
+	}
 }
 
 #endif // XFORMER

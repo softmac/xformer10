@@ -78,16 +78,6 @@ BOOL TrayMessage(HWND hDlg, DWORD dwMessage, UINT uID, HICON hIcon, PSTR pszTip)
 }
 
 
-/****************************************************************************
-
-    FUNCTION: DisplayStatus()
-
-    PURPOSE: updates window title with current status
-
-    COMMENTS:
-
-****************************************************************************/
-
 static char const * const rgszMode[] =
     {
 #if 1
@@ -114,6 +104,42 @@ static char const * const rgszMode[] =
     " True Color",
 #endif
     };
+
+// check the cartridge then the first disk for a filename that can be our instance name
+CreateInstanceName(int i, LPSTR lpInstName, int cLen)
+{
+	LPSTR lp = NULL;
+	int z;
+
+	// we have a loaded cartridge, find that name
+	if (FIsAtari8bit(v.rgvm[i].bfHW) && v.rgvm[i].rgcart.fCartIn)
+	{
+		lp = v.rgvm[i].rgcart.szName;
+	}
+
+	if (lp == NULL && v.rgvm[i].rgvd[0].sz)
+	{
+		lp = v.rgvm[i].rgvd[0].sz;
+	}
+
+	for (z = strlen(lp) - 1; z >= 0; z--)
+	{
+		if (lp[z] == '\\') break;
+	}
+
+	strncpy(lpInstName, &lp[z+1], cLen);
+	lpInstName[cLen - 1] = 0;
+}
+
+/****************************************************************************
+
+FUNCTION: DisplayStatus()
+
+PURPOSE: updates window title with current status
+
+COMMENTS:
+
+****************************************************************************/
 
 void DisplayStatus()
 {
@@ -148,7 +174,9 @@ void DisplayStatus()
 
     }
 #else
-    sprintf(rgch0, "%s - %s - %s", vi.szAppName, vmCur.szModel, "MULE");
+	char pInstname[20];
+	CreateInstanceName(v.iVM, pInstname, 20);
+    sprintf(rgch0, "%s - %s - %s", vi.szAppName, vmCur.szModel, pInstname);
 #endif
 
     if (vi.fExecuting)
@@ -533,7 +561,7 @@ void ShowWindowsMouse()
 }
 
 
-
+#if 0
 /*
  *  Clear the System Palette so that we can ensure an identity palette
  *  mapping for fast performance. note only needed for a Win31 app...
@@ -574,7 +602,7 @@ void ClearSystemPalette(void)
 
     ReleaseDC(hwnd, ScreenDC);
 }
-
+#endif
 
 //
 // This is a dummy thread that runs at lowest priority.
@@ -673,6 +701,44 @@ void DestroyDebuggerWindow()
     GetFocus();
 }
 
+// Fix the FILE menu list of all the valid VM's
+void CreateVMMenu()
+{
+	int z;
+	MENUITEMINFO mii;
+	mii.cbSize = sizeof(mii);
+	char mNew[MAX_PATH + 10];
+
+	int iFound = 0;
+	for (z = MAX_VM - 1; z >= 0; z--)
+	{
+		if (v.rgvm[z].fValidVM)
+		{
+			// the highest VM becomes IDM_VM1
+			if (iFound == 0)
+			{
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				CreateInstanceName(z, mNew, MAX_PATH + 10);	// get a name for it
+				SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
+				iFound++;
+			}
+			// lower VMs go before IDM_V1 in the menu
+			else
+			{
+				mii.fMask = MIIM_STRING | MIIM_ID;
+				mii.wID = IDM_VM1 - iFound;
+				mii.dwTypeData = mNew;
+				CreateInstanceName(z, mNew, MAX_PATH + 10);	// get a name for it
+				DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);	// erase the old one
+				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before here
+				iFound++;
+			}
+		}
+	}
+	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);	// in case we're fixing the menus because one was deleted, this will still be hanging around
+}
+
 
 /****************************************************************************
 
@@ -750,8 +816,8 @@ int CALLBACK WinMain(
 
     // Now that the app data directory is set up, it is ok to read the INI file
 
-    ClearSystemPalette();
-    InitProperties();	// !!! creates one of every possible different VM on startup
+    //ClearSystemPalette();
+    InitProperties();	// initial our state and create some default VMs if nothing will be loaded
 
     // Save the instance handle in static variable, which will be used in
     // many subsequence calls from this application to Windows.
@@ -919,12 +985,22 @@ int CALLBACK WinMain(
 	// and select an existing VM of the appropriate hardware type or create a new VM of that type
 	// For now just support for Atari 8-bit VMs and presume the disk image is an .ATR/XFD image
 
-	if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine)>2))
+	if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine) > 3))
 	{
-		lpCmdLine[strlen(lpCmdLine) - 1] = 0;	// get rid of the trailing "
-		strcpy(vmCur.rgvd[0].sz, lpCmdLine+1); // replace disk 1 image with the argument (sans ")
-		//v.fSkipStartup = TRUE;	// and go straight to running it
-		vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use this disk image in VM 0
+		int len = strlen(lpCmdLine);
+		lpCmdLine[len - 1] = 0;	// get rid of the trailing "
+
+		if (lstrcmpi(lpCmdLine + len - 4, "atr\0") == 0 || lstrcmpi(lpCmdLine + len - 4, "xfd") == 0)
+		{
+			strcpy(vmCur.rgvd[0].sz, lpCmdLine + 1); // replace disk 1 image with the argument (sans ")
+			vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use this disk image in VM 0
+		}
+		else if (stricmp(lpCmdLine + len - 4, "bin") == 0 || stricmp(lpCmdLine + len - 4, "rom") == 0
+						|| stricmp(lpCmdLine + len - 4, "car") == 0)
+		{
+			strcpy(vmCur.rgcart.szName, lpCmdLine + 1); // replace disk 1 image with the argument (sans ")
+			vmCur.rgcart.fCartIn = TRUE;
+		}
 	}
 #endif
 
@@ -993,8 +1069,7 @@ int CALLBACK WinMain(
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
-	//CheckMenuItem(vi.hMenu, IDM_CART, ramtop == 0xA000 ? MF_CHECKED : MF_UNCHECKED);
-
+	
 	// Initialize the virtual disk menu items
 	
 	MENUITEMINFO mii;
@@ -1005,26 +1080,75 @@ int CALLBACK WinMain(
 
 	if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
 	{
-		sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+		sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+
+		if (vi.pvmCur->rgcart.fCartIn)
+		{
+			sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
+			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
+		}
+		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn) ? 0 : MF_GRAYED);
 	}
 	else // TODO prefix other kinds of virtual drives appropriately
 	{
-		sprintf(mNew, "%s...", vi.pvmCur->rgvd[0].sz);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		sprintf(mNew, "%s...", vi.pvmCur->rgvd[1].sz);
+		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		sprintf(mNew, "%s...", vi.pvmCur->rgvd[2].sz);
+		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		sprintf(mNew, "%s...", vi.pvmCur->rgvd[3].sz);
+		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
 		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+
+		EnableMenuItem(vi.hMenu, IDM_CART, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
 	}
+
+	// grey out some things if there are no VMs at all
+	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
+
+	// List all the valid VMs under the FILE menu
+	CreateVMMenu();
+
+	// Now put all the possible different VM types into the menu
+
+	int zz = 0;
+#ifdef XFORMER	// offer the 8 bit choices
+	for (; zz < 3; zz++)
+	{
+		// Atari 800 / XL / XE
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_STRING;
+		mii.dwTypeData = mNew;
+		strcpy(mNew, rgszVM[zz + 1]);
+		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // give a proper name to the sample menu item
+	}
+#endif
+
+	// TODO: now do the non-8 bit choices
+
+	for (; zz < 9; zz++)
+	{
+		DeleteMenu(vi.hMenu, IDM_ADDVM1 + zz, 0); // we don't need these
+	}
+
 
     // Make the window visible; update its client area; and return "success"
 
@@ -1362,8 +1486,8 @@ BOOL SetBitmapColors()
 #endif
             }
 
-        if (vi.fInDirectXMode)
-            FChangePaletteEntries(0, 256, vsthw.rgrgb);
+		if (vi.fInDirectXMode)
+			;//FChangePaletteEntries(0, 256, vsthw.rgrgb);
         else
             SetDIBColorTable(vvmi.hdcMem, 0, 256, vsthw.rgrgb);
         return TRUE;
@@ -1371,20 +1495,21 @@ BOOL SetBitmapColors()
 
     if (FIsMac(vmCur.bfHW) && (vsthw.planes == 8))
         {
-        if (vi.fInDirectXMode)
-            FChangePaletteEntries(0, 256, vsthw.rgrgb);
+		if (vi.fInDirectXMode)
+			;// FChangePaletteEntries(0, 256, vsthw.rgrgb);
         else
             SetDIBColorTable(vvmi.hdcMem, 0, 256, vsthw.rgrgb);
         return TRUE;
         }
 
-    if (vi.fInDirectXMode)
-        FChangePaletteEntries(10, 16, vsthw.rgrgb);
+	if (vi.fInDirectXMode)
+		;// FChangePaletteEntries(10, 16, vsthw.rgrgb);
     else
         SetDIBColorTable(vvmi.hdcMem, 10, 16, vsthw.rgrgb);
     return TRUE;
 }
 
+#if 0
 BOOL FCreateOurPalette()
     {
     int         i;
@@ -1446,6 +1571,7 @@ BOOL FCreateOurPalette()
     SelectPalette(vi.hdc,vi.hpal,FALSE);
     return RealizePalette(vi.hdc) != 0;
     }
+#endif
 
 /****************************************************************************
 
@@ -1750,7 +1876,7 @@ Ltryagain:
     vvmi.hbmOld = SelectObject(vvmi.hdcMem, vvmi.hbm);
 
     SetBitmapColors();
-    FCreateOurPalette();
+    //FCreateOurPalette();
 
 // PrintScreenStats(); printf("Entering CreateNewBitmap: leaving critical section\n");
 
@@ -1993,8 +2119,8 @@ BOOL FToggleMonitor()
     vsthw.fMono = FMonoFromBf(vmCur.bfMon);
 
 #if 1
-    SetBitmapColors();
-    FCreateOurPalette();
+      SetBitmapColors();
+//    FCreateOurPalette();
 #endif
 
     InvalidateRect(vi.hWnd, NULL, 0);
@@ -2456,7 +2582,7 @@ LRESULT CALLBACK WndProc(
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
         SetBkMode(vi.hdc, TRANSPARENT);
 
-        FCreateOurPalette();
+        //FCreateOurPalette();
 		
         if (!FIsAtari8bit(vmCur.bfHW))
             {
@@ -2525,8 +2651,15 @@ LRESULT CALLBACK WndProc(
             AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
           }
-   //   CreateNewBitmap();
-   //   return 0;
+
+		if (!v.fFullScreen)
+			if ((vsthw.xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
+				if ((vsthw.ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
+					if (!IsIconic(vi.hWnd))
+						GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
+		
+    //    CreateNewBitmap();
+    //    return 0;
         break;
 
     case WM_DISPLAYCHANGE:
@@ -2702,6 +2835,7 @@ break;
         }
         return 0;
 
+#if 0
     case WM_PALETTECHANGED:
         if ((HWND)uParam == vi.hWnd)
             break;
@@ -2712,6 +2846,7 @@ break;
             InvalidateRect(hWnd, NULL, TRUE);
         return 0;
         break;
+#endif
 
        case WM_SETCURSOR:
         if (v.fFullScreen && vi.fHaveFocus)
@@ -3025,86 +3160,129 @@ L_about:
 			// don't reboot, let the OS detect it as necessary
 			return 0;
 
-#if 0
+			MENUITEMINFO mii;
+			char mNew[MAX_PATH + 10];
+
+#ifdef XFORMER
 		case IDM_CART:
+
+			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgcart.szName, FALSE, 1))
+			{
+				ReadCart();
+
+				EnableMenuItem(vi.hMenu, IDM_NOCART, 0);
+				
+				// fix the name of this menu item
+				mii.cbSize = sizeof(mii);
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
+				SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
+
+				CreateVMMenu();	// fix the FILE menu
+				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			}
+			break;
+
+		case IDM_NOCART:
+			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge and cold start
+			vi.pvmCur->rgcart.szName[0] = 0;
+			EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
+			
+			// fix the name of this menu item
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&Cartridge...");
+			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
+			
+			CreateVMMenu();	// fix the FILE menu
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
 #endif		
 
 		case IDM_D1:
-			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE);
-			vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-			FUnmountDiskVM(0);
-			FMountDiskVM(0);
+			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
+			{
+				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FUnmountDiskVM(0);
+				FMountDiskVM(0);
 
-			// Initialize the virtual disk menu items
-			MENUITEMINFO mii;
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			char mNew[MAX_PATH + 10];
-			mii.dwTypeData = mNew;
-			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-                sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
-			else
-				sprintf(mNew, "%s...", vi.pvmCur->rgvd[0].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+				// Fix the virtual disk menu items
+				mii.cbSize = sizeof(mii);
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+					sprintf(mNew, "&D1: %s...", vi.pvmCur->rgvd[0].sz);
+				else
+					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
+				SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+				EnableMenuItem(vi.hMenu, IDM_D1U, 0);
 
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+				DisplayStatus(); // this could change the title of the window
+				CreateVMMenu();	// and also the FILE menu
+			}
 			break;
 
 		case IDM_D2:
-			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE);
-			vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-			FUnmountDiskVM(1);
-			FMountDiskVM(1);
+			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
+			{
+				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FUnmountDiskVM(1);
+				FMountDiskVM(1);
 
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-				sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
-			else
-				sprintf(mNew, "%s...", vi.pvmCur->rgvd[1].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+				// Initialize the virtual disk menu items
+				mii.cbSize = sizeof(mii);
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+					sprintf(mNew, "&D2: %s...", vi.pvmCur->rgvd[1].sz);
+				else
+					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
+				SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+				EnableMenuItem(vi.hMenu, IDM_D2U, 0);
+			}
 			break;
 
 		case IDM_D3:
-			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE);
-			vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-			FUnmountDiskVM(2);
-			FMountDiskVM(2);
+			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
+			{
+				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FUnmountDiskVM(2);
+				FMountDiskVM(2);
 
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-				sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
-			else
-				sprintf(mNew, "%s...", vi.pvmCur->rgvd[2].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+				// Initialize the virtual disk menu items
+				mii.cbSize = sizeof(mii);
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+					sprintf(mNew, "&D3: %s...", vi.pvmCur->rgvd[2].sz);
+				else
+					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
+				SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+				EnableMenuItem(vi.hMenu, IDM_D3U, 0);
+			}
 			break;
 
 		case IDM_D4:
-			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE);
-			vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-			FUnmountDiskVM(3);
-			FMountDiskVM(3);
+			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE, 0))
+			{
+				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FUnmountDiskVM(3);
+				FMountDiskVM(3);
 
-			// Initialize the virtual disk menu items
-			mii.cbSize = sizeof(mii);
-			mii.fMask = MIIM_STRING;
-			mii.dwTypeData = mNew;
-			if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-				sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
-			else
-				sprintf(mNew, "%s...", vi.pvmCur->rgvd[3].sz);
-			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+				// Initialize the virtual disk menu items
+				mii.cbSize = sizeof(mii);
+				mii.fMask = MIIM_STRING;
+				mii.dwTypeData = mNew;
+				if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
+					sprintf(mNew, "&D4: %s...", vi.pvmCur->rgvd[3].sz);
+				else
+					sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
+				SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+				EnableMenuItem(vi.hMenu, IDM_D4U, 0);
+			}
 			break;
 
 		// unmount a drive
@@ -3117,10 +3295,12 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+			sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+			EnableMenuItem(vi.hMenu, IDM_D1U, MF_GRAYED);
 
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			DisplayStatus(); // this could change the title of the window
+			CreateVMMenu();	// and also the FILE menu
 			break;
 
 		case IDM_D2U:
@@ -3132,10 +3312,9 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+			sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			EnableMenuItem(vi.hMenu, IDM_D2U, MF_GRAYED);
 			break;
 		
 		case IDM_D3U:
@@ -3147,10 +3326,9 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+			sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			EnableMenuItem(vi.hMenu, IDM_D3U, MF_GRAYED);
 			break;
 		
 		case IDM_D4U:
@@ -3162,20 +3340,11 @@ L_about:
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
 			mii.dwTypeData = mNew;
-			sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+			sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
 			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			EnableMenuItem(vi.hMenu, IDM_D4U, MF_GRAYED);
 			break;
-		
-		
-		
-		
-		
-		
-		
-		
-		
+				
 		
 		
 		case IDM_LOADSTATE:
@@ -4521,7 +4690,7 @@ LRESULT CALLBACK About(
                         CloseDiskPdi(pdi);
                         }
 
-                    if (pb && f && (f = OpenTheFile(hDlg, &sz, fTrue)))
+                    if (pb && f && (f = OpenTheFile(hDlg, &sz, fTrue, 0)))
                         {
                         ULONG cbRead;
                         HANDLE hf;
@@ -4564,7 +4733,7 @@ LRESULT CALLBACK About(
 
                     pdi = PdiOpenDisk(DISK_FLOPPY, 0, DI_QUERY);
 
-                    if (pb && (f = OpenTheFile(hDlg, &sz, fFalse)))
+                    if (pb && (f = OpenTheFile(hDlg, &sz, fFalse, 0)))
                         {
                         PDI pdi2;
 
@@ -4636,7 +4805,7 @@ LRESULT CALLBACK About(
 
                     sz[0] = 0;
 
-                    if (pb && (i > 0) && (f = OpenTheFile(hDlg, &sz, fTrue)))
+                    if (pb && (i > 0) && (f = OpenTheFile(hDlg, &sz, fTrue, 0)))
                         {
                         ULONG cbRead;
                         HANDLE hf;
@@ -4783,7 +4952,9 @@ LRESULT CALLBACK About(
 //        FALSE - No files were opened.
 //
 //
-BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate)
+// nType == 0 for the ordinary disk image type you want to load
+// nType == 1 for a special type of media for your VM, eg. a cartridge for Atari800
+BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
 {
     OPENFILENAME OpenFileName;
 
@@ -4794,9 +4965,13 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate)
     if (FIsMac(vmCur.bfHW))
         OpenFileName.lpstrFilter   =
              "Macintosh Disk Images\0*.dsk;*.ima*;*.img;*.hf*;*.hqx;*.cd\0All Files\0*.*\0\0";
-    else if (FIsAtari8bit(vmCur.bfHW))
-        OpenFileName.lpstrFilter   =
-             "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0";
+	else if (FIsAtari8bit(vmCur.bfHW))
+	{
+		if (nType == 0)
+			OpenFileName.lpstrFilter = "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0";
+		else
+			OpenFileName.lpstrFilter = "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0";
+	}
     else
         OpenFileName.lpstrFilter   =
              "Atari ST Disk Images\0*.vhd;*.st;*.dsk;*.msa\0All Files\0*.*\0\0";
@@ -4816,7 +4991,7 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate)
     OpenFileName.lpfnHook            = NULL;
     OpenFileName.lpTemplateName    = NULL;
     OpenFileName.Flags             = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST |
-			(fCreate ? 0 : 0 /*OFN_FILEMUSTEXIST*/);	// let them choose nothing to unmount the disk image
+			(fCreate ? 0 : OFN_FILEMUSTEXIST);
 
     // Call the common dialog function.
     if (GetOpenFileName(&OpenFileName))

@@ -49,26 +49,6 @@ void DumpBlocks(void);
 #define SELF_OUT    128
 #define SELF_MASK   128
 
-
-//
-// Cartridge stuff
-//
-
-#define CART_8K     0
-#define CART_16K    1
-#define CART_OSS    2   // Mac65 etc.
-
-typedef struct _cart
-{
-    char szName[20];
-    BYTE FAR *pbData;  // pointer to cart data
-    int  cbData;        // actual amount of data on the cart
-    int  cPages;        // # of 4K pages of memory footprint
-} CART, *PCART;
-
-#define MAX_CART 8
-
-
 // globals
 
 char FAR rgbSwapSelf[2048];
@@ -81,14 +61,7 @@ char HUGE rgbXEMem[16][16384];
 char FAR rgbSwapXEMem[16384];
 #endif // XE
 
-BYTE oldflags;
-
-
-CART rgcart[MAX_CART];
-
-int  iCartCur;  // current cartridge running
-int  iCartMac;  // count of cartridges
-
+//BYTE oldflags;
 
 void InitBanks()
 {
@@ -143,17 +116,9 @@ void InitBanks()
         _fmemcpy(&rgbMem[0xD800], rgbAtariOSB, 10240);
         }
 
-    // enable BASIC ROMs
-
-    _fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
-    oldflags = (ramtop == 0xC000) ? 0xFF : 0xFD;
-
-    if ((iCartMac > 1) && (ramtop != 0xC000))
-        {
-        // swap in the current cartridge
-
-        InitCart();
-        }
+    // enable BASIC ROMs !!! won't the OS do this properly based on F9?
+	//_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
+    //oldflags = (ramtop == 0xC000) ? 0xFF : 0xFD;
 
 #if 0
     printf("InitBanks:    ");
@@ -225,7 +190,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
     if (mask & BASIC_MASK)
         {
-        int cb = rgcart[iCartCur].cbData;
+        int cb = rgBasic.cbData;
 
         if ((flags & BASIC_MASK) == BASIC_IN)
             {
@@ -234,7 +199,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
             ramtop = 0xC000 - cb;
             _fmemcpy(rgbSwapCart, &rgbMem[ramtop], cb);
-            _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
+            _fmemcpy(&rgbMem[ramtop], rgBasicData, cb);
             }
         else
             {
@@ -339,189 +304,50 @@ void DumpROMs()
 #endif
 
 void ReadROMs()
-    {
-    int h;
-
-    h = _open("ATARIOSB.ROM", _O_BINARY | _O_RDONLY);
-    if (h != NULL)
-        {
-#ifndef NDEBUG
-        printf("reading ATARIOSB.ROM\n");
-#endif
-        _read(h, rgbAtariOSB, 10240);
-        _close(h);
-        }
-
-    h = _open("ATARIBAS.ROM", _O_BINARY | _O_RDONLY);
-    if (h != NULL)
-        {
-#ifndef NDEBUG
-        printf("reading ATARIBAS.ROM\n");
-#endif
-        _read(h, rgbXLXEBAS, 8192);
-        _close(h);
-        }
-
-    // BASIC is a special first cartridge
-
-    strcpy(rgcart[0].szName, "Atari 8K BASIC");
-    rgcart[0].pbData = rgbXLXEBAS;
-    rgcart[0].cbData = 8192;
-    rgcart[0].cPages = 2;
-    iCartMac = 1;
-    iCartCur = 0;
-
-    h = _open("ATARIXL.ROM", _O_BINARY | _O_RDONLY);
-    if (h != NULL)
-        {
-#ifndef NDEBUG
-        printf("reading ATARIXL.ROM\n");
-#endif
-        _read(h, rgbXLXEC000, 16384);
-        _close(h);
-        }
-    }
-
-
-void ReadCart(char *pch)
 {
     int h;
-    int cb = 0;
-    long l;
 
-    h = _open(pch, _O_BINARY | _O_RDONLY);
-    if (h != NULL)
-        {
+	// 800 needs OS B
+	if (mdXLXE == md800)
+	{
+		h = _open("ATARIOSB.ROM", _O_BINARY | _O_RDONLY);
+		if (h != NULL)
+		{
 #ifndef NDEBUG
-        printf("reading %s\n", pch);
+			printf("reading ATARIOSB.ROM\n");
 #endif
+			_read(h, rgbAtariOSB, 10240);
+			_close(h);
+		}
+	}
 
-        l = _lseek(h, 0L, SEEK_END);
-
-        cb = (unsigned int)l;
-
-//      printf("size of %s is %d bytes\n", pch, cb);
-
-#ifndef HWIN32
-        if (rgcart[iCartMac].pbData = malloc(cb))
-#else
-        if (rgcart[iCartMac].pbData = GlobalAlloc(GMEM_FIXED, cb))
+	// XL needs OS XL and built in BASIC (treat it like a special cartridge)
+	if (mdXLXE != md800)
+	{
+		// !!! wrong BASIC!
+		h = _open("ATARIBAS.ROM", _O_BINARY | _O_RDONLY);
+		if (h != NULL)
+		{
+#ifndef NDEBUG
+			printf("reading ATARIBAS.ROM\n");
 #endif
-            {
-//          printf("pb = %04X\n", rgcart[iCartMac].pbData);
+			_read(h, rgBasicData, 8192);
+			_close(h);
+		}
 
-            _read(h, rgcart[iCartMac].pbData, cb);
+		strcpy(rgBasic.szName, "Atari 8K BASIC");
+		rgBasic.cbData = 8192;
 
-            strcpy(rgcart[iCartMac].szName, pch);
-            rgcart[iCartMac].cbData = cb;
-            rgcart[iCartMac].cPages = cb >> 12;
-            iCartMac++;
-            iCartCur = 1;
-            }
-        }
-    _close(h);
-}
-
-
-void NextCart()
-{
-    iCartCur = (iCartCur+1) % iCartMac;
-}
-
-void InitCart()
-{
-    PCART pcart = &rgcart[iCartCur];
-    unsigned int cb = pcart->cbData;
-
-//printf("pcart = %08X\n", pcart);
-//printf("pb    = %08X\n", pcart->pbData);
-
-    if (ramtop == 0xC000)
-        return;
-
-    if (!pcart->pbData)
-        return;
-
-    if (cb <= 8192)
-        {
-        // simple 4K or 8K case
-
-        _fmemcpy(&rgbMem[0xC000 - (pcart->cPages << 12)], pcart->pbData,
-             (pcart->cPages << 12));
-        return;
-        }
-
-    if (cb == 16384)
-        {
-        // Super cart??
-
-        unsigned int i;
-
-        BYTE FAR *pb = pcart->pbData;
-
-        for (i = 0; i != cb; i+= 4096)
-            {
-            if ((pb[i+4095] >= 0xA0) && (pb[i+4095] <= 0xBF))
-                {
-                // This is the 'fixed' bank
-
-                _fmemcpy(&rgbMem[0xB000], pb+i, 4096);
-//printf("fixed bank = %04X\n", i);
-//gets("  ");
-                }
-
-            if (pb[i+4095] == 0x00)
-                {
-                // This is the default bank
-
-                _fmemcpy(&rgbMem[0xA000], pb+i, 4096);
-//printf("default bank = %04X\n", i);
-//gets("  ");
-                }
-            }
-        }
-}
-
-
-void BankCart(int iBank)
-{
-    PCART pcart = &rgcart[iCartCur];
-    unsigned int cb = pcart->cbData;
-
-//    printf("bank select = %d\n", iBank);
-
-    if (ramtop == 0xC000)
-        return;
-
-    if (!pcart->pbData)
-        return;
-
-    if (cb <= 8192)
-        {
-        return;
-        }
-
-    if (cb == 16384)
-        {
-        // Super cart??
-
-        unsigned int i;
-
-        BYTE FAR *pb = pcart->pbData;
-
-        for (i = 0; i != cb; i+= 4096)
-            {
-            if (pb[i+4095] == i)
-                {
-                // This is the selected bank
-
-                _fmemcpy(&rgbMem[0xA000], pb+i, 4096);
-                }
-            else
-                {
-                }
-            }
-        }
+		h = _open("ATARIXL.ROM", _O_BINARY | _O_RDONLY);
+		if (h != NULL)
+		{
+#ifndef NDEBUG
+			printf("reading ATARIXL.ROM\n");
+#endif
+			_read(h, rgbXLXEC000, 16384);
+			_close(h);
+		}
+	}
 }
 
 #else  // !XFORMER

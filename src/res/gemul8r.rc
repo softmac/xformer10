@@ -45,13 +45,19 @@ BEGIN
     BEGIN
 		POPUP "&New VM"
 		BEGIN
-			MENUITEM "ATARI 800", IDM_ADDVM		// example, will be populated
-		END
+			MENUITEM "ATARI 800", IDM_ADDVM1	// examples, will be populated with more
+			MENUITEM "ATARI 800", IDM_ADDVM1+1
+			MENUITEM "ATARI 800", IDM_ADDVM1+2
+			MENUITEM "ATARI 800", IDM_ADDVM1+3
+			MENUITEM "ATARI 800", IDM_ADDVM1+4
+			MENUITEM "ATARI 800", IDM_ADDVM1+5
+			MENUITEM "ATARI 800", IDM_ADDVM1+6
+			MENUITEM "ATARI 800", IDM_ADDVM1+7
+			MENUITEM "ATARI 800", IDM_ADDVM1+8
+	END
 		MENUITEM "&Delete Current VM", IDM_DELVM
-		MENUITEM "Delete All", IDM_DELALL
+		//MENUITEM "Delete All", IDM_DELALL
         MENUITEM SEPARATOR
-		MENUITEM "Re&name VM...", IDM_RENAME
-		MENUITEM SEPARATOR
 		MENUITEM "&Reboot VM\tCtrl+F12", IDM_COLDSTART
 		MENUITEM SEPARATOR
 		MENUITEM "&Open Session...", IDM_OPEN
@@ -61,7 +67,9 @@ BEGIN
 		MENUITEM "&Export DOS File...", IDM_EXPORTDOS
 		MENUITEM SEPARATOR
 		MENUITEM "E&xit", IDM_EXIT
-		// next populate with a separator and all open instances
+		MENUITEM SEPARATOR
+		MENUITEM "M.U.L.E.", IDM_VM1
+	// next populate with a separator and all open instances
 
 		//MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
         //MENUITEM "&Save VM Profiles",           IDM_SAVE
@@ -90,9 +98,11 @@ BEGIN
 		MENUITEM "&Unmount D2:", IDM_D2U
 		MENUITEM "&Unmount D3:", IDM_D3U
 		MENUITEM "&Unmount D4:", IDM_D4U
+// there is no #ifdef XFORMER available in the .RC
 		MENUITEM SEPARATOR
 		MENUITEM "&Cartridge...", IDM_CART
-		END
+		MENUITEM "&Remove Cartridge" IDM_NOCART
+	END
 	
 	
 	

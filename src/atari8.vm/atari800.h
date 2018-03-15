@@ -19,6 +19,7 @@
 #include "common.h"
 
 static int RANDOM17;	// full 17 bit poly counter, the lower 8 bits are RANDOM
+
 //
 // Scan line structure
 //
@@ -577,11 +578,6 @@ void ReadROMs();
 
 void CchDisAsm(unsigned int *puMem);
 void CchShowRegs(void);
-
-void NextCart();
-void InitCart();
-void BankCart(int i);
-void ReadCart(char *);
 
 //
 // Various ROM data and swap buffers
