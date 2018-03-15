@@ -17,7 +17,6 @@
 
 #include "gemtypes.h" // main include file
 
-
 // instance globals
 
 PROPS v;            // properties currently in use
@@ -67,6 +66,7 @@ BOOL TrayMessage(HWND hDlg, DWORD dwMessage, UINT uID, HICON hIcon, PSTR pszTip)
     else
         tnd.szTip[0] = '\0';
 
+// !!! We leave a bunch of icons in the tray
 #ifdef WINXP
     f = Shell_NotifyIcon(dwMessage, &tnd);
 #endif
@@ -148,7 +148,7 @@ void DisplayStatus()
 
     }
 #else
-    sprintf(rgch0, "%s - %s", vmCur.szModel, vi.szAppName);
+    sprintf(rgch0, "%s - %s - %s", vi.szAppName, vmCur.szModel, "MULE");
 #endif
 
     if (vi.fExecuting)
@@ -202,9 +202,9 @@ void DisplayStatus()
 #endif
 
     if (v.fZoomColor)
-        {
-        strcat(rgch0, " - Press Ctrl+F11 for menu");
-        }
+    {
+        strcat(rgch0, " - Stretched");
+    }
 
     SetWindowText(vi.hWnd, rgch0);
 
@@ -359,11 +359,13 @@ ULONGLONG GetCycles()
 	return c;
 }
 
+#if 0
 ULONGLONG GetJiffies()
 {
 	ULONGLONG c = GetCycles() / 29833;
 	return c;
 }
+#endif
 
 //
 // Return time in millisecond increments.
@@ -818,7 +820,7 @@ int CALLBACK WinMain(
         wc.hIcon     = LoadIcon (hInstance, MAKEINTRESOURCE(IDI_APP)); // Icon name from .RC
         wc.hCursor       = LoadCursor(NULL, IDC_ARROW);// Cursor
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);// Default color
-        wc.lpszMenuName  = NULL;             // no menu
+        wc.lpszMenuName  = MAKEINTRESOURCE(IDR_GEMMENU);	// menu
         wc.lpszClassName = vi.szAppName;          // Name to register as
 
         // Register the window class and return success/failure code.
@@ -833,8 +835,7 @@ int CALLBACK WinMain(
     vi.hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_GEMMENU));
 
     // now get handle to first pop-up
-
-    vi.hMenu = GetSubMenu(vi.hMenu, 0);
+	// vi.hMenu = GetSubMenu(vi.hMenu, 0);
 
     // Try to make use of the existing command line window if present
 
@@ -921,7 +922,8 @@ int CALLBACK WinMain(
 	{
 		lpCmdLine[strlen(lpCmdLine) - 1] = 0;	// get rid of the trailing "
 		strcpy(vmCur.rgvd[0].sz, lpCmdLine+1); // replace disk 1 image with the argument (sans ")
-		v.fSkipStartup = TRUE;	// and go straight to running it
+		//v.fSkipStartup = TRUE;	// and go straight to running it
+		vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use the disk image
 	}
 #endif
 
@@ -957,7 +959,7 @@ int CALLBACK WinMain(
         v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN)-640));
         v.rectWinPos.top  = min(50, (GetSystemMetrics(SM_CYSCREEN)-420));
 
-        SetRect(&rect, 0, 0, 640, 400);
+        SetRect(&rect, 0, 0, 640, 480);	// reasonable default size (default to minimum?)
         }
     else
         {
@@ -967,8 +969,6 @@ int CALLBACK WinMain(
 #if !defined(NDEBUG)
     printf("init: client rect = %d, %d, %d, %d\n", rect.top, rect.left, rect.right, rect.bottom);
 #endif
-
-    AdjustWindowRectEx(&rect, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX, FALSE, 0);
 
     vi.hWnd = CreateWindowEx(0L,
         vi.szAppName,       // See RegisterClass() call.
@@ -987,6 +987,27 @@ int CALLBACK WinMain(
     // If window could not be created, return "failure"
     if (!vi.hWnd)
         return (FALSE);
+
+	// Initialize the menus
+	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
+	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
+	//CheckMenuItem(vi.hMenu, IDM_CART, ramtop == 0xA000 ? MF_CHECKED : MF_UNCHECKED);
+
+	// Initialize the virtual disk menu items
+	MENUITEMINFO mii;
+	mii.cbSize = sizeof(mii);
+	mii.fMask = MIIM_STRING;
+	char mNew[MAX_PATH+10];
+	mii.dwTypeData = mNew;
+	sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+	sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+	sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+	sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
 
     // Make the window visible; update its client area; and return "success"
 
@@ -1018,11 +1039,9 @@ int CALLBACK WinMain(
     if (!FToggleMacAtari(v.iVM, TRUE) && !FToggleMacAtari((unsigned)(-1), TRUE))
         return -1;
 
-    vmCur.fColdReset = TRUE;
+    //vmCur.fColdReset = TRUE;
 
-    UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
-
-    {
+	{
     int l;
 
     vi.hIdleThread  = CreateThread(NULL, 4096, (void *)IdleThread, 0, 0, &l);
@@ -1052,25 +1071,21 @@ int CALLBACK WinMain(
 
     vi.pbAudioBuf = vi.pbFrameBuf + 1280*720 + 16;
 
-    // Show the About box
-
-    if (!v.fSkipStartup)
-        PostMessage(vi.hWnd, WM_COMMAND, IDM_ABOUT, 0);
-
     PostMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 
+#if 0
     // One time un-Hibernate
-
     if (v.fSkipStartup & 2)
         {
         v.fSkipStartup &= ~2;
         SaveProperties(NULL);
 
-        SetWindowText(vi.hWnd, "Loading saved state...");
-        PostMessage(vi.hWnd, WM_COMMAND, IDM_LOADSTATE, 0);
+//        SetWindowText(vi.hWnd, "Loading saved state...");
+//        PostMessage(vi.hWnd, WM_COMMAND, IDM_LOADSTATE, 0);
         }
+#endif
 
-#ifdef WINXP
+	// !!!
     {
     FLASHWINFO fi;
 
@@ -1089,11 +1104,6 @@ int CALLBACK WinMain(
     fi.dwFlags = FLASHW_STOP;
     FlashWindowEx(&fi);
     }
-#else
-    // Allow the screen thread to complete the timing calibration
-
-    Sleep(900);
-#endif
 
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
@@ -1729,21 +1739,22 @@ Ltryagain:
 // PrintScreenStats(); printf("Entering CreateNewBitmap: leaving critical section\n");
 
     if (v.fFullScreen)
-        {
-        // Get rid of the title bar
-
+    {
+        // Get rid of the title bar and menu and maximize
+		ShowWindow(vi.hWnd, SW_MAXIMIZE); // this has to go first or it might not work!
+		SetMenu(vi.hWnd, NULL);
         ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
+		SetWindowLong(vi.hWnd, GWL_STYLE, l & ~(WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
+	}
+	else
+	{
+        // Enable title bar and menu
+		ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
+		SetMenu(vi.hWnd, vi.hMenu);
+		SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
+		ShowWindow(vi.hWnd, SW_RESTORE);	// this has to go last or the next maximize doesn't work!
+	}
 
-        SetWindowLong(vi.hWnd, GWL_STYLE, l & ~(WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
-        }
-    else
-        {
-        // Enable title bar
-
-        ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
-
-        SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
-        }
 
 #if 0
     v.rectWinPos = rectSav; // restore saved window position
@@ -2302,50 +2313,49 @@ int ShutdownDetected()
 
 void RenderBitmap()
 {
-	RECT rect, rect2;
+	RECT rect;
 
     GetClientRect(vi.hWnd, &rect);
-	GetWindowRect(vi.hWnd, &rect2);
-
+	
 #if !defined(NDEBUG)
 //  printf("rnb: rect = %d %d %d %d\n", rect.left, rect.top, rect.right, rect.bottom);
 //  PrintScreenStats();
 #endif
 
-    if (v.fZoomColor)
-        {
-        // Smart Scaling
+	if (v.fTiling)
+	{
+		// Tiling
 
-        StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
-            vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
-        }
-    else if (v.fTiling)
-        {
-        // Tiling
+		int x, y, iVM = -1; // v.iVM;
 
-        int x, y, iVM = -1; // v.iVM;
+		for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
+		{
+			for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
+			{
+				// advance to the next valid bitmap
 
-        for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
-          {
-            for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
-            {
-                // advance to the next valid bitmap
+				do
+				{
+					iVM = (iVM + 1) % MAXOSUsable;
+					// printf("hdcMem[%d] = %p, %p\n", iVM, vrgvmi[iVM].hdcMem, vrgvmi[iVM].pvBits);
+				} while (vrgvmi[iVM].hdcMem == NULL);
 
-                do
-                {
-                    iVM = (iVM + 1) % MAXOSUsable;
-// printf("hdcMem[%d] = %p, %p\n", iVM, vrgvmi[iVM].hdcMem, vrgvmi[iVM].pvBits);
-                } while (vrgvmi[iVM].hdcMem == NULL);
+				StretchBlt(vi.hdc, x, y,
+					(vsthw.xpix * vi.fXscale), (vsthw.ypix * vi.fYscale),
+					vrgvmi[iVM].hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
+			}
+		}
+	}
+	else if (v.fZoomColor)
+	{
+		// Smart Scaling
 
-                StretchBlt(vi.hdc, x, y,
-                     (vsthw.xpix * vi.fXscale), (vsthw.ypix * vi.fYscale),
-                     vrgvmi[iVM].hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
-            }
-          }
-        }
-    else
-        {
-        // Integer scaling !!! support fullscreen version
+		StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
+			vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
+	}
+	else
+    {
+        // Integer scaling
 
         int x, y, scale;
 
@@ -2363,7 +2373,14 @@ void RenderBitmap()
         x = (rect.right - rect.left) - (vsthw.xpix * vi.fXscale * scale);
         y = (rect.bottom - rect.top) - (vsthw.ypix * vi.fYscale * scale);
 
-        StretchBlt(vi.hdc, x/2, y/2,
+		// Why did we not used to have to do this?
+		StretchBlt(vi.hdc, 0, 0, x/2, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+		StretchBlt(vi.hdc, x/2, 0, x/2 + (vsthw.xpix * vi.fXscale * scale), y/2, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+		StretchBlt(vi.hdc, x/2, y/2 + (vsthw.ypix * vi.fYscale * scale), x / 2 + (vsthw.xpix * vi.fXscale * scale), rect.bottom,
+				vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+		StretchBlt(vi.hdc, x/2 + (vsthw.xpix * vi.fXscale * scale), 0, rect.right, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+
+		StretchBlt(vi.hdc, x/2, y/2,
              (vsthw.xpix * vi.fXscale * scale), (vsthw.ypix * vi.fYscale * scale),
              vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
         }
@@ -2487,7 +2504,7 @@ LRESULT CALLBACK WndProc(
         if (vi.fInDirectXMode)
           {
             RECT Rect;
-
+			// !!! I don't trust this
             SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
             AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
@@ -2688,20 +2705,21 @@ break;
             return TRUE;
             }
 
-        if (FIsAtari8bit(vmCur.bfHW))
-            {
-            // Set cursor to crosshairs
-
-            SetCursor(LoadCursor(NULL, IDC_CROSS));
-            return TRUE;
-            }
-
-        if (!vi.fVMCapture && vi.fHaveFocus && (LOWORD(lParam) == HTCLIENT))
-            {
-            // In windowed mode, don't show mouse in client area
-            SetCursor(NULL);
-            return TRUE;
-            }
+		if (vi.fHaveFocus && (LOWORD(lParam) == HTCLIENT))
+		{
+			if (FIsAtari8bit(vmCur.bfHW))
+			{
+				// Set cursor to crosshairs for 8 bit
+				SetCursor(LoadCursor(NULL, IDC_CROSS));
+				return TRUE;
+			}
+			else if (!vi.fVMCapture)
+			{
+				// In windowed mode, don't show mouse in client area
+				SetCursor(NULL);
+				return TRUE;
+			}
+		}
         break;
 
 //     case WM_ACTIVATEAPP:
@@ -2825,14 +2843,314 @@ break;
         switch (wmId)
             {
 L_about:
-        case IDM_ABOUT:
-            DialogBox(vi.hInst,       // current instance
-                MAKEINTRESOURCE(IDD_ABOUTBOX), // dlg resource to use
-                hWnd,          // parent handle
-                About);
-            break;
+		// bring up our ABOUT MessageBox
+		case IDM_ABOUT:
 
-        case IDM_LOADSTATE:
+			char rgch[1120], rgch2[64], rgchVer[32];
+			OSVERSIONINFO oi;
+
+			oi.dwOSVersionInfoSize = sizeof(oi);
+			GetVersionEx(&oi);  // REVIEW: requires Win32s 1.2+
+
+			switch (oi.dwPlatformId)
+			{
+			default:
+			case VER_PLATFORM_WIN32_WINDOWS:
+				strcpy(rgchVer, "Windows 95/98/Me");
+				break;
+
+			case VER_PLATFORM_WIN32s:
+				strcpy(rgchVer, "Win32s");
+				break;
+
+			case VER_PLATFORM_WIN32_NT:
+				strcpy(rgchVer, "Windows");
+
+				if (oi.dwMajorVersion < 5)
+				{
+					strcpy(rgchVer, "Windows NT");
+				}
+				else if (oi.dwMajorVersion == 5)
+				{
+					if (oi.dwMinorVersion == 0)
+					{
+						strcpy(rgchVer, "Windows 2000");
+					}
+					else if (oi.dwMinorVersion == 1)
+					{
+						strcpy(rgchVer, "Windows XP");
+					}
+					else
+					{
+						strcpy(rgchVer, "Windows 2003");
+					}
+				}
+				else if (oi.dwMajorVersion == 6)
+				{
+					if ((oi.dwBuildNumber & 65535) <= 6000)
+					{
+						strcpy(rgchVer, "Windows Vista");
+					}
+					else if (oi.dwMinorVersion == 0)
+					{
+						strcpy(rgchVer, "Windows Vista / Server 2008");
+					}
+					else if (oi.dwMinorVersion == 1)
+					{
+						strcpy(rgchVer, "Windows 7 / Server 2008 R2");
+					}
+					else if (oi.dwMinorVersion == 2)
+					{
+						if ((oi.dwBuildNumber & 65535) < 8400)
+							strcpy(rgchVer, "Windows 8 Beta");
+						else if ((oi.dwBuildNumber & 65535) == 8400)
+							strcpy(rgchVer, "Windows 8 Consumer Preview");
+						else if ((oi.dwBuildNumber & 65535) < 9200)
+							strcpy(rgchVer, "Windows 8 pre-release");
+						else
+							strcpy(rgchVer, "Windows 8");
+					}
+					else
+					{
+						strcpy(rgchVer, "Windows 8 or later");
+					}
+				}
+				else
+				{
+					strcpy(rgchVer, "Windows 8 or later");
+				}
+				break;
+			};
+
+			sprintf(rgch2, "About %s", vi.szAppName);
+
+			sprintf(rgch, "%s Community Release\n"
+				"Darek's Classic Computer Emulator.\n"
+				"Version 9.90 - built on %s\n"
+				"%2d-bit %s release.\n\n"
+				"Copyright (C) 1986-2018 Darek Mihocka.\n"
+				"All Rights Reserved.\n\n"
+
+#ifdef XFORMER
+				"Atari OS and BASIC used with permission.\n"
+				"Copyright (C) 1979-1984 Atari Corp.\n\n"
+#endif
+
+				"Many thanks to: "
+				"Ignac Kolenko, "
+				"Ed Malkiewicz, "
+				"Bill Huey, "
+				"\n"
+#if defined(ATARIST) || defined(SOFTMAC)
+				"Christian Bauer, "
+				"Simon Biber, "
+				"\n"
+				"William Condie, "
+				"Phil Cummins, "
+				"Kyle Fox, "
+				"\n"
+				"Manuel Perez, "
+				"Ray Ruvinskiy, "
+				"Joel Walter, "
+				"\n"
+				"Jim Watters, "
+#endif
+				"Danny Miller, "
+				"Robert Birmingham, "
+				"and Derek Yenzer.\n\n"
+
+				"Windows version: %d.%02d (build %d)\n"
+				"Windows platform: %s\n"
+				,
+				vi.szAppName,
+				__DATE__,
+				sizeof(void *) * 8,
+#if defined(_M_AMD64)
+				"x64",
+#elif defined(_M_IX86)
+				"x86",
+#elif defined(_M_IX86)
+				"ARM",
+#else
+				"",
+#endif
+				oi.dwMajorVersion, oi.dwMinorVersion,
+				oi.dwBuildNumber & 65535,
+				rgchVer,
+				0);
+
+			MessageBox(GetFocus(), rgch, rgch2, MB_OK);
+			break;
+
+		case IDM_FULLSCREEN:
+			v.fFullScreen = !v.fFullScreen;
+			CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
+			
+			// remove title bar and menus and such
+			CreateNewBitmap();
+			break; // !!! the VM sees the ENTER keystroke
+
+		case IDM_STRETCH:
+			v.fZoomColor = !v.fZoomColor;
+			CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
+			CreateNewBitmap();
+			break;
+
+		case IDM_TILE:
+			v.fTiling = !v.fTiling;
+			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
+			CreateNewBitmap();
+			break;
+
+		case IDM_COLORMONO:
+			if (!FToggleMonitor())
+				return 0;
+
+			// don't reboot, let the OS detect it as necessary
+			return 0;
+
+#if 0
+		case IDM_CART:
+#endif		
+
+		case IDM_D1:
+			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE);
+			vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+			FUnmountDiskVM(0);
+			FMountDiskVM(0);
+
+			// Initialize the virtual disk menu items
+			MENUITEMINFO mii;
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			char mNew[MAX_PATH + 10];
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
+		case IDM_D2:
+			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE);
+			vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+			FUnmountDiskVM(1);
+			FMountDiskVM(1);
+
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
+		case IDM_D3:
+			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE);
+			vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+			FUnmountDiskVM(2);
+			FMountDiskVM(2);
+
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
+		case IDM_D4:
+			OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE);
+			vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // !!! doesn't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+			FUnmountDiskVM(3);
+			FMountDiskVM(3);
+
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
+		// unmount a drive
+		case IDM_D1U:
+			strcpy(vi.pvmCur->rgvd[0].sz, "");
+			vi.pvmCur->rgvd[0].dt = DISK_NONE;
+			FUnmountDiskVM(0);
+			
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D1:%s...", vi.pvmCur->rgvd[0].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+
+		case IDM_D2U:
+			strcpy(vi.pvmCur->rgvd[1].sz, "");
+			vi.pvmCur->rgvd[1].dt = DISK_NONE;
+			FUnmountDiskVM(1);
+			
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D2:%s...", vi.pvmCur->rgvd[1].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+		
+		case IDM_D3U:
+			strcpy(vi.pvmCur->rgvd[2].sz, "");
+			vi.pvmCur->rgvd[2].dt = DISK_NONE;
+			FUnmountDiskVM(2);
+			
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D3:%s...", vi.pvmCur->rgvd[2].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+		
+		case IDM_D4U:
+			strcpy(vi.pvmCur->rgvd[3].sz, "");
+			vi.pvmCur->rgvd[3].dt = DISK_NONE;
+			FUnmountDiskVM(3);
+			
+			// Initialize the virtual disk menu items
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_STRING;
+			mii.dwTypeData = mNew;
+			sprintf(mNew, "&D4:%s...", vi.pvmCur->rgvd[3].sz);
+			SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			break;
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		case IDM_LOADSTATE:
             SaveState(FALSE);
             return 0;
             break;
@@ -2845,13 +3163,6 @@ L_about:
             if (!FIsAtari8bit(vmCur.bfHW))
                 AddToPacket(FIsMac(vmCur.bfHW) ? 0xDF : 0xB8);  // Alt  key up
             break;
-
-        case IDM_COLORMONO:
-            if (!FToggleMonitor())
-                return 0;
-
-            // don't reboot, let the OS detect it as necessary
-            return 0;
 
         case IDM_COLDSTART:
             // have some default values so as to force a default bitmap
@@ -3021,19 +3332,20 @@ L_about:
         break;
 
     case WM_SYSKEYDOWN:
-        if (uParam == VK_RETURN)
-            {
-            // Alt+Enter toggles windowed/full screen mode
-            // This also toggles the menu bar on and off
-            //
-            // Cycles through five modes:
-            //
-            //  v.fFS v.fZm v.fT
-            //  ===== ===== ====
-            //    0     0    0    menu bar, center guest in window
-            //    0     1    0    menu bar, scale guest to full window
-            //    1     0    0    no menu bar, centre guest in window
-            //    1     1    0    no menu bar, scale guest to full window
+		if (uParam == VK_RETURN)
+		{
+#if 0
+			// Alt+Enter toggles windowed/full screen mode
+			// This also toggles the menu bar on and off
+			//
+			// Cycles through five modes:
+			//
+			//  v.fFS v.fZm v.fT
+			//  ===== ===== ====
+			//    0     0    0    menu bar, center guest in window
+			//    0     1    0    menu bar, scale guest to full window
+			//    1     0    0    no menu bar, centre guest in window
+			//    1     1    0    no menu bar, scale guest to full window
 			//    1     0    1    tile window
 
 			if (v.fZoomColor && v.fFullScreen) {
@@ -3052,11 +3364,14 @@ L_about:
 
 				v.fZoomColor = !v.fZoomColor;
 			}
-            CreateNewBitmap();
-            return 0;
-            }
+			CreateNewBitmap();
+			return 0;
+		}
+#endif
+		SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+		}
 
-        // fall through
+		// fall through
 
     case WM_SYSKEYUP:
     case WM_KEYDOWN:
@@ -3211,6 +3526,8 @@ L_about:
 
         vi.fQuitting = TRUE;
 		
+		SetMenu(vi.hWnd, vi.hMenu); // so that it gets freed
+
 		UninitSound();
 		ReleaseJoysticks();
 
@@ -3499,7 +3816,7 @@ LRESULT CALLBACK About(
         case WM_INITDIALOG:
 
             CenterWindow (hDlg, GetWindow (hDlg, GW_OWNER));
-            vi.hMenu = GetMenu(hDlg);
+            //vi.hMenu = GetMenu(hDlg);
 
 #if defined(ATARIST) || defined(SOFTMAC)
 #if 0
@@ -4471,7 +4788,7 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate)
     OpenFileName.lpfnHook            = NULL;
     OpenFileName.lpTemplateName    = NULL;
     OpenFileName.Flags             = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST |
-                                             (fCreate ? 0 : OFN_FILEMUSTEXIST);
+			(fCreate ? 0 : 0 /*OFN_FILEMUSTEXIST*/);	// let them choose nothing to unmount the disk image
 
     // Call the common dialog function.
     if (GetOpenFileName(&OpenFileName))

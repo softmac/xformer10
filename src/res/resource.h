@@ -2,16 +2,45 @@
 // Microsoft Developer Studio generated include file.
 // Used by GEMUL8R.rc
 //
+
+#define IDI_APP                         102
+#define IDR_ACCEL                       104
+#define IDR_GEMMENU                     105
+
+#define IDM_ADDVM                       40201
+#define IDM_DELVM                       40202
+#define IDM_DELALL                      40203
+#define IDM_COLDSTART                   40204
+#define IDM_RENAME                      40205
+#define IDM_OPEN                        40206
+#define IDM_SAVE                        40207
+#define IDM_IMPORTDOS                   40208
+#define IDM_EXPORTDOS                   40209
+#define IDM_EXIT                        40220
+
+#define IDM_FULLSCREEN                  40231
+#define IDM_STRETCH                     40232
+#define IDM_TILE                        40237
+#define IDM_D1                          40238
+#define IDM_D2                          40239
+#define IDM_D3                          40242
+#define IDM_D4                          40243
+#define IDM_D1U                         40244
+#define IDM_D2U                         40245
+#define IDM_D3U                         40246
+#define IDM_D4U                         40247
+#define IDM_CART                        40248
+
+#define IDM_ABOUT                       40249
+
+// legacy
 #define IDSCAN                          10
 #define IDDISKPROPS                     11
 #define IDSAVE                          12
 #define IDROMSET                        13
 #define IDC_EDITPATH                    14
 #define IDPATH                          15
-#define IDI_APP                         102
 #define IDD_ABOUTBOX                    103
-#define IDR_ACCEL                       104
-#define IDR_GEMMENU                     105
 #define IDD_PROPERTIES                  106
 #define IDD_CHECKSUM                    111
 #define IDD_FIRSTTIME                   113

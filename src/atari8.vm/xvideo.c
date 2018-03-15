@@ -66,7 +66,7 @@ void ShowCountDownLine()
             }
         else if (cntTick < 60)
             {
-            pch = " PRESS ALT+ENTER TO CHANGE ZOOM MODE";
+            pch = " PRESS ALT+ENTER FOR FULLSCREEN";
             }
         else if (cntTick < 120)
             {

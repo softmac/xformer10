@@ -1840,7 +1840,7 @@ extern _declspec(dllimport) ICpuExec cpi68K;
 #define TM_TOGGLECOLOR         (WM_APP+7)
 
 ULONGLONG GetCycles();
-ULONGLONG GetJiffies();
+//ULONGLONG GetJiffies();
 
 #pragma hdrstop
 

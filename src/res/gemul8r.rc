@@ -2,18 +2,19 @@
 //
 #include "resource.h"
 
-#define APSTUDIO_READONLY_SYMBOLS
+// !!! ???
+//#define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
 //
 // Generated from the TEXTINCLUDE 2 resource.
 //
-#define APSTUDIO_HIDDEN_SYMBOLS
+//#define APSTUDIO_HIDDEN_SYMBOLS
 #include "windows.h"
-#undef APSTUDIO_HIDDEN_SYMBOLS
+//#undef APSTUDIO_HIDDEN_SYMBOLS
 #include "winver.h"
 
 /////////////////////////////////////////////////////////////////////////////
-#undef APSTUDIO_READONLY_SYMBOLS
+//#undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
 // English (U.S.) resources
@@ -42,75 +43,119 @@ IDR_GEMMENU MENU PRELOAD DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
-        MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
-        MENUITEM "&Save VM Profiles",           IDM_SAVE
+		POPUP "&Add VM"
+		BEGIN
+			MENUITEM "ATARI 800", IDM_ADDVM		// example, will be populated
+		END
+		MENUITEM "&Delete Current VM", IDM_DELVM
+		MENUITEM "Delete All", IDM_DELALL
         MENUITEM SEPARATOR
-        MENUITEM "&Restart\tCtrl+F12",          IDM_COLDSTART
-        MENUITEM "Restart &Next VM\tAlt+F12",   IDM_TOGGLEHW
-        MENUITEM SEPARATOR
-        MENUITEM "&Hibernate",                  IDM_HYBERNATE
-        MENUITEM "E&xit",                       IDM_EXIT
-    END
-    POPUP "&Options"
-    BEGIN
-        MENUITEM "&VM Properties...\tAlt+F11",  IDM_PROPERTIES
-        MENUITEM "&Disk Properties...\tShift+F11", IDM_DISKPROPS
-        MENUITEM "&ROM BIOS Setup...",          IDM_FIRST
-        MENUITEM SEPARATOR
-        MENUITEM "&Full Screen\tAlt+Enter",     IDM_DIRECTX
-        MENUITEM "&Zoom Mode",                  IDM_ZOOM
-        POPUP "DirectX &Video"
-        BEGIN
-            MENUITEM "&Automatic",                  IDM_DXNORMAL
-            MENUITEM "Delay &Load",                 IDM_DXDELAY
-            MENUITEM "&Disable",                    IDM_DXDISABLE
-        END
-        MENUITEM SEPARATOR
-        MENUITEM "Auto-&Start Default VM",      IDM_SKIPSTARTUP
-        MENUITEM "Sa&ve Profiles on Exit",      IDM_SAVEONEXIT
-        MENUITEM "&Auto-Hibernate on Exit",     IDM_HYBONEXIT
-    END
-    POPUP "&Advanced"
-    BEGIN
-        MENUITEM "Diagnostic &Info",            IDM_DEBUGINFO
-        MENUITEM "&Debugger",                   IDM_DEBUGGER
-        MENUITEM "Debugging &Mode",             IDM_DEBUGMODE
+		MENUITEM "Re&name VM...", IDM_RENAME
+		MENUITEM SEPARATOR
+		MENUITEM "&Reboot VM\tCtrl+F12", IDM_COLDSTART
+		MENUITEM SEPARATOR
+		MENUITEM "&Open Session...", IDM_OPEN
+		MENUITEM "&Save Session As...", IDM_SAVE
+		MENUITEM SEPARATOR
+		MENUITEM "&Import DOS File...", IDM_IMPORTDOS
+		MENUITEM "&Export DOS File...", IDM_EXPORTDOS
+		MENUITEM SEPARATOR
+		MENUITEM "E&xit", IDM_EXIT
+		// next populate with a separator and all open instances
+
+		//MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
+        //MENUITEM "&Save VM Profiles",           IDM_SAVE
+        //MENUITEM SEPARATOR
+        //MENUITEM "Restart &Next VM\tAlt+F12",   IDM_TOGGLEHW
+        //MENUITEM SEPARATOR
+        //MENUITEM "&Hibernate",                  IDM_HYBERNATE
+	END
+	POPUP "&Window"
+	BEGIN
+		MENUITEM "&Full Screen\tAlt+Enter", IDM_FULLSCREEN
+		MENUITEM "&Stretch Mode\tF5", IDM_STRETCH
+		MENUITEM "&Tile All VMs", IDM_TILE
+		MENUITEM SEPARATOR
+		MENUITEM "Switch &Monitors\tShift+F12", IDM_COLORMONO
+
+	END
+	POPUP "&Disk/Cartridge"
+		BEGIN
+		MENUITEM "D&1:...", IDM_D1
+		MENUITEM "D&2:...", IDM_D2
+		MENUITEM "D&3:...", IDM_D3
+		MENUITEM "D&4:...", IDM_D4
+		MENUITEM SEPARATOR
+	    MENUITEM "&Unmount D1:", IDM_D1U
+		MENUITEM "&Unmount D2:", IDM_D2U
+		MENUITEM "&Unmount D3:", IDM_D3U
+		MENUITEM "&Unmount D4:", IDM_D4U
+		MENUITEM SEPARATOR
+		MENUITEM "&Cartridge...", IDM_CART
+		END
+	
+	
+	
+	//POPUP "&Options"
+    //BEGIN
+    //    MENUITEM "&VM Properties...\tAlt+F11",  IDM_PROPERTIES
+    //    MENUITEM "&Disk Properties...\tShift+F11", IDM_DISKPROPS
+    //    MENUITEM "&ROM BIOS Setup...",          IDM_FIRST
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "&Full Screen\tAlt+Enter",     IDM_DIRECTX
+    //    MENUITEM "&Zoom Mode",                  IDM_ZOOM
+    //    POPUP "DirectX &Video"
+    //    BEGIN
+    //        MENUITEM "&Automatic",                  IDM_DXNORMAL
+    //        MENUITEM "Delay &Load",                 IDM_DXDELAY
+    //        MENUITEM "&Disable",                    IDM_DXDISABLE
+    //   END
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "Auto-&Start Default VM",      IDM_SKIPSTARTUP
+    //    MENUITEM "Sa&ve Profiles on Exit",      IDM_SAVEONEXIT
+    //    MENUITEM "&Auto-Hibernate on Exit",     IDM_HYBONEXIT
+    //END
+    //POPUP "&Advanced"
+    //BEGIN
+    //    MENUITEM "Diagnostic &Info",            IDM_DEBUGINFO
+    //    MENUITEM "&Debugger",                   IDM_DEBUGGER
+    //    MENUITEM "Debugging &Mode",             IDM_DEBUGMODE
 //      MENUITEM SEPARATOR
 //      MENUITEM "Disable Quick Boot",          IDM_NOQBOOT
 //      MENUITEM "Disable Code Compilation",    IDM_NOJIT
 //      MENUITEM "Disable ASPI Support",        IDM_NOSCSI
 //      MENUITEM "Disable Mouse Menu",          IDM_NOTWOBUTTON
 //      MENUITEM "Disable Monochrome Bitmaps",  IDM_NOMONO
-        MENUITEM SEPARATOR
-        MENUITEM "&Import VM Profiles...",      IDM_LOADINI
-        MENUITEM "&Export VM Profiles...",      IDM_SAVEINI
-        MENUITEM SEPARATOR
-        MENUITEM "&Load VM Snapshot",           IDM_LOADSTATE
-        MENUITEM "&Save VM Snapshot",           IDM_SAVESTATE
-        MENUITEM SEPARATOR
-        MENUITEM "&Clear CMOS/PRAM",            IDM_ZAPCMOS
-    END
-    POPUP "&Tools"
-    BEGIN
-        MENUITEM "&Format 1.44M Mac Floppy...", IDM_FMTMACFLOP
-        MENUITEM "&Create Disk Image From Floppy Disk...", IDM_FLOP2IMG
-        MENUITEM "&Write Disk Image To Floppy Disk...", IDM_IMG2FLOP
-        MENUITEM SEPARATOR
-        MENUITEM "Create &Formatted Mac OS Volume Image (.HFX)...", 
-                                                IDM_NEWHFX
-        MENUITEM "Create &Unformatted SCSI Disk Image (.DSK)...", IDM_NEWDSK
-        MENUITEM SEPARATOR
-        MENUITEM "Create .HFX Disk Image From Disk Volume...", IDM_LOG2HFX
-        MENUITEM "Create .DSK Disk Image From Physical Disk...", 
-                                                IDM_PHYS2DSK
-    END
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "&Import VM Profiles...",      IDM_LOADINI
+    //    MENUITEM "&Export VM Profiles...",      IDM_SAVEINI
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "&Load VM Snapshot",           IDM_LOADSTATE
+    //    MENUITEM "&Save VM Snapshot",           IDM_SAVESTATE
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "&Clear CMOS/PRAM",            IDM_ZAPCMOS
+    //END
+    //POPUP "&Tools"
+    //BEGIN
+    //    MENUITEM "&Format 1.44M Mac Floppy...", IDM_FMTMACFLOP
+    //    MENUITEM "&Create Disk Image From Floppy Disk...", IDM_FLOP2IMG
+    //    MENUITEM "&Write Disk Image To Floppy Disk...", IDM_IMG2FLOP
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "Create &Formatted Mac OS Volume Image (.HFX)...", 
+    //                                            IDM_NEWHFX
+    //    MENUITEM "Create &Unformatted SCSI Disk Image (.DSK)...", IDM_NEWDSK
+    //    MENUITEM SEPARATOR
+    //    MENUITEM "Create .HFX Disk Image From Disk Volume...", IDM_LOG2HFX
+    //    MENUITEM "Create .DSK Disk Image From Physical Disk...", 
+    //                                            IDM_PHYS2DSK
+    //END
     POPUP "&Help"
     BEGIN
-        MENUITEM "&Gemulator Online Help",      IDM_WEB_HELP
-        MENUITEM "&Emulators.com Downloads",    IDM_WEB_FREE
-        MENUITEM "Emulators.com &Home Page",    IDM_WEB_EMULATORS
-        MENUITEM "EmuTOS open source &TOS",     IDM_WEB_EMUTOS
-        MENUITEM SEPARATOR
+        //MENUITEM "&Gemulator Online Help",      IDM_WEB_HELP
+        //MENUITEM "&Emulators.com Downloads",    IDM_WEB_FREE
+        //MENUITEM "Emulators.com &Home Page",    IDM_WEB_EMULATORS
+        //MENUITEM "EmuTOS open source &TOS",     IDM_WEB_EMUTOS
+        //MENUITEM SEPARATOR
         MENUITEM "&About",                      IDM_ABOUT
     END
 END
@@ -123,19 +168,21 @@ END
 
 IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
 BEGIN
-    VK_F5,          IDM_CTRLF11,            VIRTKEY, NOINVERT
+    VK_F5,          IDM_STRETCH,            VIRTKEY, NOINVERT
+    VK_RETURN,		IDM_FULLSCREEN,			VIRTKEY, CONTROL, NOINVERT
+	VK_F12,			IDM_COLDSTART,			VIRTKEY, CONTROL, NOINVERT
+	VK_F12,			IDM_COLORMONO,			VIRTKEY, SHIFT, NOINVERT
+
+	// legacy
     VK_F11,         IDM_F11,                VIRTKEY, NOINVERT
-    VK_F11,         IDM_CTRLF11,            VIRTKEY, CONTROL, NOINVERT
-    VK_F11,         IDM_PROPERTIES,         VIRTKEY, ALT, NOINVERT
+    //VK_F11,         IDM_CTRLF11,            VIRTKEY, CONTROL, NOINVERT
+    //VK_F11,         IDM_PROPERTIES,         VIRTKEY, ALT, NOINVERT
     VK_F11,         IDM_DEBUGGER,           VIRTKEY, CONTROL, ALT, NOINVERT
-    VK_F11,         IDM_DISKPROPS,          VIRTKEY, SHIFT, NOINVERT
+    //VK_F11,         IDM_DISKPROPS,          VIRTKEY, SHIFT, NOINVERT
     VK_F12,         IDM_DEBUGGER,           VIRTKEY, NOINVERT
-    VK_F12,         IDM_COLDSTART,          VIRTKEY, CONTROL, NOINVERT
     VK_F12,         IDM_TOGGLEHW,           VIRTKEY, ALT, NOINVERT
     VK_F12,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, ALT, NOINVERT
-    VK_F12,         IDM_COLORMONO,          VIRTKEY, SHIFT, NOINVERT
 END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -159,6 +206,7 @@ BEGIN
     DEFPUSHBUTTON   "&Continue",IDOK,154,149,35,14
 END
 
+#if 0
 IDD_PROPERTIES DIALOG DISCARDABLE  0, 0, 320, 200
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Properties"
@@ -338,7 +386,7 @@ BEGIN
                     WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,72,32,50,14
 END
-
+#endif	// #if 0
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
