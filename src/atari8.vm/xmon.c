@@ -456,7 +456,7 @@ void mon()            /* the 6502 monitor */
             }
         else if (chCom == 'B')
             {
-            FColdbootVM();
+            FColdbootVM(v.iVM);
             FExecVM(FALSE,TRUE);
             CchShowRegs();
             }

@@ -30,7 +30,7 @@
 #define SIO_DEVDONE 0x90
 
 typedef struct
-    {
+{
     WORD mode;
     WORD  h;
     WORD fWP;
@@ -40,7 +40,7 @@ typedef struct
     char path[80];
     char name[12];
     ULONG cb;   // size of file when mode == MD_FILE
-    } DRIVE;
+} DRIVE;
 
 #define MAX_DRIVES 8
 
