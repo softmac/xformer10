@@ -154,10 +154,13 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	v.rgvm[iVM].fSound = TRUE;
 	v.rgvm[iVM].bfCPU = cpu6502;
 	v.rgvm[iVM].bfMon = monColrTV;
-	//v.rgvm[iVM]->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
+	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
 
-	v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
-    strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// default to something
+	if (v.rgvm[iVM].rgvd[0].dt == DISK_NONE)
+	{
+		v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+		strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// default to something?
+	}
 
 #if 0
 	// fake in the Atari 8-bit OS entires
@@ -197,6 +200,7 @@ BOOL __cdecl InitAtari(int iVM)
 	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
 	// unless Shift-F10 changes it
 	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+	wStartScan = 10;
 
     // save shift key status, why? !!! this only happens at boot time now until shutdown
     //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
@@ -214,8 +218,6 @@ BOOL __cdecl InitAtari(int iVM)
         {
             jump_tab[i] = jump_tab_RO[i];
         }
-
-        wStartScan = 8;	// should be 10 !!!
 
         fInited = TRUE;
     }
@@ -279,7 +281,7 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
     PVD pvd = &v.rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
-        AddDrive(i, pvd->sz);
+        AddDrive(iVM, i, pvd->sz);
 
     return TRUE;
 }
@@ -300,7 +302,7 @@ BOOL __cdecl UnmountAtariDisk(int iVM, int i)
 
 		//we can't just unmount if we've asked for a disk image, the whole point is to unmount if we didn't ask for one.
 		//if (pvd->dt == DISK_IMAGE)
-        DeleteDrive(i);
+        DeleteDrive(iVM, i);
 
     return TRUE;
 }
@@ -321,17 +323,15 @@ BOOL __cdecl WarmbootAtari(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-	// POKE 580,1 == Cold Start !!! why is this necessary?
-	if (rgbMem[0x244])
-		ColdbootAtari(iVM);
-
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 50*4;	// delay for banner messages
     QueryTickCtr();
 	//countJiffies = 0;
+
 	fBrakes = TRUE;	// go back to real time
+	wScan = 262;	// start at top of screen again
 
 	InitSound();	// need to reset and queue audio buffers
 
@@ -358,6 +358,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	
 	fBrakes = TRUE; // go back to real time
 	clockMult = 1;	// per instance speed-up
+	wScan = 262;	// start at top of screen again
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -691,6 +692,7 @@ BOOL __cdecl ExecuteAtari(int iVM)
 	do {
 		// this should happen every cycle, not every 30 instructions, but we do it here to make sure it happens
 		// fairly often on its own, plus just before it is read to make sure it's never the same twice
+		// the 17 bit version is a global, but that should be OK.
 		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
 		RANDOM = RANDOM17 & 0xff;
 
@@ -732,21 +734,32 @@ BOOL __cdecl ExecuteAtari(int iVM)
 
 				static ULONGLONG cCYCLES = 0;
 				static ULONGLONG cErr = 0;
+				static unsigned lastVM = 0;
 
-				// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-				// don't let errors propogate
-				const ULONGLONG cJif = 29830; // 1789790 / 60
-				ULONGLONG cCur = GetCycles() - cCYCLES;
-				while (fBrakes && ((cJif - cErr) > cCur * clockMult)) {
-					Sleep(1);
-					cCur = GetCycles() - cCYCLES;
+				// in tiling mode, run all of the instances, and then wait for time to catch up
+				if (!v.fTiling || v.iVM < lastVM)
+				{
+					// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+					// don't let errors propogate
+					const ULONGLONG cJif = 29830; // 1789790 / 60
+					ULONGLONG cCur = GetCycles() - cCYCLES;
+
+					// report back how long it took
+					cEmulationSpeed = cCur * 1000000 / cJif;
+
+					while (fBrakes && ((cJif - cErr) > cCur * clockMult)) {
+						Sleep(1);
+						cCur = GetCycles() - cCYCLES;
+					}
+					cErr = cCur - (cJif - cErr);
+					if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+					cCYCLES = GetCycles();
 				}
-				cErr = cCur - (cJif - cErr);
-				if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-				cCYCLES = GetCycles();
+				
+				lastVM = v.iVM;
 
-				// exit each frame to let the next VM run
-				if (v.fTiling)
+				// exit each frame to let the next VM run (if Tiling) and to update the clock speed on the status bar (always)
+				//if (v.fTiling)
 					fStop = fTrue;
 			}
 
@@ -822,7 +835,7 @@ BOOL __cdecl ExecuteAtari(int iVM)
 			// REVIEW: need to check if PC == $E459 and if so make sure
 			// XL/XE ROMs are swapped in, otherwise ignore
 			fSIO = 0;
-			SIOV();
+			SIOV(iVM);
 		}
 
     } while (!fTrace && !fStop);
