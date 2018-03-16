@@ -1008,6 +1008,8 @@ void InitJoysticks()
 #if !defined(_M_ARM)
     int i;
 	
+	ReleaseJoysticks();
+
     if (joyGetNumDevs() == 0)
         return;
 

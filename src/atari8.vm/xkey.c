@@ -716,7 +716,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		// F10 - system reset (warm start)
 		if (fDown && !(*pbshift & wAnyShift))
 		{
-			FWarmbootVM();
+			FWarmbootVM(v.iVM);
 		}
 		return;
 

@@ -17,13 +17,27 @@
 
 #include "gemtypes.h" // main include file
 
-// instance globals
-
+//
+// "PROPS v" contains our global persistable app data, pertinent to the entire session. Simply write this structure to disk to save.
+// It contains a pointer to:
+//		VM - an array (whose size is the maximum allowed - MAX_VM) of per-instance persistable data
+//
 PROPS v;            // global properties
-VMINFO *vpvm;		// current instance, part of the persistable stuff
 
+VMINFO *vpvm;		// the "current" instance's VMINFO
+
+//
+// "INST vi" contains our global non-persistable app state, pertinent to the entire session.
+// It is constantly updated to contain a pointer to the current state's VM structure as well as
+// the current state's VMINST structure.
+//
 INST vi;			
+
+//
+// "VMINST vrgvmi" is an array of per-instance non-persistable states
+//
 VMINST vrgvmi[MAX_VM];	// not persistable
+
 // __declspec(thread) VMINST vmi;
 ICpuExec *vpci;
 
@@ -106,14 +120,16 @@ static char const * const rgszMode[] =
 #endif
     };
 
-// check the cartridge then the first disk for a filename that can be our instance name
-// string must have enough space for MAX_PATH
-CreateInstanceName(int i, LPSTR lpInstName)
+// Come up with a name for our instance - it goes in the title bar and menu.
+// Use the name of the machine we're emulating followed by the cartridge name if it has one,
+// or if not, the filename being used by the first disk drive.
+// String must have enough space for MAX_PATH.
+void CreateInstanceName(int i, LPSTR lpInstName)
 {
 	LPSTR lp = NULL;
 	int z;
 
-	// we have a loaded cartridge, find that name
+	// cartridge only applies to 8 bit ATARI so far... we have a loaded cartridge, find that name
 	if (FIsAtari8bit(v.rgvm[i].bfHW) && v.rgvm[i].rgcart.fCartIn)
 	{
 		lp = v.rgvm[i].rgcart.szName;
@@ -124,7 +140,8 @@ CreateInstanceName(int i, LPSTR lpInstName)
 		lp = v.rgvm[i].rgvd[0].sz;
 	}
 
-	for (z = strlen(lp) - 1; z >= 0; z--)
+	// only take the filename, none of the path
+	for (z = (int)strlen(lp) - 1; z >= 0; z--)
 	{
 		if (lp[z] == '\\') break;
 	}
@@ -175,6 +192,7 @@ void DisplayStatus()
 
     }
 #else
+	// Get a name we can use for this instance
 	char pInstname[MAX_PATH];
 	CreateInstanceName(v.iVM, pInstname);
     sprintf(rgch0, "%s - %s", vi.szAppName, pInstname);
@@ -189,7 +207,7 @@ void DisplayStatus()
             sprintf(rgch, "\0%d%s, %dx%d%s\0 %d %d",
             (vi.cbRAM[0] < 4194304) ? vi.cbRAM[0]/1024 : vi.cbRAM[0]/1048576,
             (vi.cbRAM[0] < 4194304) ? "K" : "M",
-            vsthw.xpix, vsthw.ypix, (vsthw.planes == 1) ? rgszMode[0] : " Color",
+            vsthw[v.iVM].xpix, vsthw[v.iVM].ypix, (vsthw[v.iVM].planes == 1) ? rgszMode[0] : " Color",
             0, 0);
             }
         else if (FIsAtari8bit(vmCur.bfHW))
@@ -208,7 +226,7 @@ void DisplayStatus()
             0, 0, // vi.bTOSmajor, vi.bTOSminor,
             (vi.cbRAM[0] < 1048576) ? vi.cbRAM[0]/1024 : vi.cbRAM[0]/1048576,
             (vi.cbRAM[0] < 1048576) ? "K" : "M",
-            vsthw.xpix, vsthw.ypix, rgszMode[vsthw.planes-1],
+            vsthw[v.iVM].xpix, vsthw[v.iVM].ypix, rgszMode[vsthw[v.iVM].planes-1],
             vi.fHaveFocus, vi.fGEMMouse);
             }
 #endif
@@ -225,6 +243,7 @@ void DisplayStatus()
         {
         extern WORD fBrakes;
 
+		// are we running at normal speed or turbo speed
         sprintf(rgch, " (%s)", fBrakes ? "1.8 MHz" : "Turbo");
         strcat(rgch0, rgch);
         }
@@ -232,6 +251,7 @@ void DisplayStatus()
 
     if (v.fZoomColor)
     {
+		// Is the display stretched to fill the window?
         strcat(rgch0, " - Stretched");
     }
 
@@ -250,7 +270,7 @@ int UpdateOverlay()
     sprintf(rgch, "RAM:%d%s Video:%dx%dx%d",
     (vi.cbRAM[0] < 4194304) ? vi.cbRAM[0]/1024 : vi.cbRAM[0]/1048576,
     (vi.cbRAM[0] < 4194304) ? "K" : "M",
-    vsthw.xpix, vsthw.ypix, vsthw.planes);
+    vsthw[v.iVM].xpix, vsthw[v.iVM].ypix, vsthw[v.iVM].planes);
 
     if (vi.eaROM[0] && vi.fExecuting)
         {
@@ -309,7 +329,7 @@ int __cdecl printf(const char *format, ...)
 // array of right shift coefficients to generate a lower frequency count
 //
 
-void GenerateCoefficients(fE)
+void GenerateCoefficients(int fE)
 {
     ULONG lFreq = fE ? 783330 / 2 : 1000;
     BYTE *pbSh = fE ? (BYTE *)&vi.rgbShiftE : (BYTE *)&vi.rgbShiftMs;
@@ -437,9 +457,8 @@ ULONG GetEclock()
 
 /* advance pch to point to non-space */
 
-char *PchSkipSpace(pch)
-char *pch;
-    {
+char *PchSkipSpace(char *pch)
+{
     char ch;
 
     while (ch = *pch++)
@@ -449,15 +468,13 @@ char *pch;
         }
 
     return 0;
-    }
+}
 
 
-char *PchGetWord(pch, pu)
-char *pch;
-ULONG *pu;
+char *PchGetWord(char *pch, ULONG *pu)
 {
     register int x;
-    int w=0, digit=0 ;
+	int w = 0;
 
     if (pch == 0)
         return 0;
@@ -612,7 +629,7 @@ void ClearSystemPalette(void)
 // processor is truly idle!
 //
 
-long IdleThread(int l)
+long IdleThread()
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 
@@ -627,7 +644,7 @@ long IdleThread(int l)
 }
 
 
-long ScreenThread(int l)
+long ScreenThread()
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
@@ -702,7 +719,10 @@ void DestroyDebuggerWindow()
     GetFocus();
 }
 
-// Fix the FILE menu list of all the valid VM's
+// Fix the FILE menu to list of all the valid VM's currently loaded.
+// It checkmarks the current one, shows the hotkey for switching instances on the next one
+// and allows you to choose one from the list to switch to.
+//
 void CreateVMMenu()
 {
 	int z;
@@ -715,21 +735,23 @@ void CreateVMMenu()
 	int iFound = 0;
 	for (z = MAX_VM - 1; z >= 0; z--)
 	{
+		// every valid VM goes in the list
 		if (v.rgvm[z].fValidVM)
 		{
-			// the highest VM becomes IDM_VM1
+			// we're counting backwards, so the first one found goes in as IDM_VM1, the highest identifier.
 			if (iFound == 0)
 			{
 				mii.fMask = MIIM_STRING;
 				mii.dwTypeData = mNew;
 				CreateInstanceName(z, mNew);	// get a name for it
 				SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
-				CheckMenuItem(vi.hMenu, IDM_VM1, (z == v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check the current one
-				if (z == v.iVM)
-					fNeedHotKey = TRUE;	// we're the last instance, put the hot key label on the first one (the last we'll find)
+				CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
+				if (z == (int)v.iVM)
+					fNeedHotKey = TRUE;	// current inst is bottom of the list, make a note to put the hot key label on the top one
 				iFound++;
 			}
-			// lower VMs go before IDM_V1 in the menu
+
+			// subsequent (lower) VMs go before IDM_V1 in the menu
 			else
 			{
 				mii.fMask = MIIM_STRING | MIIM_ID;
@@ -737,12 +759,12 @@ void CreateVMMenu()
 				mii.dwTypeData = mNew;
 				CreateInstanceName(z, mNew);	// get a name for it
 				DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);	// erase the old one
-				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before here
-				CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check the current one
+				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before the one we last did.
+				CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
 				zLast = z;
 
-				// add the hotkey "Alt+F12" to the next instance
-				if (z == v.iVM)
+				// add the hotkey "Alt+F12" to the menu item after us
+				if (z == (int)v.iVM)
 				{
 					mii.fMask = MIIM_STRING;
 					mii.dwTypeData = mNew;
@@ -768,6 +790,8 @@ void CreateVMMenu()
 	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);	// in case we're fixing the menus because one was deleted, this will still be hanging around
 }
 
+// Something changed that affects the menus. Set all the menus up right.
+//
 void FixAllMenus()
 {
 	// not implemented yet
@@ -776,12 +800,13 @@ void FixAllMenus()
 	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
 
-	// Initialize the menus
+	// Checkmark if these modes are active
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 
-	// Initialize the virtual disk menu items
+	// Initialize the virtual disk menu items to show the associated file path with each drive.
+	// Grey the unload option for a disk that isn't loaded
 
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
@@ -789,21 +814,25 @@ void FixAllMenus()
 	char mNew[MAX_PATH + 10];
 	mii.dwTypeData = mNew;
 
-	if (FIsAtari8bit(vmCur.bfHW))	// 8 bit drives are called D1:, D2: etc.
-	{
-		sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+	// call them D1: <filespec>
+	sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+	EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+	sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+	EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+	sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+	EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+	sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
+	SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+	EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
 
+	// only 8 bit ATARI supports cartridges right now
+	if (FIsAtari8bit(vmCur.bfHW))
+	{
+
+		// show the name of the current cartridge, if there is one
 		if (vi.pvmCur->rgcart.fCartIn)
 		{
 			sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
@@ -815,28 +844,16 @@ void FixAllMenus()
 			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
 		}
 
+		// grey "remove cart" if there isn't one
 		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn) ? 0 : MF_GRAYED);
 	}
-	else // TODO prefix other kinds of virtual drives appropriately
+	else
 	{
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[0].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[1].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[2].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
-		sprintf(mNew, "%s ...", vi.pvmCur->rgvd[3].sz);
-		SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-		EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
-
 		EnableMenuItem(vi.hMenu, IDM_CART, MF_GRAYED);
 		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
 	}
 
-	// can't delete the last one
+	// don't let them delete the last VM
 	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1) ? 0 : MF_GRAYED);
 
 #if 0 // delete all VMs not supported
@@ -845,13 +862,15 @@ void FixAllMenus()
 	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
 #endif
 
-	// List all the valid VMs under the FILE menu
+	// Now fix the FILE menu's list of all valid VM's
 	CreateVMMenu();
 
-	// Now put all the possible different VM types into the menu
+	// Now put all the possible different new VM types that can be created into the menu
 
 	int zz = 0;
-	#ifdef XFORMER	// offer the 8 bit choices
+
+// offer the 8 bit choices
+#ifdef XFORMER
 	for (; zz < 3; zz++)
 	{
 		// Atari 800 / XL / XE
@@ -859,18 +878,20 @@ void FixAllMenus()
 		mii.fMask = MIIM_STRING;
 		mii.dwTypeData = mNew;
 		strcpy(mNew, rgszVM[zz + 1]);
-		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // give a proper name to the sample menu item
+		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // show the name of the type of VM (eg. ATARI 800)
 		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM) ? MF_GRAYED : MF_ENABLED);	// grey it if there are too many
 	}
-	#endif
+#endif
 
-	// TODO: now do the non-8 bit choices
+	// TODO: now do the non-8 bit choices, and allow for >9 if you need it
 
+	// There are 9 placeholders for VM types... delete the ones we don't need
 	for (; zz < 9; zz++)
 	{
 		DeleteMenu(vi.hMenu, IDM_ADDVM1 + zz, 0); // we don't need these
 	}
 
+	// something that changed the menus probably changes the title bar
 	DisplayStatus();
 }
 
@@ -951,12 +972,13 @@ int CALLBACK WinMain(
     // Now that the app data directory is set up, it is ok to read the INI file
 
     //ClearSystemPalette();
-    InitProperties();	// initial our state and create some default VMs if nothing will be loaded
+
+	// Initialize our global state (PROPS v)
+    InitProperties();
 
     // Save the instance handle in static variable, which will be used in
     // many subsequence calls from this application to Windows.
-
-    vi.hInst = hInstance; // Store instance handle in our global variable
+    vi.hInst = hInstance;
 
 #ifdef XFORMER
 #ifdef ATARIST
@@ -1049,7 +1071,7 @@ int CALLBACK WinMain(
     if ((h = LoadLibrary("kernel32.dll")) &&
        (pfnAC = (void *)GetProcAddress(h, "AttachConsole")))
         {
-        ret = (*pfnAC)(-1);
+        ret = (*pfnAC)((DWORD)-1);
         }
 
     if (0 == ret)
@@ -1108,16 +1130,15 @@ int CALLBACK WinMain(
         };
     }
 
-    // Try to load previously saved properties, need to do this to get saved window
-    // position and fNoDirectX
-	// also initializes the global persistable PROPS structure to the default set of VMs created in InitProperties (not persisted right now)
-	// current VM is set to 0
+    // Try to load previously saved properties, the persisted PROPS structure
     fProps = LoadProperties(NULL);
+
+	// If we couldn't load our last session, make a session that has one of every possible machine type, just for fun.
 	if (!fProps)
 	{
-		CreateAllVMs();	// couldn't load anything, we need at least 1 VM... why not make them all?
-						// Now go and prompt the user with First Time Setup if necessary
-
+		CreateAllVMs();
+		
+		// Now go and prompt the user with First Time Setup if necessary
 #if defined(ATARIST) || defined(SOFTMAC)
 		if (!AutoConfigure(FALSE))
 			DialogBox(vi.hInst,       // current instance
@@ -1130,16 +1151,14 @@ int CALLBACK WinMain(
 #endif // ATARIST
 	}
 
-	// Initialize the current instance (or first valid one found)
+	// Try to choose the same instance that was current when the state was saved to bring up now.
 	SelectInstance(v.iVM);
 
-	//FixAllMenus();
-
 #ifdef XFORMER
+	
 	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
-	// and select an existing VM of the appropriate hardware type or create a new VM of that type
-	// For now just support for Atari 8-bit VMs and presume the disk image is an .ATR/XFD image
-
+	// and select an existing VM of the appropriate hardware type.
+	// For now just support for Atari 8-bit VMs and trust the file extension
 	if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine) > 3))
 	{
 		int len = strlen(lpCmdLine);
@@ -1160,7 +1179,6 @@ int CALLBACK WinMain(
 #endif
 
     // DirectX can fragment address space, so only preload if user wants to
-
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
         {
         if (!FInitDirectDraw())
@@ -1191,7 +1209,7 @@ int CALLBACK WinMain(
         v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN)-640));
         v.rectWinPos.top  = min(50, (GetSystemMetrics(SM_CYSCREEN)-420));
 
-        SetRect(&rect, 0, 0, 640, 480);	// reasonable default size (default to minimum?)
+        SetRect(&rect, 0, 0, 750, 600);	// big enough so an 8-bit ATARI can fit at double size
         }
     else
         {
@@ -1220,7 +1238,7 @@ int CALLBACK WinMain(
     if (!vi.hWnd)
         return (FALSE);
 
-    // Make the window visible; update its client area; and return "success"
+    // Attach the menu, make the window visible; update its client area; and return "success"
 	SetMenu(vi.hWnd, vi.hMenu);
     ShowWindow(vi.hWnd, nCmdShow); // Show the window
     UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
@@ -1230,14 +1248,14 @@ int CALLBACK WinMain(
     if (!v.fNoSCSI)
         FInitBlockDevLib();
 
-	int l;
+	DWORD l;
 
     vi.hIdleThread  = CreateThread(NULL, 4096, (void *)IdleThread, 0, 0, &l);
 #if defined(ATARIST) || defined(SOFTMAC)
     vi.hVideoThread = NULL; // CreateThread(NULL, 4096, (void *)ScreenThread, 0, 0, &l);
 #endif // ATARIST
     
-    // create a frame buffer in shared memory
+    // create a frame buffer in shared memory for future cloud use
 
     vi.hFrameBuf = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
             0, 1280*720 + 16 + 3200, "GemulatorFrame");
@@ -1351,7 +1369,7 @@ int CALLBACK WinMain(
                 }
             }
 
-        // Check if VM needs to reset, avoid doing it too early
+        // Check if VM needs to RESET, this avoids doing it too early, I guess
         if (vmCur.fColdReset)
             {
             void ColdStart(int);
@@ -1393,7 +1411,7 @@ int CALLBACK WinMain(
 
         else if (vi.fExecuting)
             {
-            vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
+            vi.fExecuting = (FExecVM(v.iVM, FALSE, TRUE) == 0);
 
             if (FIsAtari8bit(vmCur.bfHW))
                 {
@@ -1453,29 +1471,29 @@ BOOL SetBitmapColors(int iVM)
 {
     int i;
 
-    if (vsthw.fMono)
+    if (vsthw[iVM].fMono)
         {
         if (vi.fInDirectXMode)
             return TRUE;
 
         if (v.fNoMono)
             {
-            vsthw.rgrgb[0].rgbRed =
-            vsthw.rgrgb[0].rgbGreen =
-            vsthw.rgrgb[0].rgbBlue = 0;
-            vsthw.rgrgb[0].rgbReserved = 0;
+            vsthw[iVM].rgrgb[0].rgbRed =
+            vsthw[iVM].rgrgb[0].rgbGreen =
+            vsthw[iVM].rgrgb[0].rgbBlue = 0;
+            vsthw[iVM].rgrgb[0].rgbReserved = 0;
 
             for (i = 1; i < 256; i++)
                 {
-                vsthw.rgrgb[i].rgbRed =
-                vsthw.rgrgb[i].rgbGreen =
-                vsthw.rgrgb[i].rgbBlue = 0xFF;
-                vsthw.rgrgb[i].rgbReserved = 0;
+                vsthw[iVM].rgrgb[i].rgbRed =
+                vsthw[iVM].rgrgb[i].rgbGreen =
+                vsthw[iVM].rgrgb[i].rgbBlue = 0xFF;
+                vsthw[iVM].rgrgb[i].rgbReserved = 0;
                 }
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw[iVM].rgrgb);
             }
         else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 2,   vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 2,   vsthw[iVM].rgrgb);
 
         return TRUE;
         }
@@ -1487,21 +1505,21 @@ BOOL SetBitmapColors(int iVM)
         if (v.rgvm[iVM].bfMon == monGreyTV)
 			for (i = 0; i < 256; i++)
             {
-				vsthw.rgrgb[i].rgbRed =
-				vsthw.rgrgb[i].rgbGreen =
-				vsthw.rgrgb[i].rgbBlue =
+				vsthw[iVM].rgrgb[i].rgbRed =
+				vsthw[iVM].rgrgb[i].rgbGreen =
+				vsthw[iVM].rgrgb[i].rgbBlue =
 				 (rgbRainbow[i*3] + (rgbRainbow[i*3] >> 2)) +
 				 (rgbRainbow[i*3+1]  + (rgbRainbow[i*3+1] >> 2)) +
 				 (rgbRainbow[i*3+2]  + (rgbRainbow[i*3+2] >> 2));
-				vsthw.rgrgb[i].rgbReserved = 0;
+				vsthw[iVM].rgrgb[i].rgbReserved = 0;
             }
         else 
 			for (i = 0; i < 256; i++)
             {
-				vsthw.rgrgb[i].rgbRed = (rgbRainbow[i*3] << 2) | (rgbRainbow[i*3] >> 5);
-				vsthw.rgrgb[i].rgbGreen = (rgbRainbow[i*3+1] << 2) | (rgbRainbow[i*3+1] >> 5);
-				vsthw.rgrgb[i].rgbBlue = (rgbRainbow[i*3+2] << 2) | (rgbRainbow[i*3+2] >> 5);
-				vsthw.rgrgb[i].rgbReserved = 0;
+				vsthw[iVM].rgrgb[i].rgbRed = (rgbRainbow[i*3] << 2) | (rgbRainbow[i*3] >> 5);
+				vsthw[iVM].rgrgb[i].rgbGreen = (rgbRainbow[i*3+1] << 2) | (rgbRainbow[i*3+1] >> 5);
+				vsthw[iVM].rgrgb[i].rgbBlue = (rgbRainbow[i*3+2] << 2) | (rgbRainbow[i*3+2] >> 5);
+				vsthw[iVM].rgrgb[i].rgbReserved = 0;
 
 #if 0
             //
@@ -1510,9 +1528,9 @@ BOOL SetBitmapColors(int iVM)
 
             {
             int Y, U, V;
-            int R = vsthw.rgrgb[i].rgbRed;
-            int G = vsthw.rgrgb[i].rgbGreen;
-            int B = vsthw.rgrgb[i].rgbBlue;
+            int R = vsthw[iVM].rgrgb[i].rgbRed;
+            int G = vsthw[iVM].rgrgb[i].rgbGreen;
+            int B = vsthw[iVM].rgrgb[i].rgbBlue;
 
             // from http://en.wikipedia.org/wiki/YUV/RGB_conversion_formulas
 
@@ -1535,25 +1553,25 @@ BOOL SetBitmapColors(int iVM)
             }
 
 		if (vi.fInDirectXMode)
-			;//FChangePaletteEntries(0, 256, vsthw.rgrgb);
+			;//FChangePaletteEntries(0, 256, vsthw[iVM].rgrgb);
         else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw[iVM].rgrgb);
         return TRUE;
         }
 
-    if (FIsMac(v.rgvm[iVM].bfHW) && (vsthw.planes == 8))
+    if (FIsMac(v.rgvm[iVM].bfHW) && (vsthw[iVM].planes == 8))
         {
 		if (vi.fInDirectXMode)
-			;// FChangePaletteEntries(0, 256, vsthw.rgrgb);
+			;// FChangePaletteEntries(0, 256, vsthw[iVM].rgrgb);
         else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw.rgrgb);
+            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vsthw[iVM].rgrgb);
         return TRUE;
         }
 
 	if (vi.fInDirectXMode)
-		;// FChangePaletteEntries(10, 16, vsthw.rgrgb);
+		;// FChangePaletteEntries(10, 16, vsthw[iVM].rgrgb);
     else
-        SetDIBColorTable(vrgvmi[iVM].hdcMem, 10, 16, vsthw.rgrgb);
+        SetDIBColorTable(vrgvmi[iVM].hdcMem, 10, 16, vsthw[iVM].rgrgb);
     return TRUE;
 }
 
@@ -1569,7 +1587,7 @@ BOOL FCreateOurPalette()
     }    pal;
 
 #if 0
-    if (vsthw.fMono)
+    if (vsthw[iVM].fMono)
         return TRUE;
 #endif
 
@@ -1593,13 +1611,13 @@ BOOL FCreateOurPalette()
         vi.hpal = CreatePalette((LPLOGPALETTE)&pal);
     }
 
-    if (FIsAtari8bit(vmCur.bfHW) || (vsthw.planes == 8))
+    if (FIsAtari8bit(vmCur.bfHW) || (vsthw[iVM].planes == 8))
         {
         for (i=0; i<256; i++)
             {
-            pal.ape[i].peRed = vsthw.rgrgb[i].rgbRed;
-            pal.ape[i].peGreen = vsthw.rgrgb[i].rgbGreen;
-            pal.ape[i].peBlue = vsthw.rgrgb[i].rgbBlue;
+            pal.ape[i].peRed = vsthw[iVM].rgrgb[i].rgbRed;
+            pal.ape[i].peGreen = vsthw[iVM].rgrgb[i].rgbGreen;
+            pal.ape[i].peBlue = vsthw[iVM].rgrgb[i].rgbBlue;
             pal.ape[i].peFlags = PC_NOCOLLAPSE;
             }
         SetPaletteEntries(vi.hpal, 0, 256, pal.ape);
@@ -1608,9 +1626,9 @@ BOOL FCreateOurPalette()
         {
         for (i=0; i<16; i++)
             {
-            pal.ape[i].peRed = vsthw.rgrgb[i].rgbRed;
-            pal.ape[i].peGreen = vsthw.rgrgb[i].rgbGreen;
-            pal.ape[i].peBlue = vsthw.rgrgb[i].rgbBlue;
+            pal.ape[i].peRed = vsthw[iVM].rgrgb[i].rgbRed;
+            pal.ape[i].peGreen = vsthw[iVM].rgrgb[i].rgbGreen;
+            pal.ape[i].peBlue = vsthw[iVM].rgrgb[i].rgbBlue;
             pal.ape[i].peFlags = PC_NOCOLLAPSE;
             }
         SetPaletteEntries(vi.hpal, 10, 16, pal.ape);
@@ -1631,6 +1649,9 @@ BOOL FCreateOurPalette()
 
 ****************************************************************************/
 
+// This creates the HDC that holds the screen image for the instance
+// We create one for every instance right away, so we can tile them!
+//
 BOOL CreateNewBitmap(int iVM)
 {
     RECT rect;
@@ -1638,9 +1659,34 @@ BOOL CreateNewBitmap(int iVM)
     ULONG y;
     RECT rectSav = v.rectWinPos;
 
+	if (FIsMac(v.rgvm[iVM].bfHW))
+	{
+		vsthw[iVM].planes = 1;
+		vsthw[iVM].xpix = 512;
+		vsthw[iVM].ypix = 342;
+	}
+	else if (FIsAtari8bit(v.rgvm[iVM].bfHW))
+	{
+		vsthw[iVM].planes = 8;
+		vsthw[iVM].xpix = X8;
+		vsthw[iVM].ypix = Y8;
+	}
+	else if (vsthw[iVM].fMono)
+	{
+		vsthw[iVM].planes = 1;
+		vsthw[iVM].xpix = 640;
+		vsthw[iVM].ypix = 400;
+	}
+	else // color Atari ST defaults to lo rez
+	{
+		vsthw[iVM].planes = 4;
+		vsthw[iVM].xpix = 320;
+		vsthw[iVM].ypix = 200;
+	}
+
 #if !defined(NDEBUG)
 PrintScreenStats(); printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n",
-        vsthw.xpix, vsthw.ypix, v.fFullScreen, v.fZoomColor);
+        vsthw[iVM].xpix, vsthw[iVM].ypix, v.fFullScreen, v.fZoomColor);
 #endif
 
     // Interlock to make sure video thread is not touching memory
@@ -1672,8 +1718,8 @@ PrintScreenStats(); printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%
 
     // initialize to some initial state, will be set further below
 
-    vi.sx = vsthw.xpix;
-    vi.sy = vsthw.ypix;
+    vi.sx = vsthw[iVM].xpix;
+    vi.sy = vsthw[iVM].ypix;
     vi.dx = 0;
     vi.dy = 0;
     vi.fXscale = 1;
@@ -1854,14 +1900,14 @@ Ltryagain:
         // very wide (e.g. 640x200) double the height
         // to maintain a proper aspect ratio
 
-        int scan_double = ((vsthw.xpix) >= (vsthw.ypix * 3)) ? 2 : 1;
+        int scan_double = ((vsthw[iVM].xpix) >= (vsthw[iVM].ypix * 3)) ? 2 : 1;
 
 #if 0
         if (v.fZoomColor || v.fFullScreen)
         {
         // now keep increasing the zoom until it doesn't fit
 
-        while ((vsthw.xpix * (vi.fXscale + 1) <= x) && (vsthw.ypix * scan_double * (vi.fYscale + 1) <= y))
+        while ((vsthw[iVM].xpix * (vi.fXscale + 1) <= x) && (vsthw[iVM].ypix * scan_double * (vi.fYscale + 1) <= y))
             {
             vi.fXscale++;
             vi.fYscale++;
@@ -1871,52 +1917,52 @@ Ltryagain:
 
         vi.fYscale *= scan_double;
 
-        vi.sx = vsthw.xpix * vi.fXscale;
-        vi.sy = vsthw.ypix * vi.fYscale;
+        vi.sx = vsthw[iVM].xpix * vi.fXscale;
+        vi.sy = vsthw[iVM].ypix * vi.fYscale;
         }
 
-    if (vsthw.fMono && !FIsAtari8bit(v.rgvm[iVM].bfHW) && !v.fNoMono)
+    if (vsthw[iVM].fMono && !FIsAtari8bit(v.rgvm[iVM].bfHW) && !v.fNoMono)
         {
         // create a monochrome bitmap, Win32s compatible code
 
-        vsthw.bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
-        vsthw.bmiHeader.biWidth = vsthw.xpix;
-        vsthw.bmiHeader.biHeight = -vsthw.ypix;
-        vsthw.bmiHeader.biPlanes = 1;
-        vsthw.bmiHeader.biBitCount = 1;
-        vsthw.bmiHeader.biCompression = BI_RGB;
-        vsthw.bmiHeader.biSizeImage = 0;
-        vsthw.bmiHeader.biXPelsPerMeter = 2834;
-        vsthw.bmiHeader.biYPelsPerMeter = 2834;
-        vsthw.bmiHeader.biClrUsed = 0*2;
-        vsthw.bmiHeader.biClrImportant = 0*2;
-        vsthw.lrgb[0] = 0;
-        vsthw.lrgb[1] = 0x00FFFFFF;
+        vsthw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+        vsthw[iVM].bmiHeader.biWidth = vsthw[iVM].xpix;
+        vsthw[iVM].bmiHeader.biHeight = -vsthw[iVM].ypix;
+        vsthw[iVM].bmiHeader.biPlanes = 1;
+        vsthw[iVM].bmiHeader.biBitCount = 1;
+        vsthw[iVM].bmiHeader.biCompression = BI_RGB;
+        vsthw[iVM].bmiHeader.biSizeImage = 0;
+        vsthw[iVM].bmiHeader.biXPelsPerMeter = 2834;
+        vsthw[iVM].bmiHeader.biYPelsPerMeter = 2834;
+        vsthw[iVM].bmiHeader.biClrUsed = 0*2;
+        vsthw[iVM].bmiHeader.biClrImportant = 0*2;
+        vsthw[iVM].lrgb[0] = 0;
+        vsthw[iVM].lrgb[1] = 0x00FFFFFF;
 
-        vi.cbScan = min(x, vsthw.xpix) / 8;
+        vi.cbScan = min(x, vsthw[iVM].xpix) / 8;
         }
     else
         {
         // create a 256 color bitmap buffer
 
-        vsthw.bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
-        vsthw.bmiHeader.biWidth = vsthw.xpix;
-        vsthw.bmiHeader.biHeight = -vsthw.ypix;
-        vsthw.bmiHeader.biPlanes = 1;
-        vsthw.bmiHeader.biBitCount = 8;
-        vsthw.bmiHeader.biCompression = BI_RGB;
-        vsthw.bmiHeader.biSizeImage = 0;
-        vsthw.bmiHeader.biXPelsPerMeter = 2834;
-        vsthw.bmiHeader.biYPelsPerMeter = 2834;
-        vsthw.bmiHeader.biClrUsed = 256; // FIsAtari8bit(vmCur.bfHW) ? 256 : 26;
-        vsthw.bmiHeader.biClrImportant = 0;
+        vsthw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+        vsthw[iVM].bmiHeader.biWidth = vsthw[iVM].xpix;
+        vsthw[iVM].bmiHeader.biHeight = -vsthw[iVM].ypix;
+        vsthw[iVM].bmiHeader.biPlanes = 1;
+        vsthw[iVM].bmiHeader.biBitCount = 8;
+        vsthw[iVM].bmiHeader.biCompression = BI_RGB;
+        vsthw[iVM].bmiHeader.biSizeImage = 0;
+        vsthw[iVM].bmiHeader.biXPelsPerMeter = 2834;
+        vsthw[iVM].bmiHeader.biYPelsPerMeter = 2834;
+        vsthw[iVM].bmiHeader.biClrUsed = 256; // FIsAtari8bit(vmCur.bfHW) ? 256 : 26;
+        vsthw[iVM].bmiHeader.biClrImportant = 0;
 
-        vi.cbScan = min(x, vsthw.xpix);
+        vi.cbScan = min(x, vsthw[iVM].xpix);
         }
 
     // Create offscreen bitmap
 
-    vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw.bmiHeader,
+    vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw[iVM].bmiHeader,
         DIB_RGB_COLORS, &(vrgvmi[iVM].pvBits), NULL, 0);
     vrgvmi[iVM].hdcMem = CreateCompatibleDC(vi.hdc);
 
@@ -1943,11 +1989,11 @@ Ltryagain:
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
-    if ((rect.right < vsthw.xpix) ||  (rect.bottom < vsthw.ypix))
+    if ((rect.right < vsthw[iVM].xpix) ||  (rect.bottom < vsthw[iVM].ypix))
         {
         // This is in case WM_MIXMAXINFO is not issued on too small a window
 
-        SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, vsthw.xpix, vsthw.ypix,
+        SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix,
             SWP_NOACTIVATE | SWP_NOMOVE);
         }
     }
@@ -1991,8 +2037,8 @@ Ltryagain:
     vi.sy = rect.bottom;
     }
 
-    vi.dx = (vi.sx - (vsthw.xpix * vi.fXscale)) / 2;
-    vi.dy = (vi.sy - (vsthw.ypix * vi.fYscale)) / 2;
+    vi.dx = (vi.sx - (vsthw[iVM].xpix * vi.fXscale)) / 2;
+    vi.dy = (vi.sy - (vsthw[iVM].ypix * vi.fYscale)) / 2;
 
     // we may have moved the window, so we need to move the mouse capture rectangle too
 
@@ -2040,55 +2086,55 @@ Ltryagain:
 
 void EnterMode(BOOL fGraphics)
 {
-    if (vsthw.VESAmode == 0x00)
+    if (vsthw[iVM].VESAmode == 0x00)
         {
         // standard Atari ST resolutions
 
-        switch (vsthw.shiftmd)
+        switch (vsthw[iVM].shiftmd)
             {
         default:
             Assert(FALSE);
             break;
 
         case 0:
-            vsthw.planes = 4;
-            vsthw.xpix = 320;
-            vsthw.ypix = 200;
+            vsthw[iVM].planes = 4;
+            vsthw[iVM].xpix = 320;
+            vsthw[iVM].ypix = 200;
             break;
 
         case 1:
-            vsthw.planes = 2;
-            vsthw.xpix = 640;
-            vsthw.ypix = 200;
+            vsthw[iVM].planes = 2;
+            vsthw[iVM].xpix = 640;
+            vsthw[iVM].ypix = 200;
             break;
 
         case 2:
-            vsthw.planes = 1;
-            vsthw.xpix = 640;
-            vsthw.ypix = 400;
+            vsthw[iVM].planes = 1;
+            vsthw[iVM].xpix = 640;
+            vsthw[iVM].ypix = 400;
             break;
             }
         }
-    else if (vsthw.VESAmode <= 0x12)
+    else if (vsthw[iVM].VESAmode <= 0x12)
         {
         // VGA driver asking for 640x480 mode
 
-        vsthw.xpix = 640;
-        vsthw.ypix = 480;
+        vsthw[iVM].xpix = 640;
+        vsthw[iVM].ypix = 480;
         }
-    else if (vsthw.VESAmode < 0xFF)
+    else if (vsthw[iVM].VESAmode < 0xFF)
         {
         // VGA driver asking for 800x600 mode
 
-        vsthw.xpix = 800;
-        vsthw.ypix = 600;
+        vsthw[iVM].xpix = 800;
+        vsthw[iVM].ypix = 600;
         }
     else
         {
         // VGA 4.0 driver asking for custom resolution
 
-        vsthw.xpix = HIWORD(vpregs->A4);
-        vsthw.ypix = LOWORD(vpregs->A4);
+        vsthw[iVM].xpix = HIWORD(vpregs->A4);
+        vsthw[iVM].ypix = LOWORD(vpregs->A4);
         }
 
     CreateNewBitmap();
@@ -2098,9 +2144,9 @@ void EnterMode(BOOL fGraphics)
 
 //
 // Return TRUE if we can successfully change to a different monitor
+// Basically, this switches between COLOUR and B&W
 //
-
-BOOL FToggleMonitor()
+BOOL FToggleMonitor(int iVM)
 {
     ULONG bfSav = vmCur.bfMon;
     int i;
@@ -2132,20 +2178,20 @@ BOOL FToggleMonitor()
     // we are modifying the global vsthw.fMono which both
     // the pallete and redraw routines depend on.
 
-    vsthw.rgrgb[0].rgbRed = 255;
-    vsthw.rgrgb[0].rgbGreen = 255;
-    vsthw.rgrgb[0].rgbBlue = 255;
-    vsthw.rgrgb[0].rgbReserved = 0;
+    vsthw[iVM].rgrgb[0].rgbRed = 255;
+    vsthw[iVM].rgrgb[0].rgbGreen = 255;
+    vsthw[iVM].rgrgb[0].rgbBlue = 255;
+    vsthw[iVM].rgrgb[0].rgbReserved = 0;
 
     for (i = 1; i < 256; i++)
         {
-        vsthw.rgrgb[i].rgbRed = 0;
-        vsthw.rgrgb[i].rgbGreen = 0;
-        vsthw.rgrgb[i].rgbBlue = 0;
-        vsthw.rgrgb[i].rgbReserved = 0;
+        vsthw[iVM].rgrgb[i].rgbRed = 0;
+        vsthw[iVM].rgrgb[i].rgbGreen = 0;
+        vsthw[iVM].rgrgb[i].rgbBlue = 0;
+        vsthw[iVM].rgrgb[i].rgbReserved = 0;
         }
 
-    vsthw.fMono = FMonoFromBf(vmCur.bfMon);
+    vsthw[iVM].fMono = FMonoFromBf(vmCur.bfMon);
 
 #if 1
       SetBitmapColors(v.iVM);
@@ -2165,18 +2211,15 @@ BOOL FToggleMonitor()
 }
 
 //
-// Return TRUE if we can successfully toggle to VM iVM
-// or find the next VM if iVM == -1
-//
-// Right now hard coded to toggle Atari 8-bit/Atari ST/Mac modes
+// Change which instance is current and running.
+// Start trying at the instance passed to us, and keep looking until we find a valid one
+// -1 means go to the next one (cycle)
 //
 
 BOOL SelectInstance(unsigned iVM)
 {
+	// there better be some valid ones loaded
 	assert(v.cVM);
-
-	if (v.cVM == 0)
-		return FALSE;
 
 	// go to the next one, not a particular one
 	if (iVM == -1)
@@ -2195,27 +2238,28 @@ BOOL SelectInstance(unsigned iVM)
 
 	assert(v.rgvm[iVM].fValidVM);
 
+	// This is what you need to do to switch to an instance
 	v.iVM = iVM;
 	vi.pvmCur = &v.rgvm[v.iVM];
     vi.pvmiCur = &vrgvmi[v.iVM];
     vpvm = vmCur.pvmi;
 
-	// Needs a cold start?
+	// Has it been cold started yet?
     if (!vvmi.fInited)
         {
         vmCur.fColdReset = TRUE;
         vvmi.fInited = TRUE;
         }
 
+	// a menu or title bar might need to change
 	FixAllMenus();
 
     return TRUE;
 }
 
 //
-// Reboot the current VM
+// Reboot a particular VM
 //
-
 void ColdStart(int iVM)
 {
     ShowWindowsMouse();
@@ -2223,7 +2267,7 @@ void ColdStart(int iVM)
 
     // User may have just mucked with Properties
 
-    vsthw.fMono = FMonoFromBf(v.rgvm[iVM].bfMon);
+    vsthw[iVM].fMono = FMonoFromBf(v.rgvm[iVM].bfMon);
 
     // make sure RAM setting not corrupted!
     // if it is, select the smaller RAM setting of the VM
@@ -2238,32 +2282,7 @@ void ColdStart(int iVM)
     vrgvmi[iVM].keyhead = vrgvmi[iVM].keytail = 0;
     vi.fVMCapture = FALSE;
 
-    if (FIsMac(v.rgvm[iVM].bfHW))
-        {
-        vsthw.planes = 1;
-        vsthw.xpix = 512;
-        vsthw.ypix = 342;
-        }
-    else if (FIsAtari8bit(v.rgvm[iVM].bfHW))
-        {
-        vsthw.planes = 8;
-        vsthw.xpix = X8;
-        vsthw.ypix = Y8;
-        }
-    else if (vsthw.fMono)
-        {
-        vsthw.planes = 1;
-        vsthw.xpix = 640;
-        vsthw.ypix = 400;
-        }
-    else // color Atari ST defaults to lo rez
-        {
-        vsthw.planes = 4;
-        vsthw.xpix = 320;
-        vsthw.ypix = 200;
-        }
-
-    PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
+	PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
     PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
 
 #if _ENGLISH
@@ -2282,9 +2301,9 @@ void ColdStart(int iVM)
 
     MarkAllPagesClean();
 
-    FUnInitVM(v.iVM);
     vi.fExecuting = FALSE;
-    vi.fExecuting = /* FInitVM(v.iVM) && CreateNewBitmap(v.iVM) && */ FColdbootVM(v.iVM);
+
+    vi.fExecuting = FColdbootVM(v.iVM);
 	DisplayStatus();	// show Darek's banner
 
 #if !defined(NDEBUG)
@@ -2447,7 +2466,7 @@ int PrintScreenStats()
         GetSystemMetrics(SM_CYFULLSCREEN),
         vi.sx, vi.sy,
         vi.dx, vi.dy,
-        vsthw.xpix, vsthw.ypix,
+        vsthw[v.iVM].xpix, vsthw[v.iVM].ypix,
         vi.fXscale, vi.fYscale
         );
 
@@ -2479,11 +2498,12 @@ int ShutdownDetected()
 
 //
 // Render the DIB section to the current window's device context
+// !!! Make this work on non-current instances too
 //
-
 void RenderBitmap()
 {
 	RECT rect;
+	int iVM = v.iVM;	// for now, until we support non-active instances
 
     GetClientRect(vi.hWnd, &rect);
 	
@@ -2498,9 +2518,9 @@ void RenderBitmap()
 
 		int x, y, iVM = -1; // v.iVM;
 
-		for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
+		for (y = rect.top; y < rect.bottom; y += vsthw[iVM].ypix * vi.fYscale)
 		{
-			for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
+			for (x = rect.left; x < rect.right; x += vsthw[iVM].xpix * vi.fXscale)
 			{
 					// advance to the next valid bitmap
 
@@ -2511,8 +2531,8 @@ void RenderBitmap()
 				} while (vrgvmi[iVM].hdcMem == NULL);
 
 				StretchBlt(vi.hdc, x, y,
-					(vsthw.xpix * vi.fXscale), (vsthw.ypix * vi.fYscale),
-					vrgvmi[iVM].hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
+					(vsthw[iVM].xpix * vi.fXscale), (vsthw[iVM].ypix * vi.fYscale),
+					vrgvmi[iVM].hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
 			}
 		}
 	}
@@ -2521,7 +2541,7 @@ void RenderBitmap()
 		// Smart Scaling
 
 		StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
-			vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
+			vvmi.hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
 	}
 	else
     {
@@ -2531,8 +2551,8 @@ void RenderBitmap()
 
         for (scale = 16; scale > 1; scale--)
             {
-            x = (rect.right - rect.left) - (vsthw.xpix * vi.fXscale * scale);
-            y = (rect.bottom - rect.top) - (vsthw.ypix * vi.fYscale * scale);
+            x = (rect.right - rect.left) - (vsthw[iVM].xpix * vi.fXscale * scale);
+            y = (rect.bottom - rect.top) - (vsthw[iVM].ypix * vi.fYscale * scale);
 
             if ((x >= 0) && (y >= 0))
                 break;
@@ -2540,32 +2560,32 @@ void RenderBitmap()
 
         // Repeat for the case of scale==1 when rectangle doesn't fit
 
-        x = (rect.right - rect.left) - (vsthw.xpix * vi.fXscale * scale);
-        y = (rect.bottom - rect.top) - (vsthw.ypix * vi.fYscale * scale);
+        x = (rect.right - rect.left) - (vsthw[iVM].xpix * vi.fXscale * scale);
+        y = (rect.bottom - rect.top) - (vsthw[iVM].ypix * vi.fYscale * scale);
 
 		// Why did we not used to have to do this?
 		StretchBlt(vi.hdc, 0, 0, x/2, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
-		StretchBlt(vi.hdc, x/2, 0, x/2 + (vsthw.xpix * vi.fXscale * scale), y/2, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
-		StretchBlt(vi.hdc, x/2, y/2 + (vsthw.ypix * vi.fYscale * scale), x / 2 + (vsthw.xpix * vi.fXscale * scale), rect.bottom,
+		StretchBlt(vi.hdc, x/2, 0, x/2 + (vsthw[iVM].xpix * vi.fXscale * scale), y/2, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+		StretchBlt(vi.hdc, x/2, y/2 + (vsthw[iVM].ypix * vi.fYscale * scale), x / 2 + (vsthw[iVM].xpix * vi.fXscale * scale), rect.bottom,
 				vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
-		StretchBlt(vi.hdc, x/2 + (vsthw.xpix * vi.fXscale * scale), 0, rect.right, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
+		StretchBlt(vi.hdc, x/2 + (vsthw[iVM].xpix * vi.fXscale * scale), 0, rect.right, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
 
 		StretchBlt(vi.hdc, x/2, y/2,
-             (vsthw.xpix * vi.fXscale * scale), (vsthw.ypix * vi.fYscale * scale),
-             vvmi.hdcMem, 0, 0, vsthw.xpix, vsthw.ypix, SRCCOPY);
+             (vsthw[iVM].xpix * vi.fXscale * scale), (vsthw[iVM].ypix * vi.fYscale * scale),
+             vvmi.hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
         }
 
     if (vi.pbFrameBuf && vvmi.pvBits)
     {
         int x, y;
 
-        for (y = 0; y < vsthw.ypix; y++)
+        for (y = 0; y < vsthw[iVM].ypix; y++)
         {
             BYTE *pb = ((BYTE *)vvmi.pvBits) + y * vi.cbScan;
 
-            for (x = 0; x < vsthw.xpix; x++)
+            for (x = 0; x < vsthw[iVM].xpix; x++)
             {
-                vi.pbFrameBuf[y*vsthw.xpix + x] = *pb++;
+                vi.pbFrameBuf[y*vsthw[iVM].xpix + x] = *pb++;
             }
         }
     }
@@ -2612,25 +2632,7 @@ LRESULT CALLBACK WndProc(
 
         //FCreateOurPalette();
 		
-        if (!FIsAtari8bit(vmCur.bfHW))
-            {
-            // create a default monochrome bitmap
-
-            vsthw.planes = 1;
-            vsthw.xpix = 640;
-            vsthw.ypix = 400;
-            }
-
-        else
-            {
-            // create a default 256-color bitmap
-
-            vsthw.planes = 8;
-            vsthw.xpix = X8;
-            vsthw.ypix = Y8;	// was 200
-            }
-
-		// now that we have a DC, and have set vsthw.xpix/ypix, make all the bitmaps for the instances
+		// now that we have a DC make all the buffers for the screens of all the instances
 		for (int iVM = 0; iVM < MAX_VM; iVM++)
 		{
 			if (v.rgvm[iVM].fValidVM)
@@ -2639,9 +2641,10 @@ LRESULT CALLBACK WndProc(
 
 		// if we were saved in fullscreen mode, then actually go into fullscreen
 		if (v.fFullScreen) {
-			v.fFullScreen = FALSE;
+			v.fFullScreen = FALSE;	// think we aren't in it yet
+			
 			// vi.hWnd won't be set until this WM_CREATE finishes
-			// and other stuff isn't set up yet, so don't Send the message immediately
+			// and other stuff isn't set up yet, so don't Send the message immediately, Post it.
 			PostMessage(hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
@@ -2667,8 +2670,8 @@ LRESULT CALLBACK WndProc(
 #endif
 
         if (!v.fFullScreen)
-          if ((vsthw.xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
-          if ((vsthw.ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
+          if ((vsthw[v.iVM].xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
+          if ((vsthw[v.iVM].ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
           if (!IsIconic(vi.hWnd))
             GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
@@ -2692,9 +2695,10 @@ LRESULT CALLBACK WndProc(
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
           }
 
+		// take note of our window size (if not full screen nor minimized)
 		if (!v.fFullScreen)
-			if ((vsthw.xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
-				if ((vsthw.ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
+			if ((vsthw[v.iVM].xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
+				if ((vsthw[v.iVM].ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
 					if (!IsIconic(vi.hWnd))
 						GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 		
@@ -2743,18 +2747,18 @@ LRESULT CALLBACK WndProc(
 
 break;
 #if 0
-        if ((vsthw.xpix == 0) || (vsthw.ypix == 0))
+        if ((vsthw[v.iVM].xpix == 0) || (vsthw[v.iVM].ypix == 0))
             return 0;
 
-        vi.fXscale = max(1, (lprect->right - lprect->left - thickX) /  vsthw.xpix);
-        vi.fYscale = max(1, (lprect->bottom - lprect->top - thickY) /  vsthw.ypix);
+        vi.fXscale = max(1, (lprect->right - lprect->left - thickX) /  vsthw[v.iVM].xpix);
+        vi.fYscale = max(1, (lprect->bottom - lprect->top - thickY) /  vsthw[v.iVM].ypix);
 
         vi.fYscale = vi.fXscale * ratio;
 
         if (1 /* fSnapping */)
             {
-            lprect->right = lprect->left + vsthw.xpix * vi.fXscale + thickX;
-            lprect->bottom = lprect->top + vsthw.ypix * vi.fYscale + thickY;
+            lprect->right = lprect->left + vsthw[v.iVM].xpix * vi.fXscale + thickX;
+            lprect->bottom = lprect->top + vsthw[v.iVM].ypix * vi.fYscale + thickY;
             }
 
         if (vi.fXscale == 1)
@@ -2776,9 +2780,11 @@ break;
 		GetWindowRect(hWnd, &rc1);
 		GetClientRect(hWnd, &rc2);
 
+		// calculate the non-client dimensions this window needs
 		int thickX = rc1.right - rc1.left - (rc2.right - rc2.left); // (SM_CXSIZEFRAME) * 2;
 		int thickY = rc1.bottom - rc1.top - (rc2.bottom - rc2.top); // GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);
-        int scaleX = 1, scaleY = ((vsthw.xpix) >= (vsthw.ypix * 3)) ? 2 : 1;
+        
+		int scaleX = 1, scaleY = ((vsthw[v.iVM].xpix) >= (vsthw[v.iVM].ypix * 3)) ? 2 : 1;
 
 #if !defined(NDEBUG)
         printf("WM_GETMINMAXINFO, size(%d,%d) pos(%d,%d) min(%d,%d) max(%d,%d)\n",
@@ -2793,31 +2799,32 @@ break;
 #endif
 
 		if (FIsAtari8bit(vmCur.bfHW)) {
-			lpmm->ptMinTrackSize.x = max(vsthw.xpix * scaleX, X8 * 2) + thickX;
-			lpmm->ptMinTrackSize.y = max(vsthw.ypix * scaleY, Y8 * 2) + thickY;
+			// Make sure we are big enough to show a double sized 8 bit screen
+			lpmm->ptMinTrackSize.x = max(vsthw[v.iVM].xpix * scaleX, X8 * 2) + thickX;
+			lpmm->ptMinTrackSize.y = max(vsthw[v.iVM].ypix * scaleY, Y8 * 2) + thickY;
 		}
 		else
 		{
-			lpmm->ptMinTrackSize.x = max(vsthw.xpix * scaleX, 640) + thickX;
-			lpmm->ptMinTrackSize.y = max(vsthw.ypix * scaleY, 480) + thickY;
+			lpmm->ptMinTrackSize.x = max(vsthw[v.iVM].xpix * scaleX, 640) + thickX;
+			lpmm->ptMinTrackSize.y = max(vsthw[v.iVM].ypix * scaleY, 480) + thickY;
 		}
         break;
 
 #if 0
-        if ((vsthw.xpix == 0) || (vsthw.ypix == 0))
+        if ((vsthw[v.iVM].xpix == 0) || (vsthw[v.iVM].ypix == 0))
             return 0;
 
         if (v.fFullScreen && vi.fHaveFocus)
             return 0;
 
-        while (((max(vsthw.xpix * (scaleX + 1), X8) + thickX) < lpmm->ptMaxTrackSize.x) &&
-               ((max(vsthw.ypix * (scaleX + 1) * scaleY, 200) + thickY) < lpmm->ptMaxTrackSize.y))
+        while (((max(vsthw[v.iVM].xpix * (scaleX + 1), X8) + thickX) < lpmm->ptMaxTrackSize.x) &&
+               ((max(vsthw[v.iVM].ypix * (scaleX + 1) * scaleY, 200) + thickY) < lpmm->ptMaxTrackSize.y))
             {
             scaleX++;
             }
 
-        lpmm->ptMaxTrackSize.x = max(vsthw.xpix * scaleX, 320) + thickX;
-        lpmm->ptMaxTrackSize.y = max(vsthw.ypix * scaleX * scaleY, 320) + thickY;
+        lpmm->ptMaxTrackSize.x = max(vsthw[v.iVM].xpix * scaleX, 320) + thickX;
+        lpmm->ptMaxTrackSize.y = max(vsthw[v.iVM].ypix * scaleX * scaleY, 320) + thickY;
 
 #if !defined(NDEBUG)
         printf("returning updated min(%d,%d) max(%d,%d)\n",
@@ -3040,7 +3047,8 @@ break;
 		switch (wmId)
 		{
 		L_about:
-			// bring up our ABOUT MessageBox
+
+		// bring up our ABOUT MessageBox
 		case IDM_ABOUT:
 
 			char rgch[1120], rgch2[64], rgchVer[32];
@@ -3179,6 +3187,7 @@ break;
 			MessageBox(GetFocus(), rgch, rgch2, MB_OK);
 			break;
 
+		// toggle fullscreen mode
 		case IDM_FULLSCREEN:
 			v.fFullScreen = !v.fFullScreen;
 			CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
@@ -3202,34 +3211,35 @@ break;
 
 			break; // !!! the VM sees the ENTER keystroke
 
+		// toggle stretch/letterbox mode
 		case IDM_STRETCH:
 			v.fZoomColor = !v.fZoomColor;
 			CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
 			DisplayStatus(); // affects title bar
 			break;
 
+		// toggle tile mode
 		case IDM_TILE:
 			v.fTiling = !v.fTiling;
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			break;
 
+		// toggle COLOR/B&W
 		case IDM_COLORMONO:
-			if (!FToggleMonitor())
+			if (!FToggleMonitor(v.iVM))
 				return 0;
 
 			// don't reboot, let the OS detect it as necessary
 			return 0;
 
-			// Un-init and invalidate this instance, and choose another
+		// Delete this instance, and choose another
 		case IDM_DELVM:
-			FUnInitVM(v.iVM);
-			memset(&v.rgvm[v.iVM], 0, sizeof(VM));	// erase the persistable data
-			vvmi.fInited = FALSE;	// invalidate the non-persistable data
-			v.cVM--;
-			SelectInstance(-1);
+			DeleteVM(v.iVM);
+			SelectInstance(-1);	// go to the next one
 			break;
 
-			// unless Darek gets really busy, this should be enough VM types
+		// unless Darek gets really busy, this should be enough VM types
+		// Create a new VM of the type chosen (800, 800XL, etc.)
 		case IDM_ADDVM1:
 		case IDM_ADDVM1 + 1:
 		case IDM_ADDVM1 + 2:
@@ -3247,65 +3257,60 @@ break;
 		case IDM_ADDVM1 + 14:
 		case IDM_ADDVM1 + 15:
 
+			// already the maximum, sorry
 			if (v.cVM == MAX_VM)
 				break;
 
+			// which one did they select?
 			int vmType = wmId - IDM_ADDVM1 + 1;
 			int vmNew;
 
 #ifdef XFORMER
+
 			// create a new VM of the appropriate type
-			FAddVM(&vmi800, &vmNew);
-
-			// !!! move all this code inside FAddVM!
-			// !!! support 1200XL, etc.
-			strcpy(v.rgvm[vmNew].szModel, rgszVM[vmType]);
-
+			
 			if (vmType == 1)
 			{
-				v.rgvm[vmNew].bfHW = vmType; vmAtari48;
-				v.rgvm[vmNew].iOS = 0;
-				v.rgvm[vmNew].bfRAM = ram48K;
+				AddVM(&vmi800, &vmNew, vmAtari48);
 			}
 			else if (vmType == 2)
 			{
-				v.rgvm[vmNew].bfHW = vmAtariXL;
-				v.rgvm[vmNew].iOS = 1;
-				v.rgvm[vmNew].bfRAM = ram64K;
+				AddVM(&vmi800, &vmNew, vmAtariXL);
 			}
 			else if (vmType == 3)
 			{
-				v.rgvm[vmNew].bfHW = vmAtariXE;
-				v.rgvm[vmNew].iOS = 2;
-				v.rgvm[vmNew].bfRAM = ram128K;
+				AddVM(&vmi800, &vmNew, vmAtariXE);
 			}
 
-			// and now go to that instance!
+			// Init it, Create the screen buffer for it, and now go to that instance!
 			FInitVM(vmNew);
 			CreateNewBitmap(vmNew);
 			SelectInstance(vmNew);
 #endif
 
-			// now support some more
+			// TODO now support some more VM types!
 
 			break;
 
 #ifdef XFORMER
+
+		// choose a cartridge to use
 		case IDM_CART:
 
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgcart.szName, FALSE, 1))
 			{
 				ReadCart(v.iVM);
 				FixAllMenus();
-				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);	// that requires a reboot!
 			}
 			break;
 
+		// rip the cartridge out
 		case IDM_NOCART:
 			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge and cold start
-			vi.pvmCur->rgcart.szName[0] = 0;
+			vi.pvmCur->rgcart.szName[0] = 0; // erase the name
 
-			// Atari 800 goes back to no cartridge now (this is the best way to set ramtop = 0xC000
+			// Make Atari 800 go back to no BASIC cartridge now (this is the best way to set ramtop back to 0xC000)
 			if (v.rgvm[v.iVM].bfHW == vmAtari48)
 			{
 				FUnInitVM(v.iVM);
@@ -3313,16 +3318,19 @@ break;
 			}
 			
 			FixAllMenus();
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+			
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0); // requires reboot
+
 			break;
 
 #endif		
+
+		// Choose a file to use for the virtual disks
 
 		case IDM_D1:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(v.iVM, 0);
 				FMountDiskVM(v.iVM, 0);
 				FixAllMenus();
 			}
@@ -3332,7 +3340,6 @@ break;
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(v.iVM, 1);
 				FMountDiskVM(v.iVM, 1);
 				FixAllMenus();
 			}
@@ -3342,7 +3349,6 @@ break;
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(v.iVM, 2);
 				FMountDiskVM(v.iVM, 2);
 				FixAllMenus();
 			}
@@ -3352,13 +3358,13 @@ break;
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FUnmountDiskVM(v.iVM, 3);
 				FMountDiskVM(v.iVM, 3);
 				FixAllMenus();
 			}
 			break;
 
 		// unmount a drive
+
 		case IDM_D1U:
 			strcpy(vi.pvmCur->rgvd[0].sz, "");
 			vi.pvmCur->rgvd[0].dt = DISK_NONE;
@@ -3386,13 +3392,13 @@ break;
 			FUnmountDiskVM(v.iVM, 3);
 			FixAllMenus();
 			break;		
-		
+
+#if 0
 		case IDM_LOADSTATE:
             SaveState(FALSE);
             return 0;
             break;
 
-#if 0
         case IDM_PROPERTIES:
             DialogBox(vi.hInst,
                 MAKEINTRESOURCE(IDD_PROPERTIES),
@@ -3404,14 +3410,12 @@ break;
 #endif
 
         case IDM_COLDSTART:
-            // have some default values so as to force a default bitmap
-
-            vmCur.fColdReset = TRUE;
+            vmCur.fColdReset = TRUE;	// schedule a reboot
             return 0;
             break;
 
+#if 0
         case IDM_F11:
-
             // Use F11 to also clear counters
 #if PERFCOUNT
             cntInstr = 0;
@@ -3428,10 +3432,9 @@ break;
                 vmachw.fDisk1Dirty = fTrue;
                 vmachw.fDisk2Dirty = fTrue;
 #endif
-                // vsthw.fMediaChange = fTrue;
+                // vsthw[v.iVM].fMediaChange = fTrue;
 
-                FUnmountDiskVM(v.iVM, 8);
-                FMountDiskVM(v.iVM, 8);
+                FMountDiskVM(v.iVM, 8);	// TODO make sure that unmounts first
                 }
             else
 
@@ -3449,7 +3452,9 @@ break;
 
             return 0;
             break;
+#endif
 
+		// cycle through all the instances
         case IDM_TOGGLEHW:
             SelectInstance(v.iVM + 1);
             return 0;
@@ -3506,7 +3511,6 @@ break;
                 AddToPacket(FIsMac(vmCur.bfHW) ? 0xF1 : 0xAA);  // Shift key up
             return 0;
             break;
-#endif
 
         case IDM_DIRECTX:
             v.fFullScreen = !v.fFullScreen;
@@ -3525,6 +3529,7 @@ break;
 
             return 0;
             break;
+#endif
 
         case IDM_EXIT:
 #if 0
@@ -3560,6 +3565,7 @@ break;
         default:
 
 			// We have asked to switch to a certain VM
+
 			if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM)
 			{
 				int iVM = IDM_VM1 - wmId;	// we want the VM this far from the end
@@ -3578,7 +3584,7 @@ break;
 				assert(zl >= 0);
 				SelectInstance(zl);
 				
-				// stop tiling
+				// stop tiling, tiling mode was to help us choose one
 				if (v.fTiling)
 					SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
 			}
@@ -3590,6 +3596,7 @@ break;
         return 0;
         break;
 
+#if 0 // we poll now
     case MM_JOY1MOVE:
     case MM_JOY1BUTTONDOWN:
     case MM_JOY1BUTTONUP:
@@ -3599,6 +3606,7 @@ break;
         if (vi.fExecuting)
             return FWinMsgVM(hWnd, message, uParam, lParam);
         break;
+#endif
 
     case WM_SYSKEYDOWN:
 		if (uParam == VK_RETURN)
@@ -3637,6 +3645,7 @@ break;
 			return 0;
 		}
 #endif
+		// somehow this magically only executes if ALT-enter is pressed
 		SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
@@ -3723,7 +3732,10 @@ break;
 #if !defined(NDEBUG)
             printf("LBUTTONDOWN\n");
 #endif
+
+			// MOUSE LEFT button is joystick FIRE
             FWinMsgVM(hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
+			
 			// continue to do Tiling code
         }
 		else
@@ -3742,7 +3754,8 @@ break;
 			}
 		}
 
-		// in Tile Mode, click on an instance to bring it up.
+		// in Tile Mode, click on an instance to bring it up!
+		//
 		if (v.fTiling && message == WM_LBUTTONDOWN)
 		{
 			// make sure this works on multimon, GET_X_LPARAM is not defined
@@ -3754,9 +3767,9 @@ break;
 
 			int x, y, iVM = -1;
 
-			for (y = rect.top; y < rect.bottom; y += vsthw.ypix * vi.fYscale)
+			for (y = rect.top; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
 			{
-				for (x = rect.left; x < rect.right; x += vsthw.xpix * vi.fXscale)
+				for (x = rect.left; x < rect.right; x += vsthw[v.iVM].xpix * vi.fXscale)
 				{
 					// advance to the next valid bitmap
 
@@ -3765,8 +3778,8 @@ break;
 						iVM = (iVM + 1) % MAX_VM;
 					} while (vrgvmi[iVM].hdcMem == NULL);
 
-					if ((xPos >= x) && (xPos < x + vsthw.xpix * vi.fXscale) &&
-						(yPos >= y) && (yPos < y + vsthw.ypix * vi.fYscale))
+					if ((xPos >= x) && (xPos < x + vsthw[v.iVM].xpix * vi.fXscale) &&
+						(yPos >= y) && (yPos < y + vsthw[v.iVM].ypix * vi.fYscale))
 					{
 						v.fTiling = FALSE;
 						SelectInstance(iVM);
@@ -3783,6 +3796,8 @@ break;
 #if !defined(NDEBUG)
             printf("LBUTTONUP\n");
 #endif
+
+			// MOUSE button up is JOYSTICK BUTTON UP
             return FWinMsgVM(hWnd, MM_JOY1BUTTONUP, 0, 0);
             return 0;
             }
@@ -3843,34 +3858,39 @@ break;
         vi.fInDirectXMode = FALSE;
 
         if (vi.fExecuting)
-            {
+        {
             vi.fExecuting = FALSE;
             KillTimer(hWnd, 0);
             ReleaseCapture();
-            SelectObject(vvmi.hdcMem, vvmi.hbmOld);
-            DeleteObject(vvmi.hbm);
-            DeleteDC(vvmi.hdcMem);
-            FUnInitVM(v.iVM);
-            }
-        FInitSerialPort(0);
-        ShowCursor(TRUE);
+        }
 
-        if (v.fSaveOnExit)
-            SaveProperties(NULL);
+		// always true for now, save before deleting anything!
+		if (v.fSaveOnExit)
+			SaveProperties(NULL);
+
+		// delete all of our VMs
+		for (int z = 0; z < MAX_VM; z++)
+		{
+			if (v.rgvm[z].fValidVM)
+				DeleteVM(z);
+		}
+
+		FInitSerialPort(0);
+        ShowCursor(TRUE);
 
         TrayMessage(vi.hWnd, NIM_DELETE, 0,
             LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), NULL);
 
-        Sleep(200); // let other threads finish
+        Sleep(200); // let other threads finish !!!
 
         PostQuitMessage(0);
         return 0;
         break;
 
     case WM_CLOSE:
-        if (!FIsAtari8bit(vmCur.bfHW))
-        {
 #if 0
+		if (!FIsAtari8bit(vmCur.bfHW))
+        {
         // Not currently supported!
 
         if (v.fHibrOnExit)
@@ -3913,8 +3933,8 @@ Lhib:
                 LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), NULL);
             break;
             }
-#endif
         }
+#endif
 
         // fall through
 
@@ -3926,6 +3946,7 @@ Lhib:
     return (0);
 }
 
+#if 0
 /****************************************************************************
 
     FUNCTION: CenterWindow (HWND, HWND)
@@ -4083,7 +4104,6 @@ void UpdateMode(HWND hDlg)
     SendDlgItemMessage(hDlg, IDC_VMSELECT, XB_SETCURSEL, j, 0);
 }
 
-#if 0
 /****************************************************************************
 
     FUNCTION: About(HWND, UINT, WPARAM, LPARAM)
@@ -4323,7 +4343,7 @@ LRESULT CALLBACK About(
                         {
                         int i;
 
-						if (FAddVM(vmCur.pvmi, &i))
+						if (AddVM(vmCur.pvmi, &i))
                             {
                             v.rgvm[i] = v.rgvm[iVM];
                             v.rgvm[i].szModel[0] = '+';
@@ -5136,6 +5156,7 @@ void * __stdcall SHBrowseForFolder(void *);
 
 UINT (__stdcall *pfnCoInitialize)(void *);
 
+#if 0
 BOOL OpenThePath(HWND hWnd, char *psz)
 {
     BROWSEINFO OpenFilePath;
@@ -5175,7 +5196,7 @@ BOOL OpenThePath(HWND hWnd, char *psz)
 
     return FALSE;
 }
-
+#endif
 
 char const * const rgszMon[] =
 {
@@ -5437,7 +5458,7 @@ void AddToPacket(ULONG b)
     vvmi.keyhead &= 1023;
 
 #if defined(ATARIST) || defined(SOFTMAC)
-    vsthw.gpip &= 0xEF; // to indicate characters available
+    vsthw[v.iVM].gpip &= 0xEF; // to indicate characters available
 #endif // ATARIST
 }
 
@@ -5535,6 +5556,7 @@ int CbReadWholeFileToGuest(char *sz, int cb, ULONG addr, ULONG access_mode)
 
 #endif  // ATARIST
 
+#if 0
 DWORD FReadChunkFile(char *sz, int cb, void *buf, DWORD offset)
 {
     HANDLE h;
@@ -5574,6 +5596,7 @@ DWORD FReadChunkFile(char *sz, int cb, void *buf, DWORD offset)
 
     return 0;
 }
+#endif
 
 BOOL FWriteWholeFile(char *sz, int cb, void *buf)
 {
@@ -5702,7 +5725,7 @@ void ScreenRefresh(void)
     BYTE *pbDst;
     ULONG cbScanSrc = 1, cbScanDst = 1;
     ULONG cbSkip;
-    ULONG eaScanLine = vsthw.dbase;
+    ULONG eaScanLine = vsthw[v.iVM].dbase;
     BYTE *pbSurface = NULL;
     BOOL fRefresh;
 
@@ -5739,15 +5762,15 @@ void ScreenRefresh(void)
         __asm int 3;
         }
 
-    vsthw.dbase += 0;
+    vsthw[v.iVM].dbase += 0;
 
-    if (vsthw.dbase > (vi.eaRAM[1] + vi.cbRAM[1] - 65536))
+    if (vsthw[v.iVM].dbase > (vi.eaRAM[1] + vi.cbRAM[1] - 65536))
         {
-        vsthw.dbase = vi.eaRAM[1];
+        vsthw[v.iVM].dbase = vi.eaRAM[1];
         }
 
 #if !defined(NDEBUG)
-//  printf("eaRAM[1] = %08X cbRAM[1] = %08X setting dbase = %08X\n", vi.eaRAM[1], vi.cbRAM[1], vsthw.dbase);
+//  printf("eaRAM[1] = %08X cbRAM[1] = %08X setting dbase = %08X\n", vi.eaRAM[1], vi.cbRAM[1], vsthw[v.iVM].dbase);
 #endif
 
     // display some debug information about screen refreshes and page faults
@@ -5768,7 +5791,7 @@ void ScreenRefresh(void)
 
     fMac = FIsMac(vmCur.bfHW);
 
-    if (!fMac && !vsthw.fMono && vi.fRefreshScreen)
+    if (!fMac && !vsthw[v.iVM].fMono && vi.fRefreshScreen)
         {
         // color registers have possibly changed
 
@@ -5776,7 +5799,7 @@ void ScreenRefresh(void)
 
         for (i = 0; i < 16; i++)
             {
-            ULONG w = vsthw.wcolor[i];
+            ULONG w = vsthw[v.iVM].wcolor[i];
             ULONG r, g, b;
 
             if (FIsAtariEhn(vmCur.bfHW))
@@ -5810,10 +5833,10 @@ void ScreenRefresh(void)
 
             DebugStr("setting rgrgb[%d] = %d, %d, %d\n", i, r, g, b);
 
-            vsthw.rgrgb[i].rgbRed = (BYTE)r;
-            vsthw.rgrgb[i].rgbGreen = (BYTE)g;
-            vsthw.rgrgb[i].rgbBlue =(BYTE) b;
-            vsthw.rgrgb[i].rgbReserved = 0;
+            vsthw[v.iVM].rgrgb[i].rgbRed = (BYTE)r;
+            vsthw[v.iVM].rgrgb[i].rgbGreen = (BYTE)g;
+            vsthw[v.iVM].rgrgb[i].rgbBlue =(BYTE) b;
+            vsthw[v.iVM].rgrgb[i].rgbReserved = 0;
             }
 
         SetBitmapColors();
@@ -5830,8 +5853,8 @@ void ScreenRefresh(void)
 
     // mark all the visible video pages
 
-    cbScanSrc = (vsthw.xpix/8) * vsthw.planes;
-    cbSkip = (FIsAtariEhn(vmCur.bfHW) ? vsthw.scanskip*2 : 0);
+    cbScanSrc = (vsthw[v.iVM].xpix/8) * vsthw[v.iVM].planes;
+    cbSkip = (FIsAtariEhn(vmCur.bfHW) ? vsthw[v.iVM].scanskip*2 : 0);
 
     if (eaScanLine == 0)
         goto Ldone;
@@ -5854,10 +5877,10 @@ void ScreenRefresh(void)
 
         // center the screen
 
-        if (vsthw.xpix == 320)
-            pbDst += (((vi.sx/2-vsthw.xpix)/2)) + cbScanDst * ((vi.sy/2-vsthw.ypix)/2);
-        else if (vsthw.ypix == 200)
-            pbDst += (vi.dx = ((vi.sx-vsthw.xpix)/2)) + cbScanDst * ((vi.sy/2-vsthw.ypix)/2);
+        if (vsthw[v.iVM].xpix == 320)
+            pbDst += (((vi.sx/2-vsthw[v.iVM].xpix)/2)) + cbScanDst * ((vi.sy/2-vsthw[v.iVM].ypix)/2);
+        else if (vsthw[v.iVM].ypix == 200)
+            pbDst += (vi.dx = ((vi.sx-vsthw[v.iVM].xpix)/2)) + cbScanDst * ((vi.sy/2-vsthw[v.iVM].ypix)/2);
         else
             pbDst += vi.dx + cbScanDst * vi.dy;
         }
@@ -5867,13 +5890,13 @@ void ScreenRefresh(void)
         cbScanDst = vi.cbScan;
         }
 
-    cbScanSrc = vsthw.xpix/8 * vsthw.planes;
+    cbScanSrc = vsthw[v.iVM].xpix/8 * vsthw[v.iVM].planes;
 
-    if (vsthw.fMono && (pbSurface || v.fNoMono))
+    if (vsthw[v.iVM].fMono && (pbSurface || v.fNoMono))
         {
-        Assert(vsthw.planes == 1);
+        Assert(vsthw[v.iVM].planes == 1);
 
-        if (fMac || vsthw.wcolor[0] & 1)
+        if (fMac || vsthw[v.iVM].wcolor[0] & 1)
             {
             pfnBlit = BlitMonoX;
             }
@@ -5882,11 +5905,11 @@ void ScreenRefresh(void)
             pfnBlit = BlitMonoXInv;
             }
         }
-    else if (vsthw.fMono)
+    else if (vsthw[v.iVM].fMono)
         {
-        Assert(vsthw.planes == 1);
+        Assert(vsthw[v.iVM].planes == 1);
 
-        if (fMac || vsthw.wcolor[0] & 1)
+        if (fMac || vsthw[v.iVM].wcolor[0] & 1)
             {
             pfnBlit = BlitMono;
             }
@@ -5895,20 +5918,20 @@ void ScreenRefresh(void)
             pfnBlit = BlitMonoInv;
             }
         }
-    else if (fMac && (vsthw.planes == 2))
+    else if (fMac && (vsthw[v.iVM].planes == 2))
         {
         // 4 color mode Mac II video mode
 
         pfnBlit = Blit4Mac;
         }
-    else if (vsthw.planes == 2)
+    else if (vsthw[v.iVM].planes == 2)
         {
         // medium rez
 
-        Assert(vsthw.planes == 2);
+        Assert(vsthw[v.iVM].planes == 2);
 
         // in DirectX mode, pixels are doubled so skip scan
-        if (pbSurface && vsthw.ypix == 200)
+        if (pbSurface && vsthw[v.iVM].ypix == 200)
             {
             pfnBlit = Blit4X;
             }
@@ -5917,20 +5940,20 @@ void ScreenRefresh(void)
             pfnBlit = Blit4;
             }
         }
-    else if (fMac && (vsthw.planes == 4))
+    else if (fMac && (vsthw[v.iVM].planes == 4))
         {
         // 16 color mode Mac II video mode
 
         pfnBlit = Blit16Mac;
         }
-    else if (vsthw.planes == 4)
+    else if (vsthw[v.iVM].planes == 4)
         {
         // low rez
 
-        Assert(vsthw.planes == 4);
+        Assert(vsthw[v.iVM].planes == 4);
 
         // in DirectX mode, pixels are doubled so skip scan
-        if (pbSurface && vsthw.ypix == 200)
+        if (pbSurface && vsthw[v.iVM].ypix == 200)
             {
             pfnBlit = Blit16X;
             }
@@ -5939,7 +5962,7 @@ void ScreenRefresh(void)
             pfnBlit = Blit16;
             }
         }
-    else // if (fMac && (vsthw.planes == 8))
+    else // if (fMac && (vsthw[v.iVM].planes == 8))
         {
         // 256 color mode Mac II video mode
 
@@ -5958,7 +5981,7 @@ void ScreenRefresh(void)
     {
     const void *pvScanLine = _alloca(cbScanSrc);
 
-    for (scan = 0; scan < vsthw.ypix; scan++)
+    for (scan = 0; scan < vsthw[v.iVM].ypix; scan++)
         {
         // convert scan line to min and lim 68000 addresses
 
@@ -5976,7 +5999,7 @@ void ScreenRefresh(void)
 
         pbDst += cbScanDst;
 
-        if (pbSurface && (vsthw.ypix == 200))
+        if (pbSurface && (vsthw[v.iVM].ypix == 200))
             pbDst += cbScanDst;
 
         eaScanLine += cbScanSrc+cbSkip;

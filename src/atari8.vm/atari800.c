@@ -58,16 +58,18 @@ VMINFO const vmi800 =
 // Globals
 //
 
-CANDYHW vrgcandy[MAXOSUsable];
-
-CANDYHW *vpcandyCur = &vrgcandy[0];
+// our machine specific data for each instance (ATARI specific stuff)
+//
+CANDYHW vrgcandy[MAX_VM];
+CANDYHW *vpcandyCur = &vrgcandy[0]; // default to first instance
 
 //BYTE bshiftSav;	// was a local too
+BOOL fDumpHW;
 
-WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down
-static signed short wLeftMax;
+WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down, works across all instances
 
-#define INSTR_PER_SCAN_NO_DMA 30
+static signed short wLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
+#define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
@@ -109,41 +111,71 @@ void DumpROMS()
     DumpROM("atarixlo.c", "rgbXLXED800", rgbXLXED800, 0xD800, 0x2800); // 10K
 }
 
-// not called when loading from disk, only when creating one from scratch
+// call me when first creating the instance. Provide our machine types VMINFO and the type of machine you want (800 vs. XL vs. XE)
 //
-BOOL __cdecl InstallAtari(PVMINFO pvmi, PVM pvm)
+BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
-    // initialize the default Atari 8-bit VM
 
-    pvm->pvmi = pvmi;
-    pvm->bfHW = vmAtari48;
-    pvm->bfCPU = cpu6502;
-    pvm->iOS = 0;
-    pvm->bfMon = monColrTV;
-    pvm->bfRAM  = ram48K;
-    pvm->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
+	// Install an Atari 8-bit VM
 
-    pvm->rgvd[0].dt = DISK_IMAGE;
+	// These things change depending on the machine we're emulating
 
-    strcpy(pvm->rgvd[0].sz, "DOS25.XFD");	// broken default probably won't get used anyway
+	switch (type)
+	{
+	case vmAtari48:
+		v.rgvm[iVM].bfHW = vmAtari48;
+		v.rgvm[iVM].iOS = 0;
+		v.rgvm[iVM].bfRAM = ram48K;
+		strcpy(v.rgvm[iVM].szModel, rgszVM[1]);
+		break;
 
-    // fake in the Atari 8-bit OS entires
+	case vmAtariXL:
+		v.rgvm[iVM].bfHW = vmAtariXL;
+		v.rgvm[iVM].iOS = 1;
+		v.rgvm[iVM].bfRAM = ram64K;
+		strcpy(v.rgvm[iVM].szModel, rgszVM[2]);
+		break;
 
-    if (v.cOS < 3)
+	case vmAtariXE:
+		v.rgvm[iVM].bfHW = vmAtariXE;
+		v.rgvm[iVM].iOS = 2;
+		v.rgvm[iVM].bfRAM = ram128K;
+		strcpy(v.rgvm[iVM].szModel, rgszVM[3]);
+		break;
+
+	default:
+		// oops
+		return FALSE;
+	}
+
+	// These things are the same for each machine type
+
+	v.rgvm[iVM].fCPUAuto = TRUE;
+	v.rgvm[iVM].fSound = TRUE;
+	v.rgvm[iVM].bfCPU = cpu6502;
+	v.rgvm[iVM].bfMon = monColrTV;
+	//v.rgvm[iVM]->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
+
+	v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+    strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// default to something
+
+#if 0
+	// fake in the Atari 8-bit OS entires
+	if (v.cOS < 3)
         {
         v.rgosinfo[v.cOS++].osType  = osAtari48;
         v.rgosinfo[v.cOS++].osType  = osAtariXL;
         v.rgosinfo[v.cOS++].osType  = osAtariXE;
         }
-
-    pvm->fValidVM = fTrue;
+#endif
 
  // DumpROMS();
 
     return TRUE;
 }
 
-// Initialize a VM... not necessarily the current one
+// Initialize a VM. I call this immediately after Creating/Installing the VM, so maybe
+// they don't need to be separate steps?
 //
 BOOL __cdecl InitAtari(int iVM)
 {
@@ -170,7 +202,6 @@ BOOL __cdecl InitAtari(int iVM)
     //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
     //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
 	//*pbshift |= wScrlLock;
-    
 	//countInstr = 1;
 
     if (!fInited) // static, only 1 instance needs to do this
@@ -184,10 +215,12 @@ BOOL __cdecl InitAtari(int iVM)
             jump_tab[i] = jump_tab_RO[i];
         }
 
-        wStartScan = 10;
+        wStartScan = 8;	// should be 10 !!!
 
         fInited = TRUE;
     }
+
+	// There's a fine, fine, line between what's done in Install and here in Init
 
 	switch (v.rgvm[iVM].bfHW)
 	{
@@ -208,6 +241,7 @@ BOOL __cdecl InitAtari(int iVM)
 
 	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
+	// If our saved state had a cartridge, load it back in
     ReadCart(iVM);
 
     if (!FInitSerialPort(v.rgvm[iVM].iCOM))
@@ -215,6 +249,7 @@ BOOL __cdecl InitAtari(int iVM)
     if (!InitPrinter(v.rgvm[iVM].iLPT))
 		v.rgvm[iVM].iLPT = 0;
 
+	// !!! We have at least 3 variables for whether or not to use sound
 	fSoundOn = TRUE;
     
 //  vi.pbRAM[0] = &rgbMem[0xC000-1];
@@ -227,6 +262,8 @@ BOOL __cdecl InitAtari(int iVM)
     return TRUE;
 }
 
+// Call when you destroy the instance. There is no UnInstall
+//
 BOOL __cdecl UninitAtari(int iVM)
 {
     //*pbshift = bshiftSav;
@@ -235,9 +272,10 @@ BOOL __cdecl UninitAtari(int iVM)
     return TRUE;
 }
 
-
 BOOL __cdecl MountAtariDisk(int iVM, int i)
 {
+	UnmountAtariDisk(iVM, i);	// make sure all emulator types know to do this first
+
     PVD pvd = &v.rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
@@ -267,7 +305,6 @@ BOOL __cdecl UnmountAtariDisk(int iVM, int i)
     return TRUE;
 }
 
-
 BOOL __cdecl UninitAtariDisks(int iVM)
 {
     int i;
@@ -278,13 +315,15 @@ BOOL __cdecl UninitAtariDisks(int iVM)
     return TRUE;
 }
 
-// can only happen to the current instance (I hope)
+// soft reset
 //
-BOOL __cdecl WarmbootAtari()
+BOOL __cdecl WarmbootAtari(int iVM)
 {
-	// POKE 580,1 == Cold Start
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	// POKE 580,1 == Cold Start !!! why is this necessary?
 	if (rgbMem[0x244])
-		ColdbootAtari();
+		ColdbootAtari(iVM);
 
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
@@ -292,28 +331,24 @@ BOOL __cdecl WarmbootAtari()
     cntTick = 50*4;	// delay for banner messages
     QueryTickCtr();
 	//countJiffies = 0;
-	fBrakes = TRUE;	// back to real time
+	fBrakes = TRUE;	// go back to real time
 
 	InitSound();	// need to reset and queue audio buffers
 
-	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
-	InitJoysticks();
+	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
     return TRUE;
 }
 
+// Cold Start the machine - the first one is currently done when it first becomes the active instance
+//
 BOOL __cdecl ColdbootAtari(int iVM)
 {
     unsigned addr;
 	//OutputDebugString("\n\nCOLD START\n\n");
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
-    // Initialize mode display counter (banner)
-	
-	fBrakes = 1;	// global turbo for all instances
-	clockMult = 1;	// per instance speed-up
 
 	InitAtariDisks(iVM);
 
@@ -322,6 +357,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     //countJiffies = 0;
 	
 	fBrakes = TRUE; // go back to real time
+	clockMult = 1;	// per instance speed-up
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -335,8 +371,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // Swap in BASIC and OS ROMs.
 
+	// load the OS
     InitBanks(iVM);
-	InitCart(iVM);	// after the OS and BASIC go in above, so the cartridge overrides built-in BASIC
+
+	// load the cartridge
+	InitCart(iVM);
 
 #if 0 // doesn't the OS do this?
     // initialize memory up to ramtop
@@ -348,21 +387,20 @@ BOOL __cdecl ColdbootAtari(int iVM)
 #endif
 
     // initialize the 6502
-
     cpuInit(PokeBAtari);
 
     // initialize hardware
     // NOTE: at $D5FE is ramtop and then the jump table
 
     for (addr = 0xD000; addr < 0xD5FE; addr++)
-        {
+    {
         cpuPokeB(addr,0xFF);
-        }
+    }
 
-    // CTIA/GTIA
+    // CTIA/GTIA reset
 
-	// CONSOL not read yet.
-	CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7; // let an XL detect basic or not
+	// CONSOL won't be valid during cold start. Pass the F9 to an XL as option being held down to remove BASIC
+	CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7;
     PAL = 14;
     TRIG0 = 1;
     TRIG1 = 1;
@@ -373,7 +411,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     *(ULONG *)PXPF  = 0;
     *(ULONG *)PXPL  = 0;
 
-    // POKEY
+    // POKEY reset
 
     POT0 = 228;
     POT1 = 228;
@@ -394,7 +432,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     IRQEN = 0;
     SEROUT = 0;
 
-    // ANTIC
+    // ANTIC reset
 
     VCOUNT = 0;
     NMIST = 0x1F;
@@ -409,12 +447,12 @@ BOOL __cdecl ColdbootAtari(int iVM)
     CHACTL = 0;
     DMACTL = 0;
 
-    // PIA
+    // PIA reset
 
 	rPADATA = 255;
 	rPBDATA = 255;
 	wPADATA = 255;
-    wPBDATA = (ramtop == 0xC000) ? 255: 253;	// !!!
+    wPBDATA = (ramtop == 0xC000) ? 255: 253;	// !!! WTF?
     PACTL  = 60;
     PBCTL  = 60;
 
@@ -431,8 +469,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	RANDOM17 = qpc.QuadPart & 0x1ffff;
 
 	InitSound();	// Need to reset and queue audio buffers
-	ReleaseJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
-	InitJoysticks();
+	
+	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
 	return TRUE;
@@ -472,10 +510,6 @@ BOOL __cdecl DumpHWAtari(char *pch)
 
     return TRUE;
 
-#ifdef HDOS16ORDOS32
-    _bios_keybrd(_NKEYBRD_READ);
-    SaveVideo();
-#endif
     ForceRedraw();
 #endif // DEBUG
     return TRUE;
@@ -494,21 +528,163 @@ void Interrupt()
 BOOL __cdecl TraceAtari()
 {
     fTrace = TRUE;
-    ExecuteAtari();
+    ExecuteAtari(v.iVM);	// !!!
     fTrace = FALSE;
 
     return TRUE;
 }
 
+// What happens when it's scan line 241 and it's time to start the VBI
+//
+DoVBI()
+{
+	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
+	wLeftMax = wLeft;
 
-BOOL fDumpHW;
+#ifndef NDEBUG
+	fDumpHW = 0;
+#endif
+	if (NMIEN & 0x40) {
+		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+		// every scan line now until it's done, then resume
+		Interrupt();
+		NMIST = 0x40 | 0x1F;
+		regPC = cpuPeekW(0xFFFA);
+	}
+
+	// process joysticks before the vertical blank, just because.
+	// Very slow if joysticks not installed, so skip the code
+	if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+		JOYINFO ji;
+		MMRESULT mm = joyGetPos(0, &ji);
+		if (mm == 0) {
+
+			int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+			dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
+
+			rPADATA |= 12;                  // assume joystick centered
+
+			if (dir < 0)
+				rPADATA &= ~4;              // left
+			else if (dir > 0)
+				rPADATA &= ~8;              // right
+
+			dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+			dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
+
+			rPADATA |= 3;                   // assume joystick centered
+
+			if (dir < 0)
+				rPADATA &= ~1;              // up
+			else if (dir > 0)
+				rPADATA &= ~2;              // down
+
+			UpdatePorts();
+
+			if (ji.wButtons)
+				TRIG0 &= ~1;                // JOY 0 fire button down
+			else
+				TRIG0 |= 1;                 // JOY 0 fire button up
+		}
+		if (vi.rgjc[1].wNumButtons > 0)
+		{
+			mm = joyGetPos(1, &ji);
+			if (mm == 0) {
+
+				int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
+				dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
+
+				rPBDATA |= 12;                  // assume joystick centered
+
+				if (dir < 0)
+					rPBDATA &= ~4;              // left
+				else if (dir > 0)
+					rPBDATA &= ~8;              // right
+
+				dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
+				dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
+
+				rPBDATA |= 3;                   // assume joystick centered
+
+				if (dir < 0)
+					rPBDATA &= ~1;              // up
+				else if (dir > 0)
+					rPBDATA &= ~2;              // down
+
+				UpdatePorts();
+
+				if (ji.wButtons)
+					TRIG1 &= ~1;                // JOY 0 fire button down
+				else
+					TRIG1 |= 1;                 // JOY 0 fire button up
+			}
+		}
+	}
+
+	CheckKey();	// process the ATARI keyboard buffer
+
+	if (fTrace)
+		ForceRedraw();	// it might do this anyway
+
+	// every VBI, shadow the hardware registers
+	// to their higher locations
+
+	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
+	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
+	memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
+	memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
+
+	memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
+	memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
+	memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
+	memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
+
+	memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
+	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
+	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
+
+	MSG msg;
+
+	if (wScanMin > wScanMac)
+	{
+		assert(0);
+		// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
+	}
+	else
+	{
+		extern void RenderBitmap();
+		RenderBitmap();	// tell Gemulator to actually draw the window
+	}
+
+	wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
+	wScanMac = 0;
+
+	// Gem window has a message, stop the loop to process it
+	if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
+	fStop = fTrue;
+
+	// decrement printer timer
+
+	if (vi.cPrintTimeout && vmCur.fShare)
+	{
+		vi.cPrintTimeout--;
+		if (vi.cPrintTimeout == 0)
+		{
+			FlushToPrinter();
+			UnInitPrinter();
+		}
+	}
+	else
+	FlushToPrinter();
+}
 
 // The big loop! Do a single horizontal scan line (or if it's time, the vertical blank as scan line 251)
-// Either continue in a loop, or only do one line at a time for tracing
-
-BOOL __cdecl ExecuteAtari()
+// Either continue until there's a message for our window, or cycle through all instances every frame,
+// or if tracing, only do one scan line
+//
+BOOL __cdecl ExecuteAtari(int iVM)
 {
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
 	fStop = 0;
 
@@ -518,7 +694,7 @@ BOOL __cdecl ExecuteAtari()
 		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
 		RANDOM = RANDOM17 & 0xff;
 
-		// when tracing, we only do 1 instruction per call, so there are some left over
+		// when tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions
 		if (wLeft == 0)
 		{
 
@@ -547,17 +723,18 @@ BOOL __cdecl ExecuteAtari()
 			// next scan line - should really be 262.5, ugh, sigh, NTSC.
 			wScan = wScan + 1;
 
-			// we process the audio after the whole frame is done, but video during the scan line the VBLANK starts at (241)
+			// we process the audio after the whole frame is done, but the VBLANK starts at 241
 			if (wScan >= 262)
 			{
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 				wScan = 0;
-				wFrame++;
+				wFrame++;	// count how many frames we've drawn. Does anybody care?
 
 				static ULONGLONG cCYCLES = 0;
 				static ULONGLONG cErr = 0;
 
 				// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+				// don't let errors propogate
 				const ULONGLONG cJif = 29830; // 1789790 / 60
 				ULONGLONG cCur = GetCycles() - cCYCLES;
 				while (fBrakes && ((cJif - cErr) > cCur * clockMult)) {
@@ -611,149 +788,14 @@ BOOL __cdecl ExecuteAtari()
 				wLeftMax = wLeft;
 			}
 
-			// do the VBI!
+			// **************************************************************
+			// ******************** do the VBI! *****************************
+			// **************************************************************
 			else if (wScan == 251)
 			{
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				wLeftMax = wLeft;
-
-#ifndef NDEBUG
-				fDumpHW = 0;
-#endif
-				if (NMIEN & 0x40) {
-					// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-					// every scan line now until it's done, then resume
-					Interrupt();
-					NMIST = 0x40 | 0x1F;
-					regPC = cpuPeekW(0xFFFA);
-				}
-
-				// process joysticks before the vertical blank, just because
-				// Very slow if joysticks not installed, so skip the code
-				if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
-					JOYINFO ji;
-					MMRESULT mm = joyGetPos(0, &ji);
-					if (mm == 0) {
-
-						int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-						dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-
-						rPADATA |= 12;                  // assume joystick centered
-
-						if (dir < 0)
-							rPADATA &= ~4;              // left
-						else if (dir > 0)
-							rPADATA &= ~8;              // right
-
-						dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-						dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-
-						rPADATA |= 3;                   // assume joystick centered
-
-						if (dir < 0)
-							rPADATA &= ~1;              // up
-						else if (dir > 0)
-							rPADATA &= ~2;              // down
-
-						UpdatePorts();
-
-						if (ji.wButtons)
-							TRIG0 &= ~1;                // JOY 0 fire button down
-						else
-							TRIG0 |= 1;                 // JOY 0 fire button up
-					}
-					if (vi.rgjc[1].wNumButtons > 0)
-					{
-						mm = joyGetPos(1, &ji);
-						if (mm == 0) {
-
-							int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
-							dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
-
-							rPBDATA |= 12;                  // assume joystick centered
-
-							if (dir < 0)
-								rPBDATA &= ~4;              // left
-							else if (dir > 0)
-								rPBDATA &= ~8;              // right
-
-							dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
-							dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
-
-							rPBDATA |= 3;                   // assume joystick centered
-
-							if (dir < 0)
-								rPBDATA &= ~1;              // up
-							else if (dir > 0)
-								rPBDATA &= ~2;              // down
-
-							UpdatePorts();
-
-							if (ji.wButtons)
-								TRIG1 &= ~1;                // JOY 0 fire button down
-							else
-								TRIG1 |= 1;                 // JOY 0 fire button up
-						}
-					}
-				}
-
-				CheckKey();	// process the ATARI keyboard buffer
-				
-				if (fTrace)
-					ForceRedraw();	// it might do this anyway
-
-			// every VBI, shadow the hardware registers
-			// to their higher locations
-
-				memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
-				memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
-				memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
-				memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
-
-				memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
-				memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
-				memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
-				memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
-
-				memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
-				memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
-				memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
-
-				MSG msg;
-
-				if (wScanMin > wScanMac)
-				{
-					assert(0);
-					// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
-				}
-				else
-				{
-					extern void RenderBitmap();
-					RenderBitmap();	// tell Gemulator to actually draw the window
-				}
-
-				wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
-				wScanMac = 0;
-
-				// Gem window has a message, stop the loop to process it
-				if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-					fStop = fTrue;
-
-				// decrement printer timer
-
-				if (vi.cPrintTimeout && vmCur.fShare)
-				{
-					vi.cPrintTimeout--;
-					if (vi.cPrintTimeout == 0)
-					{
-						FlushToPrinter();
-						UnInitPrinter();
-					}
-				}
-				else
-					FlushToPrinter();
-
+				DoVBI();	// it's huge, it bloats this function to inline it.
 			}
+
 			else if (wScan > 251)
 			{
 				wLeft = 30;	// for this retrace section, there will be no DMA
@@ -1121,6 +1163,8 @@ void UpdatePorts()
         PORTB = wPBDDIR;
 }
 
+// Read in the cartridge
+//
 void ReadCart(int iVM)
 {
 	char *pch = v.rgvm[iVM].rgcart.szName;
@@ -1152,6 +1196,8 @@ void ReadCart(int iVM)
 	_close(h);
 }
 
+// SWAP in the cartridge
+//
 void InitCart(int iVM)
 {
 	// no cartridge
@@ -1194,7 +1240,7 @@ void InitCart(int iVM)
 
 	if (cb == 16384)
 	{
-		// Super cart??
+		// Super cart?? !!! This is broken right now
 
 		unsigned int i;
 
@@ -1224,7 +1270,8 @@ void InitCart(int iVM)
 	}
 }
 
-
+// !!! This is broken. Work with unbanked and banked 16K carts
+//
 void BankCart(int iVM, int iBank)
 {
 	PCART pcart = &(v.rgvm[iVM].rgcart);
@@ -1265,6 +1312,4 @@ void BankCart(int iVM, int iBank)
 		}
 	}
 }
-
 #endif // XFORMER
-
