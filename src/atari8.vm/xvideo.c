@@ -412,7 +412,7 @@ void ProcessScanLine(BOOL fRender)
 
     psl = &rgsl[wScan];
 
-    if (wScan == 8)
+    if (wScan == wStartScan)
         {
         fWait = 0;
         fFetch = 1;

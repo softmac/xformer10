@@ -556,8 +556,8 @@ void RestoreVideo(void);
 void WaitForVRetrace(void);
 void UpdatePorts(void);
 
-void InitSIOV(int, char **);
-void SIOV(void);
+//void InitSIOV(int, char **);
+void SIOV(int);
 void DiskConfig(void);
 
 extern int fXFCable;

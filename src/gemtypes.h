@@ -200,20 +200,21 @@ __inline void _assert(int f, char *file, int line)
 
 #define HERTZ CLOCKS_PER_SEC
 
-// !!! these need to be way higher now
-
-// maximum 9 cards with 7 sets of ROMs each
-
-#define MAXOS 63
-
 // maximum number of virtual machines
+#define MAX_VM 108
 
+// !!! non-XFORMER does not support MAX_VM but uses these out of date variables!
+// maximum 9 cards with 7 sets of ROMs each
+#define MAXOS 63
+// maximum number of virtual machines
 #define MAXOSUsable  52
 
-// maximum number of virtual machines
+// each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
+// Out of 1,000,000. Lower is faster than real time, bigger is slower
+ULONGLONG cEmulationSpeed;
 
-#define MAX_VM 108
-                
+// stores and instance name whenever we Init an instance
+char pInstname[MAX_VM][MAX_PATH];
 
 //
 // Library prototypes
@@ -738,7 +739,7 @@ typedef struct VMINST
     HBITMAP hbmOld;         // handle of previous bitmap
     HDC  hdcMem;            // hdc of memory context
 
-    BOOL fInited;
+    BOOL fInitialReset;
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer
@@ -1151,7 +1152,7 @@ BOOL EditProperties(void);
 BOOL LoadProperties(HWND hOwner);
 BOOL SaveProperties(HWND hOwner);
 BOOL SaveState(BOOL fSave);
-void CreateAllVMs();
+BOOL CreateAllVMs();
 
 
 // romcard.c

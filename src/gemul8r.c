@@ -192,10 +192,8 @@ void DisplayStatus()
 
     }
 #else
-	// Get a name we can use for this instance
-	char pInstname[MAX_PATH];
-	CreateInstanceName(v.iVM, pInstname);
-    sprintf(rgch0, "%s - %s", vi.szAppName, pInstname);
+	// the name we can use for this instance
+	sprintf(rgch0, "%s - %s", vi.szAppName, pInstname);
 #endif
 
     if (vi.fExecuting)
@@ -238,17 +236,17 @@ void DisplayStatus()
 
     strcat(rgch0, rgch);
 
-#ifdef XFORMER
+	// make every VM support braking
     if (FIsAtari8bit(vmCur.bfHW))
-        {
+    {
         extern WORD fBrakes;
 
 		// are we running at normal speed or turbo speed
-        sprintf(rgch, " (%s)", fBrakes ? "1.8 MHz" : "Turbo");
+        sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo",
+						cEmulationSpeed ? ((int)(100000000 / cEmulationSpeed)) : 0);
         strcat(rgch0, rgch);
-        }
-#endif
-
+    }
+		
     if (v.fZoomColor)
     {
 		// Is the display stretched to fill the window?
@@ -257,8 +255,8 @@ void DisplayStatus()
 
     SetWindowText(vi.hWnd, rgch0);
 
-    TrayMessage(vi.hWnd, NIM_MODIFY, 0,
-            LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), rgch0);
+	// too expensive now that we update the title a lot with the emulation speed
+    //TrayMessage(vi.hWnd, NIM_MODIFY, 0, LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), rgch0);
 }
 
 
@@ -746,6 +744,8 @@ void CreateVMMenu()
 				CreateInstanceName(z, mNew);	// get a name for it
 				SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
 				CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
+				EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);	// grey if tiling
+
 				if (z == (int)v.iVM)
 					fNeedHotKey = TRUE;	// current inst is bottom of the list, make a note to put the hot key label on the top one
 				iFound++;
@@ -761,6 +761,7 @@ void CreateVMMenu()
 				DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);	// erase the old one
 				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before the one we last did.
 				CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
+				EnableMenuItem(vi.hMenu, IDM_VM1 - iFound, !v.fTiling ? 0 : MF_GRAYED);	// grey if tiling
 				zLast = z;
 
 				// add the hotkey "Alt+F12" to the menu item after us
@@ -770,6 +771,8 @@ void CreateVMMenu()
 					mii.dwTypeData = mNew;
 					GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
 					strcat(mNew, "\tAlt+F12");
+					mii.fMask = MIIM_STRING;	// in retail builds, you have to set these again
+					mii.dwTypeData = mNew;
 					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 				}
 				iFound++;
@@ -784,6 +787,8 @@ void CreateVMMenu()
 		mii.dwTypeData = mNew;
 		GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
 		strcat(mNew, "\tAlt+F12");
+		mii.fMask = MIIM_STRING;	// in retail builds, you have to set these again
+		mii.dwTypeData = mNew;
 		SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 	}
 
@@ -814,19 +819,23 @@ void FixAllMenus()
 	char mNew[MAX_PATH + 10];
 	mii.dwTypeData = mNew;
 
-	// call them D1: <filespec>
+	// call them D1: <filespec> - grey an unload choice if nothing is loaded there, and grey them all in tiled mode
 	sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
 	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D1, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
 	sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
 	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D2, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
 	sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
 	SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0]) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D3, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
 	sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
 	SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0]) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D4, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
 
 	// only 8 bit ATARI supports cartridges right now
 	if (FIsAtari8bit(vmCur.bfHW))
@@ -844,8 +853,9 @@ void FixAllMenus()
 			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
 		}
 
-		// grey "remove cart" if there isn't one
-		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn) ? 0 : MF_GRAYED);
+		// grey "remove cart" if there isn't one, grey them both if tiling
+		EnableMenuItem(vi.hMenu, IDM_CART, !v.fTiling ? 0 : MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn && !v.fTiling) ? 0 : MF_GRAYED);
 	}
 	else
 	{
@@ -853,8 +863,13 @@ void FixAllMenus()
 		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
 	}
 
-	// don't let them delete the last VM
-	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1) ? 0 : MF_GRAYED);
+	// don't let them delete the last VM, or anything if tiling
+	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1 && !v.fTiling) ? 0 : MF_GRAYED);
+
+	// no color/mono switch (that's per instance), cold starting or stretching when tiling
+	EnableMenuItem(vi.hMenu, IDM_COLORMONO, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
 
 #if 0 // delete all VMs not supported
 	// grey out some things if there are no VMs at all
@@ -879,7 +894,7 @@ void FixAllMenus()
 		mii.dwTypeData = mNew;
 		strcpy(mNew, rgszVM[zz + 1]);
 		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // show the name of the type of VM (eg. ATARI 800)
-		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM) ? MF_GRAYED : MF_ENABLED);	// grey it if there are too many
+		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM || v.fTiling) ? MF_GRAYED : MF_ENABLED);	// grey it if too many
 	}
 #endif
 
@@ -894,6 +909,37 @@ void FixAllMenus()
 	// something that changed the menus probably changes the title bar
 	DisplayStatus();
 }
+
+
+// Put the next filename in lpCmdLine into sFile. A space is the delimiter, but there can be spaces inside quotes
+// return the position of the first character of the next filename, or NULL
+// If quotes surround the name, remove them.
+//
+char *GetNextFilename(char *sFile, char *lpCmdLine)
+{
+	char c = ' ';		// look for a space
+
+	if (*lpCmdLine == '\"') {
+		c = '\"';		// beginning quote? Look for a matching quote instead
+		lpCmdLine++;	// filename begins after the quote
+	}
+
+	while (*lpCmdLine && *(lpCmdLine) != c)
+		*sFile++ = *lpCmdLine++;
+
+	*sFile = 0;	// terminate the filename
+
+	if (c == '\"')
+		lpCmdLine++;	// skip the closing quote
+
+	lpCmdLine++;	// skip the space
+
+	if (!*lpCmdLine)
+		return NULL;
+
+	return lpCmdLine;
+}
+
 
 /****************************************************************************
 
@@ -1130,9 +1176,62 @@ int CALLBACK WinMain(
         };
     }
 
-    // Try to load previously saved properties, the persisted PROPS structure
-    fProps = LoadProperties(NULL);
+	// In case we start up with a parameter on the cmd line
+	BOOL fSkipLoad = FALSE;
 
+#ifdef XFORMER
+
+	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
+	// and select an existing VM of the appropriate hardware type.
+	// For now just support for Atari 8-bit VMs and trust the file extension
+	if (lpCmdLine && lpCmdLine[0])
+	{
+		char sFile[MAX_PATH];
+		int iVM, len;
+
+		while (lpCmdLine && strlen(lpCmdLine) > 4)
+		{
+			// parse the next filename out of the list, removing quotes if there
+			lpCmdLine = GetNextFilename(sFile, lpCmdLine);
+
+			len = strlen(sFile);
+			
+			if (lstrcmpi(sFile + len - 3, "atr\0") == 0 || lstrcmpi(sFile + len - 3, "xfd") == 0)
+			{
+				AddVM(&vmi800, &iVM, vmAtari48);
+				strcpy(v.rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument
+				v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
+				// update the instance name whenever we Init an instance
+				CreateInstanceName(iVM, pInstname[iVM]);
+				fSkipLoad = TRUE;
+			}
+			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0
+				|| stricmp(sFile + len - 3, "car") == 0)
+			{
+				AddVM(&vmi800, &iVM, vmAtari48);
+				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
+				v.rgvm[iVM].rgcart.fCartIn = TRUE;
+				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
+				// update the instance name whenever we Init an instance
+				CreateInstanceName(iVM, pInstname[iVM]);
+				fSkipLoad = TRUE;
+			}
+		}
+	}
+#endif
+
+	// If we loaded more than 1 instance, come up in tiled mode
+	if (v.cVM > 1)
+	{
+		v.fTiling = TRUE;
+		v.fFullScreen = TRUE;
+	}
+
+	// Try to load previously saved properties, the persisted PROPS structure
+	// pretend it succeeded if we pre-loaded something from the cmd line, so it doesn't make default VM's
+    fProps = fSkipLoad ? TRUE : LoadProperties(NULL);
+	
 	// If we couldn't load our last session, make a session that has one of every possible machine type, just for fun.
 	if (!fProps)
 	{
@@ -1154,29 +1253,9 @@ int CALLBACK WinMain(
 	// Try to choose the same instance that was current when the state was saved to bring up now.
 	SelectInstance(v.iVM);
 
-#ifdef XFORMER
-	
-	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
-	// and select an existing VM of the appropriate hardware type.
-	// For now just support for Atari 8-bit VMs and trust the file extension
-	if (FIsAtari8bit(vmCur.bfHW) && (lpCmdLine && strlen(lpCmdLine) > 3))
-	{
-		int len = strlen(lpCmdLine);
-		lpCmdLine[len - 1] = 0;	// get rid of the trailing "
-
-		if (lstrcmpi(lpCmdLine + len - 4, "atr\0") == 0 || lstrcmpi(lpCmdLine + len - 4, "xfd") == 0)
-		{
-			strcpy(vmCur.rgvd[0].sz, lpCmdLine + 1); // replace disk 1 image with the argument (sans ")
-			vmCur.rgvd[0].dt = DISK_IMAGE;	// we want to use this disk image in VM 0
-		}
-		else if (stricmp(lpCmdLine + len - 4, "bin") == 0 || stricmp(lpCmdLine + len - 4, "rom") == 0
-						|| stricmp(lpCmdLine + len - 4, "car") == 0)
-		{
-			strcpy(vmCur.rgcart.szName, lpCmdLine + 1); // replace disk 1 image with the argument (sans ")
-			vmCur.rgcart.fCartIn = TRUE;
-		}
-	}
-#endif
+	// If we're about to come up in Tile mode, we won't be refreshing the menus, and they'll be bad unless we fix them now.
+	if (v.fTiling)
+		FixAllMenus();
 
     // DirectX can fragment address space, so only preload if user wants to
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
@@ -1276,7 +1355,7 @@ int CALLBACK WinMain(
 
     vi.pbAudioBuf = vi.pbFrameBuf + 1280*720 + 16;
 
-    PostMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
+    //PostMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 
 #if 0
     // One time un-Hibernate
@@ -1413,21 +1492,32 @@ int CALLBACK WinMain(
             {
             vi.fExecuting = (FExecVM(v.iVM, FALSE, TRUE) == 0);
 
-            if (FIsAtari8bit(vmCur.bfHW))
-                {
+			// every second or so, update our clock speed indicator
+			static cCJ;
+			cCJ++;
+			
+			// try to guess when a second or so has passed if the brakes are off, especially if tiling
+			int cM = v.fTiling ? 60 * v.cVM : 60;
 
-				// run all the instances at the same time in tiling mode
-				if (v.fTiling)
-                    SelectInstance(v.iVM + 1);
-                }
+			if (FIsAtari8bit(vmCur.bfHW))
+			{
+				extern WORD fBrakes;
+				if (!fBrakes)
+					cM = (v.fTiling ? 600 / (v.cVM / 2) : 600);
+				if (cM < 60) cM = 60;
+			}
+
+			if (cCJ >= cM)
+			{
+				DisplayStatus();
+				cCJ = 0;
+			}
+
+			// run all the instances at the same time in tiling mode
+			if (v.fTiling)
+                SelectInstance(v.iVM + 1);
             }
 
-        else
-            {
-            // idle code
-
-            WaitMessage();
-            }
         } // forever
 
     // Reset tick resolution
@@ -2245,14 +2335,15 @@ BOOL SelectInstance(unsigned iVM)
     vpvm = vmCur.pvmi;
 
 	// Has it been cold started yet?
-    if (!vvmi.fInited)
+    if (!vvmi.fInitialReset)
         {
         vmCur.fColdReset = TRUE;
-        vvmi.fInited = TRUE;
+        vvmi.fInitialReset = TRUE;
         }
 
-	// a menu or title bar might need to change
-	FixAllMenus();
+	// a menu or title bar might need to change. When Tiling, don't let it do this every 1/60s.
+	if (!v.fTiling)
+		FixAllMenus();
 
     return TRUE;
 }
@@ -3222,6 +3313,7 @@ break;
 		case IDM_TILE:
 			v.fTiling = !v.fTiling;
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
+			FixAllMenus();
 			break;
 
 		// toggle COLOR/B&W
@@ -3284,7 +3376,9 @@ break;
 
 			// Init it, Create the screen buffer for it, and now go to that instance!
 			FInitVM(vmNew);
-			CreateNewBitmap(vmNew);
+			// update the instance name whenever we Init an instance
+			CreateInstanceName(vmNew, pInstname[vmNew]);
+			CreateNewBitmap(vmNew);	// we've already created our window, so we need to do this manually now
 			SelectInstance(vmNew);
 #endif
 

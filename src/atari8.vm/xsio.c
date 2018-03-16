@@ -44,7 +44,7 @@ typedef struct
 
 #define MAX_DRIVES 8
 
-DRIVE rgDrives[MAX_DRIVES];
+DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 
 #define MD_OFF  0
 #define MD_SD   1
@@ -57,21 +57,22 @@ DRIVE rgDrives[MAX_DRIVES];
 #define MD_EXT  8
 #define MD_FILE 9
 
-int wCOM;
-int fXFCable;
+// scary globals
+int wCOM;		// !!! doesn't seem to be used
+int fXFCable;	// !!! left unitialized
 
 
-void DeleteDrive(int i)
+void DeleteDrive(int iVM, int i)
 {
-    if ((rgDrives[i].h > 0) && (rgDrives[i].h != 65535))
-        _close(rgDrives[i].h);
+    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
+        _close(rgDrives[iVM][i].h);
 
-    rgDrives[i].mode = MD_OFF;
-    rgDrives[i].h    = -1;
+    rgDrives[iVM][i].mode = MD_OFF;
+    rgDrives[iVM][i].h    = -1;
 }
 
 
-void AddDrive(int i, BYTE *pchPath)
+void AddDrive(int iVM, int i, BYTE *pchPath)
 {
     int h, sc=0;
 
@@ -79,17 +80,17 @@ void AddDrive(int i, BYTE *pchPath)
         {
         if (fXFCable && pchPath[2] == ':')
             {
-            rgDrives[i].mode = MD_EXT;
+            rgDrives[iVM][i].mode = MD_EXT;
             return;
             }
         }
 
-    if ((rgDrives[i].h > 0) && (rgDrives[i].h != 65535))
-        _close(rgDrives[i].h);
+    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
+        _close(rgDrives[iVM][i].h);
 
     h = _open(pchPath, _O_BINARY | _O_RDWR);
 
-    rgDrives[i].fWP = 0;   // assume file opened for R/W
+    rgDrives[iVM][i].fWP = 0;   // assume file opened for R/W
 
     if (h == -1)
         {
@@ -97,78 +98,78 @@ void AddDrive(int i, BYTE *pchPath)
         if (h == -1)
             goto Lbadfile;
 
-        rgDrives[i].fWP = 1;  // file is read-only or in use
+        rgDrives[iVM][i].fWP = 1;  // file is read-only or in use
         }
 
-    rgDrives[i].h = h;
-    rgDrives[i].wSectorMac = 720;
-    rgDrives[i].mode = MD_SD;
-    strcpy(rgDrives[i].path,pchPath);
+    rgDrives[iVM][i].h = h;
+    rgDrives[iVM][i].wSectorMac = 720;
+    rgDrives[iVM][i].mode = MD_SD;
+    strcpy(rgDrives[iVM][i].path,pchPath);
 
     if (_read(h,&sc,2) == 2)
         {
         ULONG l;
 
         l = _lseek(h,0,SEEK_END);
-        rgDrives[i].cb = l;
+        rgDrives[iVM][i].cb = l;
         _lseek(h,2,SEEK_SET);
 
         if (sc == 0x296)
             {
             // it's an SIO2PC created image
 
-            rgDrives[i].ofs = 16;
+            rgDrives[iVM][i].ofs = 16;
             _read(h,&l,2);                     // size lo
             _read(h,&sc,2);                     // bytes/sec
             _read(h,(((char *)&l) + 2),2);     // size hi
 
             l = l << 4;
-            rgDrives[i].wSectorMac = (WORD)(l / sc);
+            rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
 
             if (sc == 256)
-                rgDrives[i].mode = MD_DD;
+                rgDrives[iVM][i].mode = MD_DD;
             }
         else
             {
             // assume it's a Xformer Cable created image
             // so just check for density
 
-            rgDrives[i].ofs = 0;
+            rgDrives[iVM][i].ofs = 0;
 
             if (l == 368640)
                 {
-                rgDrives[i].mode = MD_QD;
-                rgDrives[i].wSectorMac = 1440;
+                rgDrives[iVM][i].mode = MD_QD;
+                rgDrives[iVM][i].wSectorMac = 1440;
                 }
             else if (l == 184320)
                 {
-                rgDrives[i].mode = MD_DD;
-                rgDrives[i].wSectorMac = 720;
+                rgDrives[iVM][i].mode = MD_DD;
+                rgDrives[iVM][i].wSectorMac = 720;
                 }
             else if (l == 133120)
                 {
-                rgDrives[i].mode = MD_ED;
-                rgDrives[i].wSectorMac = 1040;
+                rgDrives[iVM][i].mode = MD_ED;
+                rgDrives[iVM][i].wSectorMac = 1040;
                 }
             else if (l == 92160)
                 {
-                rgDrives[i].mode = MD_SD;
-                rgDrives[i].wSectorMac = 720;
+                rgDrives[iVM][i].mode = MD_SD;
+                rgDrives[iVM][i].wSectorMac = 720;
                 }
             else if ((i > 0) && (l <= 88375))
                 {
                 // it's just a file that we fake up as a virtual disk
 
-                rgDrives[i].mode = MD_FILE;
-                rgDrives[i].wSectorMac = 720;
-                rgDrives[i].fWP = 1;  // force read-only
-                rgDrives[i].cb = l;
+                rgDrives[iVM][i].mode = MD_FILE;
+                rgDrives[iVM][i].wSectorMac = 720;
+                rgDrives[iVM][i].fWP = 1;  // force read-only
+                rgDrives[iVM][i].cb = l;
 
                 {
                 int j;
                 char *pch = pchPath, *pchT;
 
-                memset(rgDrives[i].name,' ',12);
+                memset(rgDrives[iVM][i].name,' ',12);
 
 #if 0
                 // REVIEW: why did I do this?
@@ -188,7 +189,7 @@ void AddDrive(int i, BYTE *pchPath)
                         {
                         if ((*pch >= 'a') && (*pch <= 'z'))
                             *pch &= ~0x20;
-                        rgDrives[i].name[j] = *pch;
+                        rgDrives[iVM][i].name[j] = *pch;
                         }
                     else if (j < 9)
                         j = 7;
@@ -199,20 +200,22 @@ void AddDrive(int i, BYTE *pchPath)
                 {
                 // invalid disk image
 Lbadfile:
-                rgDrives[i].mode = MD_OFF;
+                rgDrives[iVM][i].mode = MD_OFF;
                 }
             }
         }
     else
-        rgDrives[i].ofs = 0;
+        rgDrives[iVM][i].ofs = 0;
 
 //            _close(h);
 }
 
-
-void InitSIOV(int argc, char **argv)
+#if 0
+void InitSIOV(int iVM, int argc, char **argv)
 {
     int i, iArgv = 0;
+
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
 #ifdef HDOS16ORDOS32
     _bios_printer(_PRINTER_INIT, 0, 0);
@@ -293,7 +296,7 @@ void InitSIOV(int argc, char **argv)
         case 'K':
         case 'k':
             if (argv[iArgv][2] == ':')
-                ReadCart(&argv[iArgv][3]);
+                ReadCart(iVM, &argv[iArgv][3]);
             break;
 
 #ifndef HWIN32
@@ -334,125 +337,19 @@ void InitSIOV(int argc, char **argv)
         {
         if (i < argc)
             {
-            AddDrive(i, argv[i+iArgv]);
+            AddDrive(iVM, i, argv[i+iArgv]);
             }
         else
-            rgDrives[i].mode = MD_OFF;
+            rgDrives[iVM][i].mode = MD_OFF;
         }
 }
-
-#ifndef HWIN32
-
-void MyReadJoy()
-{
-    unsigned char b, bMask;
-    int i;
-
-    bMask = (wJoy0XCal ? 0x03 : 0) | (wJoy1XCal ? 0x0C : 0);
-
-    wJoy0X = 0; wJoy0Y = 0; wJoy1X = 0; wJoy1Y = 0;
-
-    outp(0x201,0);
-
-    for (i = 0; i < 10000; i++)
-        {
-        b = inp(0x201);
-
-        if (((b & 0x08) == 0) && (0 == wJoy1Y))
-            wJoy1Y = i;
-
-        if (((b & 0x04) == 0) && (0 == wJoy1X))
-            wJoy1X = i;
-
-        if (((b & 0x02) == 0) && (0 == wJoy0Y))
-            wJoy0Y = i;
-
-        if (((b & 0x01) == 0) && (0 == wJoy0X))
-            wJoy0X = i;
-
-        if ((b & bMask) == 0)
-            break;
-        }
-
-    bJoyBut = b;
-}
-
-
-void DiskConfig()
-{
-#ifdef HDOS16ORDOS32
-        BYTE rgch[80];
-        BYTE key;
-        int i;
-
-        for (;;)
-            {
-            RestoreVideo();
-
-            printf("\n  Current Configuration:\n\n");
-
-            printf("  Modem port: ");
-
-            if ((wCOM == 0) || (wCOM == 1))
-                printf("COM%d  \n", wCOM+1);
-            else
-                printf("off\n");
-            printf("  To set the modem port, use the -C switch on the XF command line\n\n");
-
-            printf("  Joystick: %s\n", fJoy ? "enabled" : "disabled or not present");
-            printf("  To enable the joystick, use the -J switch on the XF command line\n\n");
-
-            printf("  Sound card: %sabled\n", fSound ? "en" : "dis");
-            printf("  To enable sound, use the -S switch on the XF command line\n\n");
-
-            for (i = 0; i < MAX_DRIVES; i++)
-                {
-                printf("  D%d: ", i+1);
-
-                if (rgDrives[i].mode == MD_EXT)
-                    {
-                    printf("external\n");
-                    }
-                else if (rgDrives[i].mode != MD_OFF)
-                    {
-                    printf("%s\n",rgDrives[i].path);
-                    }
-                else
-                    {
-                    printf("unused\n");
-                    }
-                }
-
-            printf("\n  Press a drive number (1-8) to change drive, or Enter to resume emulator:");
-            fflush(stdout);
-
-            key = _bios_keybrd(_NKEYBRD_READ) & 255;
-            key -= '1';
-
-            if (key >= 8)
-                break;
-
-            printf("%d\n", key+1);
-            printf("  Enter path to new disk image for D%d: ", key+1);
-            fflush(stdout);
-
-            gets(rgch);
-            AddDrive(key, rgch);
-            }
-
-        SaveVideo();
 #endif
-
-        ForceRedraw();
-}
-#endif // !HWIN32
-
 
 #define NO_TRANSLATION    32
 #define LIGHT_TRANSLATION 0
 #define HEAVY_TRANSLATION 16
 
-void BUS1()
+void BUS1(int iVM)
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
@@ -461,6 +358,8 @@ void BUS1()
     static BYTE fConcurrent = FALSE;
 
 //    printf("in bus handler, regPC = %04X\n", regPC);
+
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
     switch (regPC & 0x00F0)
         {
@@ -743,7 +642,7 @@ void BUS1()
     regSP = (regSP + 2) & 255 | 256;
 }
 
-void SIOV()
+void SIOV(int iVM)
 {
     WORD wDev, wDrive, wCom, wStat, wBuff, wSector, bAux1, bAux2;
     WORD  wBytes;
@@ -756,9 +655,11 @@ void SIOV()
     BYTE rgb[256];
     WORD i;
 
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
     if (regPC != 0xE459)
         {
-        BUS1();
+        BUS1(iVM);
         return;
         }
 
@@ -791,7 +692,7 @@ void SIOV()
         if ((wDrive < 0) || (wDrive >= MAX_DRIVES))
             goto lCable;
 
-        pdrive = &rgDrives[wDrive];
+        pdrive = &rgDrives[iVM][wDrive];
 
         md = pdrive->mode;
 

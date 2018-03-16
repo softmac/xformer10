@@ -79,13 +79,15 @@ void DeleteVM(int iVM)
 	if (!v.rgvm[iVM].fValidVM)
 		return;
 
-	vrgvmi[iVM].fInited = FALSE;	// invalidate the non-persistable data
+	vrgvmi[iVM].fInitialReset = FALSE;	// invalidate the non-persistable data
 	SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
 	DeleteObject(vrgvmi[iVM].hbm);
+	vrgvmi[iVM].hbm = NULL;
 	DeleteDC(vrgvmi[iVM].hdcMem);
+	vrgvmi[iVM].hdcMem = NULL;
 	FUnInitVM(iVM);
+	v.rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
 	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
-	v.rgvm[iVM].fValidVM = FALSE;
 	v.cVM--;	// one fewer valid instance now
 }
 
@@ -150,12 +152,18 @@ BOOL CreateAllVMs()
 
 	AddVM(&vmi800, &vmNew, vmAtari48);
 	FInitVM(vmNew);
+	// update the instance name whenever we Init an instance
+	CreateInstanceName(vmNew, pInstname[vmNew]);
 
     AddVM(&vmi800, &vmNew, vmAtariXL);
 	FInitVM(vmNew);
+	// update the instance name whenever we Init an instance
+	CreateInstanceName(vmNew, pInstname[vmNew]);
 
 	AddVM(&vmi800, &vmNew, vmAtariXE);
 	FInitVM(vmNew);
+	// update the instance name whenever we Init an instance
+	CreateInstanceName(vmNew, pInstname[vmNew]);
 #endif
 
 #ifdef ATARIST
@@ -313,11 +321,6 @@ LTryAgain:
 
 		if (v.rgvm[i].fValidVM && FIsAtari8bit(v.rgvm[i].bfHW)) {
 			v.rgvm[i].pvmi = (PVMINFO)&vmi800;
-			//			if (i == 0) {
-			//				v.rgvm[i].iOS = 0;
-			//				v.rgvm[i].bfRAM = ram48K;
-			//				v.rgvm[i].bfHW = 1;
-			//			}
 		}
 #endif
 
@@ -348,11 +351,14 @@ LTryAgain:
 
 		v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
 
-		// we just loaded an instance off disk. Init it.
+		// we just loaded an instance off disk. Install and Init it.
 		if (v.rgvm[i].fValidVM)
 		{
 			v.cVM++;
+			FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
 			FInitVM(i);
+			// update the instance name whenever we Init an instance
+			CreateInstanceName(i, pInstname[i]);
 		}
 	}
 	
