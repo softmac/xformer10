@@ -720,7 +720,7 @@ void ReadCart();
 void InitCart(int iVM);
 void BankCart(int iVM, int i);
 
-BOOL FAddVM(PVMINFO pvmi, int *pi);
+BOOL AddVM(PVMINFO pvmi, int *pi, int type);
 
 #define vmCur (*vi.pvmCur)
 #define osCur v.rgosinfo[vmCur.iOS]
@@ -1131,7 +1131,7 @@ ULONG CallGEMDOS();
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(void);
 
-BOOL OpenThePath(HWND hWnd, char *psz);
+//BOOL OpenThePath(HWND hWnd, char *psz);
 BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate);
 
 
@@ -1151,6 +1151,7 @@ BOOL EditProperties(void);
 BOOL LoadProperties(HWND hOwner);
 BOOL SaveProperties(HWND hOwner);
 BOOL SaveState(BOOL fSave);
+void CreateAllVMs();
 
 
 // romcard.c
@@ -1159,9 +1160,9 @@ void ListROMs(HWND, ULONG wf);
 BOOL FInstallROMs(void);
 void CheckSum(HWND);
 int  CbReadWholeFile(char *sz, int cb, void *buf);
-int  CbReadWholeFileToGuest(char *sz, int cb, ULONG addr, ULONG access_mode);
+//int  CbReadWholeFileToGuest(char *sz, int cb, ULONG addr, ULONG access_mode);
 BOOL FWriteWholeFile(char *sz, int cb, void *buf);
-BOOL FWriteWholeFileFromGuest(char *sz, int cb, ULONG addr, ULONG access_mode);
+//BOOL FWriteWholeFileFromGuest(char *sz, int cb, ULONG addr, ULONG access_mode);
 
 // serial.c
 
@@ -1216,14 +1217,14 @@ void mon();
 
 // misc
 
-BOOL CenterWindow (HWND, HWND);
-LRESULT CALLBACK Properties(HWND, UINT, WPARAM, LPARAM);
+//BOOL CenterWindow (HWND, HWND);
+//LRESULT CALLBACK Properties(HWND, UINT, WPARAM, LPARAM);
 //LRESULT CALLBACK About  (HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK Info   (HWND, UINT, WPARAM, LPARAM);
+//LRESULT CALLBACK Info   (HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK DisksDlg(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK FirstTimeProc(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK ChooseProc(HWND, UINT, WPARAM, LPARAM);
+//LRESULT CALLBACK DisksDlg(HWND, UINT, WPARAM, LPARAM);
+//LRESULT CALLBACK FirstTimeProc(HWND, UINT, WPARAM, LPARAM);
+//LRESULT CALLBACK ChooseProc(HWND, UINT, WPARAM, LPARAM);
 void DisplayStatus();
 //BOOL FCreateOurPalette();
 BOOL SetBitmapColors();
@@ -1558,7 +1559,7 @@ typedef struct _sthw
 
 } STHW;
 
-STHW vsthw;
+STHW vsthw[MAX_VM];
 
 
 //

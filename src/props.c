@@ -41,7 +41,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 // Add a new virtual machine to v.rgvm - return which instance it found
 //
 
-BOOL FAddVM(PVMINFO pvmi, int *pi)
+BOOL AddVM(PVMINFO pvmi, int *pi, int type)
 {
     int i;
     BOOL f;
@@ -66,26 +66,28 @@ BOOL FAddVM(PVMINFO pvmi, int *pi)
     if (pi)
         *pi = i;
 
-    f = (*pvmi->pfnInstall)(pvmi, &v.rgvm[i]);
+	// our jump table for the routines. FInstallVM will crash if we don't do this first
+	v.rgvm[i].pvmi = pvmi;
 
-    if (f)
-        {
-        // Copy default model name
-
-        strcpy (v.rgvm[i].szModel, v.rgvm[i].pvmi->pchModel);
-
-        // Set CPU to Auto by default
-
-        v.rgvm[i].fCPUAuto = TRUE;
-
-        // Set sound on by default
-
-        v.rgvm[i].fSound = TRUE;
-        }
-
-    return f;
+	f = FInstallVM(i, pvmi, type);
+	v.rgvm[i].fValidVM = f;
+	return f;
 }
 
+void DeleteVM(int iVM)
+{
+	if (!v.rgvm[iVM].fValidVM)
+		return;
+
+	vrgvmi[iVM].fInited = FALSE;	// invalidate the non-persistable data
+	SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
+	DeleteObject(vrgvmi[iVM].hbm);
+	DeleteDC(vrgvmi[iVM].hdcMem);
+	FUnInitVM(iVM);
+	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
+	v.rgvm[iVM].fValidVM = FALSE;
+	v.cVM--;	// one fewer valid instance now
+}
 
 //
 // First time initialization of global properties
@@ -136,7 +138,7 @@ BOOL InitProperties()
 	return TRUE;
 }
 
-// !!! Add a menu item to actually do this
+// Add a menu item to actually do this?
 BOOL CreateAllVMs()
 {
 	int vmNew;
@@ -144,33 +146,15 @@ BOOL CreateAllVMs()
 	// make one of everything at the same time
 #ifdef XFORMER
 
-    // initialize the default Atari 8-bit VMs
+    // Create and initialize the default Atari 8-bit VMs
 
-    FAddVM(&vmi800, &vmNew);
-    v.rgvm[vmNew].bfHW = vmAtari48;
-    v.rgvm[vmNew].iOS  = 0;
-    v.rgvm[vmNew].bfRAM = ram48K;
-    strcpy(v.rgvm[vmNew].szModel, rgszVM[1]);
-
-	// Init the instance and create it's HDC for drawing.
+	AddVM(&vmi800, &vmNew, vmAtari48);
 	FInitVM(vmNew);
 
-    FAddVM(&vmi800, &vmNew);
-    v.rgvm[vmNew].bfHW = vmAtariXL;
-    v.rgvm[vmNew].iOS  = 1;
-    v.rgvm[vmNew].bfRAM = ram64K;
-    strcpy(v.rgvm[vmNew].szModel, rgszVM[2]);
-
-	// Init the instance and create it's HDC for drawing.
+    AddVM(&vmi800, &vmNew, vmAtariXL);
 	FInitVM(vmNew);
 
-	FAddVM(&vmi800, &vmNew);
-    v.rgvm[vmNew].bfHW = vmAtariXE;
-    v.rgvm[vmNew].iOS  = 2;
-    v.rgvm[vmNew].bfRAM = ram128K;
-    strcpy(v.rgvm[vmNew].szModel, rgszVM[3]);
-
-	// Init the instance and create it's HDC for drawing.
+	AddVM(&vmi800, &vmNew, vmAtariXE);
 	FInitVM(vmNew);
 #endif
 
@@ -178,12 +162,12 @@ BOOL CreateAllVMs()
 
     // initialize the default Atari ST VM (68000 mode)
 
-    FAddVM(&vmiST, NULL);
+    AddVM(&vmiST, NULL);
     strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[5]);
 
     // initialize the default Atari ST VM (68030 mode)
 
-    FAddVM(&vmiST, NULL);
+    AddVM(&vmiST, NULL);
     strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[5]);
     strcat(v.rgvm[v.cVM-1].szModel, "/030");
     v.rgvm[v.cVM-1].fCPUAuto = FALSE;
@@ -193,21 +177,21 @@ BOOL CreateAllVMs()
 #ifdef SOFTMAC
     // initialize the default Mac Plus VM
 
-    FAddVM(&vmiMac, NULL);
+    AddVM(&vmiMac, NULL);
 #endif
 
 #ifdef SOFTMAC2
     // initialize the default color Mac VMs
 
-    FAddVM(&vmiMacII, NULL);
+    AddVM(&vmiMacII, NULL);
 
-    FAddVM(&vmiMacQdra, NULL);
+    AddVM(&vmiMacQdra, NULL);
 
 #ifdef POWERMAC
     // initialize the default Power Mac VMs
 
-    FAddVM(&vmiMacPowr, NULL);
-    FAddVM(&vmiMacG3, NULL);
+    AddVM(&vmiMacPowr, NULL);
+    AddVM(&vmiMacG3, NULL);
 
 #endif  // POWERMAC
 #endif  // SOFTMAC2

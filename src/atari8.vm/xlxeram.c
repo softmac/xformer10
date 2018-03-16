@@ -123,10 +123,6 @@ void InitBanks(int iVM)
         _fmemcpy(&rgbMem[0xD800], rgbAtariOSB, 10240);
         }
 
-    // enable BASIC ROMs !!! won't the OS do this properly based on F9?
-	//_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
-    //oldflags = (ramtop == 0xC000) ? 0xFF : 0xFD;
-
 #if 0
     printf("InitBanks:    ");
     DumpBlocks();

@@ -457,7 +457,7 @@ void mon()            /* the 6502 monitor */
         else if (chCom == 'B')
             {
             FColdbootVM(v.iVM);
-            FExecVM(FALSE,TRUE);
+            FExecVM(v.iVM, FALSE,TRUE);
             CchShowRegs();
             }
         else if (chCom == ':')
@@ -534,7 +534,7 @@ void mon()            /* the 6502 monitor */
                 {
                 u = regPC;
                 CchDisAsm(&u);
-                FExecVM(TRUE,FALSE);
+                FExecVM(v.iVM, TRUE,FALSE);
                 CchShowRegs();
                 }
             }

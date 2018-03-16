@@ -217,7 +217,7 @@ typedef struct
 
 #pragma pack()
 
-extern CANDYHW vrgcandy[MAXOSUsable], *vpcandyCur;
+extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 
 // #define CANDY_STATE(name) vrgcandy[v.iVM].m_##name
 // #define CANDY_STATE(name) vrgcandy[0].m_##name
@@ -606,18 +606,18 @@ extern char HUGE rgbXEMem[MAX_VM][16][16384];
 // Function prototypes of the Atari 800 VM API
 //
 
-BOOL __cdecl InstallAtari();
-BOOL __cdecl InitAtari();
-BOOL __cdecl UninitAtari();
-BOOL __cdecl InitAtariDisks();
-BOOL __cdecl MountAtariDisk();
-BOOL __cdecl UninitAtariDisks();
-BOOL __cdecl UnmountAtariDisk();
-BOOL __cdecl WarmbootAtari();
-BOOL __cdecl ColdbootAtari();
+BOOL __cdecl InstallAtari(int);
+BOOL __cdecl InitAtari(int);
+BOOL __cdecl UninitAtari(int);
+BOOL __cdecl InitAtariDisks(int);
+BOOL __cdecl MountAtariDisk(int);
+BOOL __cdecl UninitAtariDisks(int);
+BOOL __cdecl UnmountAtariDisk(int);
+BOOL __cdecl WarmbootAtari(int);
+BOOL __cdecl ColdbootAtari(int);
 BOOL __cdecl DumpHWAtari(char *pch);
 BOOL __cdecl TraceAtari();
-BOOL __cdecl ExecuteAtari();
+BOOL __cdecl ExecuteAtari(int);
 BOOL __cdecl KeyAtari(ULONG l);
 BOOL __cdecl DumpRegsAtari(void);
 BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC);

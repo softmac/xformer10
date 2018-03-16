@@ -688,6 +688,7 @@
     <ClInclude Include="src\680x0.cpu\68k.h" />
     <ClInclude Include="src\blocklib\blockdev.h" />
     <ClInclude Include="src\blocklib\winaspi32.h" />
+    <ClInclude Include="src\vm.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\res\Gemul8r.ico" />

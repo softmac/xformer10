@@ -90,9 +90,9 @@ typedef unsigned short int  ADDR;
 // some functions can operate on any instance, and they take a parameter (which instance)
 // and need to look at the state of that instance, not vpvm (the current one)
 
-BOOL __inline FInstallVM()
+BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
 {
-    return vpvm->pfnInstall(0);
+    return v.rgvm[iVM].pvmi->pfnInstall(iVM, pvmi, type);
 }
 
 BOOL __inline FInitVM(int iVM)
@@ -105,6 +105,9 @@ BOOL __inline FInitVM(int iVM)
 
 BOOL __inline FUnInitVM(int iVM)
 {
+	//if (v.rgvm[iVM].pvmi == NULL)
+	//	return TRUE;
+
     if (v.rgvm[iVM].pvmi->pfnUnInit == NULL)
         return TRUE;
 
@@ -128,18 +131,15 @@ BOOL __inline FColdbootVM(int iVM)
 }
 
 // so far, this only gets called on the current instance
-BOOL __inline FWarmbootVM()
+BOOL __inline FWarmbootVM(int iVM)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnWarmboot(0);
+    return v.rgvm[iVM].pvmi->pfnWarmboot(iVM);
 }
 
 // so far, this only gets called on the current instance
-BOOL __inline FExecVM(int fStep, int fCont)
+BOOL __inline FExecVM(int iVM, int fStep, int fCont)
 {
-    return vpvm->pfnExec(fStep, fCont);
+    return v.rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
 }
 
 BOOL __inline FMountDiskVM(int iVM, int i)
