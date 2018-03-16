@@ -1133,7 +1133,7 @@ ULONG CallGEMDOS();
 BOOL CreateNewBitmap(void);
 
 //BOOL OpenThePath(HWND hWnd, char *psz);
-BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate);
+BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int type);
 
 
 // printer.c
