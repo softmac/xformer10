@@ -551,7 +551,6 @@ DoVBI()
 		regPC = cpuPeekW(0xFFFA);
 	}
 
-#if 0
 	// process joysticks before the vertical blank, just because.
 	// Very slow if joysticks not installed, so skip the code
 	if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
@@ -620,7 +619,6 @@ DoVBI()
 			}
 		}
 	}
-#endif
 
 	CheckKey();	// process the ATARI keyboard buffer
 
