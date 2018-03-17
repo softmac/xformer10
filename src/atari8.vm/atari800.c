@@ -149,7 +149,6 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	// These things are the same for each machine type
 
 	v.rgvm[iVM].fCPUAuto = TRUE;
-	v.rgvm[iVM].fSound = TRUE;
 	v.rgvm[iVM].bfCPU = cpu6502;
 	v.rgvm[iVM].bfMon = monColrTV;
 	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
@@ -642,7 +641,7 @@ DoVBI()
 	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
 	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
 
-#if 0 try drawing at scan line 262, not at the start of the VBI
+#if 0 // try drawing at scan line 262, not at the start of the VBI
 	if (wScanMin > wScanMac)
 	{
 		assert(0);

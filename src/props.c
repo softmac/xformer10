@@ -70,7 +70,12 @@ BOOL AddVM(PVMINFO pvmi, int *pi, int type)
 	v.rgvm[i].pvmi = pvmi;
 
 	f = FInstallVM(i, pvmi, type);
+
 	v.rgvm[i].fValidVM = f;
+
+	v.rgvm[i].fSound = TRUE;
+	v.rgvm[i].fJoystick = TRUE;
+
 	return f;
 }
 
