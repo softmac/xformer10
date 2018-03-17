@@ -551,6 +551,7 @@ DoVBI()
 		regPC = cpuPeekW(0xFFFA);
 	}
 
+#if 0
 	// process joysticks before the vertical blank, just because.
 	// Very slow if joysticks not installed, so skip the code
 	if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
@@ -619,6 +620,7 @@ DoVBI()
 			}
 		}
 	}
+#endif
 
 	CheckKey();	// process the ATARI keyboard buffer
 
@@ -642,8 +644,7 @@ DoVBI()
 	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
 	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
 
-	MSG msg;
-
+#if 0 try drawing at scan line 262, not at the start of the VBI
 	if (wScanMin > wScanMac)
 	{
 		assert(0);
@@ -654,11 +655,12 @@ DoVBI()
 		extern void RenderBitmap();
 		RenderBitmap();	// tell Gemulator to actually draw the window
 	}
-
 	wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
 	wScanMac = 0;
+#endif
 
 	// Gem window has a message, stop the loop to process it
+	MSG msg;
 	if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
 	fStop = fTrue;
 
@@ -727,6 +729,7 @@ BOOL __cdecl ExecuteAtari(int iVM)
 			if (wScan >= 262)
 			{
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
+
 				wScan = 0;
 				wFrame++;	// count how many frames we've drawn. Does anybody care?
 
@@ -737,6 +740,8 @@ BOOL __cdecl ExecuteAtari(int iVM)
 				// in tiling mode, run all of the instances, and then wait for time to catch up
 				if (!v.fTiling || v.iVM < lastVM)
 				{
+					RenderBitmap();	// !!! used to render in VBI, if compat bugs appear. Try it only when dirty. Use DDraw.
+									
 					// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
 					// don't let errors propogate
 					const ULONGLONG cJif = 29830; // 1789790 / 60
@@ -753,7 +758,6 @@ BOOL __cdecl ExecuteAtari(int iVM)
 					if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
 					cCYCLES = GetCycles();
 				}
-				
 				lastVM = v.iVM;
 
 				// exit each frame to let the next VM run (if Tiling) and to update the clock speed on the status bar (always)

@@ -776,10 +776,9 @@ void CreateVMMenu()
 				{
 					mii.fMask = MIIM_STRING;
 					mii.dwTypeData = mNew;
+					mii.cch = sizeof(mNew);
 					GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
 					strcat(mNew, "\tAlt+F12");
-					mii.fMask = MIIM_STRING;	// in retail builds, you have to set these again
-					mii.dwTypeData = mNew;
 					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 				}
 				iFound++;
@@ -792,10 +791,9 @@ void CreateVMMenu()
 	{
 		mii.fMask = MIIM_STRING;
 		mii.dwTypeData = mNew;
+		mii.cch = sizeof(mNew);
 		GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
 		strcat(mNew, "\tAlt+F12");
-		mii.fMask = MIIM_STRING;	// in retail builds, you have to set these again
-		mii.dwTypeData = mNew;
 		SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 	}
 
@@ -1228,7 +1226,7 @@ int CALLBACK WinMain(
 	}
 #endif
 
-	// If we loaded more than 1 instance, come up in tiled mode
+	// If we loaded more than 1 instance, come up in tiled, fullscreen mode
 	if (v.cVM > 1)
 	{
 		v.fTiling = TRUE;
@@ -1238,6 +1236,13 @@ int CALLBACK WinMain(
 	// Try to load previously saved properties, the persisted PROPS structure
 	// pretend it succeeded if we pre-loaded something from the cmd line, so it doesn't make default VM's
     fProps = fSkipLoad ? TRUE : LoadProperties(NULL);
+
+	// we're not loading a saved window size, so make our default window size big enough to see an 8 bit screen image x 2
+	// (see just before CreateWindow)
+	if (fSkipLoad || !fProps)
+	{
+		SetRect(&v.rectWinPos, 0, 0, 750, 600);
+	}
 	
 	// If we couldn't load our last session, make a session that has one of every possible machine type, just for fun.
 	if (!fProps)
@@ -2615,10 +2620,13 @@ void RenderBitmap()
 					iVM = (iVM + 1) % MAX_VM;
 					// printf("hdcMem[%d] = %p, %p\n", iVM, vrgvmi[iVM].hdcMem, vrgvmi[iVM].pvBits);
 				} while (vrgvmi[iVM].hdcMem == NULL);
+				
+				// Tiled mode does not stretch, it needs to be FAST
+				BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
 
-				StretchBlt(vi.hdc, x, y,
-					(vsthw[iVM].xpix * vi.fXscale), (vsthw[iVM].ypix * vi.fYscale),
-					vrgvmi[iVM].hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
+				//StretchBlt(vi.hdc, x, y,
+				//	(vsthw[iVM].xpix * vi.fXscale), (vsthw[iVM].ypix * vi.fYscale),
+				//	vrgvmi[iVM].hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
 			}
 		}
 	}

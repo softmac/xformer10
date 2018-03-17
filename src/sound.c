@@ -203,22 +203,23 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 						// Divide by (n+4) for 64K or (n+7) for 1.79M
 					}
 					else if (i == 1 && (sAUDCTL & 0x10)) {
-						freq[i] = ((sAUDCTL & 0x40) ? 1789790 : ((sAUDCTL & 0x01) ? 15700L : 63921L)) * 100 /
-							(rgvoice[i].frequency * 256 + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
+						freq[i] = ((sAUDCTL & 0x40) ? 178979000 : ((sAUDCTL & 0x01) ? 1570000 : 6392100)) /
+							((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
 					}
 					else if (i == 3 && (sAUDCTL & 0x08)) {
-						freq[i] = ((sAUDCTL & 0x20) ? 1789790 : ((sAUDCTL & 0x01) ? 15700L : 63921L)) * 100 /
-							(rgvoice[i].frequency * 256 + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
+						freq[i] = ((sAUDCTL & 0x20) ? 178979000 : ((sAUDCTL & 0x01) ? 1570000 : 6392100)) /
+							((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
 					}
 					else {
-						freq[i] = ((sAUDCTL & 0x01) ? 15700L : 63921L) * 100 / (rgvoice[i].frequency + 1);
+						freq[i] = ((sAUDCTL & 0x01) ? 1570000 : 6392100) / (rgvoice[i].frequency + 1);
 					}
 
 					// recalculate the pulse width as the freq may have changed, rounded to the nearest half sample.
 					// and possibly alternate 2 values to achieve that (16.5 is 16 17 16 17), otherwise sound 21 = sound 22
 					// if the widths of the positive pulses are not all the same in pure tones, it sounds distorted, so you can't
 					// allow higher resoltions like 16.1 by doing 9 16's and a 17.
-					pulse[i].width[0] = (SAMPLE_RATE * 1000 / freq[i] * 10 + 25) * 2 / 100;
+					static const int sr = SAMPLE_RATE * 1000;	// save a couple of cycles
+					pulse[i].width[0] = ((sr / freq[i] * 10 + 25) << 1) / 100;
 					pulse[i].width[1] = pulse[i].width[0] / 2;
 					pulse[i].width[0] -= pulse[i].width[1]; // this may be one more than the other one
 				}
@@ -228,7 +229,7 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 			for (int i = sOldSample; i < iCurSample; i++) {
 
 				int bLeft = 0;	//left channel amplitude
-				int bRight = 0;
+				//int bRight = 0;
 
 				// figure out each voice for this sample
 				for (int voice = 0; voice < 4; voice++) {
@@ -241,29 +242,16 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 					// apply distortion on the edge transition (only relevant for non-volume only)
 					if ((rgvoice[voice].distortion & 0x01) == 0 && pulse[voice].pos == 0) {
 
-						// How many times would the poly counters have clocked since the last pulse width? The most accurate
-						// number uses the freq of the note * 10, not the pulse width, which is rounded to the nearest 1/2 integer
-						int j, r = 1789790 * 100 / freq[voice];
-
-						// !!! only advance the necessary counters
-
-						// poly4's cycle is 15
-						for (j = 0; j < r % 0xf; j++)
-							poly4[voice] = ((poly4[voice] >> 1) | ((~(poly4[voice] ^ (poly4[voice] >> 1)) & 0x01) << 3)) & 0x000F;
+						// How many times would the poly counters have clocked since the last pulse width? We need the accuracy of
+						// using the freq of the note * 10, not the pulse width, which is only rounded to the nearest 1/2 integer
+						int j, r = 178979000 / freq[voice];
 
 						// poly5's cycle is 31
-						for (j = 0; j < r % 0x1f; j++)
-							poly5[voice] = ((poly5[voice] >> 1) | ((~(poly5[voice] ^ (poly5[voice] >> 3)) & 0x01) << 4)) & 0x001F;
-
-						// poly9's cycle is 511
-						for (j = 0; j < r % 0x1ff; j++)
-							poly9[voice] = ((poly9[voice] >> 1) | ((~((~poly9[voice]) ^ ~(poly9[voice] >> 5)) & 0x01) << 8)) & 0x01FF;
-
-						// poly9's cycle is 0x1ffff
-						for (j = 0; j < r % 0x1ffff; j++)
-							poly17[voice] = ((poly17[voice] >> 1) | ((~((~poly17[voice]) ^ ~(poly17[voice] >> 5)) & 0x01) << 16)) & 0x1FFFF;
-
-						//printf("poly4 = %02X, poly5 = %02X, poly9 = %03X, poly17 = %05X\n", poly4, poly5, poly9, poly17);
+						if (!(rgvoice[voice].distortion & 8))	// only if it's being used
+						{
+							for (j = 0; j < r % 0x1f; j++)
+								poly5[voice] = ((poly5[voice] >> 1) | ((~(poly5[voice] ^ (poly5[voice] >> 3)) & 0x01) << 4)) & 0x001F;
+						}
 
 						// when bit 7 of AUDCx is off (distortion bit 3), that pulse is gated by the low bit of the 5-bit poly
 						// ie. only allow the following poly counters/pure tone to do their thing if
@@ -279,15 +267,27 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 								// AUDCTL bit 7 chooses 9 or 17
 								if ((sAUDCTL & 0x80) && fAllow)
 								{
+									// poly9's cycle is 511
+									for (j = 0; j < r % 0x1ff; j++)
+										poly9[voice] = ((poly9[voice] >> 1) | ((~((~poly9[voice]) ^ ~(poly9[voice] >> 5)) & 0x01) << 8)) & 0x01FF;
+
 									pulse[voice].phase = (poly9[voice] & 1);
 								}
 								if (!(sAUDCTL & 0x80) && fAllow)
 								{
+									// poly17's cycle is 0x1ffff
+									for (j = 0; j < r % 0x1ffff; j++)
+										poly17[voice] = ((poly17[voice] >> 1) | ((~((~poly17[voice]) ^ ~(poly17[voice] >> 5)) & 0x01) << 16)) & 0x1FFFF;
+
 									pulse[voice].phase = (poly17[voice] & 1);
 								}
 							}
 							else if (fAllow)
 							{
+								// poly4's cycle is 15
+								for (j = 0; j < r % 0xf; j++)
+									poly4[voice] = ((poly4[voice] >> 1) | ((~(poly4[voice] ^ (poly4[voice] >> 1)) & 0x01) << 3)) & 0x000F;
+
 								pulse[voice].phase = (poly4[voice] & 1);
 							}
 						}
@@ -304,13 +304,14 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 					// volume only
 					if (rgvoice[voice].distortion & 1)
 					{
-						bLeft += ((65535 * (int)rgvoice[voice].volume / 15) - 32768);
+						//bLeft += ((65535 * (int)rgvoice[voice].volume / 15) - 32768);
+						bLeft += ((rgvoice[voice].volume << 12) - 32768);	// much faster
 						pulse[voice].pos = 0;	// start a new pulse from the beginning when we're done with volume only
 
 					// output the correct sample given what part of the pulse we're in, or if we're skipping the positive section
 					}
 					else {
-						bLeft += ((pulse[voice].phase ? 32767 : -32768) * (int)rgvoice[voice].volume / 15);
+						bLeft += ((pulse[voice].phase ? 32768 : -32768) * (int)rgvoice[voice].volume >> 4);
 						pulse[voice].pos++;
 
 						// may be strictly bigger if the note changed on us
@@ -323,9 +324,9 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 					}
 				}
 
-				bLeft = (bLeft >> 2) & 0xffff;		// we won't let you clip, unlike the real POKEY
+				bLeft = (bLeft >> 2);		// we won't let you clip, unlike the real POKEY
 				//bRight = bLeft;    // mono for now			
-				*((WORD *)pb)++ = (WORD)bLeft;
+				*((WORD *)pb)++ = (bLeft & 0xffff);
 				//*pb++ = (char)(bRight & 0xff);
 				//*pb++ = (char)((bRight >> 8) & 0xff);
 
