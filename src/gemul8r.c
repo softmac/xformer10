@@ -3326,7 +3326,9 @@ break;
 			// we'll start with the current instance, not always the first one.
 			v.fTiling = !v.fTiling;
 			if (v.fTiling)
-				nFirstTile = v.iVM;
+				nFirstTile = v.iVM;	// show the current VM as the top left one
+			else
+				SelectInstance(nFirstTile + 1); // allow cycling through them by choosing the 2nd tile
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
 			break;
@@ -3874,7 +3876,9 @@ break;
 			RECT rect;
 			GetClientRect(vi.hWnd, &rect);
 
-			int x, y, iVM = -1;
+			int x, y, iVM = nFirstTile - 1;
+			if (iVM < 1)
+				iVM = v.cVM - 1;
 
 			for (y = rect.top; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
 			{
