@@ -12,6 +12,11 @@
 #define IDM_DELVM                       40202
 //#define IDM_DELALL                      40203
 #define IDM_COLDSTART                   40204
+#define IDM_WARMSTART					40221
+#define IDM_TOGGLEBASIC                 40222
+#define IDM_NEXTVM						40223
+#define IDM_PREVVM						40224
+
 #define IDM_OPEN                        40206
 #define IDM_SAVE                        40207
 #define IDM_IMPORTDOS                   40208

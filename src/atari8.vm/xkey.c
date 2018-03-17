@@ -711,12 +711,6 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			else
 				ramtop = 0xC000;
 			FColdbootVM(v.iVM);
-		} else
-
-		// F10 - system reset (warm start)
-		if (fDown && !(*pbshift & wAnyShift))
-		{
-			FWarmbootVM(v.iVM);
 		}
 		return;
 
