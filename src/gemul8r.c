@@ -52,6 +52,7 @@ VMINST vrgvmi[MAX_VM];	// not persistable
 ICpuExec *vpci;
 
 BOOL fDebug;
+static int nFirstTile; // at which instance does tiling start?
 
 // forward references
 BOOL SelectInstance(unsigned iVM);
@@ -2607,11 +2608,16 @@ void RenderBitmap()
 	{
 		// Tiling
 
-		int x, y, iVM = -1; // v.iVM;
+		int x, y, iVM;
+		
+		// start tiling where we're supposed to
+		iVM = nFirstTile - 1;
+		if (iVM < 0)
+			iVM = v.cVM - 1;
 
-		for (y = rect.top; y < rect.bottom; y += vsthw[iVM].ypix * vi.fYscale)
+		for (y = rect.top; y < rect.bottom; y += vsthw[iVM].ypix /* * vi.fYscale*/)
 		{
-			for (x = rect.left; x < rect.right; x += vsthw[iVM].xpix * vi.fXscale)
+			for (x = rect.left; x < rect.right; x += vsthw[iVM].xpix /* * vi.fXscale*/)
 			{
 					// advance to the next valid bitmap
 
@@ -3316,7 +3322,11 @@ break;
 
 		// toggle tile mode
 		case IDM_TILE:
+			// which tile appears in the top left? There are often more tiles than fit, so to give everybody a chance,
+			// we'll start with the current instance, not always the first one.
 			v.fTiling = !v.fTiling;
+			if (v.fTiling)
+				nFirstTile = v.iVM;
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
 			break;
