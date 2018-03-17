@@ -2656,8 +2656,8 @@ void RenderBitmap()
 
         x = (rect.right - rect.left) - (vsthw[iVM].xpix * vi.fXscale * scale);
         y = (rect.bottom - rect.top) - (vsthw[iVM].ypix * vi.fYscale * scale);
-
-		// Why did we not used to have to do this?
+	
+		// Why did we not used to have to do this? Only necessary when coming out of zoom?
 		StretchBlt(vi.hdc, 0, 0, x/2, rect.bottom, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
 		StretchBlt(vi.hdc, x/2, 0, x/2 + (vsthw[iVM].xpix * vi.fXscale * scale), y/2, vvmi.hdcMem, 0, 0, 0, 0, BLACKNESS);
 		StretchBlt(vi.hdc, x/2, y/2 + (vsthw[iVM].ypix * vi.fYscale * scale), x / 2 + (vsthw[iVM].xpix * vi.fXscale * scale), rect.bottom,
@@ -2669,6 +2669,7 @@ void RenderBitmap()
              vvmi.hdcMem, 0, 0, vsthw[iVM].xpix, vsthw[iVM].ypix, SRCCOPY);
         }
 
+#if 0 // future cloud stuff, too slow for now
     if (vi.pbFrameBuf && vvmi.pvBits)
     {
         int x, y;
@@ -2683,6 +2684,7 @@ void RenderBitmap()
             }
         }
     }
+#endif
 }
 
 
