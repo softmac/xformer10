@@ -202,8 +202,8 @@ void DisplayStatus()
 
     }
 #else
-	// the name we can use for this instance
-	sprintf(rgch0, "%s - %s", vi.szAppName, pInstname);
+
+	sprintf(rgch0, "%s - %s", vi.szAppName, pInstname[v.iVM]);
 #endif
 
     if (vi.fExecuting)
