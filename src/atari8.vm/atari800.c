@@ -66,8 +66,6 @@ CANDYHW *vpcandyCur = &vrgcandy[0]; // default to first instance
 //BYTE bshiftSav;	// was a local too
 BOOL fDumpHW;
 
-WORD fBrakes;        // 0 = run as fast as possible, 1 = slow down, works across all instances
-
 static signed short wLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 

@@ -279,8 +279,6 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)
 
-extern WORD fBrakes;
-
 #include "6502.h"
 
 //
