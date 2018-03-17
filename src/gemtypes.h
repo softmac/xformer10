@@ -129,6 +129,8 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 #define Y8 240
 #endif
 
+WORD fBrakes;	// run at full speed or emulated speed?
+
 //
 // Byte swapping macros
 //
@@ -213,7 +215,7 @@ __inline void _assert(int f, char *file, int line)
 // Out of 1,000,000. Lower is faster than real time, bigger is slower
 ULONGLONG cEmulationSpeed;
 
-// stores and instance name whenever we Init an instance
+// stores an instance name whenever we Init an instance
 char pInstname[MAX_VM][MAX_PATH];
 
 //
@@ -943,7 +945,7 @@ typedef struct
 	int  fWaveOutput;   // true if suitable wave output device found
 	int  iWaveOutput;   // if fWaveOutput, the identifier of the device
 	WAVEHDR rgwhdr[SNDBUFS]; // sound buffers
-	char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2 * 2];// sound buffer data
+	char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2];// MONO sound buffer data
 
     HANDLE hROMCard;    // on NT, the handle to the Gemulator device
     unsigned ioPort;    // current port being scanned

@@ -149,7 +149,7 @@ BOOL __inline FMountDiskVM(int iVM, int i)
 
 BOOL __inline FUnmountDiskVM(int iVM, int i)
 {
-    return v.rgvm[iVM].pvmi->pfnUnmountDisk(i);
+    return v.rgvm[iVM].pvmi->pfnUnmountDisk(iVM, i);
 }
 
 BOOL __inline FWinMsgVM(HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)

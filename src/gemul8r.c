@@ -38,6 +38,16 @@ INST vi;
 //
 VMINST vrgvmi[MAX_VM];	// not persistable
 
+//
+// THEORY OF OPERATION 
+// First we Install a VM, then Init it. (I do both at the same time, it's unclear what functionality belongs where)
+// CreateNewBitmap creates the screen buffer for the instance. Then you ColdBoot a VM to start it running.
+// SelectInstance() makes an instance the current one.
+// While it is running, call Exec to run for a frame or so. This function does NOT take the instance as a parameter,
+//   it can only run on the current instance.
+// When you're done with an instance, Uninit it. (There is no UnInstall).
+//
+
 // __declspec(thread) VMINST vmi;
 ICpuExec *vpci;
 
@@ -210,8 +220,6 @@ void DisplayStatus()
             }
         else if (FIsAtari8bit(vmCur.bfHW))
             {
-            extern WORD fBrakes;
-
             sprintf(rgch, " (%s", fBrakes ? "1.8 MHz" : "Turbo");
             }
         else if (FIsTutor(vmCur.bfHW))
@@ -239,8 +247,6 @@ void DisplayStatus()
 	// make every VM support braking
     if (FIsAtari8bit(vmCur.bfHW))
     {
-        extern WORD fBrakes;
-
 		// are we running at normal speed or turbo speed
         sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo",
 						cEmulationSpeed ? ((int)(100000000 / cEmulationSpeed)) : 0);
@@ -395,6 +401,7 @@ ULONG QueryTickCtr()
     return i;
 }
 
+// Gets the number of elapsed 6502 cycles, I know that's not machine independent.
 ULONGLONG GetCycles()
 {
 	LARGE_INTEGER qpc;
@@ -1492,25 +1499,13 @@ int CALLBACK WinMain(
             {
             vi.fExecuting = (FExecVM(v.iVM, FALSE, TRUE) == 0);
 
-			// every second or so, update our clock speed indicator
-			static cCJ;
-			cCJ++;
-			
-			// try to guess when a second or so has passed if the brakes are off, especially if tiling
-			int cM = v.fTiling ? 60 * v.cVM : 60;
-
-			if (FIsAtari8bit(vmCur.bfHW))
-			{
-				extern WORD fBrakes;
-				if (!fBrakes)
-					cM = (v.fTiling ? 600 / (v.cVM / 2) : 600);
-				if (cM < 60) cM = 60;
-			}
-
-			if (cCJ >= cM)
+			// every second, update our clock speed indicator
+			static ULONGLONG sCJ;
+			ULONGLONG cCJ = GetCycles();
+			if (cCJ - sCJ >= 1789790)
 			{
 				DisplayStatus();
-				cCJ = 0;
+				sCJ = cCJ;
 			}
 
 			// run all the instances at the same time in tiling mode
