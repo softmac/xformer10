@@ -735,7 +735,8 @@ void CreateVMMenu()
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
 	char mNew[MAX_PATH + 10];
-	BOOL fNeedHotKey = FALSE;
+	BOOL fNeedNextKey = FALSE;
+	BOOL fNeedPrevKey = FALSE;
 	int zLast = -1;
 
 	int iFound = 0;
@@ -755,7 +756,11 @@ void CreateVMMenu()
 				EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);	// grey if tiling
 
 				if (z == (int)v.iVM)
-					fNeedHotKey = TRUE;	// current inst is bottom of the list, make a note to put the hot key label on the top one
+				{		// current inst is bottom of the list, make a note to put the NEXT INST hot key label on the top one
+					fNeedNextKey = TRUE;
+					fNeedPrevKey = TRUE;
+				}
+				
 				iFound++;
 			}
 
@@ -766,39 +771,62 @@ void CreateVMMenu()
 				mii.wID = IDM_VM1 - iFound;
 				mii.dwTypeData = mNew;
 				CreateInstanceName(z, mNew);	// get a name for it
+
+				// this is the previous inst to the current one
+				if (fNeedPrevKey) {
+					strcat(mNew, "\tShift+Ctrl+F11");
+					fNeedPrevKey = FALSE;
+				}
+
 				DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);	// erase the old one
 				InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before the one we last did.
 				CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
 				EnableMenuItem(vi.hMenu, IDM_VM1 - iFound, !v.fTiling ? 0 : MF_GRAYED);	// grey if tiling
 				zLast = z;
 
-				// add the hotkey "Alt+F12" to the menu item after us
+				if (fNeedPrevKey)
+				{
+					mii.fMask = MIIM_STRING;
+					mii.dwTypeData = mNew;
+					mii.cch = sizeof(mNew);
+					GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+					strcat(mNew, "\tCtrl+F11");
+					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
+
+					fNeedPrevKey = TRUE;
+				}
+
+				// we-re the current one... add the hotkey "Ctrl+F11" to the menu item after us
+				// and note that the next one we find is the prev one
 				if (z == (int)v.iVM)
 				{
 					mii.fMask = MIIM_STRING;
 					mii.dwTypeData = mNew;
 					mii.cch = sizeof(mNew);
 					GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-					strcat(mNew, "\tAlt+F12");
+					strcat(mNew, "\tCtrl+F11");
 					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
+
+					fNeedPrevKey = TRUE;
 				}
 				iFound++;
 			}
 		}
 	}
 
-	// add the hotkey "Alt+F12" to the first instance
-	if (fNeedHotKey && zLast >= 0)
+	// add the NEXT or PREV INST hotkey to the first instance
+	if ((fNeedNextKey || fNeedPrevKey) && zLast >= 0)
 	{
 		mii.fMask = MIIM_STRING;
 		mii.dwTypeData = mNew;
 		mii.cch = sizeof(mNew);
-		GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-		strcat(mNew, "\tAlt+F12");
-		SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
+		GetMenuItemInfo(vi.hMenu, fNeedNextKey ? (IDM_VM1 - iFound + 1) : IDM_VM1, 0, &mii);
+		strcat(mNew, fNeedNextKey ? "\tCtrl+F11" : "\tShift+Ctrl+F11");
+		SetMenuItemInfo(vi.hMenu, fNeedNextKey ? (IDM_VM1 - iFound + 1) : IDM_VM1, FALSE, &mii);
 	}
 
-	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);	// in case we're fixing the menus because one was deleted, this will still be hanging around
+	// in case we're fixing the menus because one was deleted, this will still be hanging around
+	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);
 }
 
 // Something changed that affects the menus. Set all the menus up right.
@@ -810,6 +838,16 @@ void FixAllMenus()
 	EnableMenuItem(vi.hMenu, IDM_OPEN, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
+
+
+	// toggle basic is never a thing outside of XFORMER. If mixed VMs, it's only relevant for an 8bit VM
+	// See Darek, I'm thinking about this!
+#ifndef XFORMER
+	DeleteMenu(vi.hMenu, IDM_TOGGLEBASIC, 0);
+#endif
+	// !!! Doesn't work yet
+	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, FIsAtari8bit(vmCur.bfHW) ? MF_ENABLED : MF_GRAYED);
 
 	// Checkmark if these modes are active
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
@@ -2304,7 +2342,7 @@ BOOL FToggleMonitor(int iVM)
 //
 // Change which instance is current and running.
 // Start trying at the instance passed to us, and keep looking until we find a valid one
-// -1 means go to the next one (cycle)
+// -1 means go to the previous one
 //
 
 BOOL SelectInstance(unsigned iVM)
@@ -2312,10 +2350,14 @@ BOOL SelectInstance(unsigned iVM)
 	// there better be some valid ones loaded
 	assert(v.cVM);
 
-	// go to the next one, not a particular one
+	// which way are we looking?
+	int dir = 1;
 	if (iVM == -1)
-		iVM = v.iVM++;
-
+	{
+		dir = -1;
+		iVM = v.iVM - 1;
+	}
+	
 	if (iVM >= MAX_VM)
 		iVM = 0;
 
@@ -2323,7 +2365,7 @@ BOOL SelectInstance(unsigned iVM)
 
 	while (!v.rgvm[iVM].fValidVM)
 	{
-		iVM = (iVM + 1) % MAX_VM;
+		iVM = (iVM + dir) % MAX_VM;
 		if (iVM == old) break;
 	}
 
@@ -3344,7 +3386,7 @@ break;
 		// Delete this instance, and choose another
 		case IDM_DELVM:
 			DeleteVM(v.iVM);
-			SelectInstance(-1);	// go to the next one
+			SelectInstance(v.iVM + 1);	// go to the next one
 			break;
 
 		// unless Darek gets really busy, this should be enough VM types
@@ -3520,10 +3562,16 @@ break;
             break;
 #endif
 
+		// Ctrl-F10
         case IDM_COLDSTART:
             vmCur.fColdReset = TRUE;	// schedule a reboot
             return 0;
             break;
+
+		// F10
+		case IDM_WARMSTART:
+			FWarmbootVM(v.iVM);
+			break;
 
 #if 0
         case IDM_F11:
@@ -3566,10 +3614,15 @@ break;
 #endif
 
 		// cycle through all the instances
-        case IDM_TOGGLEHW:
+        case IDM_NEXTVM:
             SelectInstance(v.iVM + 1);
-            return 0;
+            return 0;	// for sure?
             break;
+
+		case IDM_PREVVM:
+			SelectInstance(-1);	// go backwards
+			return 0;
+			break;
 
 #if 0
         case IDM_CTRLF11:
@@ -3756,7 +3809,8 @@ break;
 			return 0;
 		}
 #endif
-		// somehow this magically only executes if ALT-enter is pressed
+		// !!! somehow this magically only executes if ALT-enter is pressed
+		// yet the .RC accelerator does not send IDM_FULLSCREEN like it should
 		SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
