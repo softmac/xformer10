@@ -18,7 +18,26 @@
 
 #include "common.h"
 
-static int RANDOM17;	// full 17 bit poly counter, the lower 8 bits are RANDOM
+
+// XE is non-zero when 130XE emulation is wanted
+#define XE 1
+
+// !!! dangerous
+#if XE
+// !!! that's a lot
+extern char HUGE rgbXEMem[MAX_VM][16][16384];
+#endif // XE
+
+// poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
+BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter
+BYTE poly5[(1 << 5) - 1];
+BYTE poly9[(1 << 9) - 1];
+BYTE poly17[(1 << 17) - 1];
+int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4], random17pos;	// each voice keeps track of its own poly position
+ULONGLONG random17last;	// instruction count last time a random number was asked for
+BOOL fPolyValid = FALSE;
+
+//static int RANDOM17;	// full 17 bit poly counter, the lower 8 bits are RANDOM
 
 //
 // Scan line structure
@@ -282,15 +301,6 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #include "6502.h"
 
 //
-// Build flags
-//
-// XE is non-zero when 130XE emulation is wanted
-//
-
-#define XE 1
-
-
-//
 // Shift key status bits (are returned by PC BIOS)
 //
 
@@ -315,7 +325,6 @@ __inline BYTE FAR *_pbtick()
 #define pbshift _pbshift()
 __inline BYTE FAR *_pbshift()
 {
-
     return &bshftByte;
 }
 
@@ -546,26 +555,26 @@ void mon(void);
 void __cdecl Go6502(void);
 void Interrupt(void);
 void CheckKey(void);
-void ReadJoy(void);
-void MyReadJoy(void);
+//void ReadJoy(void);
+//void MyReadJoy(void);
 
-void SaveVideo(void);
-void RestoreVideo(void);
-void WaitForVRetrace(void);
+//void SaveVideo(void);
+//void RestoreVideo(void);
+//void WaitForVRetrace(void);
 void UpdatePorts(void);
 
 //void InitSIOV(int, char **);
 void SIOV(int);
-void DiskConfig(void);
+//void DiskConfig(void);
 
-extern int fXFCable;
-extern unsigned uBaudClock;
+extern int fXFCable;	// !!! left uninitialized and used
+//extern unsigned uBaudClock;
 
-void _SIO_Init(void);
-void _SIO_Calibrate(void);
+//void _SIO_Init(void);
+//void _SIO_Calibrate(void);
 int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
 
-void InitSoundBlaster();
+//void InitSoundBlaster();
 
 BOOL ProcessScanLine(BOOL);
 void ForceRedraw();
@@ -585,11 +594,6 @@ extern char FAR rgbAtariOSB[]; // Atari 400/800 ROMs
 
 extern char FAR rgbXLXEBAS[], FAR rgbXLXED800[];  // XL/XE ROMs
 extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
-
-#if XE
-extern char HUGE rgbXEMem[MAX_VM][16][16384];
-#endif // XE
-
 
 //
 // The 3 hardware modes
@@ -663,5 +667,3 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b);
 #define bfPM1 0x20
 #define bfPM2 0x40
 #define bfPM3 0x80
-
-

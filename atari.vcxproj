@@ -639,19 +639,8 @@
     </Bscmake>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\Atari16.vm\68k.c" />
-    <ClCompile Include="src\680x0.cpu\68kcpu.c" />
-    <ClCompile Include="src\680x0.CPU\68kdis.c" />
-    <ClCompile Include="src\Atari16.vm\Blitter.c" />
     <ClCompile Include="src\ddlib.c" />
-    <ClCompile Include="src\Atari16.vm\Gemdos.c" />
     <ClCompile Include="src\Gemul8r.c" />
-    <ClCompile Include="src\Atari16.vm\Ikbd.c" />
-    <ClCompile Include="src\mac.vm\macdisk.c" />
-    <ClCompile Include="src\mac.vm\machw.c" />
-    <ClCompile Include="src\mac.vm\maclinea.c" />
-    <ClCompile Include="src\mac.vm\macrtc.c" />
-    <ClCompile Include="src\680x0.cpu\mon.c" />
     <ClCompile Include="src\printer.c" />
     <ClCompile Include="src\PROPS.C" />
     <ClCompile Include="src\Romcard.c" />
@@ -665,17 +654,13 @@
     <ClCompile Include="src\atari8.vm\atarixlc.c" />
     <ClCompile Include="src\atari8.vm\atarixlo.c" />
     <ClCompile Include="src\atari8.vm\x6502.c" />
-    <ClCompile Include="src\atari8.vm\xatari.c" />
     <ClCompile Include="src\atari8.vm\xfcable.c" />
     <ClCompile Include="src\atari8.vm\xkey.c" />
     <ClCompile Include="src\atari8.vm\xlxeram.c" />
     <ClCompile Include="src\atari8.vm\xmon.c" />
-    <ClCompile Include="src\atari8.vm\xsb.c" />
     <ClCompile Include="src\atari8.vm\xsio.c" />
     <ClCompile Include="src\atari8.vm\xvideo.c" />
-    <ClCompile Include="src\Atari16.vm\Yamaha.c" />
     <ClCompile Include="src\blocklib\blockapi.c" />
-    <ClCompile Include="src\blocklib\mac_hfs.c" />
     <ClCompile Include="src\blocklib\makedsk.c" />
     <ClCompile Include="src\blocklib\sectorio.c" />
   </ItemGroup>
@@ -685,7 +670,6 @@
     <ClInclude Include="src\ddlib.h" />
     <ClInclude Include="src\RES\RESOURCE.H" />
     <ClInclude Include="src\atari8.vm\atari800.h" />
-    <ClInclude Include="src\680x0.cpu\68k.h" />
     <ClInclude Include="src\blocklib\blockdev.h" />
     <ClInclude Include="src\blocklib\winaspi32.h" />
     <ClInclude Include="src\vm.h" />

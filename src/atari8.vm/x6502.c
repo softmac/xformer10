@@ -355,15 +355,18 @@ int __cdecl xprintf(const char *format, ...)
     return retval;
 }
 
-
 uint8_t READ_BYTE(uint32_t ea)
 {
 //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
 	if (ea == 0xD20A) {
-		// update RANDOM
-		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
-		RANDOM = RANDOM17 & 0xff;
+		// we've been asked for a random number. How many times would the poly counter have advanced?
+		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
+		// !!! this assumes 30 instructions per scanline always (not true) and that we quit when wLeft == 0 (not true) 
+		int cur = (wFrame * 262 * 30 + wScan * 30 + (30 - wLeft)) - random17last;
+		random17last = cur;
+		random17pos = (random17pos + cur) % 0x1ffff;
+		RANDOM = poly17[random17pos];
 	}
 
     return rgbMem[ea];

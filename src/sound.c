@@ -32,6 +32,9 @@ HWAVEOUT hWave;
 WAVEFORMATEX pcmwf;
 //static FILE *fp;
 
+
+
+// !!! dangerous
 typedef struct
 {
 	ULONG frequency;
@@ -53,12 +56,12 @@ typedef struct {
 } PULSE;
 static PULSE pulse[4] = { {0 },{0},{0},{0} };	// only need to init pos
 
-static int poly4[4], poly5[4], poly9[4], poly17[4];
-
 // the old values to use to catch up to the present, when they have just been changed
 static VOICE rgvoice[4] = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
 static ULONG sAUDCTL = 0;
 #endif
+
+
 
 //
 // convert a phase angle (0..65535) to a sine (-127..+127)
@@ -249,14 +252,13 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 						// poly5's cycle is 31
 						if (!(rgvoice[voice].distortion & 8))	// only if it's being used
 						{
-							for (j = 0; j < r % 0x1f; j++)
-								poly5[voice] = ((poly5[voice] >> 1) | ((~(poly5[voice] ^ (poly5[voice] >> 3)) & 0x01) << 4)) & 0x001F;
+							poly5pos[voice] = (poly5pos[voice] + r) % 0x1f;
 						}
 
 						// when bit 7 of AUDCx is off (distortion bit 3), that pulse is gated by the low bit of the 5-bit poly
 						// ie. only allow the following poly counters/pure tone to do their thing if
 						// poly5 is inactive or if active, if poly5 is currently high. Otherwise keep the same amplitude as the last pulse.
-						BOOL fAllow = (rgvoice[voice].distortion & 8) || (poly5[voice] & 1);
+						BOOL fAllow = (rgvoice[voice].distortion & 8) || (poly5[poly5pos[voice]] & 1);
 
 						//bit 5 chooses whether to use another counter (the 17/9 or 4-bit counter)
 						if ((rgvoice[voice].distortion & 2) == 0) {
@@ -267,28 +269,19 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 								// AUDCTL bit 7 chooses 9 or 17
 								if ((sAUDCTL & 0x80) && fAllow)
 								{
-									// poly9's cycle is 511
-									for (j = 0; j < r % 0x1ff; j++)
-										poly9[voice] = ((poly9[voice] >> 1) | ((~((~poly9[voice]) ^ ~(poly9[voice] >> 5)) & 0x01) << 8)) & 0x01FF;
-
-									pulse[voice].phase = (poly9[voice] & 1);
+									poly9pos[voice] = (poly9pos[voice] + r) % 0x1ff;
+									pulse[voice].phase = (poly9[poly9pos[voice]] & 1);
 								}
 								if (!(sAUDCTL & 0x80) && fAllow)
 								{
-									// poly17's cycle is 0x1ffff
-									for (j = 0; j < r % 0x1ffff; j++)
-										poly17[voice] = ((poly17[voice] >> 1) | ((~((~poly17[voice]) ^ ~(poly17[voice] >> 5)) & 0x01) << 16)) & 0x1FFFF;
-
-									pulse[voice].phase = (poly17[voice] & 1);
+									poly17pos[voice] = (poly17pos[voice] + r) % 0x1fff;
+									pulse[voice].phase = (poly17[poly17pos[voice]] & 1);
 								}
 							}
 							else if (fAllow)
 							{
-								// poly4's cycle is 15
-								for (j = 0; j < r % 0xf; j++)
-									poly4[voice] = ((poly4[voice] >> 1) | ((~(poly4[voice] ^ (poly4[voice] >> 1)) & 0x01) << 3)) & 0x000F;
-
-								pulse[voice].phase = (poly4[voice] & 1);
+								poly4pos[voice] = (poly4pos[voice] + r) % 0xf;
+								pulse[voice].phase = (poly4[poly4pos[voice]] & 1);
 							}
 						}
 

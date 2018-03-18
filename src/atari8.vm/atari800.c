@@ -113,8 +113,60 @@ void DumpROMS()
 //
 BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
-
 	// Install an Atari 8-bit VM
+
+	// Initialize the poly counters
+	if (fPolyValid == FALSE)
+	{
+		int j, p;
+
+		// run through all the poly counters and remember the results in a table
+		// so we can look them up and not have to do expensive calculations while emulating
+		
+		// poly5's cycle is 31
+		poly5[0] = 0;
+		p = 0;
+		for (j = 1; j < 0x1f; j++)
+		{
+			p = ((p >> 1) | ((~(p ^ (p >> 3)) & 0x01) << 4)) & 0x1F;
+			poly5[j] = p;
+		}
+
+		// poly9's cycle is 511 - we only ever look at the low bit
+		poly9[0] = 0;
+		p = 0;
+		for (j = 1; j < 0x1ff; j++)
+		{
+			p = ((p >> 1) | ((~((~p) ^ ~(p >> 5)) & 0x01) << 8)) & 0x1FF;
+			poly9[j] = p & 0xff;
+		}
+		// poly17's cycle is 0x1ffff - we only ever look at the low byte
+		poly17[0] = 0;
+		p = 0;
+		for (j = 1; j < 0x1ffff; j++)
+		{
+			p = ((p >> 1) | ((~((~p) ^ ~(p >> 5)) & 0x01) << 16)) & 0x1FFFF;
+			poly17[j] = p & 0xff;
+		}
+
+		// poly4's cycle is 15
+		poly4[0] = 0;
+		p = 0;
+		for (j = 1; j < 0x0f; j++)
+		{
+			p = ((p >> 1) | ((~(p ^ (p >> 1)) & 0x01) << 3)) & 0x0F;
+			poly4[j] = p;
+		}
+
+		// start the counters at the beginning
+		for (int v = 0; v < 4; v++)
+		{
+			poly4pos[v] = 0; poly5pos[v] = 0; poly9pos[v] = 0; poly17pos[v] = 0;
+		}
+		random17pos = 0;
+		random17last = 0;
+		fPolyValid = TRUE;	// no need to ever do this again
+	}
 
 	// These things change depending on the machine we're emulating
 
@@ -463,8 +515,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	vi.qpfCold = qpf.QuadPart;
 
 	// seed the random number generator so it's different every time, the real ATARI is probably seeded by the orientation
-	// of sector 1 on the floppy
-	RANDOM17 = qpc.QuadPart & 0x1ffff;
+	// of sector 1 on the floppy. I wonder how cartridges are unpredictable?
+	random17pos = qpc.QuadPart & 0x1ffff;
 
 	InitSound();	// Need to reset and queue audio buffers
 	
@@ -687,11 +739,13 @@ BOOL __cdecl ExecuteAtari(int iVM)
 	fStop = 0;
 
 	do {
+#if 0
 		// this should happen every cycle, not every 30 instructions, but we do it here to make sure it happens
 		// fairly often on its own, plus just before it is read to make sure it's never the same twice
 		// the 17 bit version is a global, but that should be OK.
 		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
 		RANDOM = RANDOM17 & 0xff;
+#endif
 
 		// when tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions
 		if (wLeft == 0)
