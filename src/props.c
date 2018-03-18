@@ -384,12 +384,14 @@ LTryAgain:
 				}
 				else
 				{
+					v.rgvm[i].fColdReset = TRUE;	// can't restore state, we need a reboot or we'll hang
 					FInitVM(i);
 				}
 				free(pPersist);
 			}
 			else
 			{
+				v.rgvm[i].fColdReset = TRUE;	// can't restore state, we need a reboot or we'll hang
 				FInitVM(i);
 			}
 
