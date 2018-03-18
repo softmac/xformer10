@@ -215,9 +215,6 @@ __inline void _assert(int f, char *file, int line)
 // Out of 1,000,000. Lower is faster than real time, bigger is slower
 ULONGLONG cEmulationSpeed;
 
-// stores an instance name whenever we Init an instance
-char pInstname[MAX_VM][MAX_PATH];
-
 //
 // Library prototypes
 //
@@ -732,7 +729,7 @@ typedef struct VMINST
     HBITMAP hbmOld;         // handle of previous bitmap
     HDC  hdcMem;            // hdc of memory context
 
-    BOOL fInitialReset;
+    BOOL fInitialReset;		// not used anymore
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer

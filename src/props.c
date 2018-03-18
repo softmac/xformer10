@@ -68,11 +68,13 @@ BOOL AddVM(PVMINFO pvmi, int *pi, int type)
 
 	// our jump table for the routines. FInstallVM will crash if we don't do this first
 	v.rgvm[i].pvmi = pvmi;
+	v.rgvm[i].fColdReset = TRUE;	// needs a cold start before it can run
 
 	f = FInstallVM(i, pvmi, type);
 
 	v.rgvm[i].fValidVM = f;
 
+	// decide on an app level?
 	v.rgvm[i].fSound = TRUE;
 	v.rgvm[i].fJoystick = TRUE;
 
@@ -84,7 +86,6 @@ void DeleteVM(int iVM)
 	if (!v.rgvm[iVM].fValidVM)
 		return;
 
-	vrgvmi[iVM].fInitialReset = FALSE;	// invalidate the non-persistable data
 	SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
 	DeleteObject(vrgvmi[iVM].hbm);
 	vrgvmi[iVM].hbm = NULL;
@@ -157,18 +158,13 @@ BOOL CreateAllVMs()
 
 	AddVM(&vmi800, &vmNew, vmAtari48);
 	FInitVM(vmNew);
-	// update the instance name whenever we Init an instance
-	CreateInstanceName(vmNew, pInstname[vmNew]);
-
+	
     AddVM(&vmi800, &vmNew, vmAtariXL);
 	FInitVM(vmNew);
-	// update the instance name whenever we Init an instance
-	CreateInstanceName(vmNew, pInstname[vmNew]);
-
+	
 	AddVM(&vmi800, &vmNew, vmAtariXE);
 	FInitVM(vmNew);
-	// update the instance name whenever we Init an instance
-	CreateInstanceName(vmNew, pInstname[vmNew]);
+
 #endif
 
 #ifdef ATARIST
@@ -301,9 +297,14 @@ LTryAgain:
         goto LTryAgain;
     }
 
-	_lseek(h, 0L, SEEK_SET);
-	_read(h, &vTmp, sizeof(vTmp));
-	
+	int l;
+	if (h != -1)
+	{
+		_lseek(h, 0L, SEEK_SET);
+		l = sizeof(vTmp);
+		l = _read(h, &vTmp, l);
+	}
+
     // if INI file contained valid data, use it
     // otherwise make the user give you data
 
@@ -379,8 +380,7 @@ LTryAgain:
 				l = _read(h, pPersist, cb);
 				if (l == cb) {
 					FLoadStateVM(i, pPersist, cb);
-					vrgvmi[i].fInitialReset = TRUE;	// avoid cold start when re-loading
-					vi.fExecuting = TRUE;	// OK to start executing
+					vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
 				}
 				else
 				{
@@ -393,12 +393,11 @@ LTryAgain:
 				FInitVM(i);
 			}
 
-			// update the instance name whenever we Init an instance
-			CreateInstanceName(i, pInstname[i]);
 		}
 	}
 	
-	_close(h);
+	if (h != -1)
+		_close(h);
 
 	if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
