@@ -257,7 +257,11 @@ BOOL OpenTheINI(HWND hWnd, char *psz)
 //
 // Returns TRUE if valid data loaded
 //
-
+// !!! hOwner != NULL not supported right now
+//
+// !!! Our PROPS structure is huge, containing all 108 or so instance data even when only 1 instance is being used
+// !!! This bloats memory usage and disk usage
+//
 BOOL LoadProperties(HWND hOwner)
 {
     PROPS vTmp;
@@ -266,27 +270,27 @@ BOOL LoadProperties(HWND hOwner)
     BOOL f = fFalse;
     BOOL fTriedWindows = fFalse;
         
-    sz[0] = 0;
-
     GetCurrentDirectory(sizeof(rgch), rgch);
-    SetCurrentDirectory(vi.szWindowsDir);
+    SetCurrentDirectory(vi.szWindowsDir);	// first try to load from "\users\xxxx\appdata\roaming\emulators", for example
 
-    if (hOwner != NULL)
+#if 0
+	sz[0] = 0;
+	if (hOwner != NULL)
         {
         EnableWindow(hOwner,FALSE);
         OpenTheINI(hOwner, sz);
         EnableWindow(hOwner,TRUE);
         }
+#endif
 
     vTmp.cb = 0;
 
 LTryAgain:
-    f = sizeof(vTmp) == 
-        CbReadWholeFile((hOwner != NULL) ? sz : szIniFile, sizeof(vTmp), &vTmp);
 
-    if (!f && !fTriedWindows)
-        {
-        // try the actual C:\WINDOWS directory
+	int h = _open(szIniFile, _O_BINARY | _O_RDONLY);	
+    if (h == -1 && !fTriedWindows)
+    {
+        // on failure, try the actual C:\WINDOWS directory
 
         char sz2[MAX_PATH];
 
@@ -295,8 +299,11 @@ LTryAgain:
         fTriedWindows = fTrue;
 
         goto LTryAgain;
-        }
+    }
 
+	_lseek(h, 0L, SEEK_SET);
+	_read(h, &vTmp, sizeof(vTmp));
+	
     // if INI file contained valid data, use it
     // otherwise make the user give you data
 
@@ -361,12 +368,38 @@ LTryAgain:
 		{
 			v.cVM++;
 			FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
-			FInitVM(i);
+			
+			// get the size of the persisted data
+			DWORD cb;
+			int l = _read(h, &cb, sizeof(DWORD));
+			
+			// either restore from the persisted data, or just Init a blank VM if something goes wrong
+			if (l) {
+				char *pPersist = malloc(cb);
+				l = _read(h, pPersist, cb);
+				if (l == cb) {
+					FLoadStateVM(i, pPersist, cb);
+					vrgvmi[i].fInitialReset = TRUE;	// avoid cold start when re-loading
+					vi.fExecuting = TRUE;	// OK to start executing
+				}
+				else
+				{
+					FInitVM(i);
+				}
+				free(pPersist);
+			}
+			else
+			{
+				FInitVM(i);
+			}
+
 			// update the instance name whenever we Init an instance
 			CreateInstanceName(i, pInstname[i]);
 		}
 	}
 	
+	_close(h);
+
 	if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
@@ -396,38 +429,57 @@ LTryAgain:
 //
 // If properties are dirty, prompt user to save properties to INI or registry
 //
-
+// hOwner != NULL not supported
+//
 BOOL SaveProperties(HWND hOwner)
 {
     BOOL f;
     char rgch[MAX_PATH];
     char sz[MAX_PATH];
 
-    sz[0] = '\0';
-        
     GetCurrentDirectory(sizeof(rgch), rgch);
-    SetCurrentDirectory(vi.szWindowsDir);
+    SetCurrentDirectory(vi.szWindowsDir);	// saves to "users\xxxxx\appdata\roaming\emulators", for example
 
-    if (hOwner != NULL)
+#if 0
+	sz[0] = '\0';
+	if (hOwner != NULL)
         {
         EnableWindow(hOwner,FALSE);
         OpenTheINI(hOwner, sz);
         EnableWindow(hOwner,TRUE);
         }
+#endif
 
-    f = FWriteWholeFile((hOwner != NULL) ? sz : szIniFile, sizeof(v), &v);
+	int h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY);
+	if (h != -1)
+	{
+		_lseek(h, 0L, SEEK_SET);
+		_write(h, &v, sizeof(v));
 
-    SetCurrentDirectory(rgch);
-    return f;
+		for (int i = 0; i < MAX_VM; i++)
+		{
+			if (v.rgvm[i].fValidVM)
+			{
+				DWORD cb;
+				char *pPersist;
+				FSaveStateVM(i, &pPersist, &cb);
+				_write(h, &cb, sizeof(DWORD));
+				_write(h, pPersist, cb);
+			}
+		}
+		_close(h);
+	}
+    
+	SetCurrentDirectory(rgch);
+    return h != -1;
 }
 
+#if 0
 BOOL SaveState(BOOL fSave)
 {
 	return TRUE;
 }
 
-
-#if 0
 void ListBootDrives(HWND hDlg)
 {
     // Stuff description of all detected ROMs to given dialog box

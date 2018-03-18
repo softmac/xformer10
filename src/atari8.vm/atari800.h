@@ -18,26 +18,21 @@
 
 #include "common.h"
 
-
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
-// !!! dangerous
-#if XE
-// !!! that's a lot
-extern char HUGE rgbXEMem[MAX_VM][16][16384];
-#endif // XE
+#define MAX_CART_SIZE 16384
+char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter
 BYTE poly5[(1 << 5) - 1];
 BYTE poly9[(1 << 9) - 1];
 BYTE poly17[(1 << 17) - 1];
-int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4], random17pos;	// each voice keeps track of its own poly position
+int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4]; 	// each voice keeps track of its own poly position
+unsigned int random17pos;	// needs to be unsigned
 ULONGLONG random17last;	// instruction count last time a random number was asked for
 BOOL fPolyValid = FALSE;
-
-//static int RANDOM17;	// full 17 bit poly counter, the lower 8 bits are RANDOM
 
 //
 // Scan line structure
@@ -232,6 +227,18 @@ typedef struct
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
     BYTE m_cVBI;        // count of VBIs since last tick
+
+	char FAR m_rgbSwapSelf[2048];	// extended XL memory
+	char FAR m_rgbSwapC000[4096];
+	char FAR m_rgbSwapD800[10240];
+
+#if XE
+	char HUGE m_rgbXEMem[4][16384];	// !!! was 16, not 4
+	// !!! the actual memory found at rgbMem $4000 in an XE is a duplicate of either this or one of the banks above
+	// I could save 16K of persistance data by keeping this inside the proper bank of rgbXEMem
+	char FAR m_rgbSwapXEMem[16384];
+#endif // XE
+
 } CANDYHW;
 
 #pragma pack()
@@ -297,6 +304,14 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)
+#define rgbSwapSelf  CANDY_STATE(rgbSwapSelf)
+#define rgbSwapC000  CANDY_STATE(rgbSwapC000)
+#define rgbSwapD800  CANDY_STATE(rgbSwapD800)
+
+#if XE
+#define rgbXEMem	  CANDY_STATE(rgbXEMem)
+#define rgbSwapXEMem  CANDY_STATE(rgbSwapXEMem)
+#endif
 
 #include "6502.h"
 
@@ -564,7 +579,7 @@ void CheckKey(void);
 void UpdatePorts(void);
 
 //void InitSIOV(int, char **);
-void SIOV(int);
+void SIOV();
 //void DiskConfig(void);
 
 extern int fXFCable;	// !!! left uninitialized and used
@@ -617,9 +632,11 @@ BOOL __cdecl UninitAtariDisks(int);
 BOOL __cdecl UnmountAtariDisk(int);
 BOOL __cdecl WarmbootAtari(int);
 BOOL __cdecl ColdbootAtari(int);
+BOOL __cdecl SaveStateAtari(int, char **, int *);
+BOOL __cdecl LoadStateAtari(int, char *, int);
 BOOL __cdecl DumpHWAtari(char *pch);
 BOOL __cdecl TraceAtari();
-BOOL __cdecl ExecuteAtari(int);
+BOOL __cdecl ExecuteAtari();
 BOOL __cdecl KeyAtari(ULONG l);
 BOOL __cdecl DumpRegsAtari(void);
 BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC);
