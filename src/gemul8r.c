@@ -211,7 +211,10 @@ void DisplayStatus()
     }
 #else
 
-	sprintf(rgch0, "%s - %s", vi.szAppName, pInstname[v.iVM]);
+	// put our instance name in the title, which may have changed recently
+	char pInst[MAX_PATH];
+	CreateInstanceName(v.iVM, pInst);
+	sprintf(rgch0, "%s - %s", vi.szAppName, pInst);
 #endif
 
     if (vi.fExecuting)
@@ -1234,6 +1237,9 @@ int CALLBACK WinMain(
 
 #ifdef XFORMER
 
+	//char test[130] = "\"c:\\danny\\8bit\\atari8\\108\\analog52.xfd\"";
+	//lpCmdLine = test;
+	
 	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
 	// and select an existing VM of the appropriate hardware type.
 	// For now just support for Atari 8-bit VMs and trust the file extension
@@ -1255,8 +1261,6 @@ int CALLBACK WinMain(
 				strcpy(v.rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument
 				v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
 				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
-				// update the instance name whenever we Init an instance
-				CreateInstanceName(iVM, pInstname[iVM]);
 				fSkipLoad = TRUE;
 			}
 			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0
@@ -1266,8 +1270,6 @@ int CALLBACK WinMain(
 				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
 				v.rgvm[iVM].rgcart.fCartIn = TRUE;
 				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
-				// update the instance name whenever we Init an instance
-				CreateInstanceName(iVM, pInstname[iVM]);
 				fSkipLoad = TRUE;
 			}
 		}
@@ -1549,6 +1551,7 @@ int CALLBACK WinMain(
             DestroyDebuggerWindow();
             }
 
+		// !!! not per instance, just a general "we're executing". Make sure you cold start a VM above before running it!
         else if (vi.fExecuting)
             {
             vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
@@ -2386,13 +2389,6 @@ BOOL SelectInstance(unsigned iVM)
 	vi.pvmCur = &v.rgvm[v.iVM];
     vi.pvmiCur = &vrgvmi[v.iVM];
     vpvm = vmCur.pvmi;
-
-	// Has it been cold started yet?
-    if (!vvmi.fInitialReset)
-        {
-        vmCur.fColdReset = TRUE;
-        vvmi.fInitialReset = TRUE;
-        }
 
 	// a menu or title bar might need to change. When Tiling, don't let it do this every 1/60s.
 	if (!v.fTiling)
@@ -3448,8 +3444,6 @@ break;
 
 			// Init it, Create the screen buffer for it, and now go to that instance!
 			FInitVM(vmNew);
-			// update the instance name whenever we Init an instance
-			CreateInstanceName(vmNew, pInstname[vmNew]);
 			CreateNewBitmap(vmNew);	// we've already created our window, so we need to do this manually now
 			SelectInstance(vmNew);
 #endif
