@@ -18,6 +18,9 @@
 
 #pragma once
 
+// maximum number of virtual machines
+#define MAX_VM 108
+
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 
 #undef  _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE
@@ -201,9 +204,6 @@ __inline void _assert(int f, char *file, int line)
 
 
 #define HERTZ CLOCKS_PER_SEC
-
-// maximum number of virtual machines
-#define MAX_VM 108
 
 // !!! non-XFORMER does not support MAX_VM but uses these out of date variables!
 // maximum 9 cards with 7 sets of ROMs each
@@ -657,6 +657,10 @@ typedef struct _cart
 	char temp;			// make it the same size as a VD structure
 } CART, *PCART;
 
+// !!! dangerous
+#define MAX_CART_SIZE 16384
+extern char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];
+
 typedef struct
 {
     // virtual machine descriptor
@@ -715,9 +719,6 @@ typedef struct
 #define CART_8K     0
 #define CART_16K    1
 #define CART_OSS    2   // Mac65 etc.
-
-#define MAX_CART_SIZE 16384
-extern char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];
 
 void ReadCart();
 void InitCart(int iVM);
@@ -1150,10 +1151,10 @@ BOOL FPrinterReady();
 // props.c
 
 BOOL InitProperties(void);
-BOOL EditProperties(void);
+//BOOL EditProperties(void);
 BOOL LoadProperties(HWND hOwner);
 BOOL SaveProperties(HWND hOwner);
-BOOL SaveState(BOOL fSave);
+//BOOL SaveState(BOOL fSave);
 BOOL CreateAllVMs();
 
 
@@ -1279,6 +1280,7 @@ extern unsigned int cntAccess, cntDataMiss;
 // Structure that maintains the Atari ST hardware state
 //
 
+// !!! Why does everybody use this structure? eg. CreateNewBitmap
 typedef struct _sthw
 {
     ULONG lAddrMask;    // current address bus mask for 24- or 32-bit addressing
@@ -1572,6 +1574,7 @@ STHW vsthw[MAX_VM];
 #define SCCA 1
 #define SCCB 0
 
+#ifdef SOFTMAC // is that right?
 typedef struct _machw
 {
     int     drive;          // 1 = internal, 2 = external
@@ -1870,6 +1873,7 @@ typedef struct _machw
 MACHW vmachw;
 
 #define rgbToby vmachw.rgbTobyRW
+#endif
 
 #ifndef MAKEDLL
 extern VMINFO const vmi800;
@@ -1903,6 +1907,7 @@ extern _declspec(dllimport) ICpuExec cpi68K;
 #endif // MAKEDLL
 #endif // ATARIST
 
+#if 0
 //
 // External thread control messages
 //
@@ -1914,6 +1919,7 @@ extern _declspec(dllimport) ICpuExec cpi68K;
 #define TM_JOY0MOVE            (WM_APP+5)
 #define TM_TOGGLEROM           (WM_APP+6)
 #define TM_TOGGLECOLOR         (WM_APP+7)
+#endif
 
 ULONGLONG GetCycles();
 //ULONGLONG GetJiffies();
