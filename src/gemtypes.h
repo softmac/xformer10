@@ -618,13 +618,9 @@ typedef struct _vminfo
 	PFNL pfnInit;           // VM initialization (switch to this VM)
 	PFNL pfnUnInit;         // VM uninit (switch away from VM)
 	PFNL pfnInitDisks;      // VM disk initialization
-#ifdef HWIN32
 	PFNL pfnMountDisk;      // VM disk initialization
-#endif
 	PFNL pfnUnInitDisks;    // VM disk uninitialization
-#ifdef HWIN32
 	PFNL pfnUnmountDisk;    // VM disk uninitialization
-#endif
 	PFNL pfnColdboot;       // VM resets hardware (coldboot)
 	PFNL pfnWarmboot;       // VM resets hardware (warmboot)
 	PFNL pfnExec;           // VM execute code
@@ -639,14 +635,12 @@ typedef struct _vminfo
 	PFNL pfnWriteHWByte;    // writes a byte to the VM
 	PFNL pfnWriteHWWord;    // writes a word to the VM
 	PFNL pfnWriteHWLong;    // writes a long to the VM
-#ifdef HWIN32
 	PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
 	PFNL pfnUnlockBlock;    // release memory block in VM
 	PFNP pfnMapAddress;     // convert virtual machine address to flat address
 	PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
 	PFNL pfnSaveState;      // save snapshot to disk
 	PFNL pfnLoadState;      // load snapshot from disk and resume
-#endif
 } VMINFO, *PVMINFO;
 
 typedef struct _cart
@@ -656,10 +650,6 @@ typedef struct _cart
 	BYTE fCartIn;		// there is a cartridge plugged in
 	char temp;			// make it the same size as a VD structure
 } CART, *PCART;
-
-// !!! dangerous
-#define MAX_CART_SIZE 16384
-extern char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];
 
 typedef struct
 {
@@ -1154,7 +1144,6 @@ BOOL InitProperties(void);
 //BOOL EditProperties(void);
 BOOL LoadProperties(HWND hOwner);
 BOOL SaveProperties(HWND hOwner);
-//BOOL SaveState(BOOL fSave);
 BOOL CreateAllVMs();
 
 

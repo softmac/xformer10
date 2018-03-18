@@ -34,7 +34,7 @@ WAVEFORMATEX pcmwf;
 
 
 
-// !!! dangerous
+// !!! BEGIN DANGEROUS: not per-instance? When switching instances, it will glitch. Who cares?
 typedef struct
 {
 	ULONG frequency;
@@ -60,6 +60,8 @@ static PULSE pulse[4] = { {0 },{0},{0},{0} };	// only need to init pos
 static VOICE rgvoice[4] = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
 static ULONG sAUDCTL = 0;
 #endif
+
+// !!! END DANGEROUS
 
 
 
@@ -861,6 +863,7 @@ void UninitSound()
     vi.fWaveOutput = FALSE;
 }
 
+//
 void InitSound()
 {
     WAVEOUTCAPS woc;
@@ -868,8 +871,7 @@ void InitSound()
 
     UninitSound();
 
-    if (!vmCur.fSound)
-        return;
+// figure out a real way to turn sound on/off if you want to, probably not per-vm?
 
 #if !defined(_M_ARM)
     iMac = waveOutGetNumDevs();
@@ -1022,13 +1024,16 @@ void InitJoysticks()
 #endif
 }
 
+// !!! dangerous globals, each warm and cold start will glitch the other VMs
+//
 void CaptureJoysticks()
 {
 #if !defined(_M_ARM)
     int i;
 	MMRESULT mm;
 
-    if (!vmCur.fJoystick || joyGetNumDevs() == 0)
+	// find a way to disable joystick if they want? (probably not per-VM)?
+    if (joyGetNumDevs() == 0)
         return;
 
     for (i = 0; i < 2; i++)

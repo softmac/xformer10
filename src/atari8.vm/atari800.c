@@ -51,6 +51,12 @@ VMINFO const vmi800 =
     PokeBAtari,
     PokeWAtari,
     PokeLAtari,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	SaveStateAtari,
+	LoadStateAtari
     };
 
 
@@ -115,6 +121,21 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
 	// Install an Atari 8-bit VM
 
+	static BOOL fInited;
+	if (!fInited) // static, only 1 instance needs to do this
+	{
+		extern void * jump_tab[512];
+		extern void * jump_tab_RO[256];
+		unsigned i;
+
+		for (i = 0; i < 256; i++)
+		{
+			jump_tab[i] = jump_tab_RO[i];
+		}
+
+		fInited = TRUE;
+	}
+
 	// Initialize the poly counters
 	if (fPolyValid == FALSE)
 	{
@@ -168,6 +189,22 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		fPolyValid = TRUE;	// no need to ever do this again
 	}
 
+	// reset the cycle counter now and each cold start (we may not get a cold start)
+	// !!! dangerous globals, could glitch the other VMs
+	LARGE_INTEGER qpc;
+	LARGE_INTEGER qpf;
+	QueryPerformanceFrequency(&qpf);
+	vi.qpfCold = qpf.QuadPart;
+
+	// seed the random number generator again. The real ATARI is probably seeded by the orientation
+	// of sector 1 on the floppy. I wonder how cartridges are unpredictable?
+	// don't allow the seed that gets stuck
+	do {
+		QueryPerformanceCounter(&qpc);
+		vi.qpcCold = qpc.QuadPart;	// reset real time
+		random17pos = qpc.QuadPart & 0x1ffff;
+	} while (random17pos == 0x1ffff);
+
 	// These things change depending on the machine we're emulating
 
 	switch (type)
@@ -198,19 +235,6 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		return FALSE;
 	}
 
-	// These things are the same for each machine type
-
-	v.rgvm[iVM].fCPUAuto = TRUE;
-	v.rgvm[iVM].bfCPU = cpu6502;
-	v.rgvm[iVM].bfMon = monColrTV;
-	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);	// we only have 8, others have 9
-
-	if (v.rgvm[iVM].rgvd[0].dt == DISK_NONE)
-	{
-		v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
-		strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// default to something?
-	}
-
 #if 0
 	// fake in the Atari 8-bit OS entires
 	if (v.cOS < 3)
@@ -226,25 +250,29 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
     return TRUE;
 }
 
-// Initialize a VM. I call this immediately after Creating/Installing the VM, so maybe
-// they don't need to be separate steps?
+// Initialize a VM. Either call this to create a default new instance and then ColdBoot it,
+//or call LoadState to restore a previous one, not both.
 //
 BOOL __cdecl InitAtari(int iVM)
 {
-    static BOOL fInited;
 //	BYTE bshiftSav; // already a global with that name!
 
-#if 0
-	// reset the cycle counter now and each cold start (we need to use it now, before the 1st cold start)
-	LARGE_INTEGER qpc;
-	QueryPerformanceCounter(&qpc);
-	vi.qpcCold = qpc.QuadPart;	// reset real time
-	LARGE_INTEGER qpf;
-	QueryPerformanceFrequency(&qpf);
-	vi.qpfCold = qpf.QuadPart;
-#endif
-
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	// These things are the same for each machine type
+
+	v.rgvm[iVM].fCPUAuto = TRUE;
+	v.rgvm[iVM].bfCPU = cpu6502;
+	v.rgvm[iVM].bfMon = monColrTV;
+	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);	// we only have 8, others have 9
+
+	// default to a DOS disk image for a newly created instance
+	// loading an empty instance from a file calls LoadState, not Init and won't get this default disk image
+	if (v.rgvm[iVM].rgvd[0].dt == DISK_NONE)
+	{
+		v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+		strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");
+	}
 
 	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
 	// unless Shift-F10 changes it
@@ -256,22 +284,6 @@ BOOL __cdecl InitAtari(int iVM)
     //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
 	//*pbshift |= wScrlLock;
 	//countInstr = 1;
-
-    if (!fInited) // static, only 1 instance needs to do this
-    {
-        extern void * jump_tab[512];
-        extern void * jump_tab_RO[256];
-        unsigned i;
-
-        for (i = 0 ; i < 256; i++)
-        {
-            jump_tab[i] = jump_tab_RO[i];
-        }
-
-        fInited = TRUE;
-    }
-
-	// There's a fine, fine, line between what's done in Install and here in Init
 
 	switch (v.rgvm[iVM].bfHW)
 	{
@@ -372,6 +384,9 @@ BOOL __cdecl WarmbootAtari(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
+	// tell the CPU which 
+	cpuInit(PokeBAtari);
+
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
@@ -382,7 +397,8 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	fBrakes = TRUE;	// go back to real time
 	wScan = 262;	// start at top of screen again
 
-	InitSound();	// need to reset and queue audio buffers
+	// too slow to do anytime but startup
+	//InitSound();	// need to reset and queue audio buffers
 
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
@@ -411,13 +427,16 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
+#if 0 // doesn't change
     if (mdXLXE == md800)
         v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
     else if (mdXLXE == mdXL)
 		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
     else
 		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
-    //DisplayStatus(); this might not be the active instance
+#endif
+    
+	//DisplayStatus(); this might not be the active instance
 
     // Swap in BASIC and OS ROMs.
 
@@ -427,17 +446,18 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	// load the cartridge
 	InitCart(iVM);
 
+    // reset the registers, and say which HW it is running
+    cpuReset();
+	cpuInit(PokeBAtari);
+
 #if 0 // doesn't the OS do this?
-    // initialize memory up to ramtop
+	// initialize memory up to ramtop
 
-    for (addr = 0; addr < ramtop; addr++)
-        {
-        cpuPokeB(addr,0xAA);
-        }
+	for (addr = 0; addr < ramtop; addr++)
+	{
+		cpuPokeB(addr, 0xAA);
+	}
 #endif
-
-    // initialize the 6502
-    cpuInit(PokeBAtari);
 
     // initialize hardware
     // NOTE: at $D5FE is ramtop and then the jump table
@@ -508,17 +528,21 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 	// reset the cycle counter each cold start
 	LARGE_INTEGER qpc;
-	QueryPerformanceCounter(&qpc);
-	vi.qpcCold = qpc.QuadPart;	// reset real time
 	LARGE_INTEGER qpf;
 	QueryPerformanceFrequency(&qpf);
 	vi.qpfCold = qpf.QuadPart;
-
-	// seed the random number generator so it's different every time, the real ATARI is probably seeded by the orientation
+	
+	// seed the random number generator again. The real ATARI is probably seeded by the orientation
 	// of sector 1 on the floppy. I wonder how cartridges are unpredictable?
-	random17pos = qpc.QuadPart & 0x1ffff;
+	// don't allow the seed that gets stuck
+	do {
+		QueryPerformanceCounter(&qpc);
+		vi.qpcCold = qpc.QuadPart;	// reset real time
+		random17pos = qpc.QuadPart & 0x1ffff;
+	} while (random17pos == 0x1ffff);
 
-	InitSound();	// Need to reset and queue audio buffers
+	//too slow to do anytime but app startup
+	//InitSound();	// Need to reset and queue audio buffers
 	
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
@@ -526,10 +550,54 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	return TRUE;
 }
 
+// SAVE: return a pointer to our data, and how big it is
+//
+BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
+{
+	*ppPersist = &vrgcandy[iVM];
+	*pcbPersist = sizeof(vrgcandy[iVM]);
+	return TRUE;
+}
+
+// LOAD: copy from the data we've been given. Make sure it's the right size
+// Either INIT is called followed by ColdBoot, or this, not both, so do what we need to do to restore our state
+// without resetting anything
+//
+BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
+{
+	if (cbPersist != sizeof(vrgcandy[iVM]))
+		return FALSE;
+
+	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
+	
+	if (!FInitSerialPort(v.rgvm[iVM].iCOM))
+		v.rgvm[iVM].iCOM = 0;
+	if (!InitPrinter(v.rgvm[iVM].iLPT))
+		v.rgvm[iVM].iLPT = 0;
+
+	InitAtariDisks(iVM);
+
+	// If our saved state had a cartridge, load it back in
+	ReadCart(iVM);
+	InitCart(iVM);
+
+	// too slow to do anytime but app startup
+	//InitSound();	// Need to reset and queue audio buffers
+
+	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
+	CaptureJoysticks();
+
+	return TRUE;
+}
+
+
 BOOL __cdecl DumpHWAtari(char *pch)
 {
 #ifndef NDEBUG
 //    RestoreVideo();
+
+	// tell CPU which HW is running
+	cpuInit(PokeBAtari);
 
     printf("NMIEN  %02X IRQEN  %02X SKCTLS %02X SEROUT %02X\n",
         NMIEN, IRQEN, SKCTLS, SEROUT);
@@ -578,7 +646,7 @@ void Interrupt()
 BOOL __cdecl TraceAtari()
 {
     fTrace = TRUE;
-    ExecuteAtari(v.iVM);	// !!!
+    ExecuteAtari();
     fTrace = FALSE;
 
     return TRUE;
@@ -732,20 +800,17 @@ DoVBI()
 // Either continue until there's a message for our window, or cycle through all instances every frame,
 // or if tracing, only do one scan line
 //
-BOOL __cdecl ExecuteAtari(int iVM)
+// !!! fStep and fCont are ignored for now!
+BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
+
+	// tell the 6502 which HW it is running this time
+	cpuInit(PokeBAtari);
 
 	fStop = 0;
 
 	do {
-#if 0
-		// this should happen every cycle, not every 30 instructions, but we do it here to make sure it happens
-		// fairly often on its own, plus just before it is read to make sure it's never the same twice
-		// the 17 bit version is a global, but that should be OK.
-		RANDOM17 = ((RANDOM17 >> 1) | ((~((~RANDOM17) ^ ~(RANDOM17 >> 5)) & 0x01) << 16)) & 0x1FFFF;
-		RANDOM = RANDOM17 & 0xff;
-#endif
 
 		// when tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions
 		if (wLeft == 0)
@@ -888,7 +953,7 @@ BOOL __cdecl ExecuteAtari(int iVM)
 			// REVIEW: need to check if PC == $E459 and if so make sure
 			// XL/XE ROMs are swapped in, otherwise ignore
 			fSIO = 0;
-			SIOV(iVM);
+			SIOV();
 		}
 
     } while (!fTrace && !fStop);
@@ -1233,6 +1298,8 @@ void UpdatePorts()
 //
 void ReadCart(int iVM)
 {
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
 	char *pch = v.rgvm[iVM].rgcart.szName;
 
 	int h;
@@ -1266,6 +1333,8 @@ void ReadCart(int iVM)
 //
 void InitCart(int iVM)
 {
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
 	// no cartridge
 	if (!(v.rgvm[iVM].rgcart.fCartIn))
 	{
@@ -1340,6 +1409,8 @@ void InitCart(int iVM)
 //
 void BankCart(int iVM, int iBank)
 {
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
 

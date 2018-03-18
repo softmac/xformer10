@@ -137,9 +137,19 @@ BOOL __inline FWarmbootVM(int iVM)
 }
 
 // so far, this only gets called on the current instance
-BOOL __inline FExecVM(int iVM, int fStep, int fCont)
+BOOL __inline FExecVM(BOOL fStep, BOOL fCont)
 {
-    return v.rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
+	return v.rgvm[v.iVM].pvmi->pfnExec(fStep, fCont);
+}
+
+BOOL __inline FSaveStateVM(int iVM, char **ppPersist, int *pcbPersist)
+{
+	return v.rgvm[iVM].pvmi->pfnSaveState(iVM, ppPersist, pcbPersist);
+}
+
+BOOL __inline FLoadStateVM(int iVM, char *pPersist, int cbPersist)
+{
+	return v.rgvm[iVM].pvmi->pfnLoadState(iVM, pPersist, cbPersist);
 }
 
 BOOL __inline FMountDiskVM(int iVM, int i)

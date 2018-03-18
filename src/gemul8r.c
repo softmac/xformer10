@@ -40,12 +40,19 @@ VMINST vrgvmi[MAX_VM];	// not persistable
 
 //
 // THEORY OF OPERATION 
-// First we Install a VM, then Init it. (I do both at the same time, it's unclear what functionality belongs where)
-// CreateNewBitmap creates the screen buffer for the instance. Then you ColdBoot a VM to start it running.
+// First we INSTALL a VM.
+//
+// Then we either INIT it (make a default new one) and eventually COLDBOOT it...
+// OR we just LOADSTATE (to restore its state from disk) but NOT BOTH
+//
+// CreateNewBitmap creates the screen buffer for the instance. This must be done before EXEC.
+//
 // SelectInstance() makes an instance the current one.
-// While it is running, call Exec to run for a frame or so. This function does NOT take the instance as a parameter,
-//   it can only run on the current instance.
-// When you're done with an instance, Uninit it. (There is no UnInstall).
+//
+// While it is running, call EXEC in a loop to run for a frame or so each time. This function does NOT take
+//		the instance as a parameter, it can only run on the current instance.
+//
+// When you're done with an instance, UNINIT it, even if you called LoadState to initialize it. (There is no UnInstall).
 //
 
 // __declspec(thread) VMINST vmi;
@@ -1065,6 +1072,8 @@ int CALLBACK WinMain(
 
 	// Initialize our global state (PROPS v)
     InitProperties();
+	
+	fBrakes = TRUE; // always start up in emulated speed mode
 
     // Save the instance handle in static variable, which will be used in
     // many subsequence calls from this application to Windows.
@@ -1297,7 +1306,8 @@ int CALLBACK WinMain(
 				FirstTimeProc);
 
 		// This will prevent the First Time Setup from popping up again
-		SaveProperties(NULL);
+		
+		erties(NULL);
 #endif // ATARIST
 	}
 
@@ -1541,7 +1551,7 @@ int CALLBACK WinMain(
 
         else if (vi.fExecuting)
             {
-            vi.fExecuting = (FExecVM(v.iVM, FALSE, TRUE) == 0);
+            vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
 
 			// every second, update our clock speed indicator
 			static ULONGLONG sCJ;
@@ -2792,6 +2802,9 @@ LRESULT CALLBACK WndProc(
 			PostMessage(hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
+		// this is slow, so only do it once ever
+		InitSound();
+
 //        SetTimer(hWnd, 0, 100, NULL);
 
 //        SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
@@ -3547,11 +3560,6 @@ break;
 			break;		
 
 #if 0
-		case IDM_LOADSTATE:
-            SaveState(FALSE);
-            return 0;
-            break;
-
         case IDM_PROPERTIES:
             DialogBox(vi.hInst,
                 MAKEINTRESOURCE(IDD_PROPERTIES),
@@ -3931,7 +3939,7 @@ break;
 			GetClientRect(vi.hWnd, &rect);
 
 			int x, y, iVM = nFirstTile - 1;
-			if (iVM < 1)
+			if (iVM < 0)
 				iVM = v.cVM - 1;
 
 			for (y = rect.top; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)

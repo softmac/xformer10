@@ -363,9 +363,10 @@ uint8_t READ_BYTE(uint32_t ea)
 		// we've been asked for a random number. How many times would the poly counter have advanced?
 		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
 		// !!! this assumes 30 instructions per scanline always (not true) and that we quit when wLeft == 0 (not true) 
-		int cur = (wFrame * 262 * 30 + wScan * 30 + (30 - wLeft)) - random17last;
+		int cur = (wFrame * 262 * 30 + wScan * 30 + (30 - wLeft));
+		int delta = cur - random17last;
 		random17last = cur;
-		random17pos = (random17pos + cur) % 0x1ffff;
+		random17pos = (random17pos + delta) % 0x1ffff;
 		RANDOM = poly17[random17pos];
 	}
 

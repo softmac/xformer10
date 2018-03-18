@@ -349,7 +349,7 @@ void InitSIOV(int iVM, int argc, char **argv)
 #define LIGHT_TRANSLATION 0
 #define HEAVY_TRANSLATION 16
 
-void BUS1(int iVM)
+void BUS1()
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
@@ -359,7 +359,7 @@ void BUS1(int iVM)
 
 //    printf("in bus handler, regPC = %04X\n", regPC);
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
     switch (regPC & 0x00F0)
         {
@@ -642,7 +642,7 @@ void BUS1(int iVM)
     regSP = (regSP + 2) & 255 | 256;
 }
 
-void SIOV(int iVM)
+void SIOV()
 {
     WORD wDev, wDrive, wCom, wStat, wBuff, wSector, bAux1, bAux2;
     WORD  wBytes;
@@ -655,11 +655,11 @@ void SIOV(int iVM)
     BYTE rgb[256];
     WORD i;
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
     if (regPC != 0xE459)
         {
-        BUS1(iVM);
+        BUS1();
         return;
         }
 
@@ -692,7 +692,7 @@ void SIOV(int iVM)
         if ((wDrive < 0) || (wDrive >= MAX_DRIVES))
             goto lCable;
 
-        pdrive = &rgDrives[iVM][wDrive];
+        pdrive = &rgDrives[v.iVM][wDrive];
 
         md = pdrive->mode;
 

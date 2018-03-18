@@ -12,38 +12,6 @@
 
 ***************************************************************************/
 
-#ifndef HWIN32
-
-BOOL cpuInit(PFNL pvmPokeB);
-BOOL cpuExec(void);
-BOOL cpuDisasm(char *pch, ADDR *pPC);
-BYTE cpuPeekB(ADDR addr);
-BOOL cpuPokeB(ADDR addr, BYTE b);
-WORD cpuPeekW(ADDR addr);          // performs endian conversion if necessary
-BOOL cpuPokeW(ADDR addr, WORD w);  // performs endian conversion if necessary
-
-//
-// CPUINFO structure exported by each CPU module
-//
-
-typedef struct _cpuinfo
-{
-    LONG typeMin;           // CPU type, minimum
-    LONG typeLim;           // CPU type, maximum
-    LONG ver;               // version
-    LONG flags;             // flags (TBD)
-    LONG *opcodes;          // read-only dispatch table
-    LONG *opcodesRW;        // dispatch table modified by VM
-    PFNL pfnInit;           // initialization routine
-    PFNL pfnGo;             // interpreter entry point for go
-    PFNL pfnStep;           // interpreter entry point for step
-    LONG *rgfExcptHook;     // pointer to bit vector of exceptions to hook
-} CPUINFO, *PCPUINFO;
-
-extern CPUINFO *vpci;
-
-#endif
-
 //
 // 6502 specific implementation of the CPU API
 //
@@ -100,21 +68,30 @@ __inline BOOL cpuInit(PFNL pvmPokeB)
 {
     extern PFN pfnPokeB;
 
-    pfnPokeB = pvmPokeB;
-
-    // clear all registers
-
-    regA = 0;
-    regX = 0;
-    regY = 0;
-    regP = 0xFF;
-
-    // set initial SP = $FF
-
-    regSP = 0x1FF;
-    regPC = cpuPeekW(0xFFFC);
+	// !!! broken if more than Atari 8 bit uses the 6502, this needs to be set every time a machine is Execute()'d
+	// independently of clearing the registers
+	pfnPokeB = pvmPokeB;
 
     return TRUE;
+}
+
+
+__inline BOOL cpuReset()
+{
+	
+	// clear all registers
+
+	regA = 0;
+	regX = 0;
+	regY = 0;
+	regP = 0xFF;
+
+	// set initial SP = $FF
+
+	regSP = 0x1FF;
+	regPC = cpuPeekW(0xFFFC);
+
+	return TRUE;
 }
 
 

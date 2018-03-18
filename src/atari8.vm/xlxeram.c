@@ -39,10 +39,10 @@ void DumpBlocks()
 #define BASIC_OUT   2
 #define BASIC_MASK  2
 
-#define iBankFromPortB(b) ((((b) & BANK_MASK2) >> 3) | (((b) & BANK_MASK1) >> 2))
+#define iBankFromPortB(b) (/* (((b) & BANK_MASK2) >> 3) | */ (((b) & BANK_MASK1) >> 2))
 #define BANK_MASK   108
 #define BANK_MASK1  12
-#define BANK_MASK2  96
+//#define BANK_MASK2  96 !!! was this support for some hacked 256K machine or just broken?
 
 #define EXTCPU_IN   0
 #define EXTCPU_OUT  16
@@ -56,28 +56,18 @@ void DumpBlocks()
 #define SELF_OUT    128
 #define SELF_MASK   128
 
-// globals
-
-
-char FAR rgbSwapSelf[MAX_VM][2048];
-char FAR rgbSwapCart[MAX_VM][16384];
-char FAR rgbSwapC000[MAX_VM][4096];
-char FAR rgbSwapD800[MAX_VM][10240];
-
-#if XE
-char HUGE rgbXEMem[MAX_VM][16][16384];
-char FAR rgbSwapXEMem[MAX_VM][16384];
-#endif // XE
-
 //BYTE oldflags;
+
 
 void InitBanks(int iVM)
 {
     static BYTE fFirst = TRUE;
 
-    _fmemset(rgbSwapSelf[iVM], 0, sizeof(rgbSwapSelf[iVM]));
-    _fmemset(rgbSwapC000[iVM], 0, sizeof(rgbSwapC000[iVM]));
-    _fmemset(rgbSwapD800[iVM], 0, sizeof(rgbSwapD800[iVM]));
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+    _fmemset(rgbSwapSelf, 0, sizeof(rgbSwapSelf));
+    _fmemset(rgbSwapC000, 0, sizeof(rgbSwapC000));
+    _fmemset(rgbSwapD800, 0, sizeof(rgbSwapD800));
 
     if (fFirst && (mdXLXE == mdXE))
         {
@@ -86,10 +76,10 @@ void InitBanks(int iVM)
 
         for (i = 0; i < 16; i++)
             {
-            _fmemset(&rgbXEMem[iVM][i], 0, 16384);
+            _fmemset(&rgbXEMem[i], 0, 16384);
             }
 
-        _fmemset(rgbSwapXEMem[iVM], 0, 16384);
+        _fmemset(rgbSwapXEMem, 0, 16384);
 #endif
 
         fFirst = FALSE;
@@ -106,7 +96,7 @@ void InitBanks(int iVM)
 
             int iBank = iBankFromPortB(wPBDATA);
 
-            _fmemcpy(rgbXEMem[iVM][iBank], &rgbMem[0x4000], 16384);
+            _fmemcpy(rgbXEMem[iBank], &rgbMem[0x4000], 16384);
             }
         }
 #endif // XE
@@ -163,16 +153,16 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
         if ((flags & OS_MASK) == OS_IN)
             {
 			// enable OS ROMs
-            _fmemcpy(rgbSwapC000[iVM], &rgbMem[0xC000], 4096);
-			_fmemcpy(rgbSwapD800[iVM], &rgbMem[0xD800], 10240);
-			_fmemcpy(&rgbMem[0xC000], rgbXLXEC000[iVM], 4096);
-            _fmemcpy(&rgbMem[0xD800], rgbXLXED800[iVM], 10240);
+            _fmemcpy(rgbSwapC000, &rgbMem[0xC000], 4096);
+			_fmemcpy(rgbSwapD800, &rgbMem[0xD800], 10240);
+			_fmemcpy(&rgbMem[0xC000], rgbXLXEC000, 4096);
+            _fmemcpy(&rgbMem[0xD800], rgbXLXED800, 10240);
             }
         else
             {
             // disable OS ROMs
-            _fmemcpy(&rgbMem[0xC000], rgbSwapC000[iVM], 4096);
-            _fmemcpy(&rgbMem[0xD800], rgbSwapD800[iVM], 10240);
+            _fmemcpy(&rgbMem[0xC000], rgbSwapC000, 4096);
+            _fmemcpy(&rgbMem[0xD800], rgbSwapD800, 10240);
             }
         }
 
@@ -185,7 +175,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
             {
             // enable BASIC ROMs
             ramtop = 0xC000 - cb;
-            _fmemcpy(rgbSwapCart[iVM], &rgbMem[ramtop], cb);
+            _fmemcpy(rgbSwapCart, &rgbMem[ramtop], cb);
             _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
             }
         else
@@ -194,7 +184,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
             // make sure rgbSwapCart is initialized with the cartridge image!
 			ramtop = 0xC000 - cb;
-            _fmemcpy(&rgbMem[ramtop], rgbSwapCart[iVM], cb);
+            _fmemcpy(&rgbMem[ramtop], rgbSwapCart, cb);
             ramtop = 0xC000;
             }
         }
@@ -204,13 +194,13 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 		if ((flags & SELF_MASK) == SELF_IN)
 		{
 			// enable Self Test ROMs
-			_fmemcpy(rgbSwapSelf[iVM], &rgbMem[0x5000], 2048);
+			_fmemcpy(rgbSwapSelf, &rgbMem[0x5000], 2048);
 			_fmemcpy(&rgbMem[0x5000], rgbXLXE5000, 2048);
 		}
 		else
 		{
 			// disable Self Test ROMs
-			_fmemcpy(&rgbMem[0x5000], rgbSwapSelf[iVM], 2048);
+			_fmemcpy(&rgbMem[0x5000], rgbSwapSelf, 2048);
 		}
 	}
 
@@ -225,8 +215,8 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
             int iBank = iBankFromPortB(oldflags);
 
-            _fmemcpy(rgbXEMem[iVM][iBank], &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbSwapXEMem[iVM],    16384);
+            _fmemcpy(rgbXEMem[iBank], &rgbMem[0x4000], 16384);
+            _fmemcpy(&rgbMem[0x4000], rgbSwapXEMem,    16384);
             }
         else
             {
@@ -234,8 +224,8 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
             int iBank = iBankFromPortB(flags);
 
-            _fmemcpy(rgbSwapXEMem[iVM],    &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iVM][iBank], 16384);
+            _fmemcpy(rgbSwapXEMem, &rgbMem[0x4000], 16384);
+            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
             }
         }
     else if (mask & BANK_MASK)
@@ -247,8 +237,8 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
             int iBankNew = iBankFromPortB(flags);
             int iBankOld = iBankFromPortB(oldflags);
 
-            _fmemcpy(rgbXEMem[iVM][iBankOld], &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iVM][iBankNew], 16384);
+            _fmemcpy(rgbXEMem[iBankOld], &rgbMem[0x4000], 16384);
+            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBankNew], 16384);
             }
         }
 #endif // XE
