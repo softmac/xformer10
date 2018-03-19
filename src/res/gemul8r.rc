@@ -43,7 +43,7 @@ IDR_GEMMENU MENU PRELOAD DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
-		POPUP "&New VM"
+		POPUP "New &VM"
 		BEGIN
 			MENUITEM "ATARI 800", IDM_ADDVM1	// examples, will be populated with more
 			MENUITEM "ATARI 800", IDM_ADDVM1+1
@@ -56,17 +56,17 @@ BEGIN
 			MENUITEM "ATARI 800", IDM_ADDVM1+8
 	END
 		MENUITEM "&Delete Current VM", IDM_DELVM
-		//MENUITEM "Delete All", IDM_DELALL
         MENUITEM SEPARATOR
 		MENUITEM "&Warm Start VM\tF10", IDM_WARMSTART
 		MENUITEM "&Cold Start VM\tCtrl+F10", IDM_COLDSTART
 		// this is VM specific and handled magically, there is no actual IDM_TOGGLEBASIC message handler
 		MENUITEM "&Toggle BASIC\tShift+F10", IDM_TOGGLEBASIC
 		MENUITEM SEPARATOR
-#if 0 // !!! TODO
-	    MENUITEM "&Open Session...", IDM_OPEN
-		MENUITEM "&Save Session As...", IDM_SAVE
+		MENUITEM "&New Session", IDM_NEW
+		MENUITEM "&Load Session...", IDM_LOAD
+		MENUITEM "&Save Session As...", IDM_SAVEAS
 		MENUITEM SEPARATOR
+#if 0 // !!! TODO
 		MENUITEM "&Import ATARI DOS File...", IDM_IMPORTDOS
 		MENUITEM "&Export ATARI DOS File...", IDM_EXPORTDOS
 		MENUITEM SEPARATOR

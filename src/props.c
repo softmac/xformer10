@@ -15,6 +15,7 @@
 ****************************************************************************/
 
 #include "gemtypes.h"
+#include <sys/stat.h>
 
 // private globals
 
@@ -95,6 +96,8 @@ void DeleteVM(int iVM)
 	v.rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
 	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
 	v.cVM--;	// one fewer valid instance now
+
+	FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }
 
 //
@@ -105,7 +108,7 @@ BOOL InitProperties()
 {
 	memset(&v, 0, sizeof(v));
 
-	v.fPrivate = fTrue;         // new style settings
+	//v.fPrivate = fTrue;         // new style settings
 	v.wMagic = 0x82201233; // some unique value
 
 	// all fields default to 0 or fFalse except for these...
@@ -146,7 +149,8 @@ BOOL InitProperties()
 	return TRUE;
 }
 
-// Add a menu item to actually do this?
+// make one of everything, it's our kind of default
+//
 BOOL CreateAllVMs()
 {
 	int vmNew;
@@ -158,12 +162,26 @@ BOOL CreateAllVMs()
 
 	AddVM(&vmi800, &vmNew, vmAtari48);
 	FInitVM(vmNew);
-	
+
+	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
+	if (vi.hdc)
+		CreateNewBitmap(vmNew);
+
+	SelectInstance(vmNew);	// select this one
+
     AddVM(&vmi800, &vmNew, vmAtariXL);
 	FInitVM(vmNew);
 	
+	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
+	if (vi.hdc)
+		CreateNewBitmap(vmNew);
+
 	AddVM(&vmi800, &vmNew, vmAtariXE);
 	FInitVM(vmNew);
+
+	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
+	if (vi.hdc)
+		CreateNewBitmap(vmNew);
 
 #endif
 
@@ -253,21 +271,33 @@ BOOL OpenTheINI(HWND hWnd, char *psz)
 //
 // Returns TRUE if valid data loaded
 //
-// !!! hOwner != NULL not supported right now
+// NULL = save to INI file that becomes the auto-start up file
 //
 // !!! Our PROPS structure is huge, containing all 108 or so instance data even when only 1 instance is being used
 // !!! This bloats memory usage and disk usage
 //
-BOOL LoadProperties(HWND hOwner)
+BOOL LoadProperties(char *szIn)
 {
     PROPS vTmp;
     char rgch[MAX_PATH];
-    char sz[MAX_PATH];
+	char *sz;
     BOOL f = fFalse;
     BOOL fTriedWindows = fFalse;
-        
-    GetCurrentDirectory(sizeof(rgch), rgch);
-    SetCurrentDirectory(vi.szWindowsDir);	// first try to load from "\users\xxxx\appdata\roaming\emulators", for example
+
+	// delete all of our VMs
+	for (int z = 0; z < MAX_VM; z++)
+	{
+		if (v.rgvm[z].fValidVM)
+			DeleteVM(z);
+	}
+
+	sz = szIn;
+	if (!szIn)
+	{
+		GetCurrentDirectory(sizeof(rgch), rgch);
+		SetCurrentDirectory(vi.szWindowsDir);	// first try to load from "\users\xxxx\appdata\roaming\emulators", for example
+		sz = szIniFile;
+	}
 
 #if 0
 	sz[0] = 0;
@@ -283,10 +313,10 @@ BOOL LoadProperties(HWND hOwner)
 
 LTryAgain:
 
-	int h = _open(szIniFile, _O_BINARY | _O_RDONLY);	
-    if (h == -1 && !fTriedWindows)
+	int h = _open(sz, _O_BINARY | _O_RDONLY);	
+    if (h == -1 && !szIn && !fTriedWindows)
     {
-        // on failure, try the actual C:\WINDOWS directory
+        // on failure, try the actual C:\WINDOWS directory (for our ini file)
 
         char sz2[MAX_PATH];
 
@@ -399,17 +429,26 @@ LTryAgain:
 				FInitVM(i);
 			}
 
+			// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
+			// it will happen when our window is created
+			if (vi.hdc)
+				CreateNewBitmap(i);
 		}
 	}
-	
+
+	// now select the instance that was current when we saved
+	SelectInstance(v.iVM);
+
 	if (h != -1)
 		_close(h);
 
 	if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
-    SetCurrentDirectory(rgch);
+	if (!szIn)
+		SetCurrentDirectory(rgch);
 
+#if 0
     // If we just imported an old style INI file with global VM settings
     // initialize the private VM settings to default values
 
@@ -422,28 +461,45 @@ LTryAgain:
             // All other settings default to 0 or fFalse
             // but this flag needs to be set by default
 
-            v.rgvm[i].fCPUAuto    = fTrue;
+            v.rgvm[i].fCPUAuto = fTrue;
             }
 
         v.fPrivate = fTrue;
         }
-    
+#endif
+
     return f && v.cVM;	// must have an instance loaded to count as success
 }
 
 //
 // If properties are dirty, prompt user to save properties to INI or registry
 //
-// hOwner != NULL not supported
+// NULL = save to INI file that becomes the auto-start up file
 //
-BOOL SaveProperties(HWND hOwner)
+BOOL SaveProperties(char *szIn)
 {
     BOOL f;
     char rgch[MAX_PATH];
-    char sz[MAX_PATH];
+    int h;
 
-    GetCurrentDirectory(sizeof(rgch), rgch);
-    SetCurrentDirectory(vi.szWindowsDir);	// saves to "users\xxxxx\appdata\roaming\emulators", for example
+	if (szIn == NULL)
+	{
+		GetCurrentDirectory(sizeof(rgch), rgch);
+		SetCurrentDirectory(vi.szWindowsDir);	// saves to "users\xxxxx\appdata\roaming\emulators", for example
+		h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY, _S_IREAD | _S_IWRITE);
+	}
+	else
+	{
+		h = _open(szIn, _O_BINARY | _O_RDONLY);
+		if (h != -1)
+		{
+			_close(h);
+			int h2 = MessageBox(vi.hWnd, "File exists. Overwrite?", "File Exists", MB_YESNO);
+			if (h2 == IDNO)
+				return FALSE;
+		}
+		h = _open(szIn, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+	}
 
 #if 0
 	sz[0] = '\0';
@@ -455,7 +511,6 @@ BOOL SaveProperties(HWND hOwner)
         }
 #endif
 
-	int h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY);
 	if (h != -1)
 	{
 		_lseek(h, 0L, SEEK_SET);
@@ -475,8 +530,10 @@ BOOL SaveProperties(HWND hOwner)
 		_close(h);
 	}
     
-	SetCurrentDirectory(rgch);
-    return h != -1;
+	if (szIn == NULL)
+		SetCurrentDirectory(rgch);
+    
+	return h != -1;
 }
 
 #if 0

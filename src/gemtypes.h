@@ -1120,7 +1120,8 @@ ULONG CallGEMDOS();
 
 //void UpdateMenuCheckmarks();
 //BOOL FVerifyMenuOption();
-BOOL CreateNewBitmap(void);
+BOOL CreateNewBitmap(int);
+void RenderBitmap();
 
 //BOOL OpenThePath(HWND hWnd, char *psz);
 BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int type);
