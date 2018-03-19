@@ -384,14 +384,18 @@ LTryAgain:
 				}
 				else
 				{
-					v.rgvm[i].fColdReset = TRUE;	// can't restore state, we need a reboot or we'll hang
+					// can't restore state? we need a reboot or we'll hang. It seems hacky
+					// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
+					v.rgvm[i].fColdReset = TRUE;
 					FInitVM(i);
 				}
 				free(pPersist);
 			}
 			else
 			{
-				v.rgvm[i].fColdReset = TRUE;	// can't restore state, we need a reboot or we'll hang
+				// can't restore state? we need a reboot or we'll hang. It seems hacky
+				// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
+				v.rgvm[i].fColdReset = TRUE;
 				FInitVM(i);
 			}
 

@@ -205,6 +205,9 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 	}
 
 #if XE
+
+	// !!! ANTIC reading from a different bank is not supported!
+
     if (mask & EXTCPU_MASK)
         {
         // XE's extended RAM got banked on or off
