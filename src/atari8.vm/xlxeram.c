@@ -74,7 +74,7 @@ void InitBanks(int iVM)
 #if XE
         int i;
 
-        for (i = 0; i < 16; i++)
+        for (i = 0; i < 4; i++)
             {
             _fmemset(&rgbXEMem[i], 0, 16384);
             }

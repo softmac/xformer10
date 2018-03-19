@@ -22,7 +22,7 @@
 #define XE 1
 
 #define MAX_CART_SIZE 16384
-char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges
+char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter

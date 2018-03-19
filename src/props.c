@@ -97,7 +97,8 @@ void DeleteVM(int iVM)
 	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
 	v.cVM--;	// one fewer valid instance now
 
-	FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
+	if (v.cVM)
+		FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }
 
 //
@@ -182,6 +183,8 @@ BOOL CreateAllVMs()
 	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
 	if (vi.hdc)
 		CreateNewBitmap(vmNew);
+
+	FixAllMenus();
 
 #endif
 
@@ -284,13 +287,6 @@ BOOL LoadProperties(char *szIn)
     BOOL f = fFalse;
     BOOL fTriedWindows = fFalse;
 
-	// delete all of our VMs
-	for (int z = 0; z < MAX_VM; z++)
-	{
-		if (v.rgvm[z].fValidVM)
-			DeleteVM(z);
-	}
-
 	sz = szIn;
 	if (!szIn)
 	{
@@ -327,6 +323,7 @@ LTryAgain:
         goto LTryAgain;
     }
 
+	// don't hurt the current session if this load fails
 	int l;
 	if (h != -1)
 	{
@@ -338,79 +335,96 @@ LTryAgain:
     // if INI file contained valid data, use it
     // otherwise make the user give you data
 
-    if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic))
-        {
-        v = vTmp;
-        f = fTrue;
-        }
-
-    // non-persistable pointers need to be refreshed
-	// and only use VM's that we can handle in this build
-
-	int i;
-	v.cVM = 0;
-	for (i = 0; i < MAX_VM; i++)
+	if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic))
 	{
-		v.rgvm[i].pvmi = NULL;
+		
+		// looks like something valid can be read, now it's safe to delete the old stuff
+		// BEFORE we set v
+		for (int z = 0; z < MAX_VM; z++)
+		{
+			if (v.rgvm[z].fValidVM)
+				DeleteVM(z);
+		}
+
+		v = vTmp;
+		f = fTrue;
+
+		// non-persistable pointers need to be refreshed
+		// and only use VM's that we can handle in this build
+
+		int i;
+		v.cVM = 0;
+		for (i = 0; i < MAX_VM; i++)
+		{
+			v.rgvm[i].pvmi = NULL;
 
 #ifdef XFORMER
-		// old saved PROPERTIES used out of date VMs
-		if (v.rgvm[i].bfHW == vmAtari48C)
-			v.rgvm[i].bfHW = vmAtari48;
-		if (v.rgvm[i].bfHW == vmAtariXLC)
-			v.rgvm[i].bfHW = vmAtariXL;
-		if (v.rgvm[i].bfHW == vmAtariXEC)
-			v.rgvm[i].bfHW = vmAtariXE;
+			// old saved PROPERTIES used out of date VMs
+			if (v.rgvm[i].bfHW == vmAtari48C)
+				v.rgvm[i].bfHW = vmAtari48;
+			if (v.rgvm[i].bfHW == vmAtariXLC)
+				v.rgvm[i].bfHW = vmAtariXL;
+			if (v.rgvm[i].bfHW == vmAtariXEC)
+				v.rgvm[i].bfHW = vmAtariXE;
 
-		if (v.rgvm[i].fValidVM && FIsAtari8bit(v.rgvm[i].bfHW)) {
-			v.rgvm[i].pvmi = (PVMINFO)&vmi800;
-		}
+			if (v.rgvm[i].fValidVM && FIsAtari8bit(v.rgvm[i].bfHW)) {
+				v.rgvm[i].pvmi = (PVMINFO)&vmi800;
+			}
 #endif
 
 #ifdef ATARIST
-		if (FIsAtari68K(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiST;
+			if (FIsAtari68K(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiST;
 #endif
 
 #ifdef SOFTMAC
-		if (FIsMac16(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiMac;
+			if (FIsMac16(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiMac;
 #endif
 
 #ifdef SOFTMAC2
-		if (FIsMac68020(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiMacII;
+			if (FIsMac68020(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiMacII;
 
-		if (FIsMac68030(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+			if (FIsMac68030(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 
-		if (FIsMac68040(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+			if (FIsMac68040(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 #ifdef POWERMAC
-		if (FIsMacPPC(v.rgvm[i].bfHW))
-			v.rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
+			if (FIsMacPPC(v.rgvm[i].bfHW))
+				v.rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
 #endif // POWERMAC
 #endif // SOFTMAC2
 
-		v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
+			v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
 
-		// we just loaded an instance off disk. Install and Init it.
-		if (v.rgvm[i].fValidVM)
-		{
-			v.cVM++;
-			FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
-			
-			// get the size of the persisted data
-			DWORD cb;
-			int l = _read(h, &cb, sizeof(DWORD));
-			
-			// either restore from the persisted data, or just Init a blank VM if something goes wrong
-			if (l) {
-				char *pPersist = malloc(cb);
-				l = _read(h, pPersist, cb);
-				if (l == cb) {
-					FLoadStateVM(i, pPersist, cb);
-					vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
+			// we just loaded an instance off disk. Install and Init it.
+			if (v.rgvm[i].fValidVM)
+			{
+				v.cVM++;
+				FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
+
+				// get the size of the persisted data
+				DWORD cb;
+				int l = _read(h, &cb, sizeof(DWORD));
+
+				// either restore from the persisted data, or just Init a blank VM if something goes wrong
+				if (l) {
+					char *pPersist = malloc(cb);
+					l = _read(h, pPersist, cb);
+					if (l == cb) {
+						FLoadStateVM(i, pPersist, cb);
+						vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
+					}
+					else
+					{
+						// can't restore state? we need a reboot or we'll hang. It seems hacky
+						// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
+						v.rgvm[i].fColdReset = TRUE;
+						FInitVM(i);
+					}
+					free(pPersist);
 				}
 				else
 				{
@@ -419,26 +433,18 @@ LTryAgain:
 					v.rgvm[i].fColdReset = TRUE;
 					FInitVM(i);
 				}
-				free(pPersist);
-			}
-			else
-			{
-				// can't restore state? we need a reboot or we'll hang. It seems hacky
-				// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
-				v.rgvm[i].fColdReset = TRUE;
-				FInitVM(i);
-			}
 
-			// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
-			// it will happen when our window is created
-			if (vi.hdc)
-				CreateNewBitmap(i);
+				// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
+				// it will happen when our window is created
+				if (vi.hdc)
+					CreateNewBitmap(i);
+			}
 		}
+
+		// now select the instance that was current when we saved
+		SelectInstance(v.iVM);
 	}
-
-	// now select the instance that was current when we saved
-	SelectInstance(v.iVM);
-
+	
 	if (h != -1)
 		_close(h);
 

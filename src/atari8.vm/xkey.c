@@ -701,6 +701,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
             CONSOL |= 0x04;
         return TRUE;
 
+#if 0 // handled by GEM now
 	case 0x44: // F10
 
 		// shift F10 - shortcut to toggle ATARI BASIC and reboot
@@ -713,6 +714,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			FColdbootVM(v.iVM);
 		}
 		return;
+#endif
 
 #if 0
 	case 0x58:
