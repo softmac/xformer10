@@ -854,7 +854,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				static unsigned lastVM = 0;
 
 				// in tiling mode, run all of the instances, and then wait for time to catch up
-				if (!v.fTiling || v.iVM < lastVM)
+				if (!v.fTiling || v.iVM <= lastVM) // = if there's only 1 VM
 				{
 					RenderBitmap();	// !!! used to render in VBI, if compat bugs appear. Try it only when dirty. Use DDraw.
 									

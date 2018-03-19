@@ -3878,6 +3878,8 @@ break;
 		int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
 		bottom = bottom * vsthw[v.iVM].ypix - rect.bottom;	// how many pixels past the bottom of the screen is that?
 
+		if (bottom < 0)
+			bottom = 0;
 		if (sWheelOffset > 0)
 			sWheelOffset = 0;
 		if (sWheelOffset < bottom * -1)
@@ -3967,6 +3969,8 @@ break;
 			GetClientRect(vi.hWnd, &rect);
 
 			int x, y, iVM = nFirstTile - 1;
+			BOOL fDone = FALSE;
+
 			if (iVM < 0)
 				iVM = v.cVM - 1;
 
@@ -3982,6 +3986,16 @@ break;
 					{
 						iVM = (iVM + 1) % MAX_VM;
 					} while (vrgvmi[iVM].hdcMem == NULL);
+
+					// we've painted them all, now just black for the rest
+					if (iVM == nFirstTile && fDone)
+					{
+						y = rect.bottom;	// double break
+						break;
+					}
+
+					// Tiled mode does not stretch, it needs to be FAST
+					fDone = TRUE;
 
 					if ((xPos >= x) && (xPos < x + vsthw[v.iVM].xpix * vi.fXscale) &&
 						(yPos >= y) && (yPos < y + vsthw[v.iVM].ypix * vi.fYscale))
