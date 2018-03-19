@@ -855,15 +855,11 @@ void FixAllMenus()
 	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
 
-
 	// toggle basic is never a thing outside of XFORMER. If mixed VMs, it's only relevant for an 8bit VM
 	// See Darek, I'm thinking about this!
 #ifndef XFORMER
 	DeleteMenu(vi.hMenu, IDM_TOGGLEBASIC, 0);
 #endif
-	// !!! Doesn't work yet
-	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, MF_GRAYED);
-	//EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, FIsAtari8bit(vmCur.bfHW) ? MF_ENABLED : MF_GRAYED);
 
 	// Checkmark if these modes are active
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
@@ -926,10 +922,14 @@ void FixAllMenus()
 	// don't let them delete the last VM, or anything if tiling
 	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1 && !v.fTiling) ? 0 : MF_GRAYED);
 
-	// no color/mono switch (that's per instance), cold starting or stretching when tiling
+	// no color/mono switch (that's per instance), cold starting, warm starting or stretching when tiling
 	EnableMenuItem(vi.hMenu, IDM_COLORMONO, !v.fTiling ? 0 : MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_COLDSTART, !v.fTiling ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_WARMSTART, !v.fTiling ? 0 : MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
+	
+	// toggle BASIC also has to be relevant
+	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, (FIsAtari8bit(vmCur.bfHW) && !v.fTiling) ? MF_ENABLED : MF_GRAYED);
 
 #if 0 // delete all VMs not supported
 	// grey out some things if there are no VMs at all
@@ -3623,7 +3623,23 @@ break;
             break;
 #endif
 
-		// Ctrl-F10
+
+#ifdef XFORMER // !!! really hacky support for toggle basic
+		case IDM_TOGGLEBASIC:
+			char *pCandy;
+			int cb;
+			FSaveStateVM(v.iVM, &pCandy, &cb);
+			pCandy += 16 + 65536 + 30;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
+			WORD *ramtop = pCandy;
+			if (*ramtop == 0xC000)
+				*ramtop = 0xA000;
+			else
+				*ramtop = 0xC000;
+			
+			// fall through to COLDSTART
+#endif
+
+		// Ctrl-F10, must come after IDM_TOGGLEBASIC
         case IDM_COLDSTART:
             vmCur.fColdReset = TRUE;	// schedule a reboot
             return 0;
@@ -3699,6 +3715,7 @@ break;
 			f = OpenTheFile(vi.hWnd, chFN, FALSE, 2);
 			if (f)
 				LoadProperties(chFN);
+			else
 			FixAllMenus();
 			break;
 
