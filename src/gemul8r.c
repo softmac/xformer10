@@ -17,6 +17,8 @@
 
 #include "gemtypes.h" // main include file
 
+static sWheelOffset;
+
 //
 // "PROPS v" contains our global persistable app data, pertinent to the entire session. Simply write this structure to disk to save.
 // It contains a pointer to:
@@ -2657,26 +2659,36 @@ void RenderBitmap()
 		// Tiling
 
 		int x, y, iVM;
+		BOOL fDone = FALSE, fBlack = FALSE;
 		
 		// start tiling where we're supposed to
 		iVM = nFirstTile - 1;
 		if (iVM < 0)
 			iVM = v.cVM - 1;
 
-		for (y = rect.top; y < rect.bottom; y += vsthw[iVM].ypix /* * vi.fYscale*/)
+		int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+
+		for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[iVM].ypix /* * vi.fYscale*/)
 		{
-			for (x = rect.left; x < rect.right; x += vsthw[iVM].xpix /* * vi.fXscale*/)
+			for (x = 0; x < nx * vsthw[iVM].xpix; x += vsthw[iVM].xpix /* * vi.fXscale*/)
 			{
 					// advance to the next valid bitmap
-
 				do
 				{
 					iVM = (iVM + 1) % MAX_VM;
 					// printf("hdcMem[%d] = %p, %p\n", iVM, vrgvmi[iVM].hdcMem, vrgvmi[iVM].pvBits);
 				} while (vrgvmi[iVM].hdcMem == NULL);
 				
+				// we've painted them all, now just black for the rest
+				if (iVM == nFirstTile && fDone)
+					fBlack = TRUE;
+
 				// Tiled mode does not stretch, it needs to be FAST
-				BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+				fDone = TRUE;
+				if (y + vsthw[iVM].ypix > 0 && !fBlack)
+					BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+				else if (fBlack)
+					BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, BLACKNESS);
 
 				//StretchBlt(vi.hdc, x, y,
 				//	(vsthw[iVM].xpix * vi.fXscale), (vsthw[iVM].ypix * vi.fYscale),
@@ -3377,9 +3389,12 @@ break;
 			// we'll start with the current instance, not always the first one.
 			v.fTiling = !v.fTiling;
 			if (v.fTiling)
+			{
 				nFirstTile = v.iVM;	// show the current VM as the top left one
-			else
+				sWheelOffset = 0;	// start at the top
+			} else {
 				SelectInstance(nFirstTile + 1); // allow cycling through them by choosing the 2nd tile
+			}
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
 			break;
@@ -3851,6 +3866,25 @@ break;
         return 0;
         break;
 
+	case WM_MOUSEWHEEL:
+		signed short int offset = HIWORD(uParam);
+	
+		sWheelOffset += (offset / 120) * 8; // how much did we scroll? (speed 8 seems good)
+
+		RECT rect;
+		GetClientRect(vi.hWnd, &rect);
+		
+		int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+		int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
+		bottom = bottom * vsthw[v.iVM].ypix - rect.bottom;	// how many pixels past the bottom of the screen is that?
+
+		if (sWheelOffset > 0)
+			sWheelOffset = 0;
+		if (sWheelOffset < bottom * -1)
+			sWheelOffset = bottom * -1;
+
+		break;
+
     case WM_RBUTTONDOWN:
         vi.fHaveFocus = TRUE;  // HACK
         if (vi.fExecuting && vi.fGEMMouse && !vi.fInDirectXMode &&
@@ -3936,9 +3970,11 @@ break;
 			if (iVM < 0)
 				iVM = v.cVM - 1;
 
-			for (y = rect.top; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
+			int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+
+			for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
 			{
-				for (x = rect.left; x < rect.right; x += vsthw[v.iVM].xpix * vi.fXscale)
+				for (x = 0; x < nx * vsthw[iVM].xpix; x += vsthw[iVM].xpix /* * vi.fXscale*/)
 				{
 					// advance to the next valid bitmap
 
