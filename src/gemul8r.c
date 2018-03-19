@@ -767,8 +767,10 @@ void CreateVMMenu()
 				CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);	// check if the current one
 				EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);	// grey if tiling
 
+				// current inst is bottom of the list, make a note to put the NEXT INST hot key label on the top one
+				// and the PREV INST hot key label one above us
 				if (z == (int)v.iVM)
-				{		// current inst is bottom of the list, make a note to put the NEXT INST hot key label on the top one
+				{		
 					fNeedNextKey = TRUE;
 					fNeedPrevKey = TRUE;
 				}
@@ -819,7 +821,9 @@ void CreateVMMenu()
 					strcat(mNew, "\tCtrl+F11");
 					SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 
-					fNeedPrevKey = TRUE;
+					// don't put PREV KEY hotkey over top of NEXT KEY hotkey, NEXT should get priority
+					if (v.cVM > 2)
+						fNeedPrevKey = TRUE;
 				}
 				iFound++;
 			}
@@ -838,7 +842,9 @@ void CreateVMMenu()
 	}
 
 	// in case we're fixing the menus because one was deleted, this will still be hanging around
-	DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);
+	// never delete our anchor!
+	if (v.cVM > 0)
+		DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);
 }
 
 // Something changed that affects the menus. Set all the menus up right.
@@ -846,8 +852,6 @@ void CreateVMMenu()
 void FixAllMenus()
 {
 	// not implemented yet
-	EnableMenuItem(vi.hMenu, IDM_SAVE, MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_OPEN, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
 
@@ -1242,6 +1246,9 @@ int CALLBACK WinMain(
 	//char test[130] = "\"c:\\danny\\8bit\\atari8\\108\\analog52.xfd\"";
 	//lpCmdLine = test;
 	
+	// assume we're loading the default .ini file
+	char *lpLoad = NULL;
+
 	// !!! TODO: use the FstIdentifyFileSystem() function in blockapi.c to identify the disk image format
 	// and select an existing VM of the appropriate hardware type.
 	// For now just support for Atari 8-bit VMs and trust the file extension
@@ -1274,6 +1281,20 @@ int CALLBACK WinMain(
 				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
 				fSkipLoad = TRUE;
 			}
+
+			// found a .gem file. Ignore everything else and just load this
+			else if (stricmp(sFile + len - 3, "gem") == 0)
+			{
+				// delete all of our VMs we accidently made before we found the .gem file
+				for (int z = 0; z < MAX_VM; z++)
+				{
+					if (v.rgvm[z].fValidVM)
+						DeleteVM(z);
+				}
+				
+				lpLoad = sFile;	// load this .gem file
+				break;	// stop loading more files
+			}
 		}
 	}
 #endif
@@ -1287,7 +1308,7 @@ int CALLBACK WinMain(
 
 	// Try to load previously saved properties, the persisted PROPS structure
 	// pretend it succeeded if we pre-loaded something from the cmd line, so it doesn't make default VM's
-    fProps = fSkipLoad ? TRUE : LoadProperties(NULL);
+    fProps = fSkipLoad ? TRUE : LoadProperties(lpLoad);
 
 	// we're not loading a saved window size, so make our default window size big enough to see an 8 bit screen image x 2
 	// (see just before CreateWindow)
@@ -1314,9 +1335,6 @@ int CALLBACK WinMain(
 		erties(NULL);
 #endif // ATARIST
 	}
-
-	// Try to choose the same instance that was current when the state was saved to bring up now.
-	SelectInstance(v.iVM);
 
 	// If we're about to come up in Tile mode, we won't be refreshing the menus, and they'll be bad unless we fix them now.
 	if (v.fTiling)
@@ -2658,19 +2676,27 @@ void RenderBitmap()
 	{
 		// Tiling
 
-		int x, y, iVM;
-		BOOL fDone = FALSE, fBlack = FALSE;
+		int x, y, iVM, fDone = -1;
+		BOOL fBlack = FALSE;
+
 		
 		// start tiling where we're supposed to
 		iVM = nFirstTile - 1;
 		if (iVM < 0)
-			iVM = v.cVM - 1;
+			iVM = MAX_VM - 1;
 
-		int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+		// iVM may not be valid so use v.IVM for the next 4 statements
 
-		for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[iVM].ypix /* * vi.fYscale*/)
+		int nx1 = (rect.right - rect.left) / vsthw[v.iVM].xpix; // how many fit across entirely?		
+		int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+		
+		// black out the area we'll never draw to
+		if (nx == nx1) 
+			BitBlt(vi.hdc, nx * vsthw[v.iVM].xpix, 0, rect.right - (vsthw[v.iVM].xpix * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
+
+		for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[v.iVM].ypix /* * vi.fYscale*/)
 		{
-			for (x = 0; x < nx * vsthw[iVM].xpix; x += vsthw[iVM].xpix /* * vi.fXscale*/)
+			for (x = 0; x < nx * vsthw[v.iVM].xpix; x += vsthw[v.iVM].xpix /* * vi.fXscale*/)
 			{
 					// advance to the next valid bitmap
 				do
@@ -2680,11 +2706,14 @@ void RenderBitmap()
 				} while (vrgvmi[iVM].hdcMem == NULL);
 				
 				// we've painted them all, now just black for the rest
-				if (iVM == nFirstTile && fDone)
+				if (fDone >=0 && fDone == iVM)
 					fBlack = TRUE;
 
+				// remember the first thing we drew
+				if (fDone == -1)
+					fDone = iVM;
+
 				// Tiled mode does not stretch, it needs to be FAST
-				fDone = TRUE;
 				if (y + vsthw[iVM].ypix > 0 && !fBlack)
 					BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
 				else if (fBlack)
@@ -3391,9 +3420,9 @@ break;
 			if (v.fTiling)
 			{
 				nFirstTile = v.iVM;	// show the current VM as the top left one
-				sWheelOffset = 0;	// start at the top
+				//sWheelOffset = 0;	// start at the top - Darek doesn't want this
 			} else {
-				SelectInstance(nFirstTile + 1); // allow cycling through them by choosing the 2nd tile
+				SelectInstance(nFirstTile); // was +1 to cycle
 			}
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
@@ -3411,6 +3440,21 @@ break;
 		case IDM_DELVM:
 			DeleteVM(v.iVM);
 			SelectInstance(v.iVM + 1);	// go to the next one
+			break;
+
+		case IDM_NEW:
+
+			// delete all of our VMs
+			for (int z = 0; z < MAX_VM; z++)
+			{
+				if (v.rgvm[z].fValidVM)
+					DeleteVM(z);
+			}
+
+			// now make the default ones
+			CreateAllVMs();
+			SelectInstance(0);
+			FixAllMenus();	// in case we're tiling and not spending the time
 			break;
 
 		// unless Darek gets really busy, this should be enough VM types
@@ -3639,6 +3683,23 @@ break;
 		case IDM_PREVVM:
 			SelectInstance(-1);	// go backwards
 			return 0;
+			break;
+
+		char chFN[MAX_PATH];
+		BOOL f;
+		case IDM_SAVEAS:
+			chFN[0] = 0;	// necessary!
+			f = OpenTheFile(vi.hWnd, chFN, TRUE, 2);
+			if (f)
+				SaveProperties(chFN);
+			break;
+
+		case IDM_LOAD:
+			chFN[0] = 0;	// necessary!
+			f = OpenTheFile(vi.hWnd, chFN, FALSE, 2);
+			if (f)
+				LoadProperties(chFN);
+			FixAllMenus();
 			break;
 
 #if 0
@@ -3972,13 +4033,15 @@ break;
 			BOOL fDone = FALSE;
 
 			if (iVM < 0)
-				iVM = v.cVM - 1;
+				iVM = MAX_VM - 1;
+
+			// iVM may not be valid now, so use v.iVM in the next 3 lines
 
 			int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
 
 			for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
 			{
-				for (x = 0; x < nx * vsthw[iVM].xpix; x += vsthw[iVM].xpix /* * vi.fXscale*/)
+				for (x = 0; x < nx * vsthw[v.iVM].xpix; x += vsthw[v.iVM].xpix /* * vi.fXscale*/)
 				{
 					// advance to the next valid bitmap
 
@@ -5302,6 +5365,8 @@ LRESULT CALLBACK About(
 //
 // nType == 0 for the ordinary disk image type you want to load
 // nType == 1 for a special type of media for your VM, eg. a cartridge for Atari800
+// nType == 2 for loading/saving an entire GEM session
+//
 BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
 {
     OPENFILENAME OpenFileName;
@@ -5317,8 +5382,10 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
 	{
 		if (nType == 0)
 			OpenFileName.lpstrFilter = "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0";
-		else
+		else if (nType == 1)
 			OpenFileName.lpstrFilter = "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0";
+		else 
+			OpenFileName.lpstrFilter = "Xformer Session\0*.gem\0All Files\0*.*\0\0";
 	}
     else
         OpenFileName.lpstrFilter   =
@@ -5331,7 +5398,7 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
     OpenFileName.lpstrFileTitle    = NULL;
     OpenFileName.nMaxFileTitle     = 0;
     OpenFileName.lpstrInitialDir   = NULL;
-    OpenFileName.lpstrTitle        = fCreate ? "Create a Disk Image" : "Select a Disk Image";
+    OpenFileName.lpstrTitle        = fCreate ? "Save As..." : "Select a File...";
     OpenFileName.nFileOffset       = 0;
     OpenFileName.nFileExtension    = 0;
     OpenFileName.lpstrDefExt       = NULL;
@@ -5342,11 +5409,17 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
 			(fCreate ? 0 : OFN_FILEMUSTEXIST);
 
     // Call the common dialog function.
-    if (GetOpenFileName(&OpenFileName))
-        {
+	BOOL fR;
+	if (fCreate)
+		fR = GetSaveFileName(&OpenFileName);
+	else
+		fR = GetOpenFileName(&OpenFileName);
+
+    if (fR)
+	{
         strcpy(psz, OpenFileName.lpstrFile);
         return TRUE;
-        }
+    }
 
     return FALSE;
 }

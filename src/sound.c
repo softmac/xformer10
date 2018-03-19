@@ -107,7 +107,7 @@ void CALLBACK MyWaveOutProc(
 		}
 		if (cx == SNDBUFS)
 		{
-			OutputDebugString("AUDIO GLITCH - EMPTY\n");
+			//OutputDebugString("AUDIO GLITCH - EMPTY\n");
 		}
 		
         //char ods[100];
@@ -140,10 +140,10 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 			}
 		}
 
-		// uh oh, no free buffers to write into (this will happen all the time when not running in real time but as fast as possible)
-		if (sCurBuf == -1) {
+		// uh oh, no free buffers to write into (this will happen naturally when tiling or without brakes)
+		if (sCurBuf == -1 && !v.fTiling && fBrakes) {
 #ifndef NDEBUG
-			OutputDebugString("AUDIO GLITCH - FULL\n");
+			//OutputDebugString("AUDIO GLITCH - FULL\n");
 #endif
 			return; // whatever you don't don't call waveoutWrite!
 		}
@@ -261,6 +261,8 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 						// ie. only allow the following poly counters/pure tone to do their thing if
 						// poly5 is inactive or if active, if poly5 is currently high. Otherwise keep the same amplitude as the last pulse.
 						BOOL fAllow = (rgvoice[voice].distortion & 8) || (poly5[poly5pos[voice]] & 1);
+
+						// !!! poly 5 combined with 4 sounds wrong! (Distortion 4) Why?
 
 						//bit 5 chooses whether to use another counter (the 17/9 or 4-bit counter)
 						if ((rgvoice[voice].distortion & 2) == 0) {
