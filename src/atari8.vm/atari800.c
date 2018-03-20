@@ -259,6 +259,9 @@ BOOL __cdecl InitAtari(int iVM)
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
+	// initialize our state (doesn't seem to help)
+	//_fmemset(vpcandyCur, 0, sizeof(CANDYHW));
+
 	// These things are the same for each machine type
 
 	v.rgvm[iVM].fCPUAuto = TRUE;
@@ -424,6 +427,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	fBrakes = TRUE; // go back to real time
 	clockMult = 1;	// per instance speed-up
 	wScan = 262;	// start at top of screen again
+	wFrame = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -844,6 +848,9 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// we process the audio after the whole frame is done, but the VBLANK starts at 241
 			if (wScan >= 262)
 			{
+				if (wFrame > 0)
+					ProcessScanLine(1); // renders the last scan line of the frame
+			
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 
 				wScan = 0;
@@ -885,7 +892,8 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			rgbMem[0xD41B] =
 				VCOUNT = (BYTE)(wScan >> 1);
 
-			ProcessScanLine(1); // renders the previous scan line
+			if (wScan > 0)
+				ProcessScanLine(1); // renders the previous scan line
 			ProcessScanLine(0);	// prepare for new scan line, and do the DLI
 
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
