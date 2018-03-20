@@ -377,6 +377,16 @@ __inline void IncDLPC()
     DLPC = (DLPC & 0xFC00) | ((DLPC+1) & 0x03FF);
 }
 
+// THEORY OF OPERATION
+//
+// scans is the number of scan lines this graphics mode has, minus 1. So, 7 for GR.0
+// iscan is the current scan line being drawn of this graphics mode line, 0 based
+//		iscan == scans means you're on the last scan line (time for DLI?)
+// fWait means we're doing a JVB (jump and wait for VB)
+// fFetch means we finished an ANTIC instruction and are ready for a new one
+// cbDisp is the width of the playfield in bytes (could be narrow, normal or wide)
+// cbWidth is boosted to the next size if horiz scrolling
+// wAddr is the start of screen memory set by a LMS (load memory scan)
 
 #ifdef HWIN32
 BOOL ProcessScanLine(BOOL fRender)
@@ -384,14 +394,16 @@ BOOL ProcessScanLine(BOOL fRender)
 void ProcessScanLine(BOOL fRender)
 #endif
 {
+	// scan lines per line of each graphics mode
     static const WORD mpMdScans[16] =
         {
         1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1
         };
 
+	// BYTES per line of each graphics mode for NARROW playfield
     static const WORD mpMdBytes[16] =
         {
-        0, 0, 32, 32, 32, 32, 16, 16, 8, 8, 16, 16, 16, 32, 32, 32
+        0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32
         };
 
     // table that says how many bits of data to shift for each
@@ -410,14 +422,21 @@ void ProcessScanLine(BOOL fRender)
     if (fRender)
         goto Lrender;
 
-    psl = &rgsl[wScan];
+	// don't do anything in the invisible retrace sections
+	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
+		return 0;
 
+	// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
     if (wScan == wStartScan)
-        {
-        fWait = 0;
-        fFetch = 1;
-        }
+    {
+        fWait = 0;	// not doing JVB
+        fFetch = 1;	// start by grabbing a DLIST instruction
+	}
 
+	// current scan line structure
+	psl = &rgsl[wScan];
+
+	// grab a DLIST instruction - not in JVB, done previous instruction, and ANTIC is on.
     if (!fWait && fFetch && (DMACTL & 32))
         {
 #ifndef NDEBUG
@@ -433,11 +452,12 @@ void ProcessScanLine(BOOL fRender)
         sl.modehi >>= 4;
         IncDLPC();
 
+		// vertical scroll bit enabled
         if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
             {
             sl.fVscrol = TRUE;
             sl.vscrol = VSCROL & 15;
-            iscan = sl.vscrol;
+			iscan = sl.vscrol;
             }
         else
             {
@@ -450,14 +470,14 @@ void ProcessScanLine(BOOL fRender)
         case 0:
             // display list blank line(s) instruction
 
-            scans = (sl.modehi & 7);
+            scans = (sl.modehi & 7);	// scans = 1 less than the # of blank lines wanted
             break;
 
         case 1:
             // display list jump instruction
 
             scans = 0;
-            fWait = (sl.modehi & 4);
+            fWait = (sl.modehi & 4);	// JVB or JMP?
 
             {
             WORD w;
@@ -473,8 +493,10 @@ void ProcessScanLine(BOOL fRender)
         default:
             // normal display list entry
 
+			// how many scan lines a line of this graphics mode takes
             scans = mpMdScans[sl.modelo]-1;
 
+			// LMS (load memory scan) attached to this line to give start of screen memory
             if (sl.modehi & 4)
                 {
                 wAddr = cpuPeekB(DLPC);
@@ -485,19 +507,17 @@ void ProcessScanLine(BOOL fRender)
             break;
             }
 
+		// time to stop vscrol, this line doesn't use it
         if (sl.fVscrol && (!(sl.modehi & 2) || (sl.modelo < 2)))
             {
             sl.fVscrol = FALSE;
-            scans = VSCROL;
+            scans = VSCROL;	// don't do this line like normal, finish the previous scroll?
             }
         }
 
-    // generate a DLI if necessary. Do so on the last scan of a mode
-
+    // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
     if ((sl.modehi & 8) && (iscan == scans) && (NMIEN & 0x80))
         {
-        // DLI enabled, generate DLI
-
 #ifndef NDEBUG
         extern BOOL  fDumpHW;
 
@@ -509,8 +529,8 @@ void ProcessScanLine(BOOL fRender)
         regPC = cpuPeekW(0xFFFA);
         }
 
-    // Check playfield width and set cb (number of bytes read by Antic)
-    // and cbDisp (number of bytes actually displayed) appropriately
+    // Check playfield width and set cbWidth (number of bytes read by Antic)
+    // and the smaller cbDisp (number of bytes actually visible)
 
     switch (DMACTL & 3)
         {
@@ -518,32 +538,36 @@ void ProcessScanLine(BOOL fRender)
         Assert(FALSE);
         break;
 
+	// cbDisp - actual number of bytes per line of this graphics mode visible
+	// cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
+
     case 0:	// playfield off
         sl.modelo = 0;
         cbWidth = 0;
         cbDisp = cbWidth;
         break;
     case 1: // narrow playfield
-        cbWidth = mpMdBytes[sl.modelo];
+        cbWidth = mpMdBytes[sl.modelo];		// cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
         cbDisp = cbWidth;
-        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling
+        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
             cbWidth |= (cbWidth >> 2);
         break;
     case 2: // normal playfield
-        cbWidth = mpMdBytes[sl.modelo];
-        cbDisp = cbWidth | (cbWidth >> 2);
-        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling
-            cbWidth |= (cbWidth >> 1);
+        cbWidth = mpMdBytes[sl.modelo];		// bytes in NARROW mode, eg. 32
+        cbDisp = cbWidth | (cbWidth >> 2);	// cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
+        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
+            cbWidth |= (cbWidth >> 1);			// boost cbWidth to mimic wide playfield, eg. 48
         else
-            cbWidth |= (cbWidth >> 2);
+            cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
         break;
     case 3: // wide playfield
-        cbWidth = mpMdBytes[sl.modelo];
-        cbDisp = cbWidth | (cbWidth >> 1);
+        cbWidth = mpMdBytes[sl.modelo];		// can't boost any more, we're already WIDE
+        cbDisp = cbWidth | (cbWidth >> 1);	// use WIDE numbers
         cbWidth |= (cbWidth >> 1);
         break;
         }
 
+	// first scan line of a mode line, use the correct char set for this graphics mode line?
     if (iscan == sl.vscrol)
         {
         sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
@@ -558,9 +582,10 @@ void ProcessScanLine(BOOL fRender)
 
     sl.prior  = PRIOR;
 
+	// Horiz scrolling
     if (((sl.modelo) >= 2) && (sl.modehi & 1))
         {
-        sl.hscrol = HSCROL & 14;  // HACK: can't handle odd hscrol
+        sl.hscrol = HSCROL & 15;  // HACK: can't handle odd hscrol
         hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
         }
     else
@@ -579,10 +604,10 @@ void ProcessScanLine(BOOL fRender)
     else
         pmg.pmbase = PMBASE & 0xFC;
 
-    // If PM/G DMA is enabled, read player data
-
+    // enable PLAYER DMA and enable players
     if (sl.dmactl & 0x08 && GRACTL & 2)
         {
+		// single line resolution
         if (sl.dmactl & 0x10)
             {
             pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 1024 + wScan);
@@ -590,6 +615,7 @@ void ProcessScanLine(BOOL fRender)
             pmg.grafp2 = cpuPeekB((pmg.pmbase << 8) + 1536 + wScan);
             pmg.grafp3 = cpuPeekB((pmg.pmbase << 8) + 1792 + wScan);
             }
+		// double line resolution
         else
             {
             pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 512 + (wScan>>1));
@@ -606,12 +632,15 @@ void ProcessScanLine(BOOL fRender)
         pmg.pmbase = 0;
 #endif
         }
-
+	
+	// enable MISSILE DMA and enable missiles
     if (sl.dmactl & 0x04 && GRACTL & 1)
         {
+		// single res
         if (sl.dmactl & 0x10)
             pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 768 + wScan);
-        else
+        // double res
+		else
             pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 384 + (wScan>>1));
 
         GRAFM = pmg.grafm;
@@ -622,7 +651,7 @@ void ProcessScanLine(BOOL fRender)
     if (pmg.grafpX)
         {
         // Players that are offscreen are treated as invisible
-
+		// !!! 47 and 208 are the limits, make sure it doesn't encroach
         if ((pmg.hposp0 < 32) || (pmg.hposp0 >= 216))
             pmg.grafp0 = 0;
         if ((pmg.hposp1 < 32) || (pmg.hposp1 >= 216))
@@ -636,7 +665,7 @@ void ProcessScanLine(BOOL fRender)
     if (pmg.grafm)
         {
         // Missiles that are offsecreen are treated as invisible
-
+		// !!! 47 and 208 are the limits, make sure it doesn't encroach
         if ((pmg.hposm0 < 32) || (pmg.hposm0 >= 216))
             pmg.grafm &= ~0x03;
         if ((pmg.hposm1 < 32) || (pmg.hposm1 >= 216))
@@ -652,12 +681,12 @@ void ProcessScanLine(BOOL fRender)
     sl.fpmg = (pmg.grafpX || pmg.grafm);
 
     // If GTIA is enabled, only let mode 15 display GTIA, all others blank
-
+	// mode 15 is GTIA mode. prior says whether that will be GR. 9, 10 or 11.
     if (sl.prior & 0xC0)
         {
         if (sl.modelo >= 15)
             {
-            sl.modelo = 15 + (sl.prior >> 6);
+            sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
             }
         else
             {
@@ -666,11 +695,7 @@ void ProcessScanLine(BOOL fRender)
             }
         }
 
-#ifdef HWIN32
     return 0;
-#else
-    return;
-#endif
 
 Lrender:
 
@@ -747,12 +772,14 @@ Lrender:
         {
         WORD j = 0;
 
-        // if wide playfield, offset cbDisp/10 bytes into the scan line
+        // HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
 
         if (cbDisp != cbWidth)
             {
-            j = (cbDisp>>3) - (cbDisp>>5) - ((hshift+7) >> 3);
-            hshift &= 7;
+			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin
+			// subtract one for every multiple of 8 hshift is, that's an entire character shift
+            j = (cbDisp>>3) - (cbDisp>>5) - ((hshift) >> 3);
+            hshift &= 7;	// now only consider the part < 8
             }
 
         if (fDataChanged)
@@ -775,7 +802,8 @@ Lrender:
         }
 
     // check if scan line is visible and if so redraw it
-
+	// THIS IS A LOT OF CODE
+	//
     if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
         {
         // redraw scan line
@@ -874,32 +902,76 @@ Lrender:
                     continue;
 
                 if (hshift)
-                    {
+                {
                     // non-zero horizontal scroll
 
-                    WORD u;
+					ULONGLONG u, v;
 
-                    u = (cpuPeekB((sl.chbase<<8) + ((b1&0x7F)<<3) + vpix) << 8) |
-                         cpuPeekB((sl.chbase<<8) + (sl.rgb[i+1]<<3) + vpix);
+					v = cpuPeekB((sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+					if (b1 & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							v = 0;
+						if (sl.chactl & 2)  // inverse flag
+							v = ~v & 0xff;
+					}
+					u = v;
+					
+					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 1] & 0x7f) << 3) + vpix);
+					if (sl.rgb[i-1] & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							v = 0;
+						if (sl.chactl & 2)  // inverse flag
+							v = ~v & 0xff;
+					}
+					u |= (v << 8);
 
-                         // BUG: not checking inverse bit of sl.rgb[i+1]
+					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 2] & 0x7f) << 3) + vpix);
+					if (sl.rgb[i - 2] & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							v = 0;
+						if (sl.chactl & 2)  // inverse flag
+							v = ~v & 0xff;
+					}
+					u |= (v << 16);
+
+					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 3] & 0x7f) << 3) + vpix);
+					if (sl.rgb[i - 3] & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							v = 0;
+						if (sl.chactl & 2)  // inverse flag
+							v = ~v & 0xff;
+					}
+					u |= (v << 24);
+
+					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 4] & 0x7f) << 3) + vpix);
+					if (sl.rgb[i - 4] & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							v = 0;
+						if (sl.chactl & 2)  // inverse flag
+							v = ~v & 0xff;
+					}
+					u |= (v << 32);
 
                     b2 = (BYTE)(u >> hshift);
-                    }
-                else
-                    b2 = cpuPeekB((sl.chbase<<8) + ((b1&0x7F)<<3) + vpix);
-
-                if (b1 & 0x80)
-                    {
-                    if (sl.chactl & 1)  // blank (blink) flag
-                        b2 = 0;
-
-                    if (sl.chactl & 2)  // inverse flag
-                        b2 = ~b2;
-                    }
+                }
+				else
+				{
+					b2 = cpuPeekB((sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+					if (b1 & 0x80)
+					{
+						if (sl.chactl & 1)  // blank (blink) flag
+							b2 = 0;
+						if (sl.chactl & 2)  // inverse flag
+							b2 = ~b2;
+					}
+				}
 
 //    col2 ^= cpuPeekB(20);
-
 
                 if (b2 == 0)
                     {
@@ -1101,17 +1173,31 @@ Lrender:
                         {
                         // non-zero horizontal scroll
 
-                        WORD u;
+						ULONGLONG u, v;
 
-                        u = (cpuPeekB((sl.chbase<<8) + ((b1 & 0x3F)<<3) + vpix) << 8) |
-                             cpuPeekB((sl.chbase<<8) + ((sl.rgb[i+1] & 0x3F)<<3) + vpix);
+						v = cpuPeekB((sl.chbase << 8) + ((b1 & 0x3F) << 3) + vpix);
+						u = v;
 
-                        b2 = (BYTE)(u >> hshift);
-                        
+						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 1] & 0x3f) << 3) + vpix);
+						u |= (v << 8);
+
+						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 2] & 0x3f) << 3) + vpix);
+						u |= (v << 16);
+
+						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 3] & 0x3f) << 3) + vpix);
+						u |= (v << 24);
+
+						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 4] & 0x3f) << 3) + vpix);
+						u |= (v << 32);
+
+						b2 = (BYTE)(u >> hshift);
+					
                         for (j = 0; j < 8; j++)
                             {
-                            if (j == hshift)
-                                col1 = sl.colpf[sl.rgb[i+1]>>6];
+                            if (j <= hshift)
+                                col1 = sl.colpf[sl.rgb[i-1]>>6];
+							else
+								col1 = sl.colpf[b1 >> 6];
 
                             if (b2 & 0x80)
                                 {
@@ -1832,6 +1918,7 @@ Lnextscan:
 
     if (fFetch)
         {
+		// ANTIC's PC can't cross a 4K boundary, poor thing
         wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);
         fDataChanged = 0;
         }
