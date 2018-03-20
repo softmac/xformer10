@@ -1243,8 +1243,8 @@ int CALLBACK WinMain(
 
 #ifdef XFORMER
 
-	//char test[130] = "\"c:\\danny\\8bit\\atari8\\108\\analog52.xfd\"";
-	//lpCmdLine = test;
+//	char test[130] = "\"c:\\danny\\8bit\\atari8\\ballbla2.atr\"";
+//	lpCmdLine = test;
 	
 	// assume we're loading the default .ini file
 	char *lpLoad = NULL;
@@ -1270,6 +1270,8 @@ int CALLBACK WinMain(
 				strcpy(v.rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument
 				v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
 				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
+				if (!fSkipLoad)
+					SelectInstance(iVM);
 				fSkipLoad = TRUE;
 			}
 			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0
@@ -1279,6 +1281,8 @@ int CALLBACK WinMain(
 				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
 				v.rgvm[iVM].rgcart.fCartIn = TRUE;
 				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
+				if (!fSkipLoad)
+					SelectInstance(iVM);
 				fSkipLoad = TRUE;
 			}
 
