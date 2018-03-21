@@ -388,11 +388,7 @@ __inline void IncDLPC()
 // cbWidth is boosted to the next size if horiz scrolling
 // wAddr is the start of screen memory set by a LMS (load memory scan)
 
-#ifdef HWIN32
 BOOL ProcessScanLine(BOOL fRender)
-#else
-void ProcessScanLine(BOOL fRender)
-#endif
 {
 	// scan lines per line of each graphics mode
     static const WORD mpMdScans[16] =
@@ -411,7 +407,7 @@ void ProcessScanLine(BOOL fRender)
 
     static const WORD mpmdbits[16] =
         {
-        0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 2, 2, 2
+        0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4
         };
 
     int i, j;
@@ -585,9 +581,12 @@ void ProcessScanLine(BOOL fRender)
 	// Horiz scrolling
     if (((sl.modelo) >= 2) && (sl.modehi & 1))
         {
-        sl.hscrol = HSCROL & 15;  // HACK: can't handle odd hscrol
-        hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
-        }
+        sl.hscrol = HSCROL & 15;
+		// # of bits to shift the screen byte in CHAR modes
+		// in MAP modes, every 8 of these means you've shifted an entire screen byte
+		// even though you don't do it by shifting the bits in the screen byte
+		hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
+		}
     else
         {
         sl.hscrol = 0;
@@ -768,38 +767,44 @@ Lrender:
     // If it isn't the first scan line and !fDataChanged then there is no
     // need to blit and compare since nothing changed since the first scan line.
 
-    if (((sl.modelo) >= 2) && (rgfChanged || (iscan == sl.vscrol) || (fDataChanged)))
-        {
-        WORD j = 0;
+	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
 
-        // HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
+	if (((sl.modelo) >= 2) && (rgfChanged || (iscan == sl.vscrol) || (fDataChanged)))
+	{
+		WORD j = 0;
 
-        if (cbDisp != cbWidth)
-            {
+		// HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
+
+		if (cbDisp != cbWidth)
+		{
 			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin
 			// subtract one for every multiple of 8 hshift is, that's an entire character shift
-            j = (cbDisp>>3) - (cbDisp>>5) - ((hshift) >> 3);
-            hshift &= 7;	// now only consider the part < 8
-            }
+			j = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
+			hshift &= 7;	// now only consider the part < 8
+		}
 
-        if (fDataChanged)
-            {
-            // sl.rgb already has data from previous scan line
-            }
-        else if (((wAddr+j) & 0xFFF) < 0xFD0)
-            _fmemcpy(sl.rgb,&rgbMem[wAddr+j],cbWidth);
-        else
-            {
-            for (i = 0; i < cbWidth; i++)
-                sl.rgb[i] = cpuPeekB((wAddr & 0xF000) | ((wAddr+i+j) & 0x0FFF));
-            }
-    
-        if (fDataChanged || memcmp(&sl.rgb, &psl->rgb[0], cbWidth))
-            {
-            rgfChanged |= fDisp;
-            fDataChanged = 1;
-            }
-        }
+		if (fDataChanged)
+		{
+			// sl.rgb already has data from previous scan line
+		}
+		else if (((wAddr + j) & 0xFFF) < 0xFD0)
+		{
+			_fmemcpy(sl.rgb, &rgbMem[wAddr + j], cbWidth);
+			rgbSpecial = rgbMem[wAddr + j - 1];	// the byte just offscreen to the left may be needed if scrolling
+		}
+		else
+		{
+			for (i = 0; i < cbWidth; i++)
+				sl.rgb[i] = cpuPeekB((wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
+			rgbSpecial = cpuPeekB((wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
+		}
+
+		if (fDataChanged || memcmp(&sl.rgb, &psl->rgb[0], cbWidth))
+		{
+			rgfChanged |= fDisp;
+			fDataChanged = 1;
+		}
+	}
 
     // check if scan line is visible and if so redraw it
 	// THIS IS A LOT OF CODE
@@ -886,14 +891,15 @@ Lrender:
             _fmemset(qch, sl.colbk, X8);
             break;
 
+		// GR.0 and descended character GR.0
         case 2:
+		case 3:
             col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
             col2 = sl.colpf2;
 
             if (sl.chactl & 4)
-                vpix = vpix ^ 7;    // vertical reflect bit
-            vpix &= 7;
-
+                vpix = (sl.modelo == 2) ? vpix ^ 7 : 9 - vpix;    // vertical reflect bit
+            
             for (i = 0 ; i < cbDisp; i++, qch += 8)
                 {
                 BYTE rgch[8];
@@ -901,67 +907,93 @@ Lrender:
                 if (((b1 = sl.rgb[i]) == psl->rgb[i]) && !rgfChanged)
                     continue;
 
+				// non-zero horizontal scroll
                 if (hshift)
                 {
-                    // non-zero horizontal scroll
-
 					ULONGLONG u, v;
+					UINT vpix23;
 
-					v = cpuPeekB((sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
-					if (b1 & 0x80)
+					// we need to look at 1 or 2 of the 5 characters ending in the current character, depending on how much shift.
+					// this far back from our current pos is definitely one we need to look at
+					int index = 0;
+
+					// we are not in the blank part of a mode 3 character
+					if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (sl.rgb[i - index] & 0x7F) < 0x60) ||
+									(vpix >= 8 && (sl.rgb[i - index] & 0x7F) >= 0x60)))
+					{
+						// use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
+						vpix23 = (vpix >= 8 && (sl.rgb[i - index] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
+
+						// CHBASE must be on an even page boundary
+						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7f) << 3) + vpix23);
+					}
+					// we ARE in the blank part
+					else {
+						v = 0;
+					}
+
+					if (sl.rgb[i - index] & 0x80)
 					{
 						if (sl.chactl & 1)  // blank (blink) flag
 							v = 0;
 						if (sl.chactl & 2)  // inverse flag
 							v = ~v & 0xff;
 					}
-					u = v;
 					
-					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 1] & 0x7f) << 3) + vpix);
-					if (sl.rgb[i-1] & 0x80)
-					{
-						if (sl.chactl & 1)  // blank (blink) flag
-							v = 0;
-						if (sl.chactl & 2)  // inverse flag
-							v = ~v & 0xff;
-					}
-					u |= (v << 8);
+					u = v << (index << 3);
 
-					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 2] & 0x7f) << 3) + vpix);
-					if (sl.rgb[i - 2] & 0x80)
+					if (hshift %8)
 					{
-						if (sl.chactl & 1)  // blank (blink) flag
-							v = 0;
-						if (sl.chactl & 2)  // inverse flag
-							v = ~v & 0xff;
-					}
-					u |= (v << 16);
+						// partial shifting means we also need to look at a second character intruding into our space
+						// do the same exact thing again
+						index += 1;
+						
+						// we can't look past the front of the array, we stored that byte in rgbSpecial
+						BYTE rgb = rgbSpecial;
+						if (i > 0)
+							rgb = sl.rgb[i - index];
+				
+						if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (rgb & 0x7F) < 0x60) ||
+							(vpix >= 8 && (rgb & 0x7F) >= 0x60)))
+						{
+							// use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
+							vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
-					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 3] & 0x7f) << 3) + vpix);
-					if (sl.rgb[i - 3] & 0x80)
-					{
-						if (sl.chactl & 1)  // blank (blink) flag
+							// CHBASE must be on an even page boundary
+							v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
+						}
+						// we ARE in the blank part
+						else {
 							v = 0;
-						if (sl.chactl & 2)  // inverse flag
-							v = ~v & 0xff;
-					}
-					u |= (v << 24);
+						}
 
-					v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 4] & 0x7f) << 3) + vpix);
-					if (sl.rgb[i - 4] & 0x80)
-					{
-						if (sl.chactl & 1)  // blank (blink) flag
-							v = 0;
-						if (sl.chactl & 2)  // inverse flag
-							v = ~v & 0xff;
-					}
-					u |= (v << 32);
+						if (rgb & 0x80)
+						{
+							if (sl.chactl & 1)  // blank (blink) flag
+								v = 0;
+							if (sl.chactl & 2)  // inverse flag
+								v = ~v & 0xff;
+						}
 
-                    b2 = (BYTE)(u >> hshift);
-                }
+						u += (v << (index << 3));
+					}
+
+					// now do the shifting
+					b2 = (BYTE)(u >> hshift);
+
+				}
 				else
 				{
-					b2 = cpuPeekB((sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+					if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
+						// !!! was 0xFC
+						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+					else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
+						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+					else if ((vpix >= 8) && ((b1 & 0x7F) >= 0x60))
+						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
+					else
+						b2 = 0;
+			
 					if (b1 & 0x80)
 					{
 						if (sl.chactl & 1)  // blank (blink) flag
@@ -972,6 +1004,8 @@ Lrender:
 				}
 
 //    col2 ^= cpuPeekB(20);
+
+				// I think this next page of code that could be a single line was Darek's attempt to be fast in the common GR.0 case
 
                 if (b2 == 0)
                     {
@@ -1015,73 +1049,6 @@ Lrender:
                 }
             break;
 
-        case 3:
-            if (sl.chactl & 4)
-                vpix = 9 - vpix;    // vertical reflect bit
-            vpix %= 10;
-
-            for (i = 0 ; i < cbDisp; i++)
-                {
-                if (((b1 = sl.rgb[i]) != psl->rgb[i]) || rgfChanged)
-                    {
-                    if (b1 & 0x80)
-                        {
-                        if (sl.chactl & 2)  // inverse flag
-                            col2 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
-                        else
-                            col2 = sl.colpf2;
-
-                        if (sl.chactl & 1)  // blank (blink) flag
-                            col2 = sl.colpf2;
-
-                        col1 = sl.colpf2;
-                        b1 &= 0x7F;
-                        }
-                    else
-                        {
-                        col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
-                        col2 = sl.colpf2;
-                        }
-
-                    if (hshift)
-                        {
-                        // non-zero horizontal scroll
-
-                        WORD u;
-
-                        u = (cpuPeekB((sl.chbase<<8) + (b1<<3) + vpix) << 8) |
-                             cpuPeekB((sl.chbase<<8) + (sl.rgb[i+1]<<3) + vpix);
-
-                         // BUG: not checking inverse bit of sl.rgb[i+1]
-                         // BUG: not checking alignment
-
-                        b2 = (BYTE)(u >> hshift);
-                        }
-                    else if ((vpix >= 2) && (vpix < 8))
-                        b2 = cpuPeekB(((sl.chbase & 0xFC) << 8) + (b1 << 3) + vpix);
-                    else if ((vpix < 2) && (b1 < 0x60))
-                        b2 = cpuPeekB(((sl.chbase & 0xFC) << 8) + (b1 << 3) + vpix);
-                    else if ((vpix >= 8) && (b1 >= 0x60))
-                        b2 = cpuPeekB(((sl.chbase & 0xFC) << 8) + (b1 << 3) + vpix - 8);
-                    else
-                        b2 = 0;
-
-                    for (j = 0; j < 8; j++)
-                        {
-                        if (b2 & 0x80)
-                            *qch++ = col1;
-                        else
-                            *qch++ = col2;
-                        b2 <<= 1;
-                        }
-                    }
-                else
-                    {
-                    qch += 8;
-                    }
-                }
-            break;
-
         case 5:
             vpix = iscan >> 1;
         case 4:
@@ -1103,27 +1070,40 @@ Lrender:
                     }
 
                 if (hshift)
-                    {
+                {
                     // non-zero horizontal scroll
 
-                    WORD u;
+					ULONGLONG u, v;
 
-                    u = (cpuPeekB((sl.chbase<<8) + ((b1 & 0x7F)<<3) + vpix) << 8) |
-                         cpuPeekB((sl.chbase<<8) + ((sl.rgb[i+1] & 0x7F)<<3) + vpix);
+					// see comments for modes 2 & 3
+					int index = hshift / 8;
 
-                    b2 = (BYTE)(u >> hshift);
-                    }
+					v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
+					u = v << (index << 3);
+
+					if (hshift % 8)
+					{
+						index += 1;
+						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
+						u |= (v << (index << 3));
+					}
+
+					b2 = (BYTE)(u >> hshift);
+                }
                 else
-                    b2 = cpuPeekB((sl.chbase<<8) + ((b1 & 0x7F)<<3) + vpix);
-
-                if (b1 & 0x80)
-                    col3 = sl.colpf3;
-                else
-                    col3 = sl.colpf2;
+                    b2 = cpuPeekB(((sl.chbase & 0xFE) <<8) + ((b1 & 0x7F)<<3) + vpix);
 
                 for (j = 0; j < 4; j++)
-                    {
-                    switch (b2 & 0xC0)
+                {
+					// which character was shifted into this position? Pay attention to its high bit to switch colours
+					int index = (hshift + 7 - 2 * j) / 8;	// hshift always 7 or less, but this would handle up to 31.
+
+					if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
+						col3 = sl.colpf3;
+					else
+						col3 = sl.colpf2;
+
+					switch (b2 & 0xC0)
                         {
                     default:
                         Assert(FALSE);
@@ -1150,7 +1130,7 @@ Lrender:
                         break;
                         }
                     b2 <<= 2;
-                    }
+                }
                 }
             break;
 
@@ -1169,33 +1149,31 @@ Lrender:
                     {
                     col1 = sl.colpf[b1>>6];
 
-                    if (hshift)
-                        {
-                        // non-zero horizontal scroll
+					if (hshift)
+					{
+						// non-zero horizontal scroll
 
 						ULONGLONG u, v;
 
-						v = cpuPeekB((sl.chbase << 8) + ((b1 & 0x3F) << 3) + vpix);
-						u = v;
+						// see comments for modes 2 & 3
+						int index = hshift / 8;
+						
+						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
+						u = v << (index << 3);
 
-						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 1] & 0x3f) << 3) + vpix);
-						u |= (v << 8);
-
-						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 2] & 0x3f) << 3) + vpix);
-						u |= (v << 16);
-
-						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 3] & 0x3f) << 3) + vpix);
-						u |= (v << 24);
-
-						v = cpuPeekB((sl.chbase << 8) + ((sl.rgb[i - 4] & 0x3f) << 3) + vpix);
-						u |= (v << 32);
+						if (hshift % 8)
+						{
+							index += 1;
+							v = cpuPeekB(((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
+							u |= (v << (index << 3));
+						}
 
 						b2 = (BYTE)(u >> hshift);
 					
                         for (j = 0; j < 8; j++)
                             {
-                            if (j <= hshift)
-                                col1 = sl.colpf[sl.rgb[i-1]>>6];
+                            if (j <= hshift)	// hshift restricted to 7 or less, so this is sufficient
+                                col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i-1])>>6];
 							else
 								col1 = sl.colpf[b1 >> 6];
 
@@ -1211,9 +1189,9 @@ Lrender:
                                 }
                             b2 <<= 1;
                             }
-                        }
+                    }
                     else
-                        {
+                    {
                         b2 = cpuPeekB((sl.chbase << 8)
                             + ((b1 & 0x3F) << 3) + vpix);
 
@@ -1246,79 +1224,64 @@ Lrender:
             col2 = sl.colpf1;
             col3 = sl.colpf2;
 
-            for (i = 0 ; i < cbDisp; i++)
-                {
-                b2 = sl.rgb[i];
+			for (i = 0; i < cbDisp; i++)
+			{
+				b2 = sl.rgb[i];
 
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 32;
-                    continue;
-                    }
+				if (!rgfChanged && (b2 == psl->rgb[i]))
+				{
+					qch += 32;
+					continue;
+				}
 
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
+				WORD u = b2;
 
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
+				// can't check hshift, because it is half of sl.hscrol, which might be 0 when sl.hscrol == 1
+				if (sl.hscrol)
+				{
+					// non-zero horizontal scroll
 
-                for (j = 0; j < 4; j++)
-                    {
-                    switch (b2 & 0xC0)
-                        {
-                    default:
-                        Assert(FALSE);
-                        break;
-                
-                    case 0x00:
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        break;
+					// this shift may involve our byte and the one before it
+					u = (sl.rgb[i - 1] << 8) | (BYTE)b2;
+				}
+				
+				// what 1/2-bit position in the WORD u do we start copying from?
+				int index = 15 + sl.hscrol;
 
-                    case 0x40:
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        break;
+				// copy 2 screen pixels each iteration, for 32 pixels written per screen byte in this mode
+				for (j = 0; j < 16; j++)
+				{
+					// which 2 bit pair is this 1/2-bit position inside?
+					// I really should have drawn a lot of pictures)
+					int k = (index - j) >> 2;
 
-                    case 0x80:
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        break;
+					// look at that bit pair
+					b2 = (u >> k >> k) & 0x3;
 
-                    case 0xC0:
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        break;
-                        }
-                    b2 <<= 2;
-                    }
-                }
+					switch (b2 & 0x03)
+					{
+					case 0x00:
+						*qch++ = col0;
+						*qch++ = col0;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						*qch++ = col1;
+						break;
+
+					case 0x02:
+						*qch++ = col2;
+						*qch++ = col2;
+						break;
+
+					case 0x03:
+						*qch++ = col3;
+						*qch++ = col3;
+						break;
+					}
+				}
+			}
             break;
 
         case 9:
@@ -1326,7 +1289,7 @@ Lrender:
             col1 = sl.colpf0;
 
             for (i = 0 ; i < cbDisp; i++)
-                {
+            {
                 b2 = sl.rgb[i];
 
                 if (!rgfChanged && (b2 == psl->rgb[i]))
@@ -1335,34 +1298,44 @@ Lrender:
                     continue;
                     }
 
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
+				WORD u = b2;
 
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
+				// can't use hshift, it is 1/2 of sl.hscrol, which might be only 1. It's OK, hshift never can get to 8 to reset to 0.
+				if (sl.hscrol)
+				{
+					// non-zero horizontal scroll
 
-                for (j = 0; j < 8; j++)
-                    {
-                    if (b2 & 0x80)
-                        {
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        }
-                    else
-                        {
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        }
-                    b2 <<= 1;
-                    }
-                }
-            break;
+					// this shift may involve our byte and the one before it
+					u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+				}
+
+				// what 1/2-bit position in the WORD u do we start copying from?
+				int index = 15 + sl.hscrol;
+
+				// copy 2 screen pixels each iteration, for 32 pixels written per screen byte in this mode
+				for (j = 0; j < 16; j++)
+				{
+					// which bit is this 1/2-bit position inside?
+					int k = (index - j) >> 1;
+
+					// look at that bit
+					b2 = (u >> k) & 0x1;
+
+					switch (b2 & 0x01)
+					{
+					case 0x00:
+						*qch++ = col0;
+						*qch++ = col0;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						*qch++ = col1;
+						break;
+					}
+				}
+			}
+			break;
 
         case 10:
             col0 = sl.colbk;
@@ -1371,64 +1344,67 @@ Lrender:
             col3 = sl.colpf2;
 
             for (i = 0 ; i < cbDisp; i++)
-                {
+            {
                 b2 = sl.rgb[i];
 
                 if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
+                {
                     qch += 16;
                     continue;
-                    }
-
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
-
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
-
-                for (j = 0; j < 4; j++)
-                    {
-                    switch (b2 & 0xC0)
-                        {
-                    default:
-                        Assert(FALSE);
-                        break;
-                
-                    case 0x00:
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        break;
-
-                    case 0x40:
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        break;
-
-                    case 0x80:
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        break;
-
-                    case 0xC0:
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        break;
-                        }
-                    b2 <<= 2;
-                    }
                 }
-            break;
 
+				WORD u = b2;
+
+				// modes 8 and 9 cannot shift more than 1 byte, and hshift could be 0 if sl.hscrol == 1, so we had to test sl.hscrol.
+				// This mode can shift > 1 byte, so hshift might be truncated to %8, so it's the opposite...
+				// we have to test hshift.
+				if (hshift)
+				{
+					// non-zero horizontal scroll
+
+					// this shift may involve our byte and the one before it
+					u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+				}
+
+				// what bit position in the WORD u do we start copying from?
+				int index = 7 + hshift;
+
+				// copy 2 screen pixels each iteration of a bit, for 16 pixels written per screen byte in this mode
+				for (j = 0; j < 8; j++)
+				{
+					// which 2 bit pair is this bit position inside?
+					int k = (index - j) >> 1;
+
+					// look at that bit pair
+					b2 = (u >> k >> k) & 0x3;
+
+					switch (b2 & 0x03)
+					{
+					case 0x00:
+						*qch++ = col0;
+						*qch++ = col0;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						*qch++ = col1;
+						break;
+
+					case 0x02:
+						*qch++ = col2;
+						*qch++ = col2;
+						break;
+
+					case 0x03:
+						*qch++ = col3;
+						*qch++ = col3;
+						break;
+					}
+				}
+			}
+			break;
+
+		// these only differ by # of scan lines, we'll get called twice for 11 and once for 12
         case 11:
         case 12:
             col0 = sl.colbk;
@@ -1444,30 +1420,44 @@ Lrender:
                     continue;
                     }
 
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
+				WORD u = b2;
 
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
+				// see comments in mode 10, must use hshift, not sl.hscrol for this mode
+				if (hshift)
+				{
+					// non-zero horizontal scroll
 
-                for (j = 0; j < 8; j++)
-                    {
-                    if (b2 & 0x80)
-                        {
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        }
-                    else
-                        {
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        }
-                    b2 <<= 1;
-                    }
-                }
-            break;
+					// this shift may involve our byte and the one before it
+					u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+				}
+
+				// what bit position in the WORD u do we start copying from?
+				int index = 7 + hshift;
+
+				// copy 2 screen pixels each iteration, for 16 pixels written per screen byte in this mode
+				for (j = 0; j < 8; j++)
+				{
+					// which bit is this bit position inside?
+					int k = (index - j);
+
+					// look at that bit
+					b2 = (u >> k) & 0x1;
+
+					switch (b2 & 0x01)
+					{
+					case 0x00:
+						*qch++ = col0;
+						*qch++ = col0;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						*qch++ = col1;
+						break;
+					}
+				}
+			}
+			break;
 
         case 13:
         case 14:
@@ -1486,49 +1476,57 @@ Lrender:
                     continue;
                     }
 
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
+				WORD u = b2;
 
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
+				// hshift tells us if there's any hscrol needed not accounted for by an even multiple of 8
+				if (hshift)
+				{
+					// non-zero horizontal scroll
 
-                for (j = 0; j < 4; j++)
-                    {
-                    switch (b2 & 0xC0)
-                        {
-                    default:
-                        Assert(FALSE);
-                        break;
-                
-                    case 0x00:
-                        *qch++ = col0;
-                        *qch++ = col0;
-                        break;
+					// this shift may involve our byte and the one before it
+					u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+				}
 
-                    case 0x40:
-                        *qch++ = col1;
-                        *qch++ = col1;
-                        break;
+				// what bit pair position in the WORD u do we start copying from?
+				int index = 3 + (hshift >> 1);
 
-                    case 0x80:
-                        *qch++ = col2;
-                        *qch++ = col2;
-                        break;
+				// copy 2 screen pixels each iteration of a bit pair, for total of 8 pixels written per screen byte in this mode
+				for (j = 0; j < 4; j++)
+				{
+					// which 2 bit pair is this bit position inside?
+					int k = (index - j);
 
-                    case 0xC0:
-                        *qch++ = col3;
-                        *qch++ = col3;
-                        break;
-                        }
-                    b2 <<= 2;
-                    }
-                }
-            break;
+					// look at that bit pair
+					b2 = (u >> k >> k) & 0x3;
+
+					switch (b2 & 0x03)
+					{
+					case 0x00:
+						*qch++ = col0;
+						*qch++ = col0;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						*qch++ = col1;
+						break;
+
+					case 0x02:
+						*qch++ = col2;
+						*qch++ = col2;
+						break;
+
+					case 0x03:
+						*qch++ = col3;
+						*qch++ = col3;
+						break;
+					}
+				}
+			}
+			break;
 
         case 15:
-            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);	// duplicate interlacing colors!
             col2 = sl.colpf2;
 
             for (i = 0 ; i < cbDisp; i++)
@@ -1541,38 +1539,42 @@ Lrender:
                     continue;
                     }
 
-                if (hshift)
-                    {
-                    // non-zero horizontal scroll
+				WORD u = b2;
 
-                    WORD u = (b2 << 8) | sl.rgb[i+1];
-                    b2 = (BYTE)(u >> hshift);
-                    }
+				// do you have the hang of this by now? Use hshift, not sl.hscrol
+				if (hshift)
+				{
+					// non-zero horizontal scroll
 
-                if (b2 == 0)
-                    {
-                    memset(qch,col2,8);
-                    qch += 8;
-                    continue;
-                    }
+					// this shift may involve our byte and the one before it
+					u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+				}
 
-                if (b2 == 255)
-                    {
-                    memset(qch,col1,8);
-                    qch += 8;
-                    continue;
-                    }
+				// what bit position in the WORD u do we start copying from?
+				int index = 7 + hshift;	// ATARI can only shift 2 pixels minimum at this resolution
 
-                for (j = 0; j < 8; j++)
-                    {
-                    if (b2 & 0x80)
-                        *qch++ = col1;
-                    else
-                        *qch++ = col2;
-                    b2 <<= 1;
-                    }
-                }
-            break;
+				// copy 1 screen pixel each iteration, for 8 pixels written per screen byte in this mode
+				for (j = 0; j < 8; j++)
+				{
+					// which bit is this bit position inside?
+					int k = (index - j);
+
+					// look at that bit
+					b2 = (u >> k) & 0x1;
+
+					switch (b2 & 0x01)
+					{
+					case 0x00:
+						*qch++ = col2;
+						break;
+
+					case 0x01:
+						*qch++ = col1;
+						break;
+					}
+				}
+			}
+			break;
 
         case 16:
             // GTIA 16 grey mode
@@ -1586,6 +1588,14 @@ Lrender:
                     qch += 8;
                     continue;
                     }
+
+				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
+				// use low nibble of previous byte
+				if (hshift & 0x04)
+				{
+					b2 = b2 >> 4;
+					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+				}
 
                 col1 = (b2 >> 4) | ((sl.colbk & 15) << 4);
                 col2 = (b2 & 15) | ((sl.colbk & 15) << 4);
@@ -1614,6 +1624,14 @@ Lrender:
                     qch += 8;
                     continue;
                     }
+
+				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
+				// use low nibble of previous byte
+				if (hshift & 0x04)
+				{
+					b2 = b2 >> 4;
+					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+				}
 
                 col1 = (b2 >> 4);
 
@@ -1657,6 +1675,14 @@ Lrender:
                     qch += 8;
                     continue;
                     }
+
+				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
+				// use low nibble of previous byte
+				if (hshift & 0x04)
+				{
+					b2 = b2 >> 4;
+					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+				}
 
                 col1 = ((b2 >> 4) << 4) | (sl.colbk & 15);
                 col2 = ((b2 & 15) << 4) | (sl.colbk & 15);
