@@ -388,7 +388,7 @@ void CheckKey()
 		case 0x52: // numeric 0
 			if (ch == 0)                    // numlock off
 				{
-				TRIG0 &= ~1;                // JOY 0 fire button down
+//				TRIG0 &= ~1;                // JOY 0 fire button down
 				return;
 				}
 
@@ -735,28 +735,27 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
             *pbshift &= ~wAnyShift;
         break;
 
-	// MAME uses Left control for joystick fire, that's what people are used to
-	// Hopefully that won't confuse programs, since it's a common key
-    case 0x1D: // left control
+	case 0x1D: // left control
     case 0x11D: // right control
 		if (fDown)
-		{
 			*pbshift |= wCtrl;
+		else
+			*pbshift &= ~wCtrl;
+		break;
+
+	// MAME uses Left control for joystick fire, but that interferes with the arrow keys so we can't easily use that
+	case 0x38: // left alt
+	case 0x138: // right alt
+		if (fDown)
+		{
+			*pbshift |= wAlt;
 			TRIG0 &= ~1;
 		}
 		else
 		{
-			*pbshift &= ~wCtrl;
+			*pbshift &= ~wAlt;
 			TRIG0 |= 1;
 		}
-		break;
-
-	case 0x38: // left alt
-	case 0x138: // right alt
-		if (fDown)
-			*pbshift |= wAlt;
-		else
-			*pbshift &= ~wAlt;
 		break;
 	
 	case 0x46: // Scrl Lock

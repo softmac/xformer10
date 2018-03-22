@@ -523,11 +523,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // PIA reset
 
-	rPADATA = 255;
-	rPBDATA = 255;
-	wPADATA = 255;
-    wPBDATA = (ramtop == 0xC000) ? 255: 253;	// !!! WTF?
-    PACTL  = 60;
+	rPADATA = 255;	// the data PORTA will provide if it is in READ mode
+	wPADATA = 0;	// the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
+	rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL bit to indicate if BASIC is swapped in
+	wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL bit to indicate if BASIC is swapped in
+	PACTL  = 60;
     PBCTL  = 60;
 
 	// reset the cycle counter each cold start
