@@ -18,6 +18,11 @@
 
 #include "common.h"
 
+int X8 = 352;		// valid width of screen including black bars on sides (320 normal playfield)
+int Y8 = 240;		// number of valid scan lines
+#define STARTSCAN 8	// scan line ANTIC starts drawing at
+#define NTSCY 262	// (actually 262.5, but sigh).
+
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
@@ -205,7 +210,7 @@ typedef struct
 
     ULONG m_clockMult;
 
-    SL m_rgsl[262];     // 256 scan line structures
+    SL m_rgsl[NTSCY];     // 256 scan line structures
     PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
 
     SL m_sl;            // current scan line display info
@@ -591,7 +596,7 @@ int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int
 
 //void InitSoundBlaster();
 
-BOOL ProcessScanLine(BOOL);
+BOOL ProcessScanLine();
 void ForceRedraw();
 
 void __cdecl SwapMem(BYTE mask, BYTE flags, WORD pc);

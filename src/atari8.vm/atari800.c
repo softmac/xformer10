@@ -280,7 +280,7 @@ BOOL __cdecl InitAtari(int iVM)
 	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
 	// unless Shift-F10 changes it
 	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
-	wStartScan = 10;
+	wStartScan = STARTSCAN;	// this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
 
     // save shift key status, why? !!! this only happens at boot time now until shutdown
     //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
@@ -398,7 +398,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	//countJiffies = 0;
 
 	fBrakes = TRUE;	// go back to real time
-	wScan = 262;	// start at top of screen again
+	wScan = NTSCY;	// start at top of screen again
 
 	// too slow to do anytime but startup
 	//InitSound();	// need to reset and queue audio buffers
@@ -426,7 +426,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	
 	fBrakes = TRUE; // go back to real time
 	clockMult = 1;	// per instance speed-up
-	wScan = 262;	// start at top of screen again
+	wScan = NTSCY;	// start at top of screen again
 	wFrame = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
@@ -484,6 +484,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
     *(ULONG *)PXPL  = 0;
+	GRAFP0 = 0;
+	GRAFP1 = 0;
+	GRAFP2 = 0;
+	GRAFP3 = 0;
+	GRAFM = 0;
 
     // POKEY reset
 
@@ -765,7 +770,7 @@ DoVBI()
 	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
 	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
 
-#if 0 // try drawing at scan line 262, not at the start of the VBI
+#if 0 // !!! now we try drawing at scan line 262, not at the start of the VBI and hope it didn't break anything
 	if (wScanMin > wScanMac)
 	{
 		assert(0);
@@ -842,15 +847,12 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 #endif // DEBUG
 
-			// next scan line - should really be 262.5, ugh, sigh, NTSC.
+			// next scan line
 			wScan = wScan + 1;
 
 			// we process the audio after the whole frame is done, but the VBLANK starts at 241
-			if (wScan >= 262)
-			{
-				if (wFrame > 0)
-					ProcessScanLine(1); // renders the last scan line of the frame
-			
+			if (wScan >= NTSCY)
+			{			
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 
 				wScan = 0;
@@ -892,10 +894,8 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			rgbMem[0xD41B] =
 				VCOUNT = (BYTE)(wScan >> 1);
 
-			if (wScan > 0)
-				ProcessScanLine(1); // renders the previous scan line
-			ProcessScanLine(0);	// prepare for new scan line, and do the DLI
-
+			ProcessScanLine();	// do the DLI, and fill the bitmap
+			
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
 			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
 			// 21 should be right for Gr.0 but for some reason 18 is.
@@ -915,10 +915,10 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
-			else if (wScan < 250) {
+			else if (wScan < STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
 			}
-			else if (wScan == 250) {
+			else if (wScan == STARTSCAN + Y8) {
 				// start the NMI status early so that programs
 				// that care can see it
 				NMIST = 0x40 | 0x1F;
@@ -930,12 +930,12 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// **************************************************************
 			// ******************** do the VBI! *****************************
 			// **************************************************************
-			else if (wScan == 251)
+			else if (wScan == STARTSCAN + Y8 + 1)	// was 251
 			{
 				DoVBI();	// it's huge, it bloats this function to inline it.
 			}
 
-			else if (wScan > 251)
+			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = 30;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
@@ -1105,7 +1105,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
         addr &= 31;
         bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
-
+	
         if (addr == 30)
             {
             // HITCLR
@@ -1165,7 +1165,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
 			// we're (wScan / 262) of the way through the scan lines and (wLeftmax - wLeft) of the way through this scan line
-			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / 262;
+			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
 				SoundDoneCallback(vi.rgwhdr, iCurSample);
 		}
