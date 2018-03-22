@@ -28,6 +28,7 @@
 #define IDM_FULLSCREEN                  40231
 #define IDM_STRETCH                     40232
 #define IDM_TILE                        40237
+#define IDM_TURBO	                    40033
 #define IDM_COLORMONO                   40032
 #define IDM_D1                          40238
 #define IDM_D2                          40239

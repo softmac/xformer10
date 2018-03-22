@@ -865,6 +865,7 @@ void FixAllMenus()
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
+	CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
 
 	// Initialize the virtual disk menu items to show the associated file path with each drive.
 	// Grey the unload option for a disk that isn't loaded
@@ -2468,7 +2469,7 @@ void ColdStart(int iVM)
     vi.fExecuting = FALSE;
 
     vi.fExecuting = FColdbootVM(v.iVM);
-	DisplayStatus();	// show Darek's banner
+	DisplayStatus();	// update Title Bar, etc.
 
 #if !defined(NDEBUG)
     fDebug++;
@@ -3311,6 +3312,7 @@ break;
 						else if ((oi.dwBuildNumber & 65535) < 9200)
 							strcpy(rgchVer, "Windows 8 pre-release");
 						else
+							// !!! It says this for Windows 10!
 							strcpy(rgchVer, "Windows 8");
 					}
 					else
@@ -3432,6 +3434,12 @@ break;
 			FixAllMenus();
 			break;
 
+		// toggle TURBO mode // !!! PG-UP still secretly does it too because I'm used to that
+		case IDM_TURBO:
+			fBrakes = !fBrakes;
+			FixAllMenus();
+			return 0;
+			
 		// toggle COLOR/B&W
 		case IDM_COLORMONO:
 			if (!FToggleMonitor(v.iVM))

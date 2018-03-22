@@ -66,7 +66,7 @@ void ShowCountDownLine()
             }
         else if (cntTick < 60)
             {
-            pch = " PRESS ALT+ENTER FOR FULLSCREEN";
+            pch = " USE ALT + ARROWS FOR JOYSTICK";
             }
         else if (cntTick < 120)
             {
@@ -698,8 +698,13 @@ BOOL ProcessScanLine(BOOL fRender)
 
 Lrender:
 
-    sl.colbk  = COLBK;
-    sl.colpfX = COLPFX;
+	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
+	//static BYTE sModeLast;	// last ANTIC mode we saw
+
+	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
+	sl.colbk = ((PRIOR & 0xC0) == 0x80) ? COLPM0 : COLBK;
+	
+	sl.colpfX = COLPFX;
     pmg.colpmX = COLPMX;
 
     if ((wScan < wStartScan) || (wScan >= wStartScan + wcScans))
@@ -766,8 +771,6 @@ Lrender:
     // of this mode then we need to blit and compare the memory.
     // If it isn't the first scan line and !fDataChanged then there is no
     // need to blit and compare since nothing changed since the first scan line.
-
-	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
 
 	if (((sl.modelo) >= 2) && (rgfChanged || (iscan == sl.vscrol) || (fDataChanged)))
 	{
@@ -1597,8 +1600,8 @@ Lrender:
 					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
 				}
 
-                col1 = (b2 >> 4) | ((sl.colbk & 15) << 4);
-                col2 = (b2 & 15) | ((sl.colbk & 15) << 4);
+				col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);	// let the user screw up the colours if they want, like a real 810
+				col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/ ); // they should only POKE 712 with multiples of 16
 
                 *qch++ = col1;
                 *qch++ = col1;
@@ -1613,7 +1616,7 @@ Lrender:
             break;
 
         case 17:
-            // GTIA 9 color mode
+            // GTIA 9 color mode - GR. 10
 
             for (i = 0 ; i < cbDisp; i++)
                 {
@@ -1636,21 +1639,21 @@ Lrender:
                 col1 = (b2 >> 4);
 
                 if (col1 < 9)
-                    {
                     col1 = *(((BYTE FAR *)&COLPM0) + col1);
-                    }
-                else
-                    col1 = 0;
+                else if (col1 < 12)
+					col1 = *(((BYTE FAR *)&COLPM0) + 8);	// col. 9-11 are copies of c.8
+				else 
+					col1 = *(((BYTE FAR *)&COLPM0) + col1 - 8);	// col. 12-15 are copies of c.4-7
 
                 col2 = (b2 & 15);
 
                 if (col2 < 9)
-                    {
                     col2 = *(((BYTE FAR *)&COLPM0) + col2);
-                    }
-                else
-                    col2 = 0;
-
+                else if (col2 < 12)
+					col2 = *(((BYTE FAR *)&COLPM0) + 8);	// col. 9-11 are copies of c.8
+				else
+					col2 = *(((BYTE FAR *)&COLPM0) + col2 - 8);	// col. 12-15 are copies of c.4-7
+				
                 *qch++ = col1;
                 *qch++ = col1;
                 *qch++ = col1;
@@ -1664,7 +1667,7 @@ Lrender:
             break;
 
         case 18:
-            // GTIA 16 color mode
+            // GTIA 16 color mode GR. 11
 
             for (i = 0 ; i < cbDisp; i++)
                 {
@@ -1684,8 +1687,12 @@ Lrender:
 					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
 				}
 
-                col1 = ((b2 >> 4) << 4) | (sl.colbk & 15);
-                col2 = ((b2 & 15) << 4) | (sl.colbk & 15);
+				// !!! restrict all drawing in ProcessScanLine of the background to lum=0 in ANTIC mode 18!
+
+				col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);	// lum comes from 712
+				col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
+				//col1 = ((b2 >> 4) << 4) | (sl.colbk & 15);
+                //col2 = ((b2 & 15) << 4) | (sl.colbk & 15);
 
                 *qch++ = col1;
                 *qch++ = col1;
@@ -1744,7 +1751,7 @@ Lrender:
 
         qch += (wScan - wStartScan) * vcbScan;
 
-        // if GTIA, give players and missiles highest priority
+        // if GTIA, give players and missiles highest priority !!! is that true?
 
         if (sl.modelo > 15)
             sl.prior = 1;
