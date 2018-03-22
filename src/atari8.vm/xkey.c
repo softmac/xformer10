@@ -604,8 +604,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
             printf("clock multiplier = %u\n", clockMult);
 #endif
-			fBrakes = !fBrakes;	// toggle real time or fast as possible
-			DisplayStatus();
+			SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
 		}
 		return TRUE;
 
