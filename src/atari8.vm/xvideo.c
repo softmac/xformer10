@@ -39,7 +39,7 @@ BYTE const * const rgszModes[6] =
     };
 
 #define vcbScan X8
-#define wcScans Y8
+#define wcScans Y8	// # of valid scan lines
 #define NTSCx 512
 #define NARROWx 256
 #define NORMALx 320
@@ -107,13 +107,12 @@ void ShowCountDownLine()
         if (i == 7)
             cntTick--;
 
-#ifdef HWIN32
+		// !!! not implemented attempt to see if dirty
         if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
             {
             wScanMin = min(wScanMin, (wScan - wStartScan));
             wScanMac = max(wScanMac, (wScan - wStartScan) + 1);
             }
-#endif
         }
 }
 
@@ -126,9 +125,10 @@ void DrawPlayers(WORD NEAR *pw)
     WORD w;
 
     for (i = 0; i < 4; i++)
-        {
+    {
         WORD NEAR *qw;
         
+		// no PM data in this pixel
         if (!(b2 = pmg.grafp[i]))
             continue;
 
@@ -158,7 +158,7 @@ void DrawPlayers(WORD NEAR *pw)
             qw += cw;
             b2 <<= 1;
             }
-        }
+    }
 
     // now do player-to-player and player-to-playfield collisions
 
@@ -178,7 +178,7 @@ void DrawPlayers(WORD NEAR *pw)
         cw = mpsizecw[ pmg.sizep[i] & 3];
 
         for (j = 0; j < 8; j++)
-            {
+        {
             if (b2 & 0x80)
                 {
                 PXPL[i] |= (*qw >> 12);
@@ -202,7 +202,7 @@ void DrawPlayers(WORD NEAR *pw)
                 qw += cw;
 
             b2 <<= 1;
-            }
+        }
 
         // mask out upper 4 bits of each collision register
         // and mask out same player collisions
@@ -291,7 +291,7 @@ void DrawMissiles(WORD NEAR *pw, int fFifth)
 
 Ldm:
     for (i = 0; i < 4; i++)
-        {
+    {
         WORD NEAR *qw;
         
         if (!(b2 = ((pmg.grafm >> (i+i)) & 3)))
@@ -308,66 +308,40 @@ Ldm:
             w  = mppmbw[i];
 
         if (b2 & 2)
+        {
+            if (1 || fFifth)	// !!! 5th player broken
             {
-            if (0 && fFifth)
-                {
                 qw[0] |= w;
                 if (cw > 1)
-                    {
+                {
                     qw[1] |= w;
                     if (cw > 2)
-                        {
+                    {
                         qw[2] |= w;
                         qw[3] |= w;
-                        }
-                    }
-                }
-            else
-                {
-                qw[0] = w;
-                if (cw > 1)
-                    {
-                    qw[1] = w;
-                    if (cw > 2)
-                        {
-                        qw[2] = w;
-                        qw[3] = w;
-                        }
-                    }
-                }
-            }
-        qw += cw;
-
-        if (b2 & 1)
-            {
-            if (0 && fFifth)
-                {
-                qw[0] |= w;
-                if (cw > 1)
-                    {
-                    qw[1] |= w;
-                    if (cw > 2)
-                        {
-                        qw[2] |= w;
-                        qw[3] |= w;
-                        }
-                    }
-                }
-            else
-                {
-                qw[0] = w;
-                if (cw > 1)
-                    {
-                    qw[1] = w;
-                    if (cw > 2)
-                        {
-                        qw[2] = w;
-                        qw[3] = w;
-                        }
                     }
                 }
             }
         }
+        qw += cw;
+
+        if (b2 & 1)
+        {
+            if (1 || fFifth)	// !!! 5th player probably broken!
+            {
+                qw[0] |= w;
+                if (cw > 1)
+                {
+                    qw[1] |= w;
+                    if (cw > 2)
+                    {
+                        qw[2] |= w;
+                        qw[3] |= w;
+                    }
+                }
+            }
+        }
+    }
 }
 
 #pragma optimize("",on)
@@ -388,7 +362,7 @@ __inline void IncDLPC()
 // cbWidth is boosted to the next size if horiz scrolling
 // wAddr is the start of screen memory set by a LMS (load memory scan)
 
-BOOL ProcessScanLine(BOOL fRender)
+BOOL ProcessScanLine()
 {
 	// scan lines per line of each graphics mode
     static const WORD mpMdScans[16] =
@@ -413,11 +387,6 @@ BOOL ProcessScanLine(BOOL fRender)
     int i, j;
     static WORD rgfChanged = 0;
 
-    SL *psl = &rgsl[0];
-
-    if (fRender)
-        goto Lrender;
-
 	// don't do anything in the invisible retrace sections
 	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
 		return 0;
@@ -430,11 +399,11 @@ BOOL ProcessScanLine(BOOL fRender)
 	}
 
 	// current scan line structure
-	psl = &rgsl[wScan];
+	SL *psl = &rgsl[wScan];
 
 	// grab a DLIST instruction - not in JVB, done previous instruction, and ANTIC is on.
     if (!fWait && fFetch && (DMACTL & 32))
-        {
+    {
 #ifndef NDEBUG
         extern BOOL  fDumpHW;
 
@@ -509,11 +478,11 @@ BOOL ProcessScanLine(BOOL fRender)
             sl.fVscrol = FALSE;
             scans = VSCROL;	// don't do this line like normal, finish the previous scroll?
             }
-        }
+    }
 
     // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
     if ((sl.modehi & 8) && (iscan == scans) && (NMIEN & 0x80))
-        {
+    {
 #ifndef NDEBUG
         extern BOOL  fDumpHW;
 
@@ -523,13 +492,13 @@ BOOL ProcessScanLine(BOOL fRender)
         Interrupt();
           NMIST = 0x80 | 0x1F;
         regPC = cpuPeekW(0xFFFA);
-        }
+    }
 
     // Check playfield width and set cbWidth (number of bytes read by Antic)
     // and the smaller cbDisp (number of bytes actually visible)
 
     switch (DMACTL & 3)
-        {
+    {
     default:
         Assert(FALSE);
         break;
@@ -561,14 +530,14 @@ BOOL ProcessScanLine(BOOL fRender)
         cbDisp = cbWidth | (cbWidth >> 1);	// use WIDE numbers
         cbWidth |= (cbWidth >> 1);
         break;
-        }
+    }
 
 	// first scan line of a mode line, use the correct char set for this graphics mode line?
     if (iscan == sl.vscrol)
-        {
+    {
         sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
         sl.chactl = CHACTL & 7;
-        }
+    }
 
     // fill in current sl structure
 
@@ -580,18 +549,18 @@ BOOL ProcessScanLine(BOOL fRender)
 
 	// Horiz scrolling
     if (((sl.modelo) >= 2) && (sl.modehi & 1))
-        {
+    {
         sl.hscrol = HSCROL & 15;
 		// # of bits to shift the screen byte in CHAR modes
 		// in MAP modes, every 8 of these means you've shifted an entire screen byte
 		// even though you don't do it by shifting the bits in the screen byte
 		hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
-		}
+	}
     else
-        {
+    {
         sl.hscrol = 0;
         hshift = 0;
-        }
+    }
 
     pmg.hposmX = HPOSMX;
     pmg.hpospX = HPOSPX;
@@ -603,9 +572,9 @@ BOOL ProcessScanLine(BOOL fRender)
     else
         pmg.pmbase = PMBASE & 0xFC;
 
-    // enable PLAYER DMA and enable players
+    // enable PLAYER DMA and enable players?
     if (sl.dmactl & 0x08 && GRACTL & 2)
-        {
+    {
 		// single line resolution
         if (sl.dmactl & 0x10)
             {
@@ -617,47 +586,47 @@ BOOL ProcessScanLine(BOOL fRender)
 		// double line resolution
         else
             {
-            pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 512 + (wScan>>1));
-            pmg.grafp1 = cpuPeekB((pmg.pmbase << 8) + 640 + (wScan>>1));
-            pmg.grafp2 = cpuPeekB((pmg.pmbase << 8) + 768 + (wScan>>1));
-            pmg.grafp3 = cpuPeekB((pmg.pmbase << 8) + 896 + (wScan>>1));
+            pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 512 + (wScan >>1));
+            pmg.grafp1 = cpuPeekB((pmg.pmbase << 8) + 640 + (wScan >>1));
+            pmg.grafp2 = cpuPeekB((pmg.pmbase << 8) + 768 + (wScan >>1));
+            pmg.grafp3 = cpuPeekB((pmg.pmbase << 8) + 896 + (wScan >>1));
             }
-        GRAFPX = pmg.grafpX;
+        // !!! GRAFPX = pmg.grafpX;
         }
-    else
-        {
-        pmg.grafpX = GRAFPX;
-#if 0
-        pmg.pmbase = 0;
-#endif
-        }
-	
-	// enable MISSILE DMA and enable missiles
-    if (sl.dmactl & 0x04 && GRACTL & 1)
-        {
+
+	// we want players, but a constant value, not memory lookup. GRACTL need not be set.
+	else
+		pmg.grafpX = GRAFPX;
+
+	// enable MISSILE DMA and enable missiles?
+	if (sl.dmactl & 0x04 && GRACTL & 1)
+	{
 		// single res
-        if (sl.dmactl & 0x10)
-            pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 768 + wScan);
-        // double res
+		if (sl.dmactl & 0x10)
+			pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 768 + wScan);
+		// double res
 		else
-            pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 384 + (wScan>>1));
+			pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 384 + (wScan >> 1));
 
-        GRAFM = pmg.grafm;
-        }
-    else
-        pmg.grafm = GRAFM;
+		//GRAFM = pmg.grafm;
+	}
 
+	// we want missiles, but a constant value, not memory lookup. GRACTL does NOT have to be set!
+	else
+		pmg.grafm = GRAFM;
+	
     if (pmg.grafpX)
         {
         // Players that are offscreen are treated as invisible
-		// !!! 47 and 208 are the limits, make sure it doesn't encroach
-        if ((pmg.hposp0 < 32) || (pmg.hposp0 >= 216))
+		// the limits are 40 and 216, but a quad sized player could be 32 wide
+		// probably not worth looking at size to find actual width?
+        if ((pmg.hposp0 < 8) || (pmg.hposp0 >= 216))
             pmg.grafp0 = 0;
-        if ((pmg.hposp1 < 32) || (pmg.hposp1 >= 216))
+        if ((pmg.hposp1 < 8) || (pmg.hposp1 >= 216))
             pmg.grafp1 = 0;
-        if ((pmg.hposp2 < 32) || (pmg.hposp2 >= 216))
+        if ((pmg.hposp2 < 8) || (pmg.hposp2 >= 216))
             pmg.grafp2 = 0;
-        if ((pmg.hposp3 < 32) || (pmg.hposp3 >= 216))
+        if ((pmg.hposp3 < 8) || (pmg.hposp3 >= 216))
             pmg.grafp3 = 0;
         }
 
@@ -665,13 +634,13 @@ BOOL ProcessScanLine(BOOL fRender)
         {
         // Missiles that are offsecreen are treated as invisible
 		// !!! 47 and 208 are the limits, make sure it doesn't encroach
-        if ((pmg.hposm0 < 32) || (pmg.hposm0 >= 216))
+        if ((pmg.hposm0 < 8) || (pmg.hposm0 >= 216))
             pmg.grafm &= ~0x03;
-        if ((pmg.hposm1 < 32) || (pmg.hposm1 >= 216))
+        if ((pmg.hposm1 < 8) || (pmg.hposm1 >= 216))
             pmg.grafm &= ~0x0C;
-        if ((pmg.hposm2 < 32) || (pmg.hposm2 >= 216))
+        if ((pmg.hposm2 < 8) || (pmg.hposm2 >= 216))
             pmg.grafm &= ~0x30;
-        if ((pmg.hposm3 < 32) || (pmg.hposm3 >= 216))
+        if ((pmg.hposm3 < 8) || (pmg.hposm3 >= 216))
             pmg.grafm &= ~0xC0;
         }
 
@@ -694,9 +663,9 @@ BOOL ProcessScanLine(BOOL fRender)
             }
         }
 
-    return 0;
+// !!! RENDER section used to be called separately
 
-Lrender:
+	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now
 
 	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
 	//static BYTE sModeLast;	// last ANTIC mode we saw
@@ -813,7 +782,7 @@ Lrender:
 	// THIS IS A LOT OF CODE
 	//
     if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
-        {
+    {
         // redraw scan line
 
         BYTE *qch0 = vvmi.pvBits;
@@ -828,6 +797,7 @@ Lrender:
         // !!! annoying debug pixels near top of screen qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
 #endif
 
+		// more unimplemented code to see if we're dirty
         if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
             {
             wScanMin = min(wScanMin, (wScan - wStartScan));
@@ -835,7 +805,7 @@ Lrender:
             }
 
         if (sl.fpmg)
-            {
+        {
             // When PM/G are present on the scan line is first rendered
             // into rgpix as bytes of bit vectors representing the playfields
             // and PM/G that are present at each pixel. Then later we map
@@ -850,7 +820,7 @@ Lrender:
             sl.colpf1 = bfPF1;
             sl.colpf2 = bfPF2;
             sl.colpf3 = bfPF3;
-            }
+        }
         else
             qch += (wScan - wStartScan) * vcbScan;
 
@@ -1079,7 +1049,7 @@ Lrender:
 					ULONGLONG u, v;
 
 					// see comments for modes 2 & 3
-					int index = hshift / 8;
+					int index = 0;
 
 					v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
 					u = v << (index << 3);
@@ -1099,7 +1069,7 @@ Lrender:
                 for (j = 0; j < 4; j++)
                 {
 					// which character was shifted into this position? Pay attention to its high bit to switch colours
-					int index = (hshift + 7 - 2 * j) / 8;	// hshift always 7 or less, but this would handle up to 31.
+					int index = (hshift + 7 - 2 * j) / 8;
 
 					if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
 						col3 = sl.colpf3;
@@ -1159,7 +1129,7 @@ Lrender:
 						ULONGLONG u, v;
 
 						// see comments for modes 2 & 3
-						int index = hshift / 8;
+						int index = 0;
 						
 						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
 						u = v << (index << 3);
@@ -1175,7 +1145,7 @@ Lrender:
 					
                         for (j = 0; j < 8; j++)
                             {
-                            if (j <= hshift)	// hshift restricted to 7 or less, so this is sufficient
+                            if (j < hshift)	// hshift restricted to 7 or less, so this is sufficient
                                 col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i-1])>>6];
 							else
 								col1 = sl.colpf[b1 >> 6];
@@ -1707,7 +1677,7 @@ Lrender:
             break;
 
             }
-        }
+    }
 
     sl.colbk  = COLBK;
     sl.colpfX = COLPFX;
@@ -1725,7 +1695,7 @@ Lrender:
 		// now set the bits in rgpix corresponding to players and missiles
 		// missiles go underneath the players, at least in Ms. Pacman. !!! RIVERAID breaks if missiles drawn first, no missile collision
 		DrawPlayers((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
-		DrawMissiles((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);
+		DrawMissiles((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);	// 5th player?
 
 #ifndef NDEBUG
     if (0)
@@ -1739,7 +1709,7 @@ Lrender:
 
         pmg.fHitclr = 0;
 
-        // if in a 2 color mode, set playfield 1 color
+        // if in a 2 color mode, set playfield 1 color to some luminence of PF2
 
         if ((sl.modelo == 2) || (sl.modelo == 3) || (sl.modelo == 15))
             sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
@@ -1756,120 +1726,60 @@ Lrender:
         if (sl.modelo > 15)
             sl.prior = 1;
 
+		// turn the rgpix array from a bitfield of which items are present (player or field colours)
+		// into the actual colour that will show up there, based on priorities
+		// reminder: b = PM3 PM2 PM1 PM0 | PF3 PF2 PF1 PF0 (all zeroes means BKGND)
+
         for (i = 0; i < X8; i++)
             {
             BYTE b = rgpix[i+((NTSCx - X8)>>1)];
 
-            if (b == 0)
-                {
-                // just background
+			// Thank you Altirra
+			BYTE PRI0 = (sl.prior & 1) ? 0xff : 0;
+			BYTE PRI1 = (sl.prior & 2) ? 0xff : 0;
+			BYTE PRI2 = (sl.prior & 4) ? 0xff : 0;
+			BYTE PRI3 = (sl.prior & 8) ? 0xff : 0;
+			BYTE P0 = (b & bfPM0) ? 0xff : 0;
+			BYTE P1 = (b & bfPM1) ? 0xff : 0;
+			BYTE P2 = (b & bfPM2) ? 0xff : 0;
+			BYTE P3 = (b & bfPM3) ? 0xff : 0;
+			BYTE PF0 = (b & bfPF0) ? 0xff : 0;
+			BYTE PF1 = (b & bfPF1) ? 0xff : 0;
+			BYTE PF2 = (b & bfPF2) ? 0xff : 0;
+			BYTE PF3 = (b & bfPF3) ? 0xff : 0;
+			BYTE MULTI = (sl.prior & 32) ? 0xff : 0;
+			
+			BYTE PRI01 = PRI0 | PRI1;
+			BYTE PRI12 = PRI1 | PRI2;
+			BYTE PRI23 = PRI2 | PRI3;
+			BYTE PRI03 = PRI0 | PRI3;
+			BYTE PF01 = PF0 | PF1;
+			BYTE PF23 = PF2 | PF3;
+			BYTE P01 = P0 | P1;
+			BYTE P23 = P2 | P3;
 
-                if (sl.modelo <= 15)
-                    b = sl.colbk;
-                }
-            else if ((b & 0xF0) == 0)
-                {
-                // just playfield, no missiles
+			BYTE SP0 = P0 & ~(PF01 & PRI23) & ~(PRI2 & PF23);
+			BYTE SP1 = P1 & ~(PF01 & PRI23) & ~(PRI2 & PF23) & (~P0 | MULTI);
+			BYTE SP2 = P2 & ~P01 &  ~(PF23 & PRI12) &  ~(PF01 & ~PRI0);
+			BYTE SP3 = P3 & ~P01 & ~(PF23 & PRI12) & ~(PF01 & ~PRI0) & (~P2 | MULTI);
+			BYTE SF0 = PF0 & ~(P23 & PRI0) &  ~(P01 & PRI01) /* & ~SF3 meaning P5? */;
+			BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) /* & ~SF3 */;
+			BYTE SF2 = PF2 &  ~(P23 & PRI03) & ~(P01 & ~PRI2) /* & ~SF3 */;
+			BYTE SF3 = PF3 & ~(P23 & PRI03) & ~(P01 & ~PRI2);
+			BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
+			
+			// !!! 5th PLAYER MODE BROKEN
 
-                if (sl.modelo > 15)
-                    ;
-                else if (b & bfPF0)
-                    b = sl.colpf0;
-                else if (b & bfPF1)
-                    b = sl.colpf1;
-                else if (b & bfPF2)
-                    b = sl.colpf2;
-                else
-                    b = sl.colpf3;
-                }
-            else
-                {
-                switch (sl.prior & 15)
-                    {
-                case 0:
-                case 1:   // P0 P1 P2 P3 PF0 PF1 PF2 PF3
-LdrawPM01:
-                    if ((sl.prior & 32) &&
-                           ((b & (bfPM0|bfPM1)) == (bfPM0|bfPM1)))
-                        b = pmg.colpm0 | pmg.colpm1;
-                    else if (b & bfPM0)
-                        b = pmg.colpm0;
-                    else if (b & bfPM1)
-                        b = pmg.colpm1;
-                    else
-                        {
-LdrawPM23:
-                        if ((sl.prior & 32) &&
-                               ((b & (bfPM2|bfPM3)) == (bfPM2|bfPM3)))
-                            b = pmg.colpm2 | pmg.colpm3;
-                        else if (b & bfPM2)
-                            b = pmg.colpm2;
-                        else if (b & bfPM3)
-                            b = pmg.colpm3;
-                        }
-                    break;
-
-                case 2:
-                    if ((sl.prior & 32) &&
-                           ((b & (bfPM0|bfPM1)) == (bfPM0|bfPM1)))
-                        b = pmg.colpm0 | pmg.colpm1;
-                    else if (b & bfPM0)
-                        b = pmg.colpm0;
-                    else if (b & bfPM1)
-                        b = pmg.colpm1;
-                    else if (b & bfPF0)
-                        b = sl.colpf0;
-                    else if (b & bfPF1)
-                        b = sl.colpf1;
-                    else if (b & bfPF2)
-                        b = sl.colpf2;
-                    else if (b & bfPF3)
-                        b = sl.colpf3;
-                    else
-                        goto LdrawPM23;
-                    break;
-
-                case 3:
-                case 4:
-                    if (b & bfPF0)
-                        b = sl.colpf0;
-                    else if (b & bfPF1)
-                        b = sl.colpf1;
-                    else if (b & bfPF2)
-                        b = sl.colpf2;
-                    else if (b & bfPF3)
-                        b = sl.colpf3;
-                    else
-                        goto LdrawPM01;
-                    break;
-
-                default:
-                case 8:
-                    if (b & bfPF0)
-                        b = sl.colpf0;
-                    else if (b & bfPF1)
-                        b = sl.colpf1;
-                    else if ((sl.prior & 32) &&
-                           ((b & (bfPM0|bfPM1)) == (bfPM0|bfPM1)))
-                        b = pmg.colpm0 | pmg.colpm1;
-                    else if (b & bfPM0)
-                        b = pmg.colpm0;
-                    else if (b & bfPM1)
-                        b = pmg.colpm1;
-                    else if ((sl.prior & 32) &&
-                           ((b & (bfPM2|bfPM3)) == (bfPM2|bfPM3)))
-                        b = pmg.colpm2 | pmg.colpm3;
-                    else if (b & bfPM2)
-                        b = pmg.colpm2;
-                    else if (b & bfPM3)
-                        b = pmg.colpm3;
-                    else if (b & bfPF2)
-                        b = sl.colpf2;
-                    else if (b & bfPF3)
-                        b = sl.colpf3;
-                    break;
-                    }
-                }
+			// !!! can't be right
+			if ((b == 0 || !(b & 0xF)) && sl.modelo > 15)
+				;
+			else
+			{
+				if (SP2)
+					b = b;
+				b = (SP0 & pmg.colpm0) | (SP1 & pmg.colpm1) | (SP2 & pmg.colpm2) | (SP3 & pmg.colpm3) |
+					(SF0 & sl.colpf0) | (SF1 & sl.colpf1) | (SF2 & sl.colpf2) | (SF3 & sl.colpf3) | (SB & sl.colbk);
+			}
 
             qch[i] = b;
             }

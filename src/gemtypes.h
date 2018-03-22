@@ -125,11 +125,9 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 #define k1G     (0x40000000)
 #define k2G     (0x80000000)
 
-
 #ifdef XFORMER
-// the size of an 8 bit screen
-#define X8 352
-#define Y8 240
+extern int X8;	// size of an ATARI 800 screen
+extern int Y8;
 #endif
 
 WORD fBrakes;	// run at full speed or emulated speed?
