@@ -890,17 +890,13 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 					fStop = fTrue;
 			}
 
-			// hack for programs that check $D41B instead of $D40B
-			rgbMem[0xD41B] =
-				VCOUNT = (BYTE)(wScan >> 1);
-
-			ProcessScanLine();	// do the DLI, and fill the bitmap
-			
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
 			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
 			// 21 should be right for Gr.0 but for some reason 18 is.
+			// !!! Can't go lower than 21 or PITFALL doesn't have a chance to react to a DLI in time set up the next scan line
+			// !!! Pitfall wants 29, and even then player colour is off by 1 instead of 3
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			wLeft = (fBrakes && (DMACTL & 3)) ? 20 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
+			wLeft = (fBrakes && (DMACTL & 3)) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
@@ -953,9 +949,17 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 		}
 
+		// some programs check $D41B "shadow" instead of $D40B
+		// do this so the 6502 can see the proper scan line we're on
+		rgbMem[0xD41B] = VCOUNT = (BYTE)(wScan >> 1);
+
+		// !!! NORMAL is Process, then GO
+
+		ProcessScanLine();	// do the DLI, and fill the bitmap
+
 		// Execute about one horizontal scan line's worth of 6502 code
 		Go6502();
-		//assert(wLeft == 0 || fTrace == 1);
+		assert(wLeft == 0 || fTrace == 1);
 
 		if (fSIO) {
 			// REVIEW: need to check if PC == $E459 and if so make sure
@@ -1256,11 +1260,13 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
     case 0xD4:      // ANTIC
         addr &= 15;
+		
+		// !!! using shadows like this could break an app that uses a functioning shadow version of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
 
         if (addr == 10)
             {
-            // WSYNC
+            // WSYNC - stop executing now, don't start until next scan line
 
             wLeft = 1;
             }
