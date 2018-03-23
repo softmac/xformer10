@@ -404,12 +404,15 @@ void WRITE_WORD(uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-#define HANDLER_END() if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
+#define HANDLER_END()	if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
 						
+						// !!! This version fixes GAMES2\PREPPIE tearing, and PITFALL2 score of 9000
+						// wKarate needs it badly
 						//--wLeft; (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
-						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
-						// !!! This allows wLeft to get much < 0 for certain opcodes, but PREPPIE crashes without it
-
+						
+						// !!! This version fixes most of the entire screen of PITFALL2, and completely fixes GAMES/POLEPOS,
+						//if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
+						
 // don't let a scan line end until there's an instruction that affects the PC !!! We may do >>30 instructions!
 #define HANDLER_END_FLOW()  if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
 
