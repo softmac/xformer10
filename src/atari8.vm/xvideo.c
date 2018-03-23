@@ -533,7 +533,8 @@ BOOL ProcessScanLine()
     }
 
 	// first scan line of a mode line, use the correct char set for this graphics mode line?
-    if (iscan == sl.vscrol)
+    // !!! it's never too late, but the check will help find bugs by making the whole character bad not just the top row
+	//if (iscan == sl.vscrol)
     {
         sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
         sl.chactl = CHACTL & 7;

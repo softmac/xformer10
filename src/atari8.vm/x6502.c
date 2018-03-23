@@ -404,7 +404,9 @@ void WRITE_WORD(uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-#define HANDLER_END() --wLeft; (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
+#define HANDLER_END() if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
+						
+						//--wLeft; (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
 						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
 						// !!! This allows wLeft to get much < 0 for certain opcodes, but PREPPIE crashes without it
 
