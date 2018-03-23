@@ -896,7 +896,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// !!! Can't go lower than 21 or PITFALL doesn't have a chance to react to a DLI in time set up the next scan line
 			// !!! Pitfall wants 29, and even then player colour is off by 1 instead of 3
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			wLeft = (fBrakes && (DMACTL & 3)) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
+			wLeft = (fBrakes && (DMACTL & 3)) ? 29 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
