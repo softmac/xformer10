@@ -21,7 +21,9 @@
 int X8 = 352;		// valid width of screen including black bars on sides (320 normal playfield)
 int Y8 = 240;		// number of valid scan lines
 #define STARTSCAN 8	// scan line ANTIC starts drawing at
-#define NTSCY 262	// (actually 262.5, but sigh).
+#define NTSCY 262	// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
+					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
+					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1

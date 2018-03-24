@@ -422,7 +422,10 @@ BOOL ProcessScanLine()
             {
             sl.fVscrol = TRUE;
             sl.vscrol = VSCROL & 15;
-			iscan = sl.vscrol;
+			iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
+								// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
+								// up to sscans. The last scan line is always when iscan == sscans.
+								// The actual scan line drawn will be iscan % (number of scan lines in that mode line)
             }
         else
             {
@@ -476,7 +479,7 @@ BOOL ProcessScanLine()
         if (sl.fVscrol && (!(sl.modehi & 2) || (sl.modelo < 2)))
             {
             sl.fVscrol = FALSE;
-            scans = VSCROL;	// don't do this line like normal, finish the previous scroll?
+            scans = VSCROL;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
             }
     }
 
@@ -868,12 +871,23 @@ BOOL ProcessScanLine()
 		// GR.0 and descended character GR.0
         case 2:
 		case 3:
+			UINT vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
+			
+			// mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
+			if (sl.modelo == 3 && iscan > 9)
+				vpixO = iscan - 8;
+			
+			vpix = vpixO;
+			
+			if (iscan == 8)
+				vpix = vpix;
+
             col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
             col2 = sl.colpf2;
 
-            if (sl.chactl & 4)
-                vpix = (sl.modelo == 2) ? vpix ^ 7 : 9 - vpix;    // vertical reflect bit
-            
+			if ((sl.chactl & 4) && sl.modelo == 2)	// vertical reflect bit
+				vpix = 7 - (vpix & 7);
+			
             for (i = 0 ; i < cbDisp; i++, qch += 8)
                 {
                 BYTE rgch[8];
@@ -881,32 +895,43 @@ BOOL ProcessScanLine()
                 if (((b1 = sl.rgb[i]) == psl->rgb[i]) && !rgfChanged)
                     continue;
 
+				if ((sl.chactl & 4) && sl.modelo == 3)
+				{
+					if ((sl.rgb[i] & 0x7F) < 0x60)
+						vpix = vpixO < 8 ? 7 - vpixO : vpixO;
+					else
+						// mimic odd ANTIC behaviour - you're just going to have to trust me on this one
+						vpix = (vpixO > 7) ? (23 - vpixO) : (vpixO < 2 ? vpixO : (vpixO < 6 ? 7 - vpixO : 15 - vpixO));
+				}
+
 				// non-zero horizontal scroll
                 if (hshift)
                 {
 					ULONGLONG u, v;
 					UINT vpix23;
 
-					// we need to look at 1 or 2 of the 5 characters ending in the current character, depending on how much shift.
-					// this far back from our current pos is definitely one we need to look at
-					int index = 0;
+					// we need to look at 1 or 2 of the characters ending in the current character, depending on how much shift.
 
 					// we are not in the blank part of a mode 3 character
-					if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (sl.rgb[i - index] & 0x7F) < 0x60) ||
-									(vpix >= 8 && (sl.rgb[i - index] & 0x7F) >= 0x60)))
+					if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (sl.rgb[i] & 0x7F) < 0x60) ||
+									(vpix >= 8 && (sl.rgb[i] & 0x7F) >= 0x60)))
 					{
 						// use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
-						vpix23 = (vpix >= 8 && (sl.rgb[i - index] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
+						vpix23 = (vpix >= 8 && (sl.rgb[i] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
 						// CHBASE must be on an even page boundary
-						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7f) << 3) + vpix23);
+						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
 					}
 					// we ARE in the blank part
 					else {
 						v = 0;
 					}
 
-					if (sl.rgb[i - index] & 0x80)
+					// mimic obscure quirky ANTIC behaviour - scans 8 and 9 go missing under these circumstances
+					if ((sl.rgb[i] & 0x7f) < 0x60 && (iscan == 8 || iscan == 9))
+						v = 0;
+					
+					if (sl.rgb[i] & 0x80)
 					{
 						if (sl.chactl & 1)  // blank (blink) flag
 							v = 0;
@@ -914,19 +939,27 @@ BOOL ProcessScanLine()
 							v = ~v & 0xff;
 					}
 					
-					u = v << (index << 3);
+					u = v;
 
 					if (hshift %8)
 					{
 						// partial shifting means we also need to look at a second character intruding into our space
 						// do the same exact thing again
-						index += 1;
+						int index = 1;
 						
 						// we can't look past the front of the array, we stored that byte in rgbSpecial
 						BYTE rgb = rgbSpecial;
 						if (i > 0)
 							rgb = sl.rgb[i - index];
-				
+
+						if ((sl.chactl & 4) && sl.modelo == 3)
+						{
+							if ((rgb & 0x7F) < 0x60)
+								vpix = vpixO < 8 ? 7 - vpixO : vpixO;
+							else
+								vpix = (vpixO > 7) ? (23 - vpixO) : (vpixO > 1 ? 7 - vpixO : vpixO);    // mimic odd ANTIC behaviour
+						}
+
 						if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (rgb & 0x7F) < 0x60) ||
 							(vpix >= 8 && (rgb & 0x7F) >= 0x60)))
 						{
@@ -941,6 +974,10 @@ BOOL ProcessScanLine()
 							v = 0;
 						}
 
+						// mimic obscure quirky ANTIC behaviour
+						if (rgb < 0x60 && (iscan == 8 || iscan == 9))
+							v = 0;
+					
 						if (rgb & 0x80)
 						{
 							if (sl.chactl & 1)  // blank (blink) flag
@@ -967,7 +1004,11 @@ BOOL ProcessScanLine()
 						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
 					else
 						b2 = 0;
-			
+
+					// mimic obscure quirky ANTIC behaviour
+					if (b1 < 0x60 && (iscan == 8 || iscan == 9))
+						b2 = 0;
+
 					if (b1 & 0x80)
 					{
 						if (sl.chactl & 1)  // blank (blink) flag
@@ -1024,7 +1065,7 @@ BOOL ProcessScanLine()
             break;
 
         case 5:
-            vpix = iscan >> 1;
+            vpix = iscan >> 1;	// extra thick, use screen data twice for 2 output lines
         case 4:
             if (sl.chactl & 4)
                 vpix ^= 7;                // vertical reflect bit
@@ -1776,8 +1817,6 @@ BOOL ProcessScanLine()
 				;
 			else
 			{
-				if (SP2)
-					b = b;
 				b = (SP0 & pmg.colpm0) | (SP1 & pmg.colpm1) | (SP2 & pmg.colpm2) | (SP3 & pmg.colpm3) |
 					(SF0 & sl.colpf0) | (SF1 & sl.colpf1) | (SF2 & sl.colpf2) | (SF3 & sl.colpf3) | (SB & sl.colbk);
 			}
