@@ -72,6 +72,9 @@ CANDYHW *vpcandyCur = &vrgcandy[0]; // default to first instance
 //BYTE bshiftSav;	// was a local too
 BOOL fDumpHW;
 
+BOOL WSYNC_Seen;
+BOOL WSYNC_Waited;
+
 static signed short wLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 
@@ -755,6 +758,8 @@ DoVBI()
 
 	// every VBI, shadow the hardware registers
 	// to their higher locations
+	
+	// !!! Do this quicker in PeekBAtari() as they are read
 
 	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
 	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
@@ -892,11 +897,10 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
 			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
-			// 21 should be right for Gr.0 but for some reason 18 is.
-			// !!! Can't go lower than 21 or PITFALL doesn't have a chance to react to a DLI in time set up the next scan line
-			// !!! Pitfall wants 29, and even then player colour is off by 1 instead of 3
+			// 21 should be right for Gr.0 but for some reason 18 is?
+			// !!! Preppie wants 24, why?
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			wLeft = (fBrakes && (DMACTL & 3)) ? 29 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
+			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
@@ -914,6 +918,9 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			else if (wScan < STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
 			}
+
+// !!! why?
+#if 0
 			else if (wScan == STARTSCAN + Y8) {
 				// start the NMI status early so that programs
 				// that care can see it
@@ -922,18 +929,20 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				wLeftMax = wLeft;
 			}
+#endif
 
 			// **************************************************************
 			// ******************** do the VBI! *****************************
 			// **************************************************************
-			else if (wScan == STARTSCAN + Y8 + 1)	// was 251
+			else if (wScan == STARTSCAN + Y8)	// was 251
 			{
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				DoVBI();	// it's huge, it bloats this function to inline it.
 			}
 
-			else if (wScan > STARTSCAN + Y8 + 1)
+			else if (wScan > STARTSCAN + Y8)
 			{
-				wLeft = 30;	// for this retrace section, there will be no DMA
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
 			}
 		} // if wLeft == 0
@@ -949,16 +958,20 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 		}
 
-		// some programs check $D41B "shadow" instead of $D40B
+		// some programs check "mirrors" instead of $D40B
 		// do this so the 6502 can see the proper scan line we're on
-		rgbMem[0xD41B] = VCOUNT = (BYTE)(wScan >> 1);
+		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)(wScan >> 1);
 
 		// !!! NORMAL is Process, then GO
 
 		ProcessScanLine();	// do the DLI, and fill the bitmap
 
 		// Execute about one horizontal scan line's worth of 6502 code
+		WSYNC_Seen = FALSE;
 		Go6502();
+		if (!WSYNC_Seen)
+			WSYNC_Waited = FALSE;
+
 		assert(wLeft == 0 || fTrace == 1);
 
 		if (fSIO) {
@@ -1261,14 +1274,23 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
     case 0xD4:      // ANTIC
         addr &= 15;
 		
-		// !!! using shadows like this could break an app that uses a functioning shadow version of the registers! Does anybody?
+		// !!! using shadows like this could break an app that uses a functioning mirror of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
 
         if (addr == 10)
             {
-            // WSYNC - stop executing now, don't start until next scan line
-
-            wLeft = 1;
+            // WSYNC - our code executes after the scan line is drawn, so ignore the first one, it's already safe to draw
+			// if we see a second one on this same scan line, or we saw one last time that we actually waited on,
+			// we're in a kernel, and we can't ignore it
+			
+			// !!! Demos2/Swan needs to wait the first time, which makes no sense
+			if (WSYNC_Seen || WSYNC_Waited)
+			{
+				wLeft = 1;
+				WSYNC_Waited = TRUE;
+			}
+			WSYNC_Seen = TRUE;
+			VCOUNT = (wScan + 1) >> 1;	// after a WSYNC this is updated
             }
         else if (addr == 15)
             {
