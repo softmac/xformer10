@@ -28,7 +28,7 @@ int Y8 = 240;		// number of valid scan lines
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
-#define MAX_CART_SIZE 16384
+#define MAX_CART_SIZE 131072
 char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
@@ -230,7 +230,7 @@ typedef struct
     WORD m_fNMIPending;
     WORD m_fIRQPending;
 
-    BYTE m_btick;       // current value of 18 Hz timer
+    BYTE m_bCartType;   // type of cartridge
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
     BYTE m_cVBI;        // count of VBIs since last tick
@@ -240,7 +240,7 @@ typedef struct
 	char FAR m_rgbSwapD800[10240];
 
 #if XE
-	char HUGE m_rgbXEMem[4][16384];	// !!! was 16, not 4
+	char HUGE m_rgbXEMem[4][16384];
 	// !!! the actual memory found at rgbMem $4000 in an XE is a duplicate of either this or one of the banks above
 	// I could save 16K of persistance data by keeping this inside the proper bank of rgbXEMem
 	char FAR m_rgbSwapXEMem[16384];
@@ -307,7 +307,7 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define fDataChanged  CANDY_STATE(fDataChanged)
 #define fNMIPendingd  CANDY_STATE(fNMIPending)
 #define fIRQPending   CANDY_STATE(fIRQPending)
-#define btick         CANDY_STATE(btick)
+#define bCartType     CANDY_STATE(bCartType)
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)

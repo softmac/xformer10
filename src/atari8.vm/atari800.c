@@ -482,7 +482,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     TRIG0 = 1;
     TRIG1 = 1;
     TRIG2 = 1;
-    TRIG3 = 1;
+	TRIG3 = 1; // (mdXLXE != md800) && !(v.rgvm[v.iVM].rgcart.fCartIn) ? 0 : 1;	// XL/XE cartridge sense bit does not work
     *(ULONG *)MXPF  = 0;
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
@@ -896,20 +896,18 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
-			// !!! 30 is right, but DMA on is random from 10-50% slower, so 20 is bogus.
 			// 21 should be right for Gr.0 but for some reason 18 is?
-			// !!! Preppie wants 24, why?
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
+			// !!! DMA cycle stealing is more complex than this!
+			// Allowing 30 instructions on ANTIC blank lines really helped app compat
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
-			// !!! Everything breaks if I move the VBI away from 251
-
-			// Scan line 0-9 are not visible, 10 lines without DMA
-			// Scan lines 10-249 are 240 visible lines
-			// Scan line 250 preps NMI, 251 is the VBLANK, without DMA
-			// Scan lines 252-261 are the rest of the scan lines, without DMA
+			// Scan line 0-7 are not visible, 8 lines without DMA
+			// Scan lines 8-247 are 240 visible lines
+			// Scan line 248 is the VBLANK, without DMA
+			// Scan lines 249-261 are the rest of the scan lines, without DMA
 
 			if (wScan < wStartScan) {
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
@@ -931,9 +929,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 #endif
 
-			// **************************************************************
-			// ******************** do the VBI! *****************************
-			// **************************************************************
+			// do the VBI!
 			else if (wScan == STARTSCAN + Y8)	// was 251
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
@@ -1302,7 +1298,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
     case 0xD5:      // Cartridge bank select
 //        printf("addr = %04X, b = %02X\n", addr, b);
-        BankCart(v.iVM, addr & 255);
+        BankCart(v.iVM, addr & 255, b);
         break;
     }
 
@@ -1351,7 +1347,13 @@ void ReadCart(int iVM)
 
 		l = _lseek(h, 0L, SEEK_END);
 		cb = min(l, MAX_CART_SIZE);
-		// !!! assert or something if the cartridge is too big
+
+		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
+		{
+			_close(h);
+			return FALSE;
+		}
+
 		l = _lseek(h, 0L, SEEK_SET);
 
 		//      printf("size of %s is %d bytes\n", pch, cb);
@@ -1363,7 +1365,54 @@ void ReadCart(int iVM)
 		v.rgvm[iVM].rgcart.fCartIn = TRUE;
 	}
 	_close(h);
+
+	// what kind of cartridge is it?
+	
+	BYTE *pb = rgbSwapCart[iVM];
+	
+	if (cb <= 8192)
+		bCartType = CART_8K;
+
+	else if (cb == 16384)
+	{
+		// copies of the INIT and START addresses and the CART PRESENT byte appear in both cartridge areas - not banked
+		if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0)
+			bCartType = CART_16K;
+
+		// start area is in the lower half which wouldn't exist yet if we were banked
+		else if (pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
+			bCartType = CART_16K;
+
+		// last bank is the main bank, other banks are 0, 3, 4.
+		else if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 3 && pb[12287] == 4)
+			bCartType = CART_OSSA;
+
+		// first bank is the main bank, other banks are 0, 9 1.
+		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
+			bCartType = CART_OSSB;
+
+		// assume it's a normal 16K cartridge
+		else
+			bCartType = CART_16K;
+	}
+
+	// assume >16K is an XEGS cart
+	else
+	{
+		bCartType = CART_XEGS;
+	}
+
+
+#if 0
+	// unknown cartridge, do not attempt to run it
+	else
+	{
+		v.rgvm[iVM].rgcart.cbData = 0;
+		v.rgvm[iVM].rgcart.fCartIn = FALSE;
+	}
+#endif
 }
+
 
 // SWAP in the cartridge
 //
@@ -1383,7 +1432,7 @@ void InitCart(int iVM)
 		else
 		{
 			// otherwise, the OS may try to run code for a cartridge that isn't there
-		// (zeroing all of memory would also work, but be slower)
+			// (zeroing all of memory would also work, but be slower)
 			rgbMem[0x9FFC] = 0x01;	// tell the OS there is no regular cartridge B inserted
 			rgbMem[0xBFFD] = 0x00;	// tell the OS there is no special cartridge A inserted
 			rgbMem[0xBFFC] = 0x01;	// tell the OS there is no regular cartridge A inserted
@@ -1393,96 +1442,99 @@ void InitCart(int iVM)
 
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
+	unsigned int i;
+	BYTE FAR *pb = rgbSwapCart[iVM];
 
-	//printf("pcart = %08X\n", pcart);
-	//printf("pb    = %08X\n", pcart->pbData);
-
-//	if (ramtop == 0xC000)
-//		return;
-
-	if (cb <= 8192)
+	if (bCartType == CART_8K)
 	{
-		// simple 4K or 8K case
-		// copy entire pages at a time
-		_fmemcpy(&rgbMem[0xC000 - (((pcart->cbData + 4095) >> 12) << 12)], rgbSwapCart[iVM], (((pcart->cbData + 4095) >> 12) << 12));
-		ramtop = 0xA000;
-		return;
-	}
-
-	if (cb == 16384)
-	{
-		// Super cart?? !!! This is broken right now
-
-		unsigned int i;
-
-		BYTE FAR *pb = rgbSwapCart[iVM];
-
-		for (i = 0; i != cb; i += 4096)
-		{
-			if ((pb[i + 4095] >= 0xA0) && (pb[i + 4095] <= 0xBF))
-			{
-				// This is the 'fixed' bank
-
-				_fmemcpy(&rgbMem[0xB000], pb + i, 4096);
-				//printf("fixed bank = %04X\n", i);
-				//gets("  ");
-			}
-
-			if (pb[i + 4095] == 0x00)
-			{
-				// This is the default bank
-
-				_fmemcpy(&rgbMem[0xA000], pb + i, 4096);
-				//printf("default bank = %04X\n", i);
-				//gets("  ");
-			}
-		}
+		_fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
 		ramtop = 0xA000;
 	}
+	else if (bCartType == CART_16K)
+	{
+		_fmemcpy(&rgbMem[0x8000], pb, 16384);
+		ramtop = 0x8000;
+	}
+	// main bank is the last one
+	else if (bCartType == CART_OSSA)
+	{
+		_fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
+		ramtop = 0xA000;
+	}
+	// main bank is the first one
+	else if (bCartType == CART_OSSB)
+	{
+		_fmemcpy(&rgbMem[0xB000], pb, 4096);
+		ramtop = 0xA000;
+	}
+	// 8K main bank is the last one
+	else if (bCartType == CART_XEGS)
+	{
+		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
+		ramtop = 0xA000;
+	}
+
+	return;
 }
 
-// !!! This is broken. Work with unbanked and banked 16K carts
+// Swap out cartridge banks
 //
-void BankCart(int iVM, int iBank)
+void BankCart(int iVM, int iBank, int value)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
+	unsigned int i;
+	BYTE FAR *pb = rgbSwapCart[iVM];
 
-	//    printf("bank select = %d\n", iBank);
-
-	if (ramtop == 0xC000)
+	// we are not a banking cartridge
+	if (ramtop == 0xC000 || !(v.rgvm[iVM].rgcart.fCartIn)  || cb <= 8192 || bCartType <= CART_16K)
 		return;
 
-	if (!(v.rgvm[iVM].rgcart.fCartIn))
-		return;
-
-	if (cb <= 8192)
+	// banks are 0, 3, 4, main
+	if (bCartType == CART_OSSA)
 	{
-		return;
+		i = (iBank == 0 ? 0 : (iBank == 3 ? 1 : (iBank == 4 ? 2 : -1)));
+		assert(i != -1);
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
 
-	if (cb == 16384)
+	// banks are 0, 4, 3, main
+	if (bCartType == CART_OSSA)
 	{
-		// Super cart??
+		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
+		//assert(i != -1);	//!!! swapping cartridge out to RAM not supported, why does ACTION do this?
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+	}
 
-		unsigned int i;
+	// banks are main, 0, 9, 1
+	else if (bCartType == CART_OSSB)
+	{
+		if (!(iBank & 8) && !(iBank & 1))
+			i = 1;
+		else if (!(iBank & 8) && (iBank & 1))
+			i = 3;
+		else if ((iBank & 8) && (iBank & 1))
+			i = 2;
+		else
+			i = -1;
 
-		BYTE FAR *pb = rgbSwapCart[iVM];
+		assert(i != -1);
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+	}
 
-		for (i = 0; i != cb; i += 4096)
-		{
-			if (pb[i + 4095] == i)
-			{
-				// This is the selected bank
-
-				_fmemcpy(&rgbMem[0xA000], pb + i, 4096);
-			}
-			else
-			{
-			}
-		}
+	// 8k banks, given as contents, not the address
+	else if (bCartType == CART_XEGS)
+	{
+		while (value >= cb >> 13)
+			value -= (cb >> 13);	// hope this is right
+		//assert(FALSE);	// bad bank #
+		
+		_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
 	}
 }
 #endif // XFORMER

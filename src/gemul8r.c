@@ -1275,8 +1275,8 @@ int CALLBACK WinMain(
 					SelectInstance(iVM);
 				fSkipLoad = TRUE;
 			}
-			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0
-				|| stricmp(sFile + len - 3, "car") == 0)
+			// !!! support .CAR files
+			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0)
 			{
 				AddVM(&vmi800, &iVM, vmAtari48);
 				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
