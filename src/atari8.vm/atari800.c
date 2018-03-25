@@ -337,6 +337,13 @@ BOOL __cdecl UninitAtari(int iVM)
 {
     //*pbshift = bshiftSav;
 
+	// if there's no cartridge in, make sure the RAM footprint doesn't look like there is
+	// (This is faster than clearing all memory). If it's replaced by a built-in BASIC cartridge,
+	// ramtop won't change and it won't clear automatically on cold boot.
+	rgbMem[0x9ffc] = 1;	// no R cart
+	rgbMem[0xbffc] = 1;	// no L cart
+	rgbMem[0xbffd] = 0;	// no special R cartridge
+
     UninitAtariDisks(iVM);
     return TRUE;
 }
@@ -476,7 +483,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // CTIA/GTIA reset
 
-	// CONSOL won't be valid during cold start. Pass the F9 to an XL as option being held down to remove BASIC
+	// we want to remove BASIC, on an XL the only way is to fake OPTION being held down.
+	// but now it will get stuck down! ExecuteAtari will fix that
 	CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7;
     PAL = 14;
     TRIG0 = 1;
@@ -852,6 +860,10 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 #endif // DEBUG
 
+			// if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
+			if (wFrame > 10 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
+				CONSOL |= 4;
+
 			// next scan line
 			wScan = wScan + 1;
 
@@ -898,8 +910,12 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
 			// 21 should be right for Gr.0 but for some reason 18 is?
 			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			// !!! DMA cycle stealing is more complex than this!
+			// !!! DMA cycle stealing is more complex than this! ANTIC could report how many cycles it stole, since it goes first,
+			// and then Go6502 could cycle count how many are left for it to do (it would not be precise, it would have to end
+			// its current instruction).
 			// Allowing 30 instructions on ANTIC blank lines really helped app compat
+			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
+			// Using 21 and 30, Gem took 120 (on) and 96 (off).
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
@@ -954,13 +970,11 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 		}
 
-		// some programs check "mirrors" instead of $D40B
-		// do this so the 6502 can see the proper scan line we're on
-		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)(wScan >> 1);
-
-		// !!! NORMAL is Process, then GO
-
 		ProcessScanLine();	// do the DLI, and fill the bitmap
+
+		// some programs check "mirrors" instead of $D40B
+		// if we are resuming after a WSYNC, VCOUNT will be one higher
+		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + (WSYNC_Waited ? 1 : 0)) >> 1);
 
 		// Execute about one horizontal scan line's worth of 6502 code
 		WSYNC_Seen = FALSE;
@@ -1047,10 +1061,6 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
     addr &= 65535;
     b &= 255; // just to be sure
 
-    // this is an ugly hack to keep wLeft from getting stuck 
-    //if (wLeft > 1)
-    //    wLeft--;
-
 #if 0
     printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC);
 #endif
@@ -1134,7 +1144,8 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
             }
         else if (addr == 31)
             {
-            // CONSOL
+            // 
+
 
             // REVIEW: click the speaker
 
@@ -1286,7 +1297,9 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 				WSYNC_Waited = TRUE;
 			}
 			WSYNC_Seen = TRUE;
-			VCOUNT = (wScan + 1) >> 1;	// after a WSYNC this is updated
+
+			// if we're not going to wait, we need to make sure VCOUNT is updated like it would have been had we waited
+			rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
             }
         else if (addr == 15)
             {
@@ -1429,14 +1442,6 @@ void InitCart(int iVM)
 			_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
 			ramtop = 0xA000;
 		}
-		else
-		{
-			// otherwise, the OS may try to run code for a cartridge that isn't there
-			// (zeroing all of memory would also work, but be slower)
-			rgbMem[0x9FFC] = 0x01;	// tell the OS there is no regular cartridge B inserted
-			rgbMem[0xBFFD] = 0x00;	// tell the OS there is no special cartridge A inserted
-			rgbMem[0xBFFC] = 0x01;	// tell the OS there is no regular cartridge A inserted
-		}
 		return;
 	}
 
@@ -1471,7 +1476,7 @@ void InitCart(int iVM)
 	else if (bCartType == CART_XEGS)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-		ramtop = 0xA000;
+		ramtop = 0x8000;
 	}
 
 	return;

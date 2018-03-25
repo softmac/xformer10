@@ -3538,15 +3538,12 @@ break;
 
 		// rip the cartridge out
 		case IDM_NOCART:
-			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge and cold start
+			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge
 			vi.pvmCur->rgcart.szName[0] = 0; // erase the name
 
-			// Make Atari 800 go back to no BASIC cartridge now (this is the best way to set ramtop back to 0xC000)
-			if (v.rgvm[v.iVM].bfHW == vmAtari48)
-			{
-				FUnInitVM(v.iVM);
-				FInitVM(v.iVM);
-			}
+			// this will require a reboot, I assume for all types of VMs?
+			FUnInitVM(v.iVM);
+			FInitVM(v.iVM);
 			
 			FixAllMenus();
 			
