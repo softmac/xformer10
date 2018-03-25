@@ -602,8 +602,8 @@ BOOL ProcessScanLine()
 	else
 		pmg.grafpX = GRAFPX;
 
-	// enable MISSILE DMA and enable missiles?
-	if (sl.dmactl & 0x04 && GRACTL & 1)
+	// enable MISSILE DMA and enable missiles? (enabling players enables missiles too)
+	if ((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1)
 	{
 		// single res
 		if (sl.dmactl & 0x10)

@@ -61,7 +61,8 @@ void DumpBlocks()
 
 void InitBanks(int iVM)
 {
-    static BYTE fFirst = TRUE;
+    // used to be static (which is bad), but we want this every time, don't we?
+	BYTE fFirst = TRUE;
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
@@ -70,7 +71,7 @@ void InitBanks(int iVM)
     _fmemset(rgbSwapD800, 0, sizeof(rgbSwapD800));
 
     if (fFirst && (mdXLXE == mdXE))
-        {
+    {
 #if XE
         int i;
 
@@ -83,11 +84,12 @@ void InitBanks(int iVM)
 #endif
 
         fFirst = FALSE;
-        }
+    }
 
 #if XE
+	// !!! what was the case for doing this before?
     else if (mdXLXE == mdXE)
-        {
+    {
         // swap out any extended memory that may be in
 
         if ((wPBDATA & EXTCPU_MASK) == EXTCPU_OUT)
@@ -98,7 +100,7 @@ void InitBanks(int iVM)
 
             _fmemcpy(rgbXEMem[iBank], &rgbMem[0x4000], 16384);
             }
-        }
+    }
 #endif // XE
 
     // enable OS ROMs
@@ -147,6 +149,13 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
     printf("SwapMem entr: ");
     DumpBlocks();
 #endif
+
+	// SELF-TEST gets swapped out if the OS is being swapped out
+	if ((mask & OS_MASK) && (flags & OS_MASK) == OS_OUT)
+	{
+		mask |= SELF_MASK;
+		flags |= SELF_OUT;
+	}
 
     if (mask & OS_MASK)
         {
@@ -208,7 +217,8 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 
 	// !!! ANTIC reading from a different bank is not supported!
 
-    if (mask & EXTCPU_MASK)
+		// !!! is this really the way it works?
+		if (mask & EXTCPU_MASK)
         {
         // XE's extended RAM got banked on or off
 
@@ -231,6 +241,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
             _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
             }
         }
+
     else if (mask & BANK_MASK)
         {
         if ((flags & EXTCPU_MASK) == EXTCPU_IN)

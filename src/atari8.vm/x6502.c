@@ -507,6 +507,8 @@ void HELPER(EA_absY)
 #define SUB_OVFL_VEC(diff, op1, op2) \
   (((op1) ^ (op2)) & ((op1) ^ (diff)))
 
+// !!! BUG - in decimal mode, N is set based on what the answer would have been in binary mode
+// POLEPOSITION relies on this
 void HELPER1(update_NZ, BYTE reg)
 {
     srZ = srN = reg;

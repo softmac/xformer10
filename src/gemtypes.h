@@ -701,13 +701,15 @@ typedef struct
 // Cartridge stuff
 //
 
-#define CART_8K     0
-#define CART_16K    1
-#define CART_OSS    2   // Mac65 etc.
+#define CART_8K      0
+#define CART_16K     1
+#define CART_OSSA    2   // Mac65 etc.
+#define CART_OSSB    3   //
+#define CART_XEGS	 4
 
 void ReadCart();
 void InitCart(int iVM);
-void BankCart(int iVM, int i);
+void BankCart(int iVM, int i, int v);
 
 BOOL AddVM(PVMINFO pvmi, int *pi, int type);
 
