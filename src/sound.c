@@ -195,7 +195,10 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 
 				// frequency isn't relevant for volume only sound or if sound will be silent
 				// otherwise, figure out how wide to make the pulses for this voice's frequency
-				if ((rgvoice[i].distortion & 0x01) == 0 && rgvoice[i].frequency != 0 && rgvoice[i].volume != 0) {
+
+				// I proceed whenever freq = 0 because you can do fake volume only sound without setting the bit (see bin1\WOOFER.obj)
+
+				if ((rgvoice[i].distortion & 0x01) == 0 && /* rgvoice[i].frequency != 0 && */ rgvoice[i].volume != 0) {
 
 					// actual frequency is the current clock divided by (n+1) (x 100 for the precision necessary to count poly clocks)
 					// An additional /2 will happen because this frequency is how often the square wave toggles
@@ -241,7 +244,7 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 
 					// Not in focus, or this voice is silent and won't contribute
 					if (!vi.fHaveFocus ||
-						((rgvoice[voice].distortion & 0x01) == 0 && (rgvoice[voice].frequency == 0 || rgvoice[voice].volume == 0)))
+						((rgvoice[voice].distortion & 0x01) == 0 && (/* rgvoice[voice].frequency == 0 || */ rgvoice[voice].volume == 0)))
 						continue;
 
 					// apply distortion on the edge transition (only relevant for non-volume only)
