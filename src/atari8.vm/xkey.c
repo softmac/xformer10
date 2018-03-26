@@ -82,32 +82,12 @@ void CheckKey()
         }
     else
         {
-#ifndef HWIN32
-        if (!fKeyPressed || ((inp(0x60) & 0x80) == 0))
-#else
         if (!fKeyPressed)
-#endif
             {
-#if 0
-            DebugStr("no key pressed\n");
-#endif
             return;
             }
 
         SKSTAT |= 0x04;
-#ifndef HWIN32
-        CONSOL |= 0x7;
-#endif
-
-#ifndef HWIN32
-        if (!fJoy)
-            {
-            rPADATA = 255;
-            UpdatePorts();
-            TRIG0  |= 1;
-            }
-#endif
-
         fKeyPressed = 0;
         DebugStr("upstroke!\n");
         return;
@@ -426,8 +406,6 @@ lookit2:
 }
 
 
-#ifdef HWIN32
-
 // Helper function for KeyAtari() to process a Windows keystroke. The parameter lParam is broken up as follows:
 //
 // bits 0..15  - repeat count
@@ -443,6 +421,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     int ch, scan;
     MSG msg;
     BOOL fDown =  (lParam & 0x80000000) == 0;
+
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
     static BOOL wShiftChanged;
 
@@ -962,14 +942,15 @@ printf("joy0move %d %d\n", uParam, lParam);
     return FALSE;
 }
 
-//!!! WTF? Why is this necessary? Otherwise ENTER sometimes broken
+// if we closed using ALT-F4 it will have saved the state that ALT is down
+//
 void ControlKeyUp8()
 {
-    *pbshift &= ~wCtrl;
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
+
+	*pbshift &= ~wCtrl;
 	*pbshift &= ~wAlt;
 }
-
-#endif // HWIN32
 
 #endif // XFORMER
 
