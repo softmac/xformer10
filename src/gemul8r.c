@@ -3944,10 +3944,12 @@ break;
 
         vi.fHaveFocus = TRUE;  // HACK
         if (vi.fExecuting)
-          if (((lParam & 0xC0000000) != 0x40000000) || FIsAtari8bit(vmCur.bfHW))
-            return FWinMsgVM(hWnd, message, uParam, lParam);
+            if (((lParam & 0xC0000000) != 0x40000000) || FIsAtari8bit(vmCur.bfHW))
+                FWinMsgVM(hWnd, message, uParam, lParam);
+				// let windows see all keystrokes too. For instance, it needs to see ALT for menu shortcuts.
+				// !!! limit this?
 
-        // fall through
+		break;
 
     case WM_HOTKEY:
         return 0;
