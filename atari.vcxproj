@@ -665,6 +665,7 @@
     <ClCompile Include="src\blocklib\sectorio.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\atari8.vm\6502.h" />
     <ClInclude Include="src\gemtypes.h" />
     <ClInclude Include="src\gemul8r.h" />
     <ClInclude Include="src\ddlib.h" />
