@@ -3644,7 +3644,6 @@ break;
 				*ramtop = 0xA000;
 			else
 				*ramtop = 0xC000;
-			
 			// fall through to COLDSTART
 #endif
 
@@ -3915,7 +3914,7 @@ break;
 #endif
 		// !!! somehow this magically only executes if ALT-enter is pressed
 		// yet the .RC accelerator does not send IDM_FULLSCREEN like it should
-		SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+		return SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
 		// fall through
@@ -3942,13 +3941,15 @@ break;
             return 0;
             }
 
-        vi.fHaveFocus = TRUE;  // HACK
-        if (vi.fExecuting)
-            if (((lParam & 0xC0000000) != 0x40000000) || FIsAtari8bit(vmCur.bfHW))
-                FWinMsgVM(hWnd, message, uParam, lParam);
-				// let windows see all keystrokes too. For instance, it needs to see ALT for menu shortcuts.
-				// !!! limit this?
-
+        vi.fHaveFocus = TRUE;  // HACK !!!
+        
+		if (vi.fExecuting)
+			if (((lParam & 0xC0000000) != 0x40000000) || FIsAtari8bit(vmCur.bfHW))
+			{
+				// tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
+				if (FWinMsgVM(hWnd, message, uParam, lParam))
+					return TRUE;
+			}
 		break;
 
     case WM_HOTKEY:

@@ -464,6 +464,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
     cpuReset();
 	cpuInit(PokeBAtari);
 
+	// XL's need hardware to cold start, and can only warm start through emulation.
+	// We have to invalidate this checksum to force a cold start
+	if (mdXLXE != md800)
+		rgbMem[0x033d] = 0;
+
 #if 0 // doesn't the OS do this?
 	// initialize memory up to ramtop
 
@@ -490,7 +495,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
     TRIG0 = 1;
     TRIG1 = 1;
     TRIG2 = 1;
-	TRIG3 = 1; // (mdXLXE != md800) && !(v.rgvm[v.iVM].rgcart.fCartIn) ? 0 : 1;	// XL/XE cartridge sense bit does not work
+	// XL cartridge sense line, without this warm starts can try to run an non-existent cartridge
+	TRIG3 = (mdXLXE != md800 && !(v.rgvm[v.iVM].rgcart.fCartIn)) ? 0 : 1;
     *(ULONG *)MXPF  = 0;
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
@@ -861,7 +867,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 #endif // DEBUG
 
 			// if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
-			if (wFrame > 10 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
+			if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
 				CONSOL |= 4;
 
 			// next scan line
