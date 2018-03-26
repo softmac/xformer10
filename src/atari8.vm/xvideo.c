@@ -1538,7 +1538,7 @@ BOOL ProcessScanLine()
 			break;
 
         case 15:
-            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);	// duplicate interlacing colors!
+            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);	// like GR.0, the colour is just a luminence of the background colour
             col2 = sl.colpf2;
 
             for (i = 0 ; i < cbDisp; i++)
@@ -1568,7 +1568,7 @@ BOOL ProcessScanLine()
 				// copy 1 screen pixel each iteration, for 8 pixels written per screen byte in this mode
 				for (j = 0; j < 8; j++)
 				{
-					// which bit is this bit position inside?
+					// which bit is this bit position?
 					int k = (index - j);
 
 					// look at that bit

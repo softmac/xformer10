@@ -962,10 +962,11 @@ printf("joy0move %d %d\n", uParam, lParam);
     return FALSE;
 }
 
-//!!! WTF?
+//!!! WTF? Why is this necessary? Otherwise ENTER sometimes broken
 void ControlKeyUp8()
 {
     *pbshift &= ~wCtrl;
+	*pbshift &= ~wAlt;
 }
 
 #endif // HWIN32
