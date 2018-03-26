@@ -1541,15 +1541,18 @@ BOOL ProcessScanLine()
             col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);	// like GR.0, the colour is just a luminence of the background colour
             col2 = sl.colpf2;
 
+			// the artifacting colours
+			int red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+
             for (i = 0 ; i < cbDisp; i++)
-                {
-                b2 = sl.rgb[i];
+            {				
+				b2 = sl.rgb[i];
 
                 if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
+                {
                     qch += 8;
                     continue;
-                    }
+                }
 
 				WORD u = b2;
 
@@ -1565,15 +1568,31 @@ BOOL ProcessScanLine()
 				// what bit position in the WORD u do we start copying from?
 				int index = 7 + hshift;	// ATARI can only shift 2 pixels minimum at this resolution
 
-				// copy 1 screen pixel each iteration, for 8 pixels written per screen byte in this mode
-				for (j = 0; j < 8; j++)
+				// THEORY OF OPERATION - INTERLACING
+				// - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
+				// - 3 pixels in a row all show white
+				// - a background pixel between white and (red/green) seems to stay background colour
+
+				// copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
+				for (j = 0; j < 4; j++)
 				{
+					// don't walk off the beginning of the array later on
+					BYTE last = *(qch - 1), last2 = *(qch - 2);
+					if (i == 0 && j == 0)
+					{
+							last = col2;
+							last2 = col2;
+					}
+
+					// EVEN - (unwind the loop for speed)
+
 					// which bit is this bit position?
-					int k = (index - j);
+					int k = (index - (j << 1));
 
 					// look at that bit
 					b2 = (u >> k) & 0x1;
 
+					// supports artifacting
 					switch (b2 & 0x01)
 					{
 					case 0x00:
@@ -1581,7 +1600,54 @@ BOOL ProcessScanLine()
 						break;
 
 					case 0x01:
-						*qch++ = col1;
+						if (last == col2)
+						{
+							*qch++ = red;
+							if (last2 == red)
+								*(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
+						}
+						else
+						{
+							*qch++ = col1;
+							if (last == green)
+								*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
+						}
+						break;
+					}
+					
+					// ODD
+					
+					// don't walk off the beginning of the array later on
+					last = *(qch - 1), last2 = *(qch - 2);
+					if (i == 0 && j == 0)
+						last2 = col2;
+					
+					// which bit is this bit position?
+					k = (index - (j << 1) - 1);
+
+					// look at that bit
+					b2 = (u >> k) & 0x1;
+
+					// supports artifacting
+					switch (b2 & 0x01)
+					{
+					case 0x00:
+						*qch++ = col2;
+						break;
+
+					case 0x01:
+						if (last == col2)
+						{
+							*qch++ = green;
+							if (last2 == green)
+								*(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
+						}
+						else
+						{
+							*qch++ = col1;
+							if (last == red)
+								*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
+						}
 						break;
 					}
 				}

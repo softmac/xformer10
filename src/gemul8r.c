@@ -3174,7 +3174,7 @@ break;
         else if (FIsAtari8bit(vmCur.bfHW))
             {
 #ifdef XFORMER
-            ControlKeyUp8();
+            ControlKeyUp8();	// if we ALT-F4 to close or ALT-TAB to cycle apps, it will think ALT is still down when we come back up
             ForceRedraw();
 #endif
 		}
