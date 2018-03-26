@@ -216,12 +216,15 @@ void CheckKey()
 			return;
 	#endif
 
+#if 0 // not in the keyboard buffer, handled by Windows msg
 		case 0x40:
 		case 0x59:
 			// F6 or Shift+F6 - XL Help key
 
-			KBCODE = 17;
+			//KBCODE = 17;
+			rgbMem[0x2dc] = 17;	// HELPFG
 			goto lookit2;
+#endif
 
 		case 0x77: // Control + Home
 			scan = 0x47;
@@ -679,6 +682,22 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		}
 		return TRUE; // don't let ATARI see special function key presses
 
+	case 0x40: // F6 - HELP key for XL/XE
+		if (fDown && mdXLXE != md800)
+		{
+			if (*pbshift & wAnyShift)	// HELP + CTRL + SHIFT unspecified, I choose shift.
+				rgbMem[0x02dc] = 81;
+			else if (*pbshift & wCtrl)
+				rgbMem[0x02dc] = 145;
+			else
+				rgbMem[0x02dc] = 17;
+		}
+		else if (mdXLXE != md800)
+			rgbMem[0x02dc] = 0;
+		
+		// !!! verify that nothing is supposed to go into the keyboard buffer
+		return TRUE; // dont' let ATARI see special function key presses
+
 	case 0x41: // F7 - START key
 		if (fDown)
 			CONSOL &= ~0x1;
@@ -700,20 +719,19 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			CONSOL |= 0x04;
 		return TRUE; // don't let ATARI see special function key presses
 
-#if 0 // handled by GEM now
 	case 0x44: // F10
 
 		// shift F10 - shortcut to toggle ATARI BASIC and reboot
+		// this is special to ATARI 8 bit VMs, so we handle this ourselves
 		if (fDown && (*pbshift & wAnyShift))
 		{
-			if (ramtop == 0xC000)
+ 			if (ramtop == 0xC000)
 				ramtop = 0xA000;
 			else
 				ramtop = 0xC000;
 			FColdbootVM(v.iVM);
 		}
 		return;
-#endif
 
 #if 0
 	case 0x58:
@@ -758,7 +776,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		{
 			*pbshift &= ~wAlt;
 		}
-		return TRUE; // don't let ATARI see special key presses
+		return FALSE; // return EARLY (don't let ATARI see special key presses) and FALSE (let windows see it)
 	
 	case 0x46: // Scrl Lock
         if (fDown)
@@ -778,7 +796,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     AddToPacket(fDown ? scan : 0);
     AddToPacket(fDown ? ch   : 0);
     
-    return TRUE;
+    return TRUE;	// by default, don't let windows see the key
 }
 
 // Process Thread messages for keys and joystick, and Windows messages for keybaord, mouse, and joystick
@@ -799,7 +817,7 @@ BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
 #if 0
     case WM_CHAR:
 #endif
-        return !FKeyMsg800(hWnd, message, uParam, lParam);
+        return FKeyMsg800(hWnd, message, uParam, lParam);
 
 // we don't use these custom thread messages
 #if 0
