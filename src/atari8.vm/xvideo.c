@@ -493,7 +493,7 @@ BOOL ProcessScanLine()
             printf("DLI interrupt at scan %d\n", wScan);
 #endif
         Interrupt();
-          NMIST = 0x80 | 0x1F;
+          NMIST = 0x80 | 0x1F;	// want DLI
         regPC = cpuPeekW(0xFFFA);
     }
 
@@ -529,9 +529,9 @@ BOOL ProcessScanLine()
             cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
         break;
     case 3: // wide playfield
-        cbWidth = mpMdBytes[sl.modelo];		// can't boost any more, we're already WIDE
-        cbDisp = cbWidth | (cbWidth >> 1);	// use WIDE numbers
-        cbWidth |= (cbWidth >> 1);
+        cbWidth = mpMdBytes[sl.modelo];		// NARROW width
+        cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);	// visible area is half way between NORMAL and WIDE
+        cbWidth |= (cbWidth >> 1);			// WIDE width
         break;
     }
 

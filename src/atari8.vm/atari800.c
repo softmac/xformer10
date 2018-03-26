@@ -658,7 +658,7 @@ void Interrupt()
 {
     cpuPokeB(regSP, regPC >> 8);  regSP = (regSP-1) & 255 | 256;
     cpuPokeB(regSP, regPC & 255); regSP = (regSP-1) & 255 | 256;
-    cpuPokeB(regSP, regP);          regSP = (regSP-1) & 255 | 256;
+	cpuPokeB(regSP, regP);          regSP = (regSP-1) & 255 | 256;
 
     regP |= IBIT;
 }
@@ -686,7 +686,7 @@ DoVBI()
 		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
 		// every scan line now until it's done, then resume
 		Interrupt();
-		NMIST = 0x40 | 0x1F;
+		NMIST = 0x40 | 0x1F;	// want VBI
 		regPC = cpuPeekW(0xFFFA);
 	}
 
@@ -1165,7 +1165,8 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 
     case 0xD2:      // POKEY
         addr &= 15;
-        rgbMem[writePOKEY+addr] = b;
+		
+		rgbMem[writePOKEY+addr] = b;
 
         if (addr == 10)
         {
@@ -1283,6 +1284,12 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 		
 		// !!! using shadows like this could break an app that uses a functioning mirror of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
+		
+		// the display list pointer is the only ANTIC register that is R/W
+		if (addr == 2 || addr == 3)
+			rgbMem[0xd400 + addr] = b;
+		if (addr == 3 && b == 8)
+			b = b;
 
         if (addr == 10)
             {
