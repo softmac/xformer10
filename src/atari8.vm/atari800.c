@@ -403,7 +403,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
-    cntTick = 50*4;	// delay for banner messages
+    cntTick = 255;	// delay for banner messages
     QueryTickCtr();
 	//countJiffies = 0;
 
@@ -430,7 +430,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 	InitAtariDisks(iVM);
 
-	cntTick = 50*4;
+	cntTick = 255;
     QueryTickCtr();
     //countJiffies = 0;
 	
@@ -929,11 +929,10 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
-			else if (wScan < STARTSCAN + Y8) {	// after all the valid lines have been drawn
+			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
 			}
 
-// !!! why?
 #if 0
 			else if (wScan == STARTSCAN + Y8) {
 				// start the NMI status early so that programs
@@ -945,14 +944,14 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			}
 #endif
 
-			// do the VBI!
-			else if (wScan == STARTSCAN + Y8)	// was 251
+			// do the VBI! We MUST do it one line late (249 vs 248), because otherwise MULE does not work. !!! I don't know why.
+			else if (wScan == STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				DoVBI();	// it's huge, it bloats this function to inline it.
 			}
 
-			else if (wScan > STARTSCAN + Y8)
+			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;

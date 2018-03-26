@@ -60,20 +60,17 @@ void ShowCountDownLine()
         BYTE *qch = vvmi.pvBits;
         BYTE colfg;
 
-        if (cntTick < 2)
-            {
-            pch = "";
-            }
-        else if (cntTick < 60)
-            {
-            pch = " USE ALT + ARROWS FOR JOYSTICK";
-            }
-        else if (cntTick < 120)
-            {
+		if (cntTick < 2)
+			pch = "";
+		else if (cntTick < 80)
+			pch = "F6 - F10 FOR HELP START SEL OPT RESET";
+        else if (cntTick < 156)
+            pch = " USE CTRL + ARROWS FOR JOYSTICK";
+        else if (cntTick < 206)
             pch = " XFORMER BY DAREK MIHOCKA";
-            }
         else
             pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
+
         qch += (wScan - wStartScan) * vcbScan;
 
         colfg = ((wFrame >> 2) << 4) + i + i;

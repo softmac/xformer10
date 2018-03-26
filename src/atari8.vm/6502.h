@@ -36,7 +36,6 @@ __inline BOOL cpuDisasm(char *pch, ADDR *pPC)
 __inline BYTE cpuPeekB(ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
-
     return rgbMem[addr];
     return TRUE;
 }
