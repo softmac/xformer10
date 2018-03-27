@@ -32,6 +32,8 @@ int Y8 = 240;		// number of valid scan lines
 char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
+// !!! globals should be OK as at worst the sound glitches in tile mode (it does that anyway until I support
+// setting focus in tile mode. Globals should only help the randomizer ???
 BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter
 BYTE poly5[(1 << 5) - 1];
 BYTE poly9[(1 << 9) - 1];
@@ -171,7 +173,12 @@ typedef struct
 
     WORD m_regEA;
     BYTE m_mdEA;
-    BYTE pad5[5];
+
+	BYTE m_WSYNC_Seen;
+	BYTE m_WSYNC_Waited;
+	BYTE m_bLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
+
+	BYTE pad5[2];
 
     // 6502 address space
 
@@ -265,6 +272,9 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define regP          CANDY_STATE(regP)
 #define regEA         CANDY_STATE(regEA)
 #define mdEA          CANDY_STATE(mdEA)
+#define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
+#define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
+#define bLeftMax      CANDY_STATE(bLeftMax)
 #define fTrace        CANDY_STATE(fTrace)
 #define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)

@@ -128,8 +128,6 @@ void InitBanks(int iVM)
 // Routine to swap the Atari ROMs in and out of address space.
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
-// Function maintains a static state of the memory banks.
-//
 void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 {
 	int iVM = v.iVM;	// support independent instances someday

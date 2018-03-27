@@ -18,8 +18,6 @@
 #include <sys/stat.h>
 #include "gemtypes.h" // main include file
 
-static sWheelOffset;
-
 //
 // "PROPS v" contains our global persistable app data, pertinent to the entire session. Simply write this structure to disk to save.
 // It contains a pointer to:
@@ -1586,9 +1584,10 @@ int CALLBACK WinMain(
             vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
 
 			// every second, update our clock speed indicator
+			// When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
 			static ULONGLONG sCJ;
 			ULONGLONG cCJ = GetCycles();
-			if (cCJ - sCJ >= 1789790)
+			if (cCJ - sCJ >= 1789790 && (!v.fTiling || sVM == v.iVM))
 			{
 				DisplayStatus();
 				sCJ = cCJ;
@@ -2722,9 +2721,22 @@ void RenderBitmap()
 				if (fDone == -1)
 					fDone = iVM;
 
-				// Tiled mode does not stretch, it needs to be FAST
+				// Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
 				if (y + vsthw[iVM].ypix > 0 && !fBlack)
-					BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+				{
+					if (sVM == iVM)
+					{
+						// border around the one we're hovering over
+						int xw = vsthw[iVM].xpix, yw = vsthw[iVM].ypix;
+						BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+						BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+						BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+						BitBlt(vi.hdc, x, y + yw -5, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+						BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
+					}
+					else
+						BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+				}
 				else if (fBlack)
 					BitBlt(vi.hdc, x, y, vsthw[iVM].xpix, vsthw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, BLACKNESS);
 
@@ -2791,6 +2803,51 @@ void RenderBitmap()
 #endif
 }
 
+// which tile is under the mouse right now? (Or -1 if none)
+//
+int GetTileFromPos(int xPos, int yPos)
+{
+	RECT rect;
+	GetClientRect(vi.hWnd, &rect);
+
+	int x, y, iVM = nFirstTile - 1;
+	BOOL fDone = FALSE;
+
+	if (iVM < 0)
+		iVM = MAX_VM - 1;
+
+	// iVM may not be valid now, so use v.iVM in the next 3 lines
+
+	int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+
+	for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
+	{
+		for (x = 0; x < nx * vsthw[v.iVM].xpix; x += vsthw[v.iVM].xpix /* * vi.fXscale*/)
+		{
+			// advance to the next valid bitmap
+			do
+			{
+				iVM = (iVM + 1) % MAX_VM;
+			} while (vrgvmi[iVM].hdcMem == NULL);
+
+			// we've reached the end of the tiles
+			if (iVM == nFirstTile && fDone)
+			{
+				y = rect.bottom;	// double break
+				break;
+			}
+
+			fDone = TRUE;
+
+			if ((xPos >= x) && (xPos < x + vsthw[v.iVM].xpix * vi.fXscale) &&
+				(yPos >= y) && (yPos < y + vsthw[v.iVM].ypix * vi.fYscale))
+			{
+				return iVM;
+			}
+		}
+	}
+	return -1;
+}
 
 /****************************************************************************
 
@@ -3569,8 +3626,15 @@ break;
 			{
 				nFirstTile = v.iVM;	// show the current VM as the top left one
 				//sWheelOffset = 0;	// start at the top - Darek doesn't want this
+
+				// now where is the mouse? That tile gets focus
+				POINT pt;
+				if (GetCursorPos(&pt))
+					if (ScreenToClient(vi.hWnd, &pt))
+						sVM = GetTileFromPos(pt.x, pt.y);
+
 			} else {
-				SelectInstance(nFirstTile); // was +1 to cycle
+				SelectInstance(sVM >= 0 ? sVM : nFirstTile);	// bring the one with focus up
 			}
 			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
@@ -3738,31 +3802,31 @@ break;
 		// unmount a drive
 
 		case IDM_D1U:
+			FUnmountDiskVM(v.iVM, 0);	// do this before tampering
 			strcpy(vi.pvmCur->rgvd[0].sz, "");
 			vi.pvmCur->rgvd[0].dt = DISK_NONE;
-			FUnmountDiskVM(v.iVM, 0);
 			FixAllMenus();
 			break;
 
 		case IDM_D2U:
+			FUnmountDiskVM(v.iVM, 1);	// do this before tampering
 			strcpy(vi.pvmCur->rgvd[1].sz, "");
 			vi.pvmCur->rgvd[1].dt = DISK_NONE;
-			FUnmountDiskVM(v.iVM, 1);
 			FixAllMenus();
 			break;
 		
 #if 0
 		case IDM_D3U:
+			FUnmountDiskVM(v.iVM, 2);
 			strcpy(vi.pvmCur->rgvd[2].sz, "");
 			vi.pvmCur->rgvd[2].dt = DISK_NONE;
-			FUnmountDiskVM(v.iVM, 2);
 			FixAllMenus();
 			break;
 		
 		case IDM_D4U:
+			FUnmountDiskVM(v.iVM, 3);
 			strcpy(vi.pvmCur->rgvd[3].sz, "");
 			vi.pvmCur->rgvd[3].dt = DISK_NONE;
-			FUnmountDiskVM(v.iVM, 3);
 			FixAllMenus();
 			break;		
 #endif
@@ -4058,9 +4122,9 @@ break;
 			return 0;
 		}
 #endif
-		// !!! somehow this magically only executes if ALT-enter is pressed
-		// yet the .RC accelerator does not send IDM_FULLSCREEN like it should
-		return SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+			// !!! somehow this magically only executes if ALT-enter is pressed
+			// yet the .RC accelerator does not send IDM_FULLSCREEN like it should			
+			return SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
 		}
 
 		// fall through
@@ -4092,9 +4156,22 @@ break;
 		if (vi.fExecuting)
 			if (((lParam & 0xC0000000) != 0x40000000) || FIsAtari8bit(vmCur.bfHW))
 			{
-				// tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
-				if (FWinMsgVM(hWnd, message, uParam, lParam))
-					return TRUE;
+				if (!v.fTiling)
+				{
+					// tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
+					if (FWinMsgVM(hWnd, message, uParam, lParam))
+						return TRUE;
+				}
+				
+				// send all keys to the tile that is in focus
+				else
+				{
+					SelectInstance(sVM);
+					BOOL bb = FWinMsgVM(hWnd, message, uParam, lParam);
+					SelectInstance(v.iVM);
+					if (bb)
+						return TRUE;
+				}
 			}
 		break;
 
@@ -4120,6 +4197,12 @@ break;
 			sWheelOffset = 0;
 		if (sWheelOffset < bottom * -1)
 			sWheelOffset = bottom * -1;
+
+		// now where would our mouse be after this scroll?
+		POINT pt;
+		if (GetCursorPos(&pt))
+			if (ScreenToClient(vi.hWnd, &pt))
+				sVM = GetTileFromPos(pt.x, pt.y);
 
 		break;
 
@@ -4160,7 +4243,7 @@ break;
         // fall through into WM_LBUTTONDOWN case
 
     case WM_LBUTTONDOWN:
-        vi.fHaveFocus = TRUE;  // HACK
+        vi.fHaveFocus = TRUE;  // HACK !!! ???
 
 #ifdef SOFTMAC
         vmachw.fVIA2 = TRUE;
@@ -4197,51 +4280,10 @@ break;
 		//
 		if (v.fTiling && message == WM_LBUTTONDOWN)
 		{
-			// make sure this works on multimon, GET_X_LPARAM is not defined
-			int xPos = LOWORD(lParam);
-			int yPos = HIWORD(lParam);
-
-			RECT rect;
-			GetClientRect(vi.hWnd, &rect);
-
-			int x, y, iVM = nFirstTile - 1;
-			BOOL fDone = FALSE;
-
-			if (iVM < 0)
-				iVM = MAX_VM - 1;
-
-			// iVM may not be valid now, so use v.iVM in the next 3 lines
-
-			int nx = ((rect.right - rect.left) * 10 / vsthw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
-
-			for (y = rect.top + sWheelOffset; y < rect.bottom; y += vsthw[v.iVM].ypix * vi.fYscale)
+			if (sVM >= 0)
 			{
-				for (x = 0; x < nx * vsthw[v.iVM].xpix; x += vsthw[v.iVM].xpix /* * vi.fXscale*/)
-				{
-					// advance to the next valid bitmap
-
-					do
-					{
-						iVM = (iVM + 1) % MAX_VM;
-					} while (vrgvmi[iVM].hdcMem == NULL);
-
-					// we've painted them all, now just black for the rest
-					if (iVM == nFirstTile && fDone)
-					{
-						y = rect.bottom;	// double break
-						break;
-					}
-
-					// Tiled mode does not stretch, it needs to be FAST
-					fDone = TRUE;
-
-					if ((xPos >= x) && (xPos < x + vsthw[v.iVM].xpix * vi.fXscale) &&
-						(yPos >= y) && (yPos < y + vsthw[v.iVM].ypix * vi.fYscale))
-					{
-						v.fTiling = FALSE;
-						SelectInstance(iVM);
-					}
-				}
+				v.fTiling = FALSE;
+				SelectInstance(sVM);
 			}
 		}
 
@@ -4277,8 +4319,21 @@ break;
     case WM_MOUSEMOVE:
         if (FIsAtari8bit(vmCur.bfHW))
             {
-            FWinMsgVM(hWnd, message, uParam, lParam);
-            return 0;
+	            FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM
+
+			// in Tile Mode, make note of which tile we are hovering over
+			// !!! In the future, send all joy and key input there
+			//
+			if (v.fTiling)
+			{
+				// make sure this works on multimon, GET_X_LPARAM is not defined
+				int xPos = LOWORD(lParam);
+				int yPos = HIWORD(lParam);
+
+				sVM = GetTileFromPos(xPos, yPos);
+			}
+
+			return 0;
             }
 
         vi.fMouseMoved = TRUE;

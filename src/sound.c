@@ -34,7 +34,7 @@ WAVEFORMATEX pcmwf;
 
 
 
-// !!! BEGIN DANGEROUS: not per-instance? When switching instances, it will glitch. Who cares?
+// !!! not per-instance. When switching instances, it will glitch. Who cares?
 typedef struct
 {
 	ULONG frequency;
@@ -44,7 +44,8 @@ typedef struct
 } VOICE;
 
 #ifdef XFORMER
-// !!! when we support multiple VMs running at the same time, each will need its own static
+// !!! one global sound buffer for now, it will glitch when several tiles run at the same time
+
 static int sCurBuf = -1;	// which buffer is the current one we're filling
 static int sOldSample = 0; // how much of the buffer is full already
 
@@ -60,9 +61,6 @@ static PULSE pulse[4] = { {0 },{0},{0},{0} };	// only need to init pos
 static VOICE rgvoice[4] = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
 static ULONG sAUDCTL = 0;
 #endif
-
-// !!! END DANGEROUS
-
 
 
 //
@@ -121,6 +119,10 @@ void CALLBACK MyWaveOutProc(
 //
 void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 {
+
+	// only do sound for the tiled VM in focus
+	if (v.fTiling && sVM != v.iVM)
+		return;
 
 	// 8 bit code
 	if (!FIsAtari68K(vmCur.bfHW)) {
@@ -1029,7 +1031,7 @@ void InitJoysticks()
 #endif
 }
 
-// !!! dangerous globals, each warm and cold start will glitch the other VMs
+// !!! globals, each warm and cold start will glitch the other VMs
 //
 void CaptureJoysticks()
 {

@@ -27,6 +27,8 @@ void CheckKey()
     WORD dshift = 0;
 	BOOL fForceCtrl = FALSE;
 
+	// !!! statics are broken when tiled, but all key input is a mess anyway
+	// (different tile gets the key up than got the key down)
     static WORD oldshift = 0;
     static WORD fKeyPressed = 0;
      
@@ -427,7 +429,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
-    static BOOL wShiftChanged;
+	// !!! statics are broken when tiled, but all key input is a mess anyway
+	static BOOL wShiftChanged;
 
     scan = (lParam >> 16) & 0xFF;
     ch = uParam;
