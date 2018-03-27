@@ -382,6 +382,7 @@ BOOL ProcessScanLine()
         };
 
     int i, j;
+	// !!! if this is ever implemented, make sure it's OK as a static
     static WORD rgfChanged = 0;
 
 	// don't do anything in the invisible retrace sections
@@ -668,6 +669,7 @@ BOOL ProcessScanLine()
 
 	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now
 
+	// we don't need to remember it after this function, so static is OK
 	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
 	//static BYTE sModeLast;	// last ANTIC mode we saw
 

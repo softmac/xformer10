@@ -72,10 +72,6 @@ CANDYHW *vpcandyCur = &vrgcandy[0]; // default to first instance
 //BYTE bshiftSav;	// was a local too
 BOOL fDumpHW;
 
-BOOL WSYNC_Seen;
-BOOL WSYNC_Waited;
-
-static signed short wLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
@@ -193,7 +189,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	}
 
 	// reset the cycle counter now and each cold start (we may not get a cold start)
-	// !!! dangerous globals, could glitch the other VMs
+	// !!! globals, could glitch the other VMs when one VM cold starts
 	LARGE_INTEGER qpc;
 	LARGE_INTEGER qpf;
 	QueryPerformanceFrequency(&qpf);
@@ -374,9 +370,8 @@ BOOL __cdecl UnmountAtariDisk(int iVM, int i)
 {
     PVD pvd = &v.rgvm[iVM].rgvd[i];
 
-		//we can't just unmount if we've asked for a disk image, the whole point is to unmount if we didn't ask for one.
-		//if (pvd->dt == DISK_IMAGE)
-        DeleteDrive(iVM, i);
+		if (pvd->dt == DISK_IMAGE)
+			DeleteDrive(iVM, i);
 
     return TRUE;
 }
@@ -683,7 +678,7 @@ BOOL __cdecl TraceAtari()
 DoVBI()
 {
 	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-	wLeftMax = wLeft;
+	bLeftMax = wLeft;
 
 #ifndef NDEBUG
 	fDumpHW = 0;
@@ -698,7 +693,8 @@ DoVBI()
 
 	// process joysticks before the vertical blank, just because.
 	// Very slow if joysticks not installed, so skip the code
-	if (vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+	// When tiling, only the tile in focus gets input
+	if ((!v.fTiling || sVM == v.iVM) && vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
 		JOYINFO ji;
 		MMRESULT mm = joyGetPos(0, &ji);
 		if (mm == 0) {
@@ -738,22 +734,22 @@ DoVBI()
 				int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
 				dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
 
-				rPBDATA |= 12;                  // assume joystick centered
+				rPADATA |= 192;                  // assume joystick centered
 
 				if (dir < 0)
-					rPBDATA &= ~4;              // left
+					rPADATA &= ~ 64;              // left
 				else if (dir > 0)
-					rPBDATA &= ~8;              // right
+					rPADATA &= ~ 128;              // right
 
 				dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
 				dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
 
-				rPBDATA |= 3;                   // assume joystick centered
+				rPADATA |= 48;                   // assume joystick centered
 
 				if (dir < 0)
-					rPBDATA &= ~1;              // up
+					rPADATA &= ~ 16;              // up
 				else if (dir > 0)
-					rPBDATA &= ~2;              // down
+					rPADATA &= ~ 32;              // down
 
 				UpdatePorts();
 
@@ -881,6 +877,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				wScan = 0;
 				wFrame++;	// count how many frames we've drawn. Does anybody care?
 
+				// should be safe as static
 				static ULONGLONG cCYCLES = 0;
 				static ULONGLONG cErr = 0;
 				static unsigned lastVM = 0;
@@ -923,7 +920,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
 			// Using 21 and 30, Gem took 120 (on) and 96 (off).
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
-			wLeftMax = wLeft;	// remember what it started at
+			bLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
@@ -933,7 +930,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 
 			if (wScan < wStartScan) {
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
-				wLeftMax = wLeft;
+				bLeftMax = wLeft;
 			}
 			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
@@ -946,7 +943,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				NMIST = 0x40 | 0x1F;
 
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				wLeftMax = wLeft;
+				bLeftMax = wLeft;
 			}
 #endif
 
@@ -960,7 +957,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
-				wLeftMax = wLeft;
+				bLeftMax = wLeft;
 			}
 		} // if wLeft == 0
 
@@ -1194,8 +1191,8 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
 		else if (addr <= 8)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
-			// we're (wScan / 262) of the way through the scan lines and (wLeftmax - wLeft) of the way through this scan line
-			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
+			// we're (wScan / 262) of the way through the scan lines and (bLeftMax - wLeft) of the way through this scan line
+			int iCurSample = (wScan * 100 + (bLeftMax - wLeft) * 100 / bLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
 				SoundDoneCallback(vi.rgwhdr, iCurSample);
 		}

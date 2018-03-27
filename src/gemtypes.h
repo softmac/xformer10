@@ -21,6 +21,9 @@
 // maximum number of virtual machines
 #define MAX_VM 108
 
+static sWheelOffset;	// for scrolling tiles
+int sVM = -1;	// which tile you're hovering over
+
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 
 #undef  _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE
@@ -130,6 +133,7 @@ extern int X8;	// size of an ATARI 800 screen
 extern int Y8;
 #endif
 
+// this is supposed to be global for the whole app
 WORD fBrakes;	// run at full speed or emulated speed?
 
 //

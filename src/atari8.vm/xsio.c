@@ -353,7 +353,9 @@ void BUS1()
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
-    static BYTE oldstat = 0;
+    
+	// !!! statics. CIO won't work
+	static BYTE oldstat = 0;
     static BYTE mdTranslation = NO_TRANSLATION;
     static BYTE fConcurrent = FALSE;
 
@@ -367,12 +369,7 @@ void BUS1()
         break;
 
     case 0x00:    // CIO open
-#ifdef HDOS16ORDOS32
-        _bios_serialcom(_COM_INIT, wCOM,
-                _COM_300 | _COM_NOPARITY | _COM_CHR8 | _COM_STOP1 );
-#else
         FSetBaudRate(0, 0, 64, 1);
-#endif
         break;
 
     case 0x10:  // CIO close
@@ -380,12 +377,6 @@ void BUS1()
         break;
 
     case 0x20:  // CIO get byte
-#ifdef HDOS16ORDOS32
-        while (!(0x0100 & (wStat = _bios_serialcom(_COM_STATUS, wCOM, 0))))
-            ;
-
-#else
-#endif
 
 #if DEBUGCOM
         printf("g%04X", wStat); fflush(stdout);
@@ -393,12 +384,8 @@ void BUS1()
 
         if (0x0100 & wStat)
             {
-#ifdef HDOS16ORDOS32
-             wStat = _bios_serialcom(_COM_RECEIVE, wCOM, 0);
-#else
             wStat = 0;
             CchSerialRead(&wStat, 1);
-#endif
 
 #if DEBUGCOM
             printf("G%04X", wStat); fflush(stdout);
@@ -429,22 +416,14 @@ void BUS1()
                 regA &= 0x7F;
             }
 
-#ifdef HDOS16ORDOS32
-        _bios_serialcom(_COM_SEND, wCOM, regA);
-#else
         FWriteSerialPort(regA);
-#endif
         break;
 
     case 0x40:  // CIO status
-#ifdef HDOS16ORDOS32
-        wStat =  _bios_serialcom(_COM_STATUS, wCOM, 0);
-#else
         if (CchSerialPending())
             wStat = 0x4030;
         else
             wStat = 0x4130;
-#endif
 
         if (fConcurrent)
             {
@@ -501,51 +480,6 @@ void BUS1()
 
         case 36:     // Baud, stop bits, ready monitoring
             {
-#ifdef HDOS16ORDOS32
-            int baud = _COM_300;
-
-            switch (cpuPeekB(0x2A) & 15)
-                {
-            default:
-                break;
-
-            case 2:    //  50 baud
-            case 4:    //  75 baud
-            case 5:    // 110 baud
-                baud = _COM_110;
-                break;
-
-            case 6:    // 134 baud
-            case 7:    // 150 baud
-                baud = _COM_150;
-                break;
-
-            case 9:    // 600 baud
-                baud = _COM_600;
-                break;
-
-            case 10:   // 1200 baud
-                baud = _COM_1200;
-                break;
-
-            case 11:    // 1800 baud
-            case 12:    // 2400 baud
-                baud = _COM_2400;
-                break;
-
-            case 13:    // 4800 baud
-                baud = _COM_4800;
-                break;
-
-            case 14:    // 9600 baud
-            case 15:    // 19200 baud
-                baud = _COM_9600;
-                break;
-                }
-
-            _bios_serialcom(_COM_INIT, wCOM,
-                    baud | _COM_NOPARITY | _COM_CHR8 | _COM_STOP1 );
-#else
             int baud = 300;
 
             switch (cpuPeekB(0x2A) & 15)
@@ -588,7 +522,6 @@ void BUS1()
                 }
 
         FSetBaudRate(0, 0, 19200/baud, 1);
-#endif
 
 #if DEBUGCOM
             printf("setting baud rate to %d\n", baud);
@@ -965,11 +898,7 @@ lNAK:
         case 'S': 
             while (timeout--)
                 {
-#ifdef HDOS16ORDOS32
-                if (_bios_printer(_PRINTER_STATUS, 0, 0) == 0x90)
-#else
                 if (FPrinterReady())
-#endif
                     {
                     wRetStat = SIO_OK;
                     break;
@@ -1003,27 +932,14 @@ lNAK:
 
                 while (timeout--)
                     {
-#ifdef HDOS16ORDOS32
-                    if (_bios_printer(_PRINTER_STATUS, 0, 0) == 0x90)
-#else
                     if (FPrinterReady())
-#endif
                         {
                         if (ch != 155)
-#ifdef HDOS16ORDOS32
-                            _bios_printer(_PRINTER_WRITE, 0, ch);
-#else
                             ByteToPrinter(ch);
-#endif
                         else
                             {
-#ifdef HDOS16ORDOS32
-                            _bios_printer(_PRINTER_WRITE, 0, 13);
-                            _bios_printer(_PRINTER_WRITE, 0, 10);
-#else
                             ByteToPrinter(13);
                             ByteToPrinter(10);
-#endif
                             }
 
                         wRetStat = SIO_OK;
@@ -1044,52 +960,12 @@ lNAK:
     else
         {
 lCable:
-#ifndef HWIN32
-        if (!fXFCable)
-#endif
             {
             wRetStat = SIO_TIMEOUT;
             goto lExit;
             }
 
-#ifndef HWIN32
-#if 0
-        printf("Device ID = %2x\n", cpuPeekB(0x300));
-        printf("Drive # = %2x\n", cpuPeekB(0x301));
-        printf("Command = %2x\n", cpuPeekB(0x302));
-        printf("SIO Command = %2x\n", cpuPeekB(0x303));
-        printf("Buffer = %2x\n", cpuPeekW(0x304));
-        printf("Timeout = %2x\n", cpuPeekW(0x306));
-        printf("Byte count = %2x\n", cpuPeekW(0x308));
-        printf("Sector = %2x\n", cpuPeekW(0x30A));
-        printf("Aux1 = %2x\n", cpuPeekB(0x30A));
-        printf("Aux2 = %2x\n", cpuPeekB(0x30B));
-#endif
-
-//        printf("SIO command %c\n", wCom);
-
-        // temporary kludge to prevent reading over ROM */
-        if ((wStat == 0x40) && (wBuff >= ramtop))
-            wRetStat = SIO_OK;
-        else
-            {
-            wRetStat = _SIOV(&rgbMem[wBuff], wDev+wDrive,
-                 wCom, wStat, wBytes, wSector, wTimeout);
-            }
-
-#if 0
-        if (wCom == 'S')
-            {
-            printf("Status packet = %02x %02x %02x %02x\n",
-                cpuPeekB(wBuff),
-                cpuPeekB(wBuff+1),
-                cpuPeekB(wBuff+2),
-                cpuPeekB(wBuff+3));
-            }
-#endif
-#else
         ;
-#endif // HWIN32
         }
 
 #ifdef xDEBUG
