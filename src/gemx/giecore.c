@@ -238,8 +238,8 @@ int  EnumerateDirectory(int id, const char *szPath)
             CloseDiskPdi(vpdi);
         vpdi = NULL;
         }
-    else if (vpdi == NULL)
-        return 0;
+//    else if (vpdi == NULL)
+//       return 0;
 
     if (vrgpfd)
         {
@@ -407,7 +407,7 @@ int AddDiskImage(const char *szPathName)
     vrgszDrives[vcDrives] = malloc(MAX_PATH);
 #endif
 
-    if (((LONG)szPathName) & 0xFFFF0000)
+	if (((LONG)szPathName) & 0xFFFF0000)
         {
         strcpy(vrgszDrives[vcDrives], szPathName);
         }
@@ -417,6 +417,9 @@ int AddDiskImage(const char *szPathName)
 
         if (iFile >= vcFind || iFile < 0)
             return vcDrives;
+
+		int pch;
+		int iMac = CbReadFileContents(vpdi, &pch, &vrgpfd[iFile]);
 
         strcpy(vrgszDrives[vcDrives], vpdi->szCwd);
         strcat(vrgszDrives[vcDrives], vrgpfd[iFile].cFileName);
@@ -477,18 +480,22 @@ BOOL ShowFileProperties(const char *szFile)
     wsprintf(szT, "Modified: %s\n\n", szDate);
     strcat(sz, szT);
 
-    if (vpdi->fst == FS_HFS)
+#if 0
+	if (vpdi->fst == FS_HFS)
         {
         wsprintf(szT, "Type: %4s\n", &vrgpfd[iFile].ftCreationTime);
         szT[10] = '\n';
         szT[11] = '\0';
         strcat(sz, szT);
+#endif
 
         wsprintf(szT, "Creator: %4s\n", (BYTE *)(&vrgpfd[iFile].ftCreationTime) + 4);
         szT[13] = '\n';
         szT[14] = '\0';
         strcat(sz, szT);
-        }
+#if 0
+	}
+#endif
 
     MessageBox(NULL, sz, "File Properties", MB_OK);
     return TRUE;

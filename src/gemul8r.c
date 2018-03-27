@@ -15,6 +15,7 @@
 
 //#define _NO_CRT_STDIO_INLINE
 
+#include <sys/stat.h>
 #include "gemtypes.h" // main include file
 
 static sWheelOffset;
@@ -852,8 +853,7 @@ void CreateVMMenu()
 void FixAllMenus()
 {
 	// not implemented yet
-	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS, MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
 
 	// toggle basic is never a thing outside of XFORMER. If mixed VMs, it's only relevant for an 8bit VM
 	// See Darek, I'm thinking about this!
@@ -881,18 +881,22 @@ void FixAllMenus()
 	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
 	EnableMenuItem(vi.hMenu, IDM_D1, !v.fTiling ? 0 : MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, (vi.pvmCur->rgvd[0].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
+
 	sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
 	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
 	EnableMenuItem(vi.hMenu, IDM_D2, !v.fTiling ? 0 : MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-	sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D3, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-	sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D4, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (vi.pvmCur->rgvd[1].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
+
+	//sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
+	//SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
+	//EnableMenuItem(vi.hMenu, IDM_D3, !v.fTiling ? 0 : MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
+	//sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
+	//SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
+	//EnableMenuItem(vi.hMenu, IDM_D4, !v.fTiling ? 0 : MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
 
 	// only 8 bit ATARI supports cartridges right now
 	if (FIsAtari8bit(vmCur.bfHW))
@@ -3209,7 +3213,7 @@ break;
             {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
-            goto L_about;
+            //goto L_about;
 
         default:
             break;
@@ -3245,7 +3249,145 @@ break;
 
 		switch (wmId)
 		{
-		L_about:
+		
+		//L_about:
+
+		case IDM_IMPORTDOS1:
+		case IDM_IMPORTDOS2:
+
+			int drive = wmId - IDM_IMPORTDOS1;
+
+			// Any changes you've made to the disk are not saved until the drive is un-mounted and re-mounted
+			//FUnmountDiskVM(v.iVM, 0);
+			//FMountDiskVM(v.iVM, 0);
+
+			char szDir[MAX_PATH];
+			szDir[0] = 0;
+			DISKINFO *pdi = PdiOpenDisk(vi.pvmCur->rgvd[drive].dt, vi.pvmCur->rgvd[drive].sz, DI_READONLY);
+
+			int cnt = CntReadDiskDirectory(pdi, szDir, NULL);
+			
+			BOOL fB, fh = TRUE;
+
+			// save all the files in binary, then text format
+			// !!! or ask them to rename the files to ".txt" or auto detect?
+			for (int ij = 0; ij < pdi->cfd * 2; ij++)
+			{
+			
+				szDir[0] = 0;
+				strcat(szDir, vi.pvmCur->rgvd[drive].sz);
+				strcat(szDir, "_Files");
+
+				// Create a directory named after the disk image for all of its files
+				if (ij == 0)
+					fB = CreateDirectory(szDir, NULL);
+
+				strcat(szDir, "\\");					// add '\'
+				strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);	// add the filename
+				if (ij >= pdi->cfd)
+					strcat(szDir, ".txt");	// 2nd time around, save everything as text
+
+				// get file size
+				ULONG cbSize = CbReadFileContents(pdi, NULL, &pdi->pfd[ij % pdi->cfd]);
+				
+				if (cbSize > 0)
+				{
+					unsigned char *szFile = malloc(cbSize);
+					if (!szFile)
+					{
+						fh = FALSE;
+						break;
+					}
+
+					cbSize = CbReadFileContents(pdi, szFile, &pdi->pfd[ij % pdi->cfd]);
+
+					int h = _open(szDir, _O_BINARY | _O_RDONLY);
+					if (h != -1)
+					{
+						_close(h);
+						char ods[MAX_PATH];
+						sprintf(ods, "\"%s\" exists. Overwrite?", szDir);
+						int h2 = MessageBox(vi.hWnd, ods, "File Exists", MB_YESNO);
+						if (h2 == IDNO)
+							continue;
+					}
+					h = _open(szDir, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+					
+					// 2nd time around, convert the buffer to text (ATASCII -> ASCII)
+					// !!! Check ATARIWRITER format is just plain ATASCII
+					if (h != -1 && ij >= pdi->cfd)
+					{
+						// a buffer for the ASCII (maximum 2 characters per character)
+						unsigned char *szA = malloc(cbSize * 2);
+						unsigned char *szA1 = szA;
+						int cbA = 0;
+						if (!szA)
+						{
+							fh = FALSE;
+							_close(h);
+							free(szFile);
+							break;
+						}
+
+						for (int ind = 0; ind < cbSize; ind++)
+						{
+							// first one is CR, subsequent ones are LF
+							if (szFile[ind] == 0x9b)
+							{
+								*szA++ = 0x0d;
+								*szA++ = 0x0a;
+								cbA += 2;
+							}
+							// TAB
+							else if (szFile[ind] == 0x7f)
+							{
+								*szA++ = 0x09;
+								cbA++;
+							}
+							// BACKSPACE
+							else if (szFile[ind] == 0x7e)
+							{
+								*szA++ = 0x08;
+								cbA++;
+							}
+							else
+							{
+								*szA++ = szFile[ind];
+								cbA++;
+							}
+						}
+						fB = _write(h, szA1, cbA);
+						
+						// something in the process failed
+						if (fB != cbA)
+							fh = FALSE;
+						
+						free(szA1);
+					}					
+					else if (h != -1)
+					{
+						fB = _write(h, szFile, cbSize);
+						
+						// something in the process failed
+						if (fB != cbSize)
+							fh = FALSE;
+					}
+
+					_close(h);
+					free(szFile);
+					
+					// something in the process failed
+					if (h == -1)
+						fh = FALSE;
+				}
+			}
+			
+			fB = CloseDiskPdi(pdi);
+
+			if (!fh)
+				MessageBox(vi.hWnd, "Not every file saved successfully", "Extract ATARI DOS Files", MB_OK);
+
+			break;
 
 		// bring up our ABOUT MessageBox
 		case IDM_ABOUT:
@@ -3573,6 +3715,7 @@ break;
 			}
 			break;
 
+#if 0
 		case IDM_D3:
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
 			{
@@ -3590,6 +3733,7 @@ break;
 				FixAllMenus();
 			}
 			break;
+#endif
 
 		// unmount a drive
 
@@ -3607,6 +3751,7 @@ break;
 			FixAllMenus();
 			break;
 		
+#if 0
 		case IDM_D3U:
 			strcpy(vi.pvmCur->rgvd[2].sz, "");
 			vi.pvmCur->rgvd[2].dt = DISK_NONE;
@@ -3620,6 +3765,7 @@ break;
 			FUnmountDiskVM(v.iVM, 3);
 			FixAllMenus();
 			break;		
+#endif
 
 #if 0
         case IDM_PROPERTIES:

@@ -277,6 +277,7 @@ DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
     pdi->lpBuf = NULL;
     pdi->offsec = 0;
     pdi->cfd = 0;
+	pdi->pfd = NULL;
 
 #if USEHEAP
     HeapCompact(GetProcessHeap(), 0);
