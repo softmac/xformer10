@@ -807,6 +807,10 @@ Lnextdir:
 	return count;
 }
 
+
+// call with pb == NULL to just get size requirement
+// !!! only supported by ATARI for now, others will crash or fail
+//
 ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
 {
     unsigned char rgb[512];
@@ -857,8 +861,39 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
         {
         }
     else if (pdi->fst == FS_ATARIDOS || pdi->fst == FS_MYDOS)
-        {
-        }
+    {
+		ULONG count = pfd->nFileSizeHigh * 4 / pdi->cbSector;	// # of sectors in this file
+		WORD sec = *(WORD *)(pfd->cAlternateFileName);	// starting sector, 1 based
+		ULONG pos = 0;	// buffer position
+
+		for (int j = 0; j < count; j++)
+		{
+			pdi->count = 1;
+			pdi->sec = (sec - 1) * 128 / pdi->cbSector;	// which 512 byte sector number would this be found in?
+			pdi->lpBuf = rgb;
+
+			if (!FRawDiskRWPdi(pdi, 0))
+			{
+				cb = 0;
+				break;
+			}
+
+			int pos = ((sec - 1) % 4) << 7;	// where in the buffer did the 128 bytes we're interested in go?
+
+			int cbT = rgb[pos + 127];
+			Assert(cbT == 125 || j == count - 1);	// only the last sector should be short
+
+			// just provide the memory requirement if NULL
+			if (pb)
+			{
+				memcpy(pb, &rgb[pos], cbT);	// copy the 125 bytes actually used
+				pb += cbT;
+			}
+			cb += cbT;
+
+			sec = rgb[pos + 126] | ((rgb[pos + 125] & 3) << 8);	// next sector
+		}
+    }
     else if (pdi->fst == FS_FAT12 || pdi->fst == FS_FAT16)
         {
         int rootSec;    // start of root directory sectors

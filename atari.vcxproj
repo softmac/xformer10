@@ -639,6 +639,7 @@
     </Bscmake>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\blocklib\mac_hfs.c" />
     <ClCompile Include="src\ddlib.c" />
     <ClCompile Include="src\Gemul8r.c" />
     <ClCompile Include="src\printer.c" />

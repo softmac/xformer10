@@ -110,6 +110,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite);
 BOOL __stdcall FlushCachePdi(DISKINFO *pdi);
 BOOL __stdcall CloseDiskPdi(DISKINFO *pdi);
 int __stdcall CntReadDiskDirectory(PDI pdi, char *szDir, WIN32_FIND_DATA **);
+ULONG CbReadFileContents(PDI pdi, unsigned char *szFile, WIN32_FIND_DATA *);
 enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi);
 
 void __stdcall CreateHFSBootBlocks(BYTE *pb, ULONG l, char *szVol);

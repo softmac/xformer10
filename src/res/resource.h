@@ -19,8 +19,8 @@
 
 #define IDM_LOAD                        40206
 #define IDM_SAVEAS                      40207
-#define IDM_IMPORTDOS                   40208
-#define IDM_EXPORTDOS                   40209
+#define IDM_IMPORTDOS1                  40208
+#define IDM_IMPORTDOS2                  40209
 #define IDM_EXIT                        40220
 
 #define IDM_VM1							41999	// leave lots of room for many more before this one
