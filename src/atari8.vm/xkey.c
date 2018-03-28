@@ -611,7 +611,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 			printf("clock multiplier = %u\n", clockMult);
 #endif
-			SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
+			//SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
+			TimeTravel();
 		}
 		return TRUE;	// don't let ATARI see this
 
