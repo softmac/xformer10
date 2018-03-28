@@ -3321,6 +3321,10 @@ break;
 			szDir[0] = 0;
 			DISKINFO *pdi = PdiOpenDisk(vi.pvmCur->rgvd[drive].dt, (long)vi.pvmCur->rgvd[drive].sz, DI_READONLY);
 
+			// oops, something wrong with the disk image file
+			if (!pdi)
+				break;
+
 			CntReadDiskDirectory(pdi, szDir, NULL);
 			
 			BOOL fB, fh = TRUE;
@@ -4196,11 +4200,14 @@ break;
 				// send all keys to the tile that is in focus
 				else
 				{
-					SelectInstance(sVM);
-					BOOL bb = FWinMsgVM(hWnd, message, uParam, lParam);
-					SelectInstance(v.iVM);
-					if (bb)
-						return TRUE;
+					if (sVM >= 0)
+					{
+						SelectInstance(sVM);
+						BOOL bb = FWinMsgVM(hWnd, message, uParam, lParam);
+						SelectInstance(v.iVM);
+						if (bb)
+							return TRUE;
+					}
 				}
 			}
 		break;
