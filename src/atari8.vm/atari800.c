@@ -109,7 +109,7 @@ void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 
 void DumpROMS()
 {
-    DumpROM("atariosb.c", "rgbAtariOSB", rgbAtariOSB, 0xC800, 0x2800); // 10K
+    DumpROM("atariosb.c", "rgbAtariOSB", rgbAtariOSB, 0xD800, 0x2800); // 10K
     DumpROM("atarixl5.c", "rgbXLXE5000", rgbXLXE5000, 0x5000, 0x1000); //  4K
     DumpROM("atarixlb.c", "rgbXLXEBAS",  rgbXLXEBAS,  0xA000, 0x2000); //  8K
     DumpROM("atarixlc.c", "rgbXLXEC000", rgbXLXEC000, 0xC000, 0x1000); //  4K
@@ -679,7 +679,7 @@ BOOL __cdecl TraceAtari(BOOL fStep, BOOL fCont)
 void DoVBI()
 {
 	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-	bLeftMax = (BYTE)wLeft;
+	wLeftMax = wLeft;
 
 #ifndef NDEBUG
 	fDumpHW = 0;
@@ -921,7 +921,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
 			// Using 21 and 30, Gem took 120 (on) and 96 (off).
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
-			bLeftMax = (BYTE)wLeft;	// remember what it started at
+			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
@@ -931,7 +931,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 
 			if (wScan < wStartScan) {
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
-				bLeftMax = (BYTE)wLeft;
+				wLeftMax = wLeft;
 			}
 			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
@@ -944,7 +944,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 				NMIST = 0x40 | 0x1F;
 
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				bLeftMax = wLeft;
+				wLeftMax = wLeft;
 			}
 #endif
 
@@ -958,7 +958,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
-				bLeftMax = (BYTE)wLeft;
+				wLeftMax = wLeft;
 			}
 		} // if wLeft == 0
 
@@ -1190,8 +1190,8 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
 		else if (addr <= 8)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
-			// we're (wScan / 262) of the way through the scan lines and (bLeftMax - wLeft) of the way through this scan line
-			int iCurSample = (wScan * 100 + (bLeftMax - wLeft) * 100 / bLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
+			// we're (wScan / 262) of the way through the scan lines and (wLeftMax - wLeft) of the way through this scan line
+			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
 				SoundDoneCallback(vi.rgwhdr, iCurSample);
 		}
@@ -1353,13 +1353,13 @@ void ReadCart(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-	char *pch = v.rgvm[iVM].rgcart.szName;
+	unsigned char *pch = (unsigned char *)v.rgvm[iVM].rgcart.szName;
 
 	int h;
 	int cb = 0;
 	long l;
 
-	h = _open(pch, _O_BINARY | _O_RDONLY);
+	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
 	if (h != -1)
 	{
 #ifndef NDEBUG
@@ -1380,7 +1380,7 @@ void ReadCart(int iVM)
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 		
-		_read(h, rgbSwapCart[iVM], cb);
+		cb = _read(h, rgbSwapCart[iVM], cb);
 
 		v.rgvm[iVM].rgcart.cbData = cb;
 		v.rgvm[iVM].rgcart.fCartIn = TRUE;
@@ -1389,7 +1389,7 @@ void ReadCart(int iVM)
 
 	// what kind of cartridge is it?
 	
-	char *pb = rgbSwapCart[iVM];
+	unsigned char *pb = rgbSwapCart[iVM];
 	
 	if (cb <= 8192)
 		bCartType = CART_8K;
@@ -1513,14 +1513,16 @@ void BankCart(int iVM, int iBank, int value)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
 
+#if 0
 	// banks are 0, 4, 3, main
-	if (bCartType == CART_OSSA)
+	if (bCartType == CART_OSSA_DIFFERENT)
 	{
 		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
 		//assert(i != -1);	//!!! swapping cartridge out to RAM not supported, why does ACTION do this?
 		if (i != -1)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
+#endif
 
 	// banks are main, 0, 9, 1
 	else if (bCartType == CART_OSSB)

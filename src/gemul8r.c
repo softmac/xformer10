@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include "gemtypes.h" // main include file
 
-unsigned int sVM = (unsigned int)-1;	// the tile with focus
+int sVM = -1;	// the tile with focus
 
 //
 // "PROPS v" contains our global persistable app data, pertinent to the entire session. Simply write this structure to disk to save.
@@ -66,7 +66,7 @@ BOOL fDebug;
 static int nFirstTile; // at which instance does tiling start?
 
 // forward references
-BOOL SelectInstance(unsigned iVM);
+BOOL SelectInstance(int iVM);
 
 #include "shellapi.h"
 
@@ -925,17 +925,17 @@ void FixAllMenus()
 		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
 	}
 
-	// don't let them delete the last VM, or anything if tiling
+	// don't let them delete the last VM (or anything if tiling)
 	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1 && !v.fTiling) ? 0 : MF_GRAYED);
 
 	// no color/mono switch (that's per instance), cold starting, warm starting or stretching when tiling
-	EnableMenuItem(vi.hMenu, IDM_COLORMONO, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_COLDSTART, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_WARMSTART, !v.fTiling ? 0 : MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_COLORMONO, !v.fTiling ? 0 : MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_COLDSTART, !v.fTiling ? 0 : MF_GRAYED);
+	//EnableMenuItem(vi.hMenu, IDM_WARMSTART, !v.fTiling ? 0 : MF_GRAYED);
 	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
 	
 	// toggle BASIC also has to be relevant
-	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, (FIsAtari8bit(vmCur.bfHW) && !v.fTiling) ? MF_ENABLED : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, FIsAtari8bit(vmCur.bfHW) ? MF_ENABLED : MF_GRAYED);
 
 #if 0 // delete all VMs not supported
 	// grey out some things if there are no VMs at all
@@ -1591,7 +1591,7 @@ int CALLBACK WinMain(
 			// When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
 			static ULONGLONG sCJ;
 			ULONGLONG cCJ = GetCycles();
-			if (cCJ - sCJ >= 1789790 && (!v.fTiling || sVM == v.iVM))
+			if (cCJ - sCJ >= 1789790 && (!v.fTiling || sVM == (int)v.iVM))
 			{
 				DisplayStatus();
 				sCJ = cCJ;
@@ -2387,7 +2387,7 @@ BOOL FToggleMonitor(int iVM)
 // -1 means go to the previous one
 //
 
-BOOL SelectInstance(unsigned int iVM)
+BOOL SelectInstance(int iVM)
 {
 	// there better be some valid ones loaded
 	assert(v.cVM);
@@ -2724,7 +2724,7 @@ void RenderBitmap()
 				// Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
 				if (y + vsthw[iVM].ypix > 0 && !fBlack)
 				{
-					if (sVM == iVM)
+					if (sVM == (int)iVM)
 					{
 						// border around the one we're hovering over
 						int xw = vsthw[iVM].xpix, yw = vsthw[iVM].ypix;
@@ -3623,7 +3623,7 @@ break;
 			v.fTiling = !v.fTiling;
 			if (v.fTiling)
 			{
-				nFirstTile = v.iVM;	// show the current VM as the top left one
+				//nFirstTile = v.iVM;	// show the current VM as the top left one - I don't like that
 				//sWheelOffset = 0;	// start at the top - Darek doesn't want this
 
 				// now where is the mouse? That tile gets focus
@@ -3647,8 +3647,14 @@ break;
 			
 		// toggle COLOR/B&W
 		case IDM_COLORMONO:
-			if (!FToggleMonitor(v.iVM))
-				return 0;
+
+			// toggle the tile in focus (or nothing)
+			if (v.fTiling && sVM >= 0)
+				FToggleMonitor(sVM);
+			
+			// toggle the active VM
+			else if (!v.fTiling)
+				FToggleMonitor(v.iVM);
 
 			// don't reboot, let the OS detect it as necessary
 			return 0;
@@ -3657,6 +3663,8 @@ break;
 		case IDM_DELVM:
 			DeleteVM(v.iVM);
 			SelectInstance(v.iVM + 1);	// go to the next one
+			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
+			sVM = -1;	// the one in focus may be gone
 			break;
 
 		case IDM_NEW:
@@ -3672,6 +3680,8 @@ break;
 			CreateAllVMs();
 			SelectInstance(0);
 			FixAllMenus();	// in case we're tiling and not spending the time
+			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
+			sVM = -1;	// the one in focus may be gone
 			break;
 
 		// unless Darek gets really busy, this should be enough VM types
@@ -3722,6 +3732,7 @@ break;
 			FInitVM(vmNew);
 			CreateNewBitmap(vmNew);	// we've already created our window, so we need to do this manually now
 			SelectInstance(vmNew);
+
 #endif
 
 			// TODO now support some more VM types!
@@ -3858,13 +3869,29 @@ break;
 
 		// Ctrl-F10, must come after IDM_TOGGLEBASIC
         case IDM_COLDSTART:
-            vmCur.fColdReset = TRUE;	// schedule a reboot
-            return 0;
+            
+			//vmCur.fColdReset = TRUE;	// schedule a reboot, only works on current VM
+            
+			// cold start the tile in focus (or nothing)
+			if (v.fTiling && sVM >= 0)
+				FColdbootVM(sVM);
+			
+			// cold start the active VM
+			else if (!v.fTiling)
+				FColdbootVM(v.iVM);
+			
+			return 0;
             break;
 
 		// F10
 		case IDM_WARMSTART:
-			FWarmbootVM(v.iVM);
+			// warm start the tile in focus (or nothing)
+			if (v.fTiling && sVM >= 0)
+				FWarmbootVM(sVM);
+			
+			// warm start the active VM
+			else if (!v.fTiling)
+				FWarmbootVM(v.iVM);
 			break;
 
 #if 0
@@ -3914,7 +3941,7 @@ break;
             break;
 
 		case IDM_PREVVM:
-			SelectInstance((unsigned int)-1);	// go backwards
+			SelectInstance(-1);	// go backwards
 			return 0;
 			break;
 
@@ -3934,6 +3961,9 @@ break;
 				LoadProperties(chFN);
 			else
 			FixAllMenus();
+			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
+			sVM = -1;	// the one in focus may be gone
+
 			break;
 
 #if 0
@@ -4134,7 +4164,7 @@ break;
         // Catch the keystroke for Menu key so that it doesn't
         // register as an F10 (and reboot Atari BASIC!)
         // The Menu key still functions as expected.
-
+		// !!! ???
         if (uParam == VK_APPS)
             break;
 
@@ -4143,6 +4173,7 @@ break;
 #endif
         printf("WM_KEY*: u = %08X l = %08X\n", uParam, lParam);
 
+		// !!! Make it work, but not in retail?
         if (uParam == VK_PAUSE)
             {
             ShowWindowsMouse();
@@ -4279,7 +4310,7 @@ break;
 		//
 		if (v.fTiling && message == WM_LBUTTONDOWN)
 		{
-			if (sVM >= 0)
+			if (sVM != -1)
 			{
 				v.fTiling = FALSE;
 				SelectInstance(sVM);
@@ -4316,8 +4347,8 @@ break;
 
     case WM_MOUSEMOVE:
         if (FIsAtari8bit(vmCur.bfHW))
-            {
-	            FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM
+        {
+	        FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM
 
 			// in Tile Mode, make note of which tile we are hovering over
 			// !!! In the future, send all joy and key input there
@@ -4332,7 +4363,7 @@ break;
 			}
 
 			return 0;
-            }
+        }
 
         vi.fMouseMoved = TRUE;
         return 0;
@@ -5975,7 +6006,7 @@ void AddToPacket(ULONG b)
 {
     vvmi.rgbKeybuf[vvmi.keyhead++] = (BYTE)b;
     vvmi.keyhead &= 1023;
-
+	
 #if defined(ATARIST) || defined(SOFTMAC)
     vsthw[v.iVM].gpip &= 0xEF; // to indicate characters available
 #endif // ATARIST

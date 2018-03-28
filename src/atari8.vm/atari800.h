@@ -174,14 +174,11 @@ typedef struct
     WORD m_regEA;
     BYTE m_mdEA;
 
-	BYTE m_WSYNC_Seen;
-	BYTE m_WSYNC_Waited;
-	BYTE m_bLeftMax;	// keeps track of how many 6502 instructions we're trying to execute this scan line
-
-	BYTE pad5[2];
-
-    // 6502 address space
-
+	WORD m_fKeyPressed;	 // xkey.c
+	WORD m_oldshift;	 // xkey.c
+	BOOL m_wShiftChanged;// xkey.c
+						
+	// 6502 address space
     BYTE m_rgbMem[65536];
 
     // fTrace:  non-zero for single opcode execution
@@ -193,7 +190,10 @@ typedef struct
 
     WORD m_wFrame, m_wScan;
     signed short m_wLeft;
-	
+	signed short m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
+	BYTE m_WSYNC_Seen;
+	BYTE m_WSYNC_Waited;
+
     WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
     WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;
     BYTE m_bJoyBut;
@@ -274,7 +274,10 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define mdEA          CANDY_STATE(mdEA)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
-#define bLeftMax      CANDY_STATE(bLeftMax)
+#define wLeftMax      CANDY_STATE(wLeftMax)
+#define fKeyPressed   CANDY_STATE(fKeyPressed)
+#define oldshift      CANDY_STATE(oldshift)
+#define wShiftChanged CANDY_STATE(wShiftChanged)
 #define fTrace        CANDY_STATE(fTrace)
 #define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)
@@ -336,6 +339,7 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 // Shift key status bits (are returned by PC BIOS)
 //
 
+#define wRCtrl	  0x80	// specifically, right control
 #define wCapsLock 0x40
 #define wNumLock  0x20
 #define wScrlLock 0x10
@@ -674,6 +678,7 @@ BOOL  __cdecl PokeBAtari(int addr, BYTE b);
 
 // Map to Win32 counterparts
 
+// !!! This is very dangerous!
 #define _open    _lopen
 #define _read    _lread
 #define _write   _lwrite

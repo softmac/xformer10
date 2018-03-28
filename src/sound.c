@@ -121,9 +121,8 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 {
 
 	// only do sound for the tiled VM in focus
-	if (v.fTiling && sVM != v.iVM)
+	if (v.fTiling && sVM != (int)v.iVM)
 		return;
-
 
 	// 8 bit code
 	if (!FIsAtari68K(vmCur.bfHW)) {

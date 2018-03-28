@@ -24,7 +24,7 @@
 #define MAX_VM 108
 
 static int sWheelOffset;	// for scrolling tiles
-extern unsigned int sVM;	// which tile you're hovering over, sound.c must be able to see this too
+extern int sVM;	// which tile you're hovering over, -1 means none so this must be signed
 
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 
