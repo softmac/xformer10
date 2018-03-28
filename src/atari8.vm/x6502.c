@@ -1726,6 +1726,7 @@ HANDLER(opAD)
 {
     EA_abs(pcandy);
 	LDA_com(pcandy);
+
     HANDLER_END();
 }
 
