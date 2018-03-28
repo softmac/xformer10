@@ -102,22 +102,39 @@ void TimeTravelPrepare()
 }
 
 
+// Omega13 - go back in time 13 seconds
+//
 void TimeTravel()
 {
+	// Two 5-second snapshots ago will be from 10-15 seconds back in time
 	CANDYHW *pC = &Time[cTimeTravelPos];
 
-	if (pC->m_ullTimeTravelTime > 0)
-		LoadStateAtari(v.iVM, &Time[cTimeTravelPos], sizeof(CANDYHW));
+	assert(pC->m_ullTimeTravelTime > 0);
+	LoadStateAtari(v.iVM, &Time[cTimeTravelPos], sizeof(CANDYHW));	// restore our snapshot
+
+	// set up for going back to this same point until more time passes
+	TimeTravelReset();
 }
 
+// Call this at a point where you can't go back in time from... Cold Start, Warm Start, LoadState (e.g cartridge may be removed)
+//
 void TimeTravelReset()
 {
-	ullTimeTravelTime = 0;
+	unsigned char *pPersist;
+	unsigned int cbPersist;
+
+	// reset our clock to "have not saved any states yet"
+	ullTimeTravelTime = GetCycles();
 	cTimeTravelPos = 0;
+
+	SaveStateAtari(v.iVM, &pPersist, &cbPersist);	// get our current state
+
+	// initialize all our saved states to now, so that going back in time takes us back here.
 	for (unsigned i = 0; i < 3; i++)
 	{
 		CANDYHW *pC = &Time[i];
-		pC->m_ullTimeTravelTime = 0;
+		_fmemcpy(&Time[i], pPersist, sizeof(CANDYHWPROTO));
+		pC->m_ullTimeTravelTime = GetCycles();	// time stamp it 
 	}
 }
 
@@ -437,8 +454,6 @@ BOOL __cdecl WarmbootAtari(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-	TimeTravelReset();
-
 	// tell the CPU which 
 	cpuInit(PokeBAtari);
 
@@ -458,6 +473,8 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
+	TimeTravelReset(); // state is now a valid anchor point
+
     return TRUE;
 
 }
@@ -470,8 +487,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	//OutputDebugString("\n\nCOLD START\n\n");
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
-	TimeTravelReset();
 
 	InitAtariDisks(iVM);
 
@@ -618,6 +633,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
+	TimeTravelReset(); // state is now a valid anchor point
+
 	return TRUE;
 }
 
@@ -641,8 +658,6 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
 	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
 	
-	TimeTravelReset();	// AFTER doing the load above
-
 	if (!FInitSerialPort(v.rgvm[iVM].iCOM))
 		v.rgvm[iVM].iCOM = 0;
 	if (!InitPrinter(v.rgvm[iVM].iLPT))
@@ -659,6 +674,8 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
+
+	TimeTravelReset(); // state is now a valid anchor point
 
 	return TRUE;
 }
