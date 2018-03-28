@@ -12,7 +12,7 @@
     09/27/2000  darekm      last update
 
 ***************************************************************************/
-
+#include <sys/stat.h>
 #include "atari800.h"
 
 #ifdef XFORMER

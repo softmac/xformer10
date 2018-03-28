@@ -26,11 +26,6 @@ void CheckKey()
     WORD shift = 0;
     WORD dshift = 0;
 	BOOL fForceCtrl = FALSE;
-
-	// !!! statics are broken when tiled, but all key input is a mess anyway
-	// (different tile gets the key up than got the key down)
-    static WORD oldshift = 0;
-    static WORD fKeyPressed = 0;
      
     extern BYTE rgbMapScans[1024];
 
@@ -73,7 +68,7 @@ void CheckKey()
         shift &= ~wCapsLock;
         }
 
-    dshift = shift ^ oldshift;
+    oldshift = shift ^ oldshift;
     oldshift = shift;
 
     if (dshift || scan || ch)
@@ -420,6 +415,8 @@ lookit2:
 // bit  30     - previous key state. 0 = up, 1 = down
 // bit  31     - transition state. 0 = down, 1 = up
 //
+// Decide whether or not to pass the key to ATARI
+// RETURN TRUE to hide the key from Windows, FALSE to let Windows see it
 
 BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 {
@@ -429,11 +426,13 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
-	// !!! statics are broken when tiled, but all key input is a mess anyway
-	static BOOL wShiftChanged;
-
-    scan = (lParam >> 16) & 0xFF;
+	scan = (lParam >> 16) & 0xFF;
     ch = uParam;
+
+	// the VK codes for volume and brightness, etc. happen to have the same scan codes as ordinary letters
+	// and the ATARI will type them
+	if (ch >= 0xa4 && ch <= 0xb7)
+		return TRUE;
 
 #if 0
     // eat repeating keystrokes
@@ -579,8 +578,10 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 		// !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee)
 		// pause the game on any keystroke! Playing without a joystick and using the arrow keys would
-		// continuously pause/unpause the game
-		if (*pbshift & wCtrl)
+		// continuously pause/unpause the game. Some games pause (Archon) on any keystroke, so let's NOT pass
+		// the arrow keys to Atari if RIGHT control is pressed. That will always work for joystick fire without
+		// interfering (although you have to use the left control for the cursor keys)
+		if (*pbshift & wCtrl && !(*pbshift & wRCtrl))
 		{
 			scan += 0x50;
 			break;	// pass to ATARI
@@ -750,24 +751,35 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 	case 0x2A: // left shift
 	case 0x36: // right shift
 		if (fDown)
+		{
 			*pbshift |= wAnyShift;
+		}
 		else
+		{
 			*pbshift &= ~wAnyShift;
-		break;
+		}break;
 
-	// MAME uses Left control for joystick fire, so we should too
+	// MAME uses Left control for joystick fire, but that generates keystrokes with the arrows and some games (archon) pause.
+	// We can't use ALT because that works the menus, we can't use shift as that activates sticky keys.
+	// If your game pauses, use the RIGHT control key, we won't pass that to ATARI (you won't be able to move the arrows with it)
+	// (Altirra makes you toggle a menu item to enable joystick or not, but that's annoying to)
 	case 0x1D: // left control
 	case 0x11D: // right control
 		if (fDown)
 		{
+			if (((lParam >> 16) & 0x1FF) == 0x11D)
+				*pbshift |= wRCtrl;		// it's the RIGHT control
 			*pbshift |= wCtrl;
 			TRIG0 &= ~1;
 		}
 		else
 		{
+			if (((lParam >> 16) & 0x1FF) == 0x11D)
+				*pbshift &= ~wRCtrl;		// it's the RIGHT control
 			*pbshift &= ~wCtrl;
 			TRIG0 |= 1;
-		}break;
+		}
+		break;
 
 	case 0x38: // left alt
 	case 0x138: // right alt
@@ -779,7 +791,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		{
 			*pbshift &= ~wAlt;
 		}
-		return FALSE; // return EARLY (don't let ATARI see special key presses) and FALSE (let windows see it)
+		return FALSE; // return EARLY (don't let ATARI see it) and FALSE (let windows see it)
 	
 	case 0x46: // Scrl Lock
         if (fDown)

@@ -414,10 +414,17 @@ LTryAgain:
 				// either restore from the persisted data, or just Init a blank VM if something goes wrong
 				if (l) {
 					char *pPersist = malloc(cb);
-					l = _read(h, pPersist, cb);
+					l = 0;
+					if (pPersist)
+						l = _read(h, pPersist, cb);
 					if (l == (int)cb) {
-						FLoadStateVM(i, pPersist, cb);
-						vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
+						if (FLoadStateVM(i, pPersist, cb))
+							vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
+						else
+						{
+							v.rgvm[i].fColdReset = TRUE;	// uh oh, couldn't load VM state, it will come up fresh
+							FInitVM(i);
+						}
 					}
 					else
 					{
