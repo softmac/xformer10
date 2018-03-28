@@ -734,7 +734,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 				ramtop = 0xC000;
 			FColdbootVM(v.iVM);
 		}
-		return;
+		return TRUE;
 
 #if 0
 	case 0x58:

@@ -124,6 +124,7 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 	if (v.fTiling && sVM != v.iVM)
 		return;
 
+
 	// 8 bit code
 	if (!FIsAtari68K(vmCur.bfHW)) {
 #ifdef XFORMER
@@ -254,7 +255,7 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 
 						// How many times would the poly counters have clocked since the last pulse width? We need the accuracy of
 						// using the freq of the note * 10, not the pulse width, which is only rounded to the nearest 1/2 integer
-						int j, r = 178979000 / freq[voice];
+						int r = 178979000 / freq[voice];
 
 						// poly5's cycle is 31
 						if (!(rgvoice[voice].distortion & 8))	// only if it's being used
@@ -932,9 +933,8 @@ void InitSound()
 		int iHdr;
 
 #ifndef NDEBUG
-		printf("opened wave device, handle = %08x\n", hWave);
-		printf("Device name %s %d %08X\n",
-			vi.woc.szPname, vi.woc.wChannels, vi.woc.dwFormats);
+		//printf("opened wave device, handle = %08x\n", hWave);
+		//printf("Device name %s %d %08X\n", vi.woc.szPname, vi.woc.wChannels, vi.woc.dwFormats);
 #endif
 
 		for (iHdr = 0; iHdr < SNDBUFS; iHdr++)

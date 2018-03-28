@@ -662,11 +662,11 @@
     <ClCompile Include="src\atari8.vm\xsio.c" />
     <ClCompile Include="src\atari8.vm\xvideo.c" />
     <ClCompile Include="src\blocklib\blockapi.c" />
-    <ClCompile Include="src\blocklib\makedsk.c" />
     <ClCompile Include="src\blocklib\sectorio.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\atari8.vm\6502.h" />
+    <ClInclude Include="src\blocklib\precomp.h" />
     <ClInclude Include="src\gemtypes.h" />
     <ClInclude Include="src\gemul8r.h" />
     <ClInclude Include="src\ddlib.h" />

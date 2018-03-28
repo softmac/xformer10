@@ -73,12 +73,7 @@ extern VMINFO *vpvm;
 
 // a VM address
 
-#ifdef HWIN32
 typedef unsigned long int  ADDR;
-#else
-typedef unsigned short int  ADDR;
-#endif
-
 
 //
 // Wrapper functions to hide the VMINFO tables and also perform some

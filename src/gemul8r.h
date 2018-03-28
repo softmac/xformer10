@@ -12,6 +12,8 @@
 
 ***************************************************************************/
 
+#define _CRT_SECURE_NO_WARNINGS
+
 // uncomment to undefine NDEBUG, which will turn on a lot of debug spew
 // #undef NDEBUG
 

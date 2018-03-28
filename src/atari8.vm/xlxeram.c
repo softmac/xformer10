@@ -130,7 +130,7 @@ void InitBanks(int iVM)
 //
 void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 {
-	int iVM = v.iVM;	// support independent instances someday
+	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
 	if (mdXLXE == md800)
 		return;
@@ -181,7 +181,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
         if ((flags & BASIC_MASK) == BASIC_IN)
             {
             // enable BASIC ROMs
-            ramtop = 0xC000 - cb;
+            ramtop = 0xC000 - (WORD)cb;
             _fmemcpy(rgbSwapCart, &rgbMem[ramtop], cb);
             _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
             }
@@ -190,7 +190,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
             // disable BASIC ROMs
 
             // make sure rgbSwapCart is initialized with the cartridge image!
-			ramtop = 0xC000 - cb;
+			ramtop = 0xC000 - (WORD)cb;
             _fmemcpy(&rgbMem[ramtop], rgbSwapCart, cb);
             ramtop = 0xC000;
             }
@@ -342,4 +342,3 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
 }
 
 #endif // XFORMER
-

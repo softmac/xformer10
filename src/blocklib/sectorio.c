@@ -14,6 +14,7 @@
 ****************************************************************************/
 
 #include "precomp.h"
+#include "blockdev.h"
 
 #define VOLATILE volatile
 
@@ -28,6 +29,7 @@ WinAspiCommand pfnSendASPI32Command;
 //
 
 #include <winioctl.h>
+
 
 BOOL GetDiskGeometry(HANDLE hDisk, PDISK_GEOMETRY lpGeometry)
 {
@@ -96,7 +98,7 @@ BOOL DismountVolume(HANDLE hDisk)
 BOOL FReadWriteSecNT(DISKINFO *pdi, BOOL fWrite)
 {
     int retry = 3;
-    int newcount = pdi->count;
+    //int newcount = pdi->count;
 
     Assert(pdi->count >= 1);
 
@@ -107,14 +109,15 @@ BOOL FReadWriteSecNT(DISKINFO *pdi, BOOL fWrite)
         {
         static DISK_GEOMETRY Geometry;
 
-        BOOL f;
+        //BOOL f;
 
         LPVOID IoBuffer;
         BOOL b;
-        DWORD BytesRead, BytesWritten;
-        DWORD FileSize;
+		DWORD BytesRead;
+		//DWORD BytesWritten;
+        //DWORD FileSize;
         DWORD VirtBufSize;
-        DWORD NumBufs;
+        //DWORD NumBufs;
         DWORD emOld;
 
 #if TRACEDISK
@@ -126,7 +129,7 @@ BOOL FReadWriteSecNT(DISKINFO *pdi, BOOL fWrite)
             char sz[8];
 
             strcpy(sz, "\\\\.\\A:");
-            sz[4] = 'A' + pdi->id;
+            sz[4] = 'A' + (char)pdi->id;
 
             // Open and Lock the drive
 
@@ -238,6 +241,7 @@ typedef struct DIOCRegs
     DWORD   reg_Flags;
     } DIOC_REGISTERS;
 
+
 BOOL FReadWriteSec9x(DISKINFO *pdi, BOOL fWrite)
 {
     int retry = 3;
@@ -286,7 +290,7 @@ BOOL FReadWriteSec9x(DISKINFO *pdi, BOOL fWrite)
                     sizeof(regs),
                     &regs,
                     sizeof(regs),
-                    &ReturnedByteCount,
+                    (LPDWORD)&ReturnedByteCount,
                     NULL
                     );
 
@@ -476,6 +480,7 @@ BOOL FReadWriteImage(DISKINFO *pdi, BOOL fWrite)
     return f;
 }
 
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
 
 //
 // SCSI I/O routines
@@ -832,7 +837,7 @@ BOOL __stdcall scsiReadTOC(int adapter_id, int target_id, char *pbBuf, int cb)
 BOOL __stdcall scsiReadCapacity(int adapter_id, int target_id, char *pbBuf, int cb)
 {          
   VOLATILE SRB_ExecSCSICmd ExecSRB;
-  long cnt = 1000000;
+  //long cnt = 1000000;
 
 // Now we construct the SCSI ReadCapacity SRB and send it to ASPI!
  
@@ -871,7 +876,7 @@ BOOL __stdcall scsiReadCapacity(int adapter_id, int target_id, char *pbBuf, int 
 BOOL __stdcall scsiModeSense(int adapter_id, int target_id, char *pbBuf, int cb, int page)
 {          
   VOLATILE SRB_ExecSCSICmd ExecSRB;
-  long cnt = 1000000;
+  //long cnt = 1000000;
 
 // Now we construct the SCSI ReadCapacity SRB and send it to ASPI!
  
@@ -898,6 +903,6 @@ BOOL __stdcall scsiModeSense(int adapter_id, int target_id, char *pbBuf, int cb,
   return (ExecSRB.SRB_Status==SS_COMP);
 }
 
-
+#endif
 
 

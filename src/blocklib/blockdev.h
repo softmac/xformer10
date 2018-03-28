@@ -104,6 +104,11 @@ typedef struct _pdi
 
 // The API prototypes
 
+BOOL GetDiskGeometry(HANDLE hDisk, PDISK_GEOMETRY lpGeometry);
+BOOL FReadWriteSecNT(DISKINFO *pdi, BOOL fWrite);
+BOOL FReadWriteSec9x(DISKINFO *pdi, BOOL fWrite);
+BOOL FReadWriteImage(DISKINFO *pdi, BOOL fWrite);
+
 BOOL __stdcall FInitBlockDevLib(void);
 DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags);
 BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite);

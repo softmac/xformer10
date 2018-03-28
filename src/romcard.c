@@ -13,6 +13,8 @@
     
 ****************************************************************************/
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "gemtypes.h"
 
 // 17 countries supported in ROMs

@@ -18,11 +18,13 @@
 
 #pragma once
 
+#define _CRT_SECURE_NO_WARNINGS
+
 // maximum number of virtual machines
 #define MAX_VM 108
 
-static sWheelOffset;	// for scrolling tiles
-int sVM = -1;	// which tile you're hovering over
+static int sWheelOffset;	// for scrolling tiles
+extern unsigned int sVM;	// which tile you're hovering over, sound.c must be able to see this too
 
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 
@@ -53,8 +55,6 @@ int sVM = -1;	// which tile you're hovering over
 #define NOPROFILER
 #define NODEFERWINDOWPOS
 #define NOMCX
-
-#define _CRT_SECURE_NO_WARNINGS
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -112,7 +112,8 @@ typedef int                BOOL;
 #endif
 
 typedef void           (__cdecl *PFN) (int x, ...);
-typedef ULONG          (__cdecl *PFNL)(int x, ...);
+typedef BOOL          (__cdecl *PFNL)(int x, ...);
+typedef BOOL		   (__cdecl *PFNLH)(HWND x, ...);
 typedef BYTE *         (__cdecl *PFNP)(int x, ...);
 
 typedef void *         (__fastcall *PHNDLR)(void *, long);
@@ -624,7 +625,7 @@ typedef struct _vminfo
 	PFNL pfnWarmboot;       // VM resets hardware (warmboot)
 	PFNL pfnExec;           // VM execute code
 	PFNL pfnTrace;          // Execute one single instruction in the VM
-	PFNL pfnWinMsg;         // handles Windows messages
+	PFNLH pfnWinMsg;         // handles Windows messages
 	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
 	PFNL pfnDumpHW;         // dumps hardware state
 	PFNL pfnDisasm;         // Disassemble code in VM as ASCII
@@ -715,7 +716,11 @@ void ReadCart();
 void InitCart(int iVM);
 void BankCart(int iVM, int i, int v);
 
-BOOL AddVM(PVMINFO pvmi, int *pi, int type);
+BOOL AddVM(const VMINFO *pvmi, int *pi, int type);
+void DeleteVM(int);
+void FixAllMenus();
+
+BOOL SelectInstance(unsigned int);
 
 #define vmCur (*vi.pvmCur)
 #define osCur v.rgosinfo[vmCur.iOS]
@@ -1144,8 +1149,8 @@ BOOL FPrinterReady();
 
 BOOL InitProperties(void);
 //BOOL EditProperties(void);
-BOOL LoadProperties(HWND hOwner);
-BOOL SaveProperties(HWND hOwner);
+BOOL LoadProperties(char *);
+BOOL SaveProperties(char *);
 BOOL CreateAllVMs();
 
 

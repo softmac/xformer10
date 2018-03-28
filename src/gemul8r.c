@@ -14,9 +14,12 @@
 ****************************************************************************/
 
 //#define _NO_CRT_STDIO_INLINE
+#define _CRT_SECURE_NO_WARNINGS
 
 #include <sys/stat.h>
 #include "gemtypes.h" // main include file
+
+unsigned int sVM = (unsigned int)-1;	// the tile with focus
 
 //
 // "PROPS v" contains our global persistable app data, pertinent to the entire session. Simply write this structure to disk to save.
@@ -1278,7 +1281,7 @@ int CALLBACK WinMain(
 				fSkipLoad = TRUE;
 			}
 			// !!! support .CAR files
-			else if (stricmp(sFile + len - 3, "bin") == 0 || stricmp(sFile + len - 3, "rom") == 0)
+			else if (_stricmp(sFile + len - 3, "bin") == 0 || _stricmp(sFile + len - 3, "rom") == 0)
 			{
 				AddVM(&vmi800, &iVM, vmAtari48);
 				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
@@ -1290,7 +1293,8 @@ int CALLBACK WinMain(
 			}
 
 			// found a .gem file. Ignore everything else and just load this
-			else if (stricmp(sFile + len - 3, "gem") == 0)
+
+			else if (_stricmp(sFile + len - 3, "gem") == 0)
 			{
 				// delete all of our VMs we accidently made before we found the .gem file
 				for (int z = 0; z < MAX_VM; z++)
@@ -1496,9 +1500,9 @@ int CALLBACK WinMain(
 
             if (msg.hwnd == NULL)
                 {
-                UINT message = msg.message;
-                WPARAM uParam = msg.wParam;
-                LPARAM lParam = msg.lParam;
+                //UINT message = msg.message;
+                //WPARAM uParam = msg.wParam;
+                //LPARAM lParam = msg.lParam;
 
                 switch(msg.message)
                     {
@@ -1602,11 +1606,11 @@ int CALLBACK WinMain(
 
     // Reset tick resolution
 
+	Lquit:
 #if !defined(_M_ARM)
     timeEndPeriod(1);
 #endif
 
-Lquit:
 {
  int i;
 
@@ -1623,7 +1627,7 @@ Lquit:
 
     return (msg.wParam); // Returns the value from PostQuitMessage
 
-    lpCmdLine; // This will prevent 'unused formal parameter' warnings
+    //lpCmdLine; // This will prevent 'unused formal parameter' warnings
 }
 
 
@@ -1827,7 +1831,6 @@ BOOL CreateNewBitmap(int iVM)
     RECT rect;
     ULONG x;
     ULONG y;
-    RECT rectSav = v.rectWinPos;
 
 	if (FIsMac(v.rgvm[iVM].bfHW))
 	{
@@ -2109,7 +2112,7 @@ Ltryagain:
         vsthw[iVM].lrgb[0] = 0;
         vsthw[iVM].lrgb[1] = 0x00FFFFFF;
 
-        vi.cbScan = min(x, vsthw[iVM].xpix) / 8;
+        vi.cbScan = (ULONG)(min(x, (ULONG)vsthw[iVM].xpix) / 8);
         }
     else
         {
@@ -2127,7 +2130,7 @@ Ltryagain:
         vsthw[iVM].bmiHeader.biClrUsed = 256; // FIsAtari8bit(vmCur.bfHW) ? 256 : 26;
         vsthw[iVM].bmiHeader.biClrImportant = 0;
 
-        vi.cbScan = min(x, vsthw[iVM].xpix);
+        vi.cbScan = (ULONG)(min(x, (ULONG)vsthw[iVM].xpix));
         }
 
     // Create offscreen bitmap
@@ -2156,7 +2159,6 @@ Ltryagain:
 #endif
 
     {
-    RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
     if ((rect.right < vsthw[iVM].xpix) ||  (rect.bottom < vsthw[iVM].ypix))
@@ -2196,7 +2198,6 @@ Ltryagain:
     // the window size
 
     {
-    RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
 #if !defined(NDEBUG)
@@ -2386,7 +2387,7 @@ BOOL FToggleMonitor(int iVM)
 // -1 means go to the previous one
 //
 
-BOOL SelectInstance(unsigned iVM)
+BOOL SelectInstance(unsigned int iVM)
 {
 	// there better be some valid ones loaded
 	assert(v.cVM);
@@ -2402,7 +2403,7 @@ BOOL SelectInstance(unsigned iVM)
 	if (iVM >= MAX_VM)
 		iVM = 0;
 
-	int old = iVM;
+	unsigned int old = iVM;
 
 	while (!v.rgvm[iVM].fValidVM)
 	{
@@ -2671,7 +2672,7 @@ int ShutdownDetected()
 void RenderBitmap()
 {
 	RECT rect;
-	int iVM = v.iVM;	// for now, until we support non-active instances
+	unsigned int iVM = v.iVM;	// for now, until we support non-active instances
 
     GetClientRect(vi.hWnd, &rect);
 	
@@ -2684,10 +2685,9 @@ void RenderBitmap()
 	{
 		// Tiling
 
-		int x, y, iVM, fDone = -1;
+		int x, y, fDone = -1;
 		BOOL fBlack = FALSE;
 
-		
 		// start tiling where we're supposed to
 		iVM = nFirstTile - 1;
 		if (iVM < 0)
@@ -2714,7 +2714,7 @@ void RenderBitmap()
 				} while (vrgvmi[iVM].hdcMem == NULL);
 				
 				// we've painted them all, now just black for the rest
-				if (fDone >=0 && fDone == iVM)
+				if (fDone >=0 && fDone == (int)iVM)
 					fBlack = TRUE;
 
 				// remember the first thing we drew
@@ -2992,18 +2992,18 @@ LRESULT CALLBACK WndProc(
 #if !defined(NDEBUG)
     case WM_SIZING:
         {
-        LPRECT lprect = (LPRECT)lParam;
-        BYTE ratio = vi.fYscale / vi.fXscale;
-        int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2;
-        int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);
+        //LPRECT lprect = (LPRECT)lParam;
+        //BYTE ratio = vi.fYscale / vi.fXscale;
+        //int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2;
+        //int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION);
 
-            RECT rect;
-            GetClientRect(hWnd, &rect);
+        //    RECT rect;
+        //    GetClientRect(hWnd, &rect);
 
-        printf("WM_SIZING: lprect = %p\n", lprect);
-        printf("WM_SIZING: client rect = %d, %d\n", rect.right, rect.bottom);
-        printf("WM_SIZING #1: x = %d, y = %d, w = %d, h = %d\n",
-            lprect->left, lprect->top, lprect->right - lprect->left, lprect->bottom - lprect->top);
+        //printf("WM_SIZING: lprect = %p\n", lprect);
+        //printf("WM_SIZING: client rect = %d, %d\n", rect.right, rect.bottom);
+        //printf("WM_SIZING #1: x = %d, y = %d, w = %d, h = %d\n",
+        //    lprect->left, lprect->top, lprect->right - lprect->left, lprect->bottom - lprect->top);
 
 break;
 #if 0
@@ -3097,7 +3097,6 @@ break;
         break;
 #endif
 		}
-        return 0;
 #endif
 
     case WM_NCPAINT:
@@ -3320,9 +3319,9 @@ break;
 
 			char szDir[MAX_PATH];
 			szDir[0] = 0;
-			DISKINFO *pdi = PdiOpenDisk(vi.pvmCur->rgvd[drive].dt, vi.pvmCur->rgvd[drive].sz, DI_READONLY);
+			DISKINFO *pdi = PdiOpenDisk(vi.pvmCur->rgvd[drive].dt, (long)vi.pvmCur->rgvd[drive].sz, DI_READONLY);
 
-			int cnt = CntReadDiskDirectory(pdi, szDir, NULL);
+			CntReadDiskDirectory(pdi, szDir, NULL);
 			
 			BOOL fB, fh = TRUE;
 
@@ -3386,7 +3385,7 @@ break;
 							break;
 						}
 
-						for (int ind = 0; ind < cbSize; ind++)
+						for (unsigned int ind = 0; ind < cbSize; ind++)
 						{
 							// first one is CR, subsequent ones are LF
 							if (szFile[ind] == 0x9b)
@@ -3426,7 +3425,7 @@ break;
 						fB = _write(h, szFile, cbSize);
 						
 						// something in the process failed
-						if (fB != cbSize)
+						if (fB != (BOOL)cbSize)
 							fh = FALSE;
 					}
 
@@ -3849,7 +3848,7 @@ break;
 			int cb;
 			FSaveStateVM(v.iVM, &pCandy, &cb);
 			pCandy += 16 + 65536 + 30;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
-			WORD *ramtop = pCandy;
+			WORD *ramtop = (WORD *)pCandy;
 			if (*ramtop == 0xC000)
 				*ramtop = 0xA000;
 			else
@@ -3915,7 +3914,7 @@ break;
             break;
 
 		case IDM_PREVVM:
-			SelectInstance(-1);	// go backwards
+			SelectInstance((unsigned int)-1);	// go backwards
 			return 0;
 			break;
 
@@ -4298,7 +4297,6 @@ break;
 
 			// MOUSE button up is JOYSTICK BUTTON UP
             return FWinMsgVM(hWnd, MM_JOY1BUTTONUP, 0, 0);
-            return 0;
             }
 
         if (!vi.fVMCapture)
@@ -4455,7 +4453,6 @@ Lhib:
         }
 
     return (DefWindowProc(hWnd, message, uParam, lParam));
-    return (0);
 }
 
 #if 0
@@ -6034,7 +6031,7 @@ int CbReadWholeFile(char *sz, int cb, void *buf)
 
     if (h != INVALID_HANDLE_VALUE)
         {
-        ReadFile(h, buf, cb, &cbRead, NULL);
+        ReadFile(h, buf, cb, (LPDWORD)&cbRead, NULL);
         CloseHandle(h);
         }
 
@@ -6150,7 +6147,7 @@ BOOL FWriteWholeFile(char *sz, int cb, void *buf)
         {
         int cbWrite;
 
-        WriteFile(h, buf, cb, &cbWrite, NULL);
+        WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
         CloseHandle(h);
 
         return cb == cbWrite;
@@ -6191,7 +6188,7 @@ BOOL FAppendWholeFile(char *sz, int cb, void *buf)
         int cbWrite;
 
         SetFilePointer(h, 0, NULL, FILE_END);
-        WriteFile(h, buf, cb, &cbWrite, NULL);
+        WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
         CloseHandle(h);
 
         return cb == cbWrite;

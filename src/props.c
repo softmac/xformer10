@@ -14,6 +14,8 @@
     
 ****************************************************************************/
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "gemtypes.h"
 #include <sys/stat.h>
 
@@ -42,7 +44,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 // Add a new virtual machine to v.rgvm - return which instance it found
 //
 
-BOOL AddVM(PVMINFO pvmi, int *pi, int type)
+BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 {
     int i;
     BOOL f;
@@ -68,10 +70,10 @@ BOOL AddVM(PVMINFO pvmi, int *pi, int type)
         *pi = i;
 
 	// our jump table for the routines. FInstallVM will crash if we don't do this first
-	v.rgvm[i].pvmi = pvmi;
+	v.rgvm[i].pvmi = (VMINFO *)pvmi;
 	v.rgvm[i].fColdReset = TRUE;	// needs a cold start before it can run
 
-	f = FInstallVM(i, pvmi, type);
+	f = FInstallVM(i, (VMINFO *)pvmi, type);
 
 	v.rgvm[i].fValidVM = f;
 
@@ -292,7 +294,7 @@ BOOL LoadProperties(char *szIn)
 	{
 		GetCurrentDirectory(sizeof(rgch), rgch);
 		SetCurrentDirectory(vi.szWindowsDir);	// first try to load from "\users\xxxx\appdata\roaming\emulators", for example
-		sz = szIniFile;
+		sz = (char *)szIniFile;
 	}
 
 #if 0
@@ -316,7 +318,7 @@ LTryAgain:
 
         char sz2[MAX_PATH];
 
-        GetWindowsDirectory(&sz2, MAX_PATH);
+        GetWindowsDirectory((LPSTR)&sz2, MAX_PATH);
         SetCurrentDirectory(sz2);
         fTriedWindows = fTrue;
 
@@ -407,13 +409,13 @@ LTryAgain:
 
 				// get the size of the persisted data
 				DWORD cb;
-				int l = _read(h, &cb, sizeof(DWORD));
+				l = _read(h, &cb, sizeof(DWORD));
 
 				// either restore from the persisted data, or just Init a blank VM if something goes wrong
 				if (l) {
 					char *pPersist = malloc(cb);
 					l = _read(h, pPersist, cb);
-					if (l == cb) {
+					if (l == (int)cb) {
 						FLoadStateVM(i, pPersist, cb);
 						vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
 					}
@@ -484,7 +486,6 @@ LTryAgain:
 //
 BOOL SaveProperties(char *szIn)
 {
-    BOOL f;
     char rgch[MAX_PATH];
     int h;
 
@@ -528,7 +529,7 @@ BOOL SaveProperties(char *szIn)
 			{
 				DWORD cb;
 				char *pPersist;
-				FSaveStateVM(i, &pPersist, &cb);
+				FSaveStateVM(i, (char **)&pPersist, (int *)&cb);
 				_write(h, &cb, sizeof(DWORD));
 				_write(h, pPersist, cb);
 			}

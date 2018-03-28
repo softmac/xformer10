@@ -37,7 +37,6 @@ __inline BYTE cpuPeekB(ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
     return rgbMem[addr];
-    return TRUE;
 }
 
 __inline BOOL cpuPokeB(ADDR addr, BYTE b)

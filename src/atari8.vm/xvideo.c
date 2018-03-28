@@ -17,6 +17,7 @@
 
 #ifdef XFORMER
 
+
 const WORD mpsizecw[4] = { 1, 2, 1, 4 };
 
 const WORD mppmbw[5] =
@@ -49,13 +50,13 @@ BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
 
 void ShowCountDownLine()
 {
-    WORD i = wScan - (wStartScan + wcScans - 12);
+    int i = wScan - (wStartScan + wcScans - 12);
 
     // make sure bottom 8 scan lines
 
-    if (i < 8)
+    if (i < 8 && i >= 0)
         {
-        BYTE *pch;
+        char *pch;
         int cch;
         BYTE *qch = vvmi.pvBits;
         BYTE colfg;
@@ -73,8 +74,8 @@ void ShowCountDownLine()
 
         qch += (wScan - wStartScan) * vcbScan;
 
-        colfg = ((wFrame >> 2) << 4) + i + i;
-        colfg = (((wFrame >> 2) + i) << 4) + 8;
+        colfg = (BYTE)(((wFrame >> 2) << 4) + i + i);
+        colfg = (BYTE)((((wFrame >> 2) + i) << 4) + 8);
 
         for (cch = 0; cch < X8 >> 3; cch++)
             {
@@ -460,7 +461,7 @@ BOOL ProcessScanLine()
             // normal display list entry
 
 			// how many scan lines a line of this graphics mode takes
-            scans = mpMdScans[sl.modelo]-1;
+            scans = (BYTE)mpMdScans[sl.modelo]-1;
 
 			// LMS (load memory scan) attached to this line to give start of screen memory
             if (sl.modehi & 4)
@@ -746,7 +747,7 @@ BOOL ProcessScanLine()
 
 	if (((sl.modelo) >= 2) && (rgfChanged || (iscan == sl.vscrol) || (fDataChanged)))
 	{
-		WORD j = 0;
+		j = 0;
 
 		// HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
 
@@ -870,7 +871,7 @@ BOOL ProcessScanLine()
 		// GR.0 and descended character GR.0
         case 2:
 		case 3:
-			UINT vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
+			BYTE vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
 			
 			// mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
 			if (sl.modelo == 3 && iscan > 9)
@@ -1544,7 +1545,7 @@ BOOL ProcessScanLine()
             col2 = sl.colpf2;
 
 			// the artifacting colours
-			int red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+			BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
 
             for (i = 0 ; i < cbDisp; i++)
             {				
