@@ -1249,8 +1249,8 @@ int CALLBACK WinMain(
 
 #ifdef XFORMER
 
-	char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
-	lpCmdLine = test;
+	//char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
+	//lpCmdLine = test;
 	
 	// assume we're loading the default .ini file
 	char *lpLoad = NULL;
