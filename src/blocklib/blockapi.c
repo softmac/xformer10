@@ -344,7 +344,7 @@ Lerror:
 
         strcpy(pdi->szImage, "\\\\.\\.:\\");
 
-        pdi->szImage[4] = 'A' + pdi->id;
+        pdi->szImage[4] = 'A' + (char)pdi->id;
 
         switch(GetDriveType(&pdi->szImage[4]))
             {
@@ -376,6 +376,8 @@ Lerror:
 
         goto Limage;
         break;
+
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
 
     case DISK_SCSI:
         pdi->ctl = (l>>4) & 7;
@@ -418,6 +420,7 @@ Lblock:
             }
         }
         break;
+#endif
 
     case DISK_IMAGE:
         strcpy(pdi->szImage, (char *)l);
@@ -766,6 +769,8 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
             }
         break;
 
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
+
     case DISK_SCSI:
         if (NumAdapters == 0)
             break;
@@ -853,6 +858,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
             }
         }
         break;
+#endif
 
     case DISK_WIN32:
     case DISK_IMAGE:
@@ -884,6 +890,7 @@ BOOL __stdcall CloseDiskPdi(DISKINFO *pdi)
             CloseDiskPdi(pdi->pdiStub);
 
         FlushCachePdi(pdi);
+
 
 #if USEHEAP
         if (pdi->pfd != NULL)

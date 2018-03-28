@@ -12,7 +12,11 @@
 
 ***************************************************************************/
 
+
 #include "atari800.h"
+ 
+int X8 = 352;
+int Y8 = 240;
 
 //
 // Our VM's VMINFO structure
@@ -20,11 +24,12 @@
 
 #ifdef XFORMER
 
+
 VMINFO const vmi800 =
     {
     NULL,
     0,
-    "Atari 800/800XL/130XE",
+    (BYTE *)"Atari 800/800XL/130XE",
     /* vmAtari48C | vmAtariXLC | vmAtariXEC |*/ vmAtari48 | vmAtariXL | vmAtariXE,
     cpu6502,
     ram48K | ram64K | ram128K,
@@ -104,9 +109,6 @@ void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 
 void DumpROMS()
 {
-    FILE *fp;
-    int i, j;
-
     DumpROM("atariosb.c", "rgbAtariOSB", rgbAtariOSB, 0xC800, 0x2800); // 10K
     DumpROM("atarixl5.c", "rgbXLXE5000", rgbXLXE5000, 0x5000, 0x1000); //  4K
     DumpROM("atarixlb.c", "rgbXLXEBAS",  rgbXLXEBAS,  0xA000, 0x2000); //  8K
@@ -149,7 +151,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		for (j = 1; j < 0x1f; j++)
 		{
 			p = ((p >> 1) | ((~(p ^ (p >> 3)) & 0x01) << 4)) & 0x1F;
-			poly5[j] = p;
+			poly5[j] = (BYTE)p;
 		}
 
 		// poly9's cycle is 511 - we only ever look at the low bit
@@ -175,13 +177,13 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		for (j = 1; j < 0x0f; j++)
 		{
 			p = ((p >> 1) | ((~(p ^ (p >> 1)) & 0x01) << 3)) & 0x0F;
-			poly4[j] = p;
+			poly4[j] = (BYTE)p;
 		}
 
 		// start the counters at the beginning
-		for (int v = 0; v < 4; v++)
+		for (int vv = 0; vv < 4; vv++)
 		{
-			poly4pos[v] = 0; poly5pos[v] = 0; poly9pos[v] = 0; poly17pos[v] = 0;
+			poly4pos[vv] = 0; poly5pos[vv] = 0; poly9pos[vv] = 0; poly17pos[vv] = 0;
 		}
 		random17pos = 0;
 		random17last = 0;
@@ -351,7 +353,7 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
     PVD pvd = &v.rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
-        AddDrive(iVM, i, pvd->sz);
+        AddDrive(iVM, i, (BYTE *)pvd->sz);
 
     return TRUE;
 }
@@ -412,6 +414,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	CaptureJoysticks();
 
     return TRUE;
+
 }
 
 // Cold Start the machine - the first one is currently done when it first becomes the active instance
@@ -575,7 +578,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 //
 BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 {
-	*ppPersist = &vrgcandy[iVM];
+	*ppPersist = (char *)&vrgcandy[iVM];
 	*pcbPersist = sizeof(vrgcandy[iVM]);
 	return TRUE;
 }
@@ -612,7 +615,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 }
 
 
-BOOL __cdecl DumpHWAtari(char *pch)
+BOOL __cdecl DumpHWAtari()
 {
 #ifndef NDEBUG
 //    RestoreVideo();
@@ -647,9 +650,7 @@ BOOL __cdecl DumpHWAtari(char *pch)
     printf("AUDCTL %02X  $87   %02X   $88  %02X  $A2  %02X\n",
        AUDCTL, cpuPeekB(0x87), cpuPeekB(0x88), cpuPeekB(0xA2));
 
-    return TRUE;
-
-    ForceRedraw();
+//    ForceRedraw();
 #endif // DEBUG
     return TRUE;
 }
@@ -664,10 +665,10 @@ void Interrupt()
     regP |= IBIT;
 }
 
-BOOL __cdecl TraceAtari()
+BOOL __cdecl TraceAtari(BOOL fStep, BOOL fCont)
 {
     fTrace = TRUE;
-    ExecuteAtari();
+    ExecuteAtari(fStep, fCont);
     fTrace = FALSE;
 
     return TRUE;
@@ -675,10 +676,10 @@ BOOL __cdecl TraceAtari()
 
 // What happens when it's scan line 241 and it's time to start the VBI
 //
-DoVBI()
+void DoVBI()
 {
 	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-	bLeftMax = wLeft;
+	bLeftMax = (BYTE)wLeft;
 
 #ifndef NDEBUG
 	fDumpHW = 0;
@@ -844,7 +845,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// Display scan line here
 			if (fDumpHW) {
 				WORD PCt = cpuPeekW(0x200);
-				extern void CchDisAsm(WORD *);
+				extern void CchDisAsm(unsigned int *);
 				int i;
 
 				printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
@@ -920,7 +921,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
 			// Using 21 and 30, Gem took 120 (on) and 96 (off).
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
-			bLeftMax = wLeft;	// remember what it started at
+			bLeftMax = (BYTE)wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
@@ -930,7 +931,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 
 			if (wScan < wStartScan) {
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
-				bLeftMax = wLeft;
+				bLeftMax = (BYTE)wLeft;
 			}
 			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
@@ -957,7 +958,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
-				bLeftMax = wLeft;
+				bLeftMax = (BYTE)wLeft;
 			}
 		} // if wLeft == 0
 
@@ -998,7 +999,6 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
     return FALSE;
 }
 
-
 //
 // Stubs
 //
@@ -1019,7 +1019,7 @@ BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC)
 }
 
 
-BYTE __cdecl PeekBAtari(ADDR addr)
+BYTE __cdecl PeekBAtari(int addr)
 {
     // reads always read directly
 
@@ -1027,7 +1027,7 @@ BYTE __cdecl PeekBAtari(ADDR addr)
 }
 
 
-WORD __cdecl PeekWAtari(ADDR addr)
+WORD __cdecl PeekWAtari(int addr)
 {
     // reads always read directly
 
@@ -1035,7 +1035,7 @@ WORD __cdecl PeekWAtari(ADDR addr)
 }
 
 
-ULONG __cdecl PeekLAtari(ADDR addr)
+ULONG __cdecl PeekLAtari(int addr)
 {
     // reads always read directly
 
@@ -1043,7 +1043,7 @@ ULONG __cdecl PeekLAtari(ADDR addr)
 }
 
 
-BOOL __cdecl PokeWAtari(ADDR addr, WORD w)
+BOOL __cdecl PokeWAtari(int addr, WORD w)
 {
     PokeBAtari(addr, w & 255);
     PokeBAtari(addr+1, w >> 8);
@@ -1051,13 +1051,12 @@ BOOL __cdecl PokeWAtari(ADDR addr, WORD w)
 }
 
 
-BOOL __cdecl PokeLAtari(ADDR addr, ULONG w)
+BOOL __cdecl PokeLAtari(int addr, ULONG w)
 {
     return TRUE;
 }
 
-
-BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
+BOOL __cdecl PokeBAtari(int addr, BYTE b)
 {
     BYTE bOld;
     addr &= 65535;
@@ -1246,7 +1245,7 @@ BOOL __cdecl PokeBAtari(ADDR addr, BYTE b)
                 // it is a data register. Update only bits that are marked as write.
 
                 BYTE bMask = cpuPeekB(wPADDIRea + addr);
-                BYTE bOld  = cpuPeekB(wPADATAea + addr);
+                bOld  = cpuPeekB(wPADATAea + addr);
                 BYTE bNew  = (b & bMask) | (bOld & ~bMask);
 
                 if (bOld != bNew)
@@ -1373,7 +1372,7 @@ void ReadCart(int iVM)
 		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
 		{
 			_close(h);
-			return FALSE;
+			return;
 		}
 
 		l = _lseek(h, 0L, SEEK_SET);
@@ -1390,7 +1389,7 @@ void ReadCart(int iVM)
 
 	// what kind of cartridge is it?
 	
-	BYTE *pb = rgbSwapCart[iVM];
+	char *pb = rgbSwapCart[iVM];
 	
 	if (cb <= 8192)
 		bCartType = CART_8K;
@@ -1456,8 +1455,7 @@ void InitCart(int iVM)
 
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
-	unsigned int i;
-	BYTE FAR *pb = rgbSwapCart[iVM];
+	char *pb = rgbSwapCart[iVM];
 
 	if (bCartType == CART_8K)
 	{
@@ -1499,8 +1497,8 @@ void BankCart(int iVM, int iBank, int value)
 
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
-	unsigned int i;
-	BYTE FAR *pb = rgbSwapCart[iVM];
+	int i;
+	char *pb = rgbSwapCart[iVM];
 
 	// we are not a banking cartridge
 	if (ramtop == 0xC000 || !(v.rgvm[iVM].rgcart.fCartIn)  || cb <= 8192 || bCartType <= CART_16K)
@@ -1544,8 +1542,8 @@ void BankCart(int iVM, int iBank, int value)
 	// 8k banks, given as contents, not the address
 	else if (bCartType == CART_XEGS)
 	{
-		while (value >= cb >> 13)
-			value -= (cb >> 13);	// hope this is right
+		while ((unsigned int)value >= cb >> 13)
+			value -= (cb >> 13);
 		//assert(FALSE);	// bad bank #
 		
 		_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);

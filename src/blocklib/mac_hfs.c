@@ -156,7 +156,7 @@ void SzFrom8_3(char szTo[], char szFrom[])
 
     for (i = 0; i < 12; i++)
         {
-        BYTE sz[2] = { szFrom[i - (i > 8)], 0 };
+        char sz[2] = { szFrom[i - (i > 8)], 0 };
 
         if (i == 8)
             sz[0] = '.';
@@ -332,7 +332,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
 
                     cbKey = pKey->cb;
                     cbName = pKey->cbName;
-                    strncpy(sz, pKey->sz, cbName);
+                    strncpy((char *)sz, (const char *)pKey->sz, cbName);
                     sz[cbName] = '\0';
                     parentID = SwapL(pKey->dirID);
 
@@ -405,7 +405,7 @@ Assert((((ULONG)pRec) & 1) == 0);
 #endif
 
                     memset(&fd, 0, sizeof(fd));
-                    strcpy(fd.cFileName, sz);
+                    strcpy(fd.cFileName, (const char *)sz);
                     memcpy(&fd.ftCreationTime, &pRec->l, 8);
                     fd.dwReserved0 = parentID;
                     fd.dwReserved1 = fileID;
@@ -463,10 +463,10 @@ Lfindit:
             if (cchCwd == cchDir)
                 break;
 
-            strcpy(sz, &szDir[cchCwd]);
+            strcpy((char *)sz, &szDir[cchCwd]);
 
-            if (strstr(sz, ":"))
-                *strstr(sz, ":") = 0;
+            if (strstr((const char *)sz, ":"))
+                *strstr((const char *)sz, ":") = 0;
 
             for (i = 0; i < pdi->cfd; i++)
                 {
@@ -478,9 +478,9 @@ Lfindit:
                 if ((parentID == pdi->dirID) && 
                    ((pdi->pfd)[i].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
                     {
-                    if (!strcmp(sz, (pdi->pfd)[i].cFileName))
+                    if (!strcmp((const char *)sz, (pdi->pfd)[i].cFileName))
                         {
-                        strcat(pdi->szCwd, sz);
+                        strcat(pdi->szCwd, (const char *)sz);
                         strcat(pdi->szCwd, ":");
                         pdi->dirID = fileID;
                         break;
@@ -574,7 +574,7 @@ Lfindit:
                         break;
 
                     cbName = pMRec->cbName;
-                    strncpy(sz, pMRec->sz, cbName);
+                    strncpy((char *)sz, (const char *)pMRec->sz, cbName);
                     sz[cbName] = '\0';
 
                     lTime = SwapL(pMRec->filMdDat);
@@ -607,7 +607,7 @@ Lfindit:
 #endif
 
                     memset(&fd, 0, sizeof(fd));
-                    strcpy(fd.cFileName, sz);
+                    strcpy(fd.cFileName, (const char *)sz);
                     memcpy(&fd.ftCreationTime, &pMRec->l, 8);
                     fd.nFileSizeLow = lSize;
                     fd.nFileSizeHigh = SwapL(pMRec->cbData);
@@ -632,9 +632,9 @@ Lfindit:
         {
         ULONG lSize = GetFileSize(pdi->h, NULL);
         int cbSector = 128;
-        int vtocSec  = 360;
+        //int vtocSec  = 360;
         int rootSec  = 361;
-        BYTE rgb[8*256];
+		BYTE rgbA[8 * 256];
 
         if (lSize >= (180*1024))
             cbSector = 256;
@@ -643,13 +643,13 @@ Lfindit:
 
         pdi->count = 8 * cbSector / 512;
         pdi->sec   = (rootSec-1) * cbSector / 512;
-        pdi->lpBuf = rgb;
+        pdi->lpBuf = rgbA;
 
         if (FRawDiskRWPdi(pdi, 0))
             {
             for (j = 0; j < 8*cbSector; j+=sizeof(AREC))
                 {
-                AREC *parec = (AREC *)&rgb[j];
+                AREC *parec = (AREC *)&rgbA[j];
 
 #if TRACEDISK
                 printf("flags byte = %02X\n", parec->bFlags);
@@ -773,19 +773,19 @@ Lnextdir:
                         if (!strcmp(fd.cFileName, "."))
                             continue;
 
-                        strcpy(szTmp, szSoFar);
-                        strcat(szTmp, fd.cFileName);
-                        strcat(szTmp, "\\");
+                        strcpy((char *)szTmp, (const char *)szSoFar);
+                        strcat((char *)szTmp, fd.cFileName);
+                        strcat((char *)szTmp, "\\");
 
-                        if (!strncmp(szTmp, szDir, strlen(szTmp)))
+                        if (!strncmp((const char *)szTmp, (const char *)szDir, strlen(szTmp)))
                             {
                             // file size for a directory is set to 0
                             fd.nFileSizeLow = sizeof(rgbBig);
-                            memset(rgbBig, 0, sizeof(rgbBig));
-                            cbBig = CbReadFileContents(pdi, &rgbBig, &fd);
+                            memset((unsigned char *)rgbBig, 0, sizeof(rgbBig));
+                            cbBig = CbReadFileContents(pdi, (unsigned char *)&rgbBig, &fd);
                             fd.nFileSizeLow = 0;
 
-                            strcpy(szSoFar, szTmp);
+                            strcpy((char *)szSoFar, (const char *)szTmp);
                             pdi->cfd = 0;
                             count = 0;
                             croot = 0;
@@ -864,9 +864,8 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
     {
 		ULONG count = pfd->nFileSizeHigh * 4 / pdi->cbSector;	// # of sectors in this file
 		WORD sec = *(WORD *)(pfd->cAlternateFileName);	// starting sector, 1 based
-		ULONG pos = 0;	// buffer position
 
-		for (int j = 0; j < count; j++)
+		for (unsigned int j = 0; j < count; j++)
 		{
 			pdi->count = 1;
 			pdi->sec = (sec - 1) * 128 / pdi->cbSector;	// which 512 byte sector number would this be found in?
@@ -880,7 +879,7 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
 
 			int pos = ((sec - 1) % 4) << 7;	// where in the buffer did the 128 bytes we're interested in go?
 
-			int cbT = rgb[pos + 127];
+			unsigned int cbT = rgb[pos + 127];
 			Assert(cbT == 125 || j == count - 1);	// only the last sector should be short
 
 			// just provide the memory requirement if NULL

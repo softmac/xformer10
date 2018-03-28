@@ -12,6 +12,7 @@
 
 ***************************************************************************/
 
+
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 
 #undef  _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE

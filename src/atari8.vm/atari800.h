@@ -18,8 +18,8 @@
 
 #include "common.h"
 
-int X8 = 352;		// valid width of screen including black bars on sides (320 normal playfield)
-int Y8 = 240;		// number of valid scan lines
+extern int X8;		// valid width of screen including black bars on sides (320 normal playfield)
+extern int Y8;		// number of valid scan lines
 #define STARTSCAN 8	// scan line ANTIC starts drawing at
 #define NTSCY 262	// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
@@ -41,7 +41,7 @@ BYTE poly17[(1 << 17) - 1];
 int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4]; 	// each voice keeps track of its own poly position
 unsigned int random17pos;	// needs to be unsigned
 ULONGLONG random17last;	// instruction count last time a random number was asked for
-BOOL fPolyValid = FALSE;
+BOOL fPolyValid;
 
 //
 // Scan line structure
@@ -596,8 +596,11 @@ void CheckKey(void);
 void UpdatePorts(void);
 
 //void InitSIOV(int, char **);
-void SIOV();
 //void DiskConfig(void);
+
+void SIOV();
+void DeleteDrive(int, int);
+void AddDrive(int, int, BYTE *);
 
 extern int fXFCable;	// !!! left uninitialized and used
 //extern unsigned uBaudClock;
@@ -640,29 +643,29 @@ extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 // Function prototypes of the Atari 800 VM API
 //
 
-BOOL __cdecl InstallAtari(int);
+BOOL __cdecl InstallAtari(int, PVMINFO, int);
 BOOL __cdecl InitAtari(int);
 BOOL __cdecl UninitAtari(int);
 BOOL __cdecl InitAtariDisks(int);
-BOOL __cdecl MountAtariDisk(int);
+BOOL __cdecl MountAtariDisk(int, int);
 BOOL __cdecl UninitAtariDisks(int);
-BOOL __cdecl UnmountAtariDisk(int);
+BOOL __cdecl UnmountAtariDisk(int, int);
 BOOL __cdecl WarmbootAtari(int);
 BOOL __cdecl ColdbootAtari(int);
 BOOL __cdecl SaveStateAtari(int, char **, int *);
 BOOL __cdecl LoadStateAtari(int, char *, int);
-BOOL __cdecl DumpHWAtari(char *pch);
-BOOL __cdecl TraceAtari();
-BOOL __cdecl ExecuteAtari();
-BOOL __cdecl KeyAtari(ULONG l);
+BOOL __cdecl DumpHWAtari(void);
+BOOL __cdecl TraceAtari(BOOL, BOOL);
+BOOL __cdecl ExecuteAtari(BOOL, BOOL);
+BOOL __cdecl KeyAtari(HWND, UINT, WPARAM, LPARAM);
 BOOL __cdecl DumpRegsAtari(void);
 BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC);
-BYTE __cdecl PeekBAtari(ADDR addr);
-WORD __cdecl PeekWAtari(ADDR addr);
-ULONG __cdecl PeekLAtari(ADDR addr);
-BOOL __cdecl PokeLAtari(ADDR addr, ULONG l);
-BOOL __cdecl PokeWAtari(ADDR addr, WORD w);
-BOOL __cdecl PokeBAtari(ADDR addr, BYTE b);
+BYTE __cdecl PeekBAtari(int addr);
+WORD __cdecl PeekWAtari(int addr);
+ULONG __cdecl PeekLAtari(int addr);
+BOOL  __cdecl PokeLAtari(int addr, ULONG l);
+BOOL  __cdecl PokeWAtari(int addr, WORD w);
+BOOL  __cdecl PokeBAtari(int addr, BYTE b);
 
 
 //
