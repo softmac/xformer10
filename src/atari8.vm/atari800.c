@@ -79,6 +79,49 @@ BOOL fDumpHW;
 
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 
+
+void TimeTravelPrepare()
+{
+	const ULONGLONG s5 = 29830 * 60 * 5;	// 5 seconds
+	unsigned char *pPersist;
+	unsigned int cbPersist;
+
+	ULONGLONG cCur = GetCycles();
+	ULONGLONG cTest = cCur -ullTimeTravelTime;
+	
+	// time to save a snapshot (every 5 seconds)
+	if (cTest >= s5)
+	{
+		SaveStateAtari(v.iVM, &pPersist, &cbPersist);
+		_fmemcpy(&Time[cTimeTravelPos], pPersist, sizeof(CANDYHWPROTO));
+		ullTimeTravelTime = cCur;
+		cTimeTravelPos++;
+		if (cTimeTravelPos == 3)
+			cTimeTravelPos = 0;
+	}
+}
+
+
+void TimeTravel()
+{
+	CANDYHW *pC = &Time[cTimeTravelPos];
+
+	if (pC->m_ullTimeTravelTime > 0)
+		LoadStateAtari(v.iVM, &Time[cTimeTravelPos], sizeof(CANDYHW));
+}
+
+void TimeTravelReset()
+{
+	ullTimeTravelTime = 0;
+	cTimeTravelPos = 0;
+	for (unsigned i = 0; i < 3; i++)
+	{
+		CANDYHW *pC = &Time[i];
+		pC->m_ullTimeTravelTime = 0;
+	}
+}
+
+
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
     FILE *fp;
@@ -394,6 +437,8 @@ BOOL __cdecl WarmbootAtari(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
+	TimeTravelReset();
+
 	// tell the CPU which 
 	cpuInit(PokeBAtari);
 
@@ -425,6 +470,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	//OutputDebugString("\n\nCOLD START\n\n");
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	TimeTravelReset();
 
 	InitAtariDisks(iVM);
 
@@ -594,6 +641,8 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
 	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
 	
+	TimeTravelReset();	// AFTER doing the load above
+
 	if (!FInitSerialPort(v.rgvm[iVM].iCOM))
 		v.rgvm[iVM].iCOM = 0;
 	if (!InitPrinter(v.rgvm[iVM].iLPT))
@@ -873,6 +922,8 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// we process the audio after the whole frame is done, but the VBLANK starts at 241
 			if (wScan >= NTSCY)
 			{			
+				TimeTravelPrepare();
+				
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 
 				wScan = 0;
