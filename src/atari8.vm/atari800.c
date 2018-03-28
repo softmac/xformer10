@@ -1289,8 +1289,6 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
 		// the display list pointer is the only ANTIC register that is R/W
 		if (addr == 2 || addr == 3)
 			rgbMem[0xd400 + addr] = b;
-		if (addr == 3 && b == 8)
-			b = b;
 
         if (addr == 10)
             {
