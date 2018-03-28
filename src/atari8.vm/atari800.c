@@ -1483,6 +1483,7 @@ void InitCart(int iVM)
 	else if (bCartType == CART_XEGS)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
+		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
 		ramtop = 0x8000;
 	}
 
