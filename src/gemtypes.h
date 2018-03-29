@@ -680,9 +680,12 @@ typedef struct
     int      fUseVHD:1;     // TRUE means to use virtual disks
     int      fSwapKeys:1;   // use alternate keyboard layout
     int      xQuickBaud:1;  // Acceleration: activate fast baud rates
-    int      fWarmReset:1;  // if set, this VM needs a warm boot
-    int      fColdReset:1;  // if set, this VM needs a cold boot
-    int      fValidVM:1;    // if set, this VM is initialized
+    
+	// UNUSED
+	int      fWarmReset:1;  // UNUSED if set, this VM needs a warm boot
+    int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
+    
+	int      fValidVM:1;    // if set, this VM is initialized
 
     int      res83:8;
 
@@ -712,15 +715,17 @@ typedef struct
 #define CART_OSSB    3   //
 #define CART_XEGS	 4
 
-void ReadCart();
+BOOL ReadCart();
 void InitCart(int iVM);
 void BankCart(int iVM, int i, int v);
 
 BOOL AddVM(const VMINFO *pvmi, int *pi, int type);
 void DeleteVM(int);
+
 void FixAllMenus();
 
-BOOL SelectInstance(int);
+BOOL ColdStart(int);
+void SelectInstance(int);
 
 #define vmCur (*vi.pvmCur)
 #define osCur v.rgosinfo[vmCur.iOS]
@@ -1147,7 +1152,7 @@ BOOL FPrinterReady();
 
 // props.c
 
-BOOL InitProperties(void);
+void InitProperties(void);
 //BOOL EditProperties(void);
 BOOL LoadProperties(char *);
 BOOL SaveProperties(char *);

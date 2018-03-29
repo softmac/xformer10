@@ -44,9 +44,9 @@ ULONGLONG random17last;	// instruction count last time a random number was asked
 
 // Time Travel stuff
 
-void TimeTravel(unsigned);
-void TimeTravelPrepare(unsigned);
-void TimeTravelReset(unsigned);
+BOOL TimeTravel(unsigned);
+BOOL TimeTravelPrepare(unsigned);
+BOOL TimeTravelReset(unsigned);
 BOOL TimeTravelInit(unsigned);
 void TimeTravelFree(unsigned);
 

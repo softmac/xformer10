@@ -430,9 +430,9 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     ch = uParam;
 
 	// the VK codes for volume and brightness, etc. happen to have the same scan codes as ordinary letters
-	// and the ATARI will type them
-	if (ch >= 0xa4 && ch <= 0xb7)
-		return TRUE;
+	// and the ATARI will type them, so return early
+	if ((ch >= 0xa4 && ch <= 0xb7) || ch == 0xff)	// ff is both brightness keys, or possibly other future expansion keys too?
+		return FALSE;
 
 #if 0
     // eat repeating keystrokes
@@ -541,13 +541,18 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 				wShiftChanged ^= (*pbshift & wAnyShift);
 			}
 		}
+		
+		// don't pass ALT-ed keys to ATARI, but pass them to Windows for menuing
+		if (*pbshift & wAlt)
+			return FALSE;
+
 		break;
 
 	case 0x1c:	// normal ENTER
 	case 0x11C: // keypad ENTER?
 		
 		if (*pbshift & wAlt)
-			return TRUE;	// exit early to avoid passing the FULLSCREEN Alt-ENTER key to the ATARI
+			return FALSE;	// exit early to avoid passing the FULLSCREEN Alt-ENTER key to the ATARI
 
 		scan = 0x72;    // Enter -> Enter
 		break;
@@ -587,7 +592,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			break;	// pass to ATARI
 		}
 		
-		return TRUE;	// exit early so the ATARI doesn't see keystrokes when cursor used as joystick.
+		return FALSE;	// exit early so the ATARI doesn't see keystrokes when cursor used as joystick.
 						// some games pause or react badly.
 		
 	case 0x147:
@@ -615,7 +620,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			//SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
 			TimeTravel(v.iVM);
 		}
-		return TRUE;	// don't let ATARI see this
+		return FALSE;	// don't let ATARI see this
 
 #if 0
 	case 0x151:         // Page Dn
@@ -623,7 +628,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			TRIG0 &= ~1;                // JOY 0 fire button down
 		else
 			TRIG0 |= 1;                 // JOY 0 fire button up
-		return TRUE;
+		return FALSE;
 #endif
 
 	case 0x85:
@@ -686,7 +691,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		{
 			PostMessage(vi.hWnd, WM_CLOSE, 0, 0);	// be polite and close
 		}
-		return TRUE; // don't let ATARI see special function key presses
+		return TRUE; // don't let ATARI nor Windows see special function key presses (Windows might react)
 
 	case 0x40: // F6 - HELP key for XL/XE
 		if (fDown && mdXLXE != md800)
@@ -735,7 +740,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 				ramtop = 0xA000;
 			else
 				ramtop = 0xC000;
-			FColdbootVM(v.iVM);
+			ColdStart(v.iVM);
 		}
 		return TRUE;
 
@@ -745,7 +750,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		if (fDown && (*pbshift & wCtrl))
 		{
 			NextCart();
-			FColdbootVM();
+			ColdStart();
 		}
 		return;
 #endif
@@ -800,7 +805,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
             *pbshift ^= wScrlLock;
         else
             DisplayStatus();
-		return TRUE; // don't let ATARI see special key presses
+		return FALSE; // don't let ATARI see special key presses
 
     case 0x3A: // Caps Lock
         if (fDown)
@@ -813,7 +818,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     AddToPacket(fDown ? scan : 0);
     AddToPacket(fDown ? ch   : 0);
     
-    return TRUE;	// by default, don't let windows see the key
+    return FALSE;	// by default, let windows see the key - eg. to operate menus
 }
 
 // Process Thread messages for keys and joystick, and Windows messages for keybaord, mouse, and joystick

@@ -72,6 +72,7 @@ void DeleteDrive(int iVM, int i)
 }
 
 
+// !!! needs error checking
 void AddDrive(int iVM, int i, BYTE *pchPath)
 {
     int h, sc=0;

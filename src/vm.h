@@ -192,20 +192,20 @@ ULONG __inline vmPeekB(ULONG ea)
     return b;
 }
 
-ULONG __inline vmPeekW(ULONG ea)
+ULONG __inline vmPeekW(int iVM, ULONG ea)
 {
     WORD w = 0;
 
-    vpvm->pfnReadHWWord(ea, &w);
+    v.rgvm[iVM].pvmi->pfnReadHWWord(ea, &w);
 
     return w;
 }
 
-ULONG __inline vmPeekL(ULONG ea)
+ULONG __inline vmPeekL(int iVM, ULONG ea)
 {
     ULONG l = 0;
 
-    vpvm->pfnReadHWLong(ea, &l);
+    v.rgvm[iVM].pvmi->pfnReadHWLong(ea, &l);
 
     return l;
 }

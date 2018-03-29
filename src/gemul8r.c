@@ -13,6 +13,25 @@
 
 ****************************************************************************/
 
+//
+// THEORY OF OPERATION 
+// First we INSTALL a VM.
+//
+// Then we either INIT it (make a default new one) and eventually COLDBOOT it
+// (by calling ColdStart instead of ColdbootVM directly, at least for now)
+// OR we just LOADSTATE (to restore its state from disk) but NOT BOTH
+//
+// CreateNewBitmap creates the screen buffer for the instance. This must be done before EXEC, but after
+// our window is created
+//
+// SelectInstance() makes an instance the current one.
+//
+// While it is running, call EXEC in a loop to run for a frame or so each time. This function does NOT take
+//		the instance as a parameter, it can only run on the current instance.
+//
+// When you're done with an instance, UNINIT it, even if you called LoadState to initialize it. (There is no UnInstall).
+//
+
 //#define _NO_CRT_STDIO_INLINE
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -41,23 +60,6 @@ INST vi;
 // "VMINST vrgvmi" is an array of per-instance non-persistable states
 //
 VMINST vrgvmi[MAX_VM];	// not persistable
-
-//
-// THEORY OF OPERATION 
-// First we INSTALL a VM.
-//
-// Then we either INIT it (make a default new one) and eventually COLDBOOT it...
-// OR we just LOADSTATE (to restore its state from disk) but NOT BOTH
-//
-// CreateNewBitmap creates the screen buffer for the instance. This must be done before EXEC.
-//
-// SelectInstance() makes an instance the current one.
-//
-// While it is running, call EXEC in a loop to run for a frame or so each time. This function does NOT take
-//		the instance as a parameter, it can only run on the current instance.
-//
-// When you're done with an instance, UNINIT it, even if you called LoadState to initialize it. (There is no UnInstall).
-//
 
 // __declspec(thread) VMINST vmi;
 ICpuExec *vpci;
@@ -660,7 +662,7 @@ long IdleThread()
     return 0;
 }
 
-
+// !!! do we really need this thread just to call CheckClockSpeed? Don't we know we're on a pentium or higher?
 long ScreenThread()
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
@@ -687,7 +689,7 @@ long ScreenThread()
 
         Sleep(30);
 
-#if 1
+#if 0
         {
         static int count = 0;
 
@@ -1181,8 +1183,9 @@ int CALLBACK WinMain(
     // initialize menu and menu accelerators
 
     vi.hAccelTable = LoadAccelerators (hInstance, MAKEINTRESOURCE(IDR_ACCEL));
-
     vi.hMenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_GEMMENU));
+	if (!vi.hAccelTable || !vi.hMenu)
+		return FALSE;
 
     // now get handle to first pop-up
 	// vi.hMenu = GetSubMenu(vi.hMenu, 0);
@@ -1263,8 +1266,8 @@ int CALLBACK WinMain(
 
 #ifdef XFORMER
 
-	//char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
-	//lpCmdLine = test;
+//	char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
+//	lpCmdLine = test;
 	
 	// assume we're loading the default .ini file
 	char *lpLoad = NULL;
@@ -1276,6 +1279,7 @@ int CALLBACK WinMain(
 	{
 		char sFile[MAX_PATH];
 		int iVM, len;
+		BOOL f;
 
 		while (lpCmdLine && strlen(lpCmdLine) > 4)
 		{
@@ -1286,24 +1290,47 @@ int CALLBACK WinMain(
 			
 			if (lstrcmpi(sFile + len - 3, "atr\0") == 0 || lstrcmpi(sFile + len - 3, "xfd") == 0)
 			{
-				AddVM(&vmi800, &iVM, vmAtari48);
-				strcpy(v.rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument
-				v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
-				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
-				if (!fSkipLoad)
-					SelectInstance(iVM);
-				fSkipLoad = TRUE;
+				if (AddVM(&vmi800, &iVM, vmAtari48))	// does the FInstalVM for us
+				{
+					strcpy(v.rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
+					v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+					f = FALSE;
+					if (FInitVM(iVM))
+						if (f = ColdStart(iVM))
+							if (vi.hdc)
+								CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					if (f)
+					{
+						if (!fSkipLoad)
+							SelectInstance(iVM);
+						fSkipLoad = TRUE;
+					}
+					else
+						DeleteVM(iVM);
+				}	// !!! just move on with our lives if there's an error
 			}
+			
 			// !!! support .CAR files
 			else if (_stricmp(sFile + len - 3, "bin") == 0 || _stricmp(sFile + len - 3, "rom") == 0)
 			{
-				AddVM(&vmi800, &iVM, vmAtari48);
-				strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
-				v.rgvm[iVM].rgcart.fCartIn = TRUE;
-				FInitVM(iVM);	// CreateNewBitmap will come in the WM_CREATE, it's too soon now.
-				if (!fSkipLoad)
-					SelectInstance(iVM);
-				fSkipLoad = TRUE;
+				if (AddVM(&vmi800, &iVM, vmAtari48))
+				{
+					strcpy(v.rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
+					v.rgvm[iVM].rgcart.fCartIn = TRUE;
+					f = FALSE;
+					if (FInitVM(iVM))
+						if (f = ColdStart(iVM))
+							if (vi.hdc)
+								CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					if (f)
+					{
+						if (!fSkipLoad)
+							SelectInstance(iVM);
+						fSkipLoad = TRUE;
+					}
+					else
+						DeleteVM(iVM);
+				}
 			}
 
 			// found a .gem file. Ignore everything else and just load this
@@ -1347,7 +1374,8 @@ int CALLBACK WinMain(
 	// If we couldn't load our last session, make a session that has one of every possible machine type, just for fun.
 	if (!fProps)
 	{
-		CreateAllVMs();
+		if (!CreateAllVMs())
+			return FALSE;	// uh oh, app dead.
 		
 		// Now go and prompt the user with First Time Setup if necessary
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -1434,18 +1462,24 @@ int CALLBACK WinMain(
 
     // Initialize SCSI
 
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
     if (!v.fNoSCSI)
         FInitBlockDevLib();
+#endif
 
 	DWORD l;
 
+	// !!! Is this really necessary?
     vi.hIdleThread  = CreateThread(NULL, 4096, (void *)IdleThread, 0, 0, &l);
+	if (!vi.hIdleThread)
+		return FALSE;
+
 #if defined(ATARIST) || defined(SOFTMAC)
     vi.hVideoThread = NULL; // CreateThread(NULL, 4096, (void *)ScreenThread, 0, 0, &l);
 #endif // ATARIST
     
+#if 0
     // create a frame buffer in shared memory for future cloud use
-
     vi.hFrameBuf = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
             0, 1280*720 + 16 + 3200, "GemulatorFrame");
 
@@ -1467,7 +1501,6 @@ int CALLBACK WinMain(
 
     //PostMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);
 
-#if 0
     // One time un-Hibernate
     if (v.fSkipStartup & 2)
         {
@@ -1479,6 +1512,7 @@ int CALLBACK WinMain(
         }
 #endif
 
+	// !!! is this really necessary?
     {
     FLASHWINFO fi;
 
@@ -1502,79 +1536,65 @@ int CALLBACK WinMain(
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
     for (;;)
-        {
-        while (PeekMessage(&msg, // message structure
-           NULL,   // handle of window receiving the message
-           0,      // lowest message to examine
-           0,      // highest message to examine
-           PM_REMOVE)) // remove the message, as if a GetMessage
-            {
-            if (msg.message == WM_QUIT)
-                goto Lquit;
+    {
+		while (PeekMessage(&msg, // message structure
+			NULL,   // handle of window receiving the message
+			0,      // lowest message to examine
+			0,      // highest message to examine
+			PM_REMOVE)) // remove the message, as if a GetMessage
+		{
+			if (msg.message == WM_QUIT)
+				goto Lquit;
 
-//            Assert(msg.hwnd == vi.hWnd);
+			//            Assert(msg.hwnd == vi.hWnd);
 
-            if (msg.hwnd == NULL)
-                {
-                //UINT message = msg.message;
-                //WPARAM uParam = msg.wParam;
-                //LPARAM lParam = msg.lParam;
+			if (msg.hwnd == NULL)
+			{
+				//UINT message = msg.message;
+				//WPARAM uParam = msg.wParam;
+				//LPARAM lParam = msg.lParam;
 
-                switch(msg.message)
-                    {
+				switch (msg.message)
+				{
 
-				// we don't seem to send these to ourself anymore
+					// we don't seem to send these to ourself anymore
 #if 0
 				case TM_JOY0FIRE:
-                case TM_JOY0MOVE:
-                    if (vi.fExecuting)
-                        FWinMsgVM(vi.hWnd, message, uParam, lParam);
-                    break;
+				case TM_JOY0MOVE:
+					if (vi.fExecuting)
+						FWinMsgVM(vi.hWnd, message, uParam, lParam);
+					break;
 
-                case TM_KEYDOWN:
-                    if (vi.fExecuting)
-                        FWinMsgVM(vi.hWnd, WM_KEYDOWN,
-                            uParam, (lParam << 16) | 1);
-                    break;
+				case TM_KEYDOWN:
+					if (vi.fExecuting)
+						FWinMsgVM(vi.hWnd, WM_KEYDOWN,
+							uParam, (lParam << 16) | 1);
+					break;
 
-                case TM_KEYUP:
-                    if (vi.fExecuting)
-                        FWinMsgVM(vi.hWnd, WM_KEYUP,
-                            uParam, (lParam << 16) | 0xC0000001);
-                    break;
+				case TM_KEYUP:
+					if (vi.fExecuting)
+						FWinMsgVM(vi.hWnd, WM_KEYUP,
+							uParam, (lParam << 16) | 0xC0000001);
+					break;
 #endif
 				}
 
-                // don't pass thread message to window handler
-                continue;
-                }
+				// don't pass thread message to window handler
+				continue;
+			}
 
-            if (!TranslateAccelerator (msg.hwnd, vi.hAccelTable, &msg))
-                {
-                // for Xformer, we need special German keys to translate
-                if (!FIsAtari8bit(vmCur.bfHW) && (!vi.fExecuting))
-                    TranslateMessage(&msg);// Translates virtual key codes
-                DispatchMessage(&msg); // Dispatches message to window
-                }
-            }
+			if (!TranslateAccelerator(msg.hwnd, vi.hAccelTable, &msg))
+			{
+				// for Xformer, we need special German keys to translate. !!! Huh? Should we test this?
+				if (!FIsAtari8bit(vmCur.bfHW) && (!vi.fExecuting))
+					TranslateMessage(&msg);// Translates virtual key codes
+				DispatchMessage(&msg); // Dispatches message to window
+			}
+		}       // Break into debugger is asked to, or if in debug mode and VM died
 
-        // Check if VM needs to RESET, this avoids doing it too early, I guess
-        if (vmCur.fColdReset)
-            {
-            void ColdStart(int);
-
-            vmCur.fColdReset = FALSE;
-            ColdStart(v.iVM);
-
-			if (v.fDebugMode)
-                vi.fDebugBreak = TRUE;
-            }
-
-        // Break into debugger is asked to, or if in debug mode and VM died
-
-        if (vi.fDebugBreak ||
-                 ((vi.fInDebugger || v.fDebugMode) && !vi.fExecuting))
-            {
+		// !!! Get this working
+        if (vi.fDebugBreak || ((vi.fInDebugger || v.fDebugMode) && !vi.fExecuting))
+        {
             vi.fDebugBreak = FALSE;
 
             CreateDebuggerWindow();
@@ -1596,11 +1616,13 @@ int CALLBACK WinMain(
 #endif
                 }
             DestroyDebuggerWindow();
-            }
+        }
 
 		// !!! not per instance, just a general "we're executing". Make sure you cold start a VM above before running it!
         else if (vi.fExecuting)
-            {
+        {
+			
+			// !!! this is a global. If any VM fails, we stop and, I guess, get a chance to debug it?
             vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
 
 			// every second, update our clock speed indicator
@@ -1616,9 +1638,9 @@ int CALLBACK WinMain(
 			// run all the instances at the same time in tiling mode
 			if (v.fTiling)
                 SelectInstance(v.iVM + 1);
-            }
+        }
 
-        } // forever
+    } // forever
 
     // Reset tick resolution
 
@@ -1627,19 +1649,17 @@ int CALLBACK WinMain(
     timeEndPeriod(1);
 #endif
 
-{
- int i;
-
 #ifndef NDEBUG
- for (i = 0; i < MAXOSUsable; i++)
- {
- // printf("vmi %2d: pvBits = %08p\n", vrgvmi[i]);
- }
+	for (int i = 0; i < MAXOSUsable; i++)
+	{
+		 // printf("vmi %2d: pvBits = %08p\n", vrgvmi[i]);
+	}
 #endif
-}
 
+#if 0
     // cloud support - clear the share memory thread ID
     *(DWORD *)&vi.pbFrameBuf[1280*720] = 0;
+#endif
 
     return (msg.wParam); // Returns the value from PostQuitMessage
 
@@ -2104,7 +2124,7 @@ Ltryagain:
         }
 #endif
 
-        vi.fYscale *= scan_double;
+        vi.fYscale *= (char)scan_double; // won't overflow?
 
         vi.sx = vsthw[iVM].xpix * vi.fXscale;
         vi.sy = vsthw[iVM].ypix * vi.fYscale;
@@ -2154,6 +2174,9 @@ Ltryagain:
     vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vsthw[iVM].bmiHeader,
         DIB_RGB_COLORS, &(vrgvmi[iVM].pvBits), NULL, 0);
     vrgvmi[iVM].hdcMem = CreateCompatibleDC(vi.hdc);
+
+	if (vrgvmi[iVM].hbm == NULL || vrgvmi[iVM].hdcMem == NULL)
+		return FALSE;
 
     vrgvmi[iVM].hbmOld = SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbm);
 
@@ -2403,7 +2426,7 @@ BOOL FToggleMonitor(int iVM)
 // -1 means go to the previous one
 //
 
-BOOL SelectInstance(int iVM)
+void SelectInstance(int iVM)
 {
 	// there better be some valid ones loaded
 	assert(v.cVM);
@@ -2433,19 +2456,20 @@ BOOL SelectInstance(int iVM)
 	v.iVM = iVM;
 	vi.pvmCur = &v.rgvm[v.iVM];
     vi.pvmiCur = &vrgvmi[v.iVM];
-    vpvm = vmCur.pvmi;
+    vpvm = vi.pvmCur->pvmi;
 
 	// a menu or title bar might need to change. When Tiling, don't let it do this every 1/60s.
 	if (!v.fTiling)
 		FixAllMenus();
 
-    return TRUE;
+    return;
 }
 
 //
-// Reboot a particular VM
+// Reboot a particular VM.
+// !!! I'm not convinced any of this is necessary, but for now I'll reboot by calling this and letting it call FColdbootVM
 //
-void ColdStart(int iVM)
+BOOL ColdStart(int iVM)
 {
     ShowWindowsMouse();
     SetWindowsMouse(0);
@@ -2467,8 +2491,9 @@ void ColdStart(int iVM)
     vrgvmi[iVM].keyhead = vrgvmi[iVM].keytail = 0;
     vi.fVMCapture = FALSE;
 
-	PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
-    PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
+	// we no longer require cold start to happen after CreateNewBitmap, so we might not have hdc's now.
+	//PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
+    //PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
 
 #if _ENGLISH
         SetWindowText(vi.hWnd, "Rebooting...");
@@ -2486,10 +2511,9 @@ void ColdStart(int iVM)
 
     MarkAllPagesClean();
 
-    vi.fExecuting = FALSE;
-
-    vi.fExecuting = FColdbootVM(v.iVM);
-	DisplayStatus();	// update Title Bar, etc.
+	// !!! This global will make everything hang if any VM fails
+    vi.fExecuting = FColdbootVM(iVM);
+	//DisplayStatus();	// update Title Bar, etc.
 
 #if !defined(NDEBUG)
     fDebug++;
@@ -2499,7 +2523,7 @@ void ColdStart(int iVM)
 
     if (vi.fExecuting)
         {
-        switch(vmPeekL(vi.eaROM[0]))
+        switch(vmPeekL(iVM, vi.eaROM[0]))
             {
         default:         printf("Unknown ROM!\n");              break;
 
@@ -2552,27 +2576,31 @@ void ColdStart(int iVM)
         case 0xff7439ee: printf("Mac LC 475 / Quadra 605\n");   break;
             }
 
-        printf("ROM sig  = $%08X\n", vmPeekL(vi.eaROM[0]));
-        printf("ROM ver  = $%04X\n", vmPeekW(vi.eaROM[0]+8));
-        printf("ROM subv = $%04X\n", vmPeekW(vi.eaROM[0]+18));
+        printf("ROM sig  = $%08X\n", vmPeekL(iVM, vi.eaROM[0]));
+        printf("ROM ver  = $%04X\n", vmPeekW(iVM, vi.eaROM[0]+8));
+        printf("ROM subv = $%04X\n", vmPeekW(iVM, vi.eaROM[0]+18));
         }
     printf("CPU type = %s\n", (long)PchFromBfRgSz(vi.fFake040 ? cpu68040 : v.rgvm[iVM].bfCPU, rgszCPU));
 //    printf("CPU real = %s\n", (long)PchFromBfRgSz(v.rgvm[iVM].bfCPU, rgszCPU));
     fDebug--;
 #endif
 
+#if 0
     if (!vi.fExecuting)
         {
         MessageBox (GetFocus(),
             "Error restarting emulator.",
             vi.szAppName, MB_OK|MB_ICONHAND);
         }
-    DisplayStatus();
+#endif
 
     if (v.fDebugMode)
-        {
+    {
         vi.fInDebugger = TRUE;
-        }
+		vi.fDebugBreak = TRUE;
+	}
+	
+	return vi.fExecuting;
 }
 
 #if 0
@@ -2868,10 +2896,8 @@ int GetTileFromPos(int xPos, int yPos)
 
 // Extract all the DOS files from this disk image and save them to the PC hard drive
 //
-BOOL SaveATARIDOS(int drive)
+BOOL SaveATARIDOS(int inst, int drive)
 {
-	int inst = (v.fTiling && sVM > 0) ? sVM : (v.fTiling? -1 : v.iVM);	// use the active tile if there is one
-
 	if (inst == -1)
 		return TRUE;
 
@@ -2887,7 +2913,7 @@ BOOL SaveATARIDOS(int drive)
 	if (!pdi)
 		return TRUE;	// don't show an error, there's no actual disk image
 
-	CntReadDiskDirectory(pdi, szDir, NULL);
+	CntReadDiskDirectory(pdi, szDir, NULL); // not sure how this returns an error, 0 is fine
 
 	BOOL fB, fh = TRUE;
 
@@ -2902,7 +2928,7 @@ BOOL SaveATARIDOS(int drive)
 
 		// Create a directory named after the disk image for all of its files
 		if (ij == 0)
-			fB = CreateDirectory(szDir, NULL);
+			fB = CreateDirectory(szDir, NULL); // error OK, it may already exist
 
 		strcat(szDir, "\\");					// add '\'
 		strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);	// add the filename
@@ -3143,8 +3169,8 @@ void ShowAbout()
 #endif
 		oi.dwMajorVersion, oi.dwMinorVersion,
 		oi.dwBuildNumber & 65535,
-		rgchVer,
-		0);
+		rgchVer
+		);
 
 	MessageBox(GetFocus(), rgch, rgch2, MB_OK);
 }
@@ -3193,7 +3219,13 @@ LRESULT CALLBACK WndProc(
 		for (int iVM = 0; iVM < MAX_VM; iVM++)
 		{
 			if (v.rgvm[iVM].fValidVM)
-				CreateNewBitmap(iVM);
+			{
+				BOOL fC = CreateNewBitmap(iVM);
+				if (!fC)
+				{
+					//!!! what to do now?
+				}
+			}
 		}
 
 		// if we were saved in fullscreen mode, then actually go into fullscreen
@@ -3609,9 +3641,16 @@ break;
 		case IDM_IMPORTDOS1:
 		case IDM_IMPORTDOS2:
 
+			int inst = (v.fTiling && sVM > 0) ? sVM : (v.fTiling ? -1 : v.iVM);	// use the active tile if there is one
+
+			if (inst == -1)
+				break;
+
 			int drive = wmId - IDM_IMPORTDOS1;
-			if (!SaveATARIDOS(drive))
+			
+			if (!SaveATARIDOS(inst, drive))
 				MessageBox(vi.hWnd, "Not every file saved successfully", "Extract ATARI DOS Files", MB_OK);
+			
 			break;
 
 		// bring up our ABOUT MessageBox
@@ -3726,7 +3765,7 @@ break;
 		case IDM_DELVM:
 
 			// our active instance
-			int inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
 			
 			assert(inst != -1);
 			if (inst != -1)
@@ -3752,7 +3791,7 @@ break;
 			}
 
 			// now make the default ones
-			CreateAllVMs();
+			CreateAllVMs();	// !!! what to do on error?
 			SelectInstance(0);
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone
@@ -3790,25 +3829,39 @@ break;
 
 			// create a new VM of the appropriate type
 			
+			BOOL fA = FALSE;
 			if (vmType == 1)
 			{
-				AddVM(&vmi800, &vmNew, vmAtari48);
+				fA = AddVM(&vmi800, &vmNew, vmAtari48);
 			}
 			else if (vmType == 2)
 			{
-				AddVM(&vmi800, &vmNew, vmAtariXL);
+				fA = AddVM(&vmi800, &vmNew, vmAtariXL);
 			}
 			else if (vmType == 3)
 			{
-				AddVM(&vmi800, &vmNew, vmAtariXE);
+				fA = AddVM(&vmi800, &vmNew, vmAtariXE);
 			}
 
-			// Init it, Create the screen buffer for it, and now go to that instance!
-			FInitVM(vmNew);
-			CreateNewBitmap(vmNew);	// we've already created our window, so we need to do this manually now
-			
-			// even if we're tiling, what the heck
-			SelectInstance(vmNew);
+			// !!! if you want to put a default disk in the drive for a new VM, this is the place to do it
+			// if one is shipped and its directory location is well known
+#if 0
+			v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+			strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// doesn't work, not in right dir
+#endif
+
+			fA = FALSE;
+			if (FInitVM(vmNew))
+				if (fA = ColdStart(vmNew))
+					if (vi.hdc)
+						CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			if (!fA)
+				DeleteVM(vmNew);
+			else
+				// even if we're tiling, what the heck
+				SelectInstance(vmNew);
+
+			// !!! what about error?
 
 #endif
 
@@ -3828,9 +3881,9 @@ break;
 
 			if (inst != -1 && OpenTheFile(vi.hWnd, v.rgvm[inst].rgcart.szName, FALSE, 1))
 			{
-				ReadCart(inst);
+				ReadCart(inst);	// might as well ignroe error
 				FixAllMenus();
-				FColdbootVM(inst);	// that requires a reboot!
+				ColdStart(inst);	// !!! requires reboot, what about error?
 			}
 			break;
 
@@ -3852,7 +3905,7 @@ break;
 
 				FixAllMenus();
 
-				FColdbootVM(inst);
+				ColdStart(inst); // !!! could error
 			}
 
 			break;
@@ -3866,10 +3919,10 @@ break;
 			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
 			assert(inst != -1);
 			
-			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
+			if (OpenTheFile(vi.hWnd, v.rgvm[inst].rgvd[0].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FMountDiskVM(v.iVM, 0);
+				v.rgvm[inst].rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FMountDiskVM(inst, 0);	// !!! could error
 				FixAllMenus();
 			}
 			break;
@@ -3879,10 +3932,10 @@ break;
 			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
 			assert(inst != -1);
 			
-			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
+			if (OpenTheFile(vi.hWnd, v.rgvm[inst].rgvd[1].sz, FALSE, 0))
 			{
-				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FMountDiskVM(v.iVM, 1);
+				v.rgvm[inst].rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				FMountDiskVM(inst, 1); // !!! could error
 				FixAllMenus();
 			}
 			break;
@@ -3929,16 +3982,18 @@ break;
 			{
 				char *pCandy;
 				int cb;
-				FSaveStateVM(v.iVM, &pCandy, &cb);
-				pCandy += 16 + 65536 + 30;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
-				WORD *ramtop = (WORD *)pCandy;
-				if (*ramtop == 0xC000)
-					*ramtop = 0xA000;
-				else
-					*ramtop = 0xC000;
+				if (FSaveStateVM(inst, &pCandy, &cb))
+				{
+					pCandy += 16 + 65536 + 38;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
+					WORD *ramtop = (WORD *)pCandy;
+					if (*ramtop == 0xC000)
+						*ramtop = 0xA000;
+					else
+						*ramtop = 0xC000;
+				}
 			}
 
-			FColdbootVM(inst);
+			ColdStart(inst); // !!! could error
 
 			break;
 #endif
@@ -3946,18 +4001,23 @@ break;
 		// Ctrl-F10, must come after IDM_TOGGLEBASIC
         case IDM_COLDSTART:
             
+			// !!! no error checking
+
 			// cold start the tile in focus (or nothing)
 			if (v.fTiling && sVM >= 0)
-				FColdbootVM(sVM);
+				ColdStart(sVM);
 			
 			// cold start the active VM
 			else if (!v.fTiling)
-				FColdbootVM(v.iVM);
+				ColdStart(v.iVM);
 			
             break;
 
 		// F10
 		case IDM_WARMSTART:
+
+			// !!! no error checking
+
 			// warm start the tile in focus (or nothing)
 			if (v.fTiling && sVM >= 0)
 				FWarmbootVM(sVM);
@@ -3976,6 +4036,7 @@ break;
 			SelectInstance(-1);	// go backwards
 			break;
 
+
 		char chFN[MAX_PATH];
 		BOOL f;
 
@@ -3983,14 +4044,14 @@ break;
 			chFN[0] = 0;	// necessary!
 			f = OpenTheFile(vi.hWnd, chFN, TRUE, 2);
 			if (f)
-				SaveProperties(chFN);
+				f = SaveProperties(chFN); // !!! error - now what?
 			break;
 
 		case IDM_LOAD:
 			chFN[0] = 0;	// necessary!
 			f = OpenTheFile(vi.hWnd, chFN, FALSE, 2);
 			if (f)
-				f = LoadProperties(chFN);
+				f = LoadProperties(chFN); // !!! error - now what?
 
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone
@@ -4292,7 +4353,7 @@ break;
         break;
 
 	case WM_MOUSEWHEEL:
-		signed short int offset = HIWORD(uParam);
+		short int offset = HIWORD(uParam);
 	
 		sWheelOffset += (offset / 120) * 8; // how much did we scroll? (speed 8 seems good)
 
@@ -4436,7 +4497,7 @@ break;
     case WM_MOUSEMOVE:
         if (FIsAtari8bit(vmCur.bfHW))
         {
-	        FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM
+	        FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM !!! not listening to whether to eat it
 
 			// in Tile Mode, make note of which tile we are hovering over
 			// !!! In the future, send all joy and key input there
@@ -6034,9 +6095,7 @@ char *PchFromBfRgSz(ULONG bf, char const * const *rgsz)
 
 BOOL FMonoFromBf(ULONG bf)
 {
-    return (vmCur.bfMon == monMono)
-         || (vmCur.bfMon == monSTMono)
-        ;
+    return (bf == monMono) || (bf == monSTMono);
 }
 
 
@@ -6095,6 +6154,7 @@ ULONG BfFromWfI(ULONG wf, int i)
 // Add a byte to the IKBD input buffer
 //
 
+// !!! only works on the current instance
 void AddToPacket(ULONG b)
 {
     vvmi.rgbKeybuf[vvmi.keyhead++] = (BYTE)b;
@@ -6119,6 +6179,8 @@ void MarkAllPagesClean()
     vi.fVideoWrite = 0;
 }
 
+
+#if defined(ATARIST) || defined(SOFTMAC)
 //
 // CbReadWholeFile(filename, count, buffer);
 //
@@ -6163,8 +6225,6 @@ int CbReadWholeFile(char *sz, int cb, void *buf)
 }
 
 
-#if defined(ATARIST) || defined(SOFTMAC)
-
 //
 // CbReadWholeFileToGuest(filename, count, addr);
 //
@@ -6197,7 +6257,88 @@ int CbReadWholeFileToGuest(char *sz, int cb, ULONG addr, ULONG access_mode)
     return cb;
 }
 
-#endif  // ATARIST
+BOOL FWriteWholeFile(char *sz, int cb, void *buf)
+{
+	HANDLE h;
+	char szDir[MAX_PATH];
+
+	GetCurrentDirectory(MAX_PATH, (char *)szDir);
+
+#if !defined(NDEBUG)
+	printf("FWriteWholeFile: dir = '%s', file = '%s'\n", szDir, sz);
+#endif
+
+	if ((sz[1] == ':') || (sz[0] == '\\') || (sz[1] == '\\'))
+		strcpy(szDir, sz);
+	else
+	{
+		strcat(szDir, "\\");
+		strcat(szDir, sz);
+	}
+
+#if !defined(NDEBUG)
+	printf("actual filename: '%s'\n", szDir);
+#endif
+
+	h = CreateFile(szDir, GENERIC_READ | GENERIC_WRITE, 0,
+		NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (h != INVALID_HANDLE_VALUE)
+	{
+		int cbWrite;
+
+		WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
+		CloseHandle(h);
+
+		return cb == cbWrite;
+	}
+
+	return FALSE;
+}
+
+
+BOOL FAppendWholeFile(char *sz, int cb, void *buf)
+{
+	HANDLE h;
+	char szDir[MAX_PATH];
+
+	GetCurrentDirectory(MAX_PATH, (char *)szDir);
+
+#if !defined(NDEBUG)
+	printf("FAppendWholeFile: dir = '%s', file = '%s'\n", szDir, sz);
+#endif
+
+	if ((sz[1] == ':') || (sz[0] == '\\') || (sz[1] == '\\'))
+		strcpy(szDir, sz);
+	else
+	{
+		strcat(szDir, "\\");
+		strcat(szDir, sz);
+	}
+
+#if !defined(NDEBUG)
+	printf("actual filename: '%s'\n", szDir);
+#endif
+
+	h = CreateFile(szDir, GENERIC_READ | GENERIC_WRITE, 0,
+		NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (h != INVALID_HANDLE_VALUE)
+	{
+		int cbWrite;
+
+		SetFilePointer(h, 0, NULL, FILE_END);
+		WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
+		CloseHandle(h);
+
+		return cb == cbWrite;
+	}
+
+	return FALSE;
+}
+
+
+#endif  // ATARIST SOFTMAC
 
 #if 0
 DWORD FReadChunkFile(char *sz, int cb, void *buf, DWORD offset)
@@ -6240,86 +6381,6 @@ DWORD FReadChunkFile(char *sz, int cb, void *buf, DWORD offset)
     return 0;
 }
 #endif
-
-BOOL FWriteWholeFile(char *sz, int cb, void *buf)
-{
-    HANDLE h;
-    char szDir[MAX_PATH];
-
-    GetCurrentDirectory(MAX_PATH, (char *)szDir);
-
-#if !defined(NDEBUG)
-    printf("FWriteWholeFile: dir = '%s', file = '%s'\n", szDir, sz);
-#endif
-
-    if ((sz[1] == ':') || (sz[0] == '\\') || (sz[1] == '\\'))
-        strcpy(szDir,sz);
-    else
-        {
-        strcat(szDir,"\\");
-        strcat(szDir,sz);
-        }
-
-#if !defined(NDEBUG)
-    printf("actual filename: '%s'\n", szDir);
-#endif
-
-    h = CreateFile(szDir, GENERIC_READ | GENERIC_WRITE, 0,
-          NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if (h != INVALID_HANDLE_VALUE)
-        {
-        int cbWrite;
-
-        WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
-        CloseHandle(h);
-
-        return cb == cbWrite;
-        }
-
-    return FALSE;
-}
-
-
-BOOL FAppendWholeFile(char *sz, int cb, void *buf)
-{
-    HANDLE h;
-    char szDir[MAX_PATH];
-
-    GetCurrentDirectory(MAX_PATH, (char *)szDir);
-
-#if !defined(NDEBUG)
-    printf("FAppendWholeFile: dir = '%s', file = '%s'\n", szDir, sz);
-#endif
-
-    if ((sz[1] == ':') || (sz[0] == '\\') || (sz[1] == '\\'))
-        strcpy(szDir,sz);
-    else
-        {
-        strcat(szDir,"\\");
-        strcat(szDir,sz);
-        }
-
-#if !defined(NDEBUG)
-    printf("actual filename: '%s'\n", szDir);
-#endif
-
-    h = CreateFile(szDir, GENERIC_READ | GENERIC_WRITE, 0,
-          NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if (h != INVALID_HANDLE_VALUE)
-        {
-        int cbWrite;
-
-        SetFilePointer(h, 0, NULL, FILE_END);
-        WriteFile(h, buf, cb, (LPDWORD)&cbWrite, NULL);
-        CloseHandle(h);
-
-        return cb == cbWrite;
-        }
-
-    return FALSE;
-}
 
 
 #if defined(ATARIST) || defined(SOFTMAC)

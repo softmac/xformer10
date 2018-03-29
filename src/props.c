@@ -42,13 +42,14 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 
 //
 // Add a new virtual machine to v.rgvm - return which instance it found
+// It will Install only... the caller needs to set a disk or cartridge image after this
+// before calling Init, ColdStart and CreateNewBitmap
 //
 
 BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 {
     int i;
-    BOOL f;
-
+    
     // first try to find an empty slot in the rgvm array
     for (i = 0; i < MAX_VM; i++)
     {
@@ -59,24 +60,24 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
     // did not find an empty slot!
 	if (i == MAX_VM)
 	{
-		assert(FALSE);
 		return FALSE;
 	}
 
     // i is now an index to an empty VM
 
-	v.cVM++;
-    if (pi)
+	if (pi)
         *pi = i;
 
 	// our jump table for the routines. FInstallVM will crash if we don't do this first
 	v.rgvm[i].pvmi = (VMINFO *)pvmi;
-	v.rgvm[i].fColdReset = TRUE;	// needs a cold start before it can run
 
-	f = FInstallVM(i, (VMINFO *)pvmi, type);
+	BOOL f = FInstallVM(i, (VMINFO *)pvmi, type);
 
 	v.rgvm[i].fValidVM = f;
 
+	if (f)
+		v.cVM++;
+	
 	// decide on an app level?
 	v.rgvm[i].fSound = TRUE;
 	v.rgvm[i].fJoystick = TRUE;
@@ -84,19 +85,30 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 	return f;
 }
 
+// This will Uninit and delete the VM, freeing it's bitmap, etc.
+//
 void DeleteVM(int iVM)
 {
 	if (!v.rgvm[iVM].fValidVM)
 		return;
 
-	SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
-	DeleteObject(vrgvmi[iVM].hbm);
-	vrgvmi[iVM].hbm = NULL;
-	DeleteDC(vrgvmi[iVM].hdcMem);
-	vrgvmi[iVM].hdcMem = NULL;
+	if (vrgvmi[iVM].hdcMem)
+	{
+		SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
+		DeleteDC(vrgvmi[iVM].hdcMem);
+		vrgvmi[iVM].hdcMem = NULL;
+	}
+	
+	if (vrgvmi[iVM].hbm)
+	{
+		DeleteObject(vrgvmi[iVM].hbm);
+		vrgvmi[iVM].hbm = NULL;
+	}
+	
 	FUnInitVM(iVM);
 	v.rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
 	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
+	
 	v.cVM--;	// one fewer valid instance now
 
 	if (v.cVM)
@@ -107,7 +119,7 @@ void DeleteVM(int iVM)
 // First time initialization of global properties
 //
 
-BOOL InitProperties()
+void InitProperties()
 {
 	memset(&v, 0, sizeof(v));
 
@@ -149,7 +161,7 @@ BOOL InitProperties()
 
 	strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
-	return TRUE;
+	return;
 }
 
 // make one of everything, it's our kind of default
@@ -157,34 +169,54 @@ BOOL InitProperties()
 BOOL CreateAllVMs()
 {
 	int vmNew;
+	BOOL f = FALSE;
 
 	// make one of everything at the same time
 #ifdef XFORMER
 
     // Create and initialize the default Atari 8-bit VMs
 
-	AddVM(&vmi800, &vmNew, vmAtari48);
-	FInitVM(vmNew);
+	if (!AddVM(&vmi800, &vmNew, vmAtari48))
+		return f;
 
-	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
-	if (vi.hdc)
-		CreateNewBitmap(vmNew);
+// !!! if you want to put a default disk in the drive for a new VM, this is the place to do it
+// if one is shipped and its directory location is well known
+#if 0
+	v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;	// and 1 and 2 too
+	strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// doesn't work, not in right dir
+#endif
 
-	SelectInstance(vmNew);	// select this one
+	f = FALSE;
+	if (FInitVM(vmNew))
+		if (f = ColdStart(vmNew))
+			if (vi.hdc)
+				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+	if (!f)
+		DeleteVM(vmNew);
+	else
+		SelectInstance(vmNew);	// select the first one we make as current
 
-    AddVM(&vmi800, &vmNew, vmAtariXL);
-	FInitVM(vmNew);
-	
-	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
-	if (vi.hdc)
-		CreateNewBitmap(vmNew);
+	if (!AddVM(&vmi800, &vmNew, vmAtariXL))
+		return f;
 
-	AddVM(&vmi800, &vmNew, vmAtariXE);
-	FInitVM(vmNew);
+	f = FALSE;
+	if (FInitVM(vmNew))
+		if (f = ColdStart(vmNew))
+			if (vi.hdc)
+				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+	if (!f)
+		DeleteVM(vmNew);
 
-	// make the screen buffer. If it's too soon (initial start up) it will happen when our window is created
-	if (vi.hdc)
-		CreateNewBitmap(vmNew);
+	if (!AddVM(&vmi800, &vmNew, vmAtariXE))
+		return f;
+
+	f = FALSE;
+	if (FInitVM(vmNew))
+		if (f = ColdStart(vmNew))
+			if (vi.hdc)
+				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+	if (!f)
+		DeleteVM(vmNew);
 
 	FixAllMenus();
 
@@ -228,46 +260,7 @@ BOOL CreateAllVMs()
 #endif  // POWERMAC
 #endif  // SOFTMAC2
 
-    return TRUE;
-}
-
-
-BOOL OpenTheINI(HWND hWnd, char *psz)
-{
-    OPENFILENAME OpenFileName;
-
-    // Fill in the OPENFILENAME structure to support a template and hook.
-    OpenFileName.lStructSize       = sizeof(OPENFILENAME);
-    OpenFileName.hwndOwner         = hWnd;
-    OpenFileName.hInstance         = NULL;
-    OpenFileName.lpstrFilter   =
-             "Configuration Files (*.cfg;*.ini)\0*.cfg;*.ini\0All Files\0*.*\0\0";
-    OpenFileName.lpstrCustomFilter = NULL;
-    OpenFileName.nMaxCustFilter    = 0;
-    OpenFileName.nFilterIndex      = 0;
-    OpenFileName.lpstrFile         = psz;
-    OpenFileName.nMaxFile          = MAX_PATH;
-    OpenFileName.lpstrFileTitle    = NULL;
-    OpenFileName.nMaxFileTitle     = 0;
-    OpenFileName.lpstrInitialDir   = NULL;
-    OpenFileName.lpstrTitle        = "Select Configuration File";
-    OpenFileName.nFileOffset       = 0;
-    OpenFileName.nFileExtension    = 0;
-    OpenFileName.lpstrDefExt       = NULL;
-    OpenFileName.lCustData         = 0;
-    OpenFileName.lpfnHook            = NULL;
-    OpenFileName.lpTemplateName    = NULL;
-    OpenFileName.Flags             = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST \
-                                                  | OFN_CREATEPROMPT;
-
-    // Call the common dialog function.
-    if (GetOpenFileName(&OpenFileName))
-        {
-        strcpy(psz, OpenFileName.lpstrFile);
-        return TRUE;
-        }
-
-    return FALSE;
+    return f;
 }
 
 
@@ -286,8 +279,8 @@ BOOL LoadProperties(char *szIn)
     PROPS vTmp;
     char rgch[MAX_PATH];
 	char *sz;
-    BOOL f = fFalse;
-    BOOL fTriedWindows = fFalse;
+	BOOL f = FALSE;
+    BOOL fTriedWindows = FALSE;
 
 	sz = szIn;
 	if (!szIn)
@@ -334,10 +327,8 @@ LTryAgain:
 		l = _read(h, &vTmp, l);
 	}
 
-    // if INI file contained valid data, use it
-    // otherwise make the user give you data
-
-	if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic))
+    // if INI file contained valid data, use what we can of it, otherwise fail
+	if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic)) // check for version difference
 	{
 		
 		// looks like something valid can be read, now it's safe to delete the old stuff
@@ -349,7 +340,7 @@ LTryAgain:
 		}
 
 		v = vTmp;
-		f = fTrue;
+		f = TRUE;
 
 		// non-persistable pointers need to be refreshed
 		// and only use VM's that we can handle in this build
@@ -402,56 +393,70 @@ LTryAgain:
 			v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
 
 			// we just loaded an instance off disk. Install and Init it.
-			if (v.rgvm[i].fValidVM)
+			if (f && v.rgvm[i].fValidVM)
 			{
-				v.cVM++;
-				FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
+				f = FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
 
-				// get the size of the persisted data
-				DWORD cb;
-				l = _read(h, &cb, sizeof(DWORD));
+				if (f)
+				{
+					// get the size of the persisted data
+					DWORD cb;
+					l = _read(h, &cb, sizeof(DWORD));
 
-				// either restore from the persisted data, or just Init a blank VM if something goes wrong
-				if (l) {
-					char *pPersist = malloc(cb);
-					l = 0;
-					if (pPersist)
-						l = _read(h, pPersist, cb);
-					if (l == (int)cb) {
-						if (FLoadStateVM(i, pPersist, cb))
-							vi.fExecuting = TRUE;	// OK to start executing, we've loading something saved
+					// either restore from the persisted data, or just Init a blank VM if something goes wrong
+					if (l)	// that's a L, not a 1.
+					{
+						char *pPersist = malloc(cb);
+						l = 0;
+						if (pPersist)
+							l = _read(h, pPersist, cb);
+						if (l == (int)cb) {
+							if (FLoadStateVM(i, pPersist, cb))
+								// !!! silly global
+								// OK to start executing, we've loading something saved (we're not doing a cold start)
+								vi.fExecuting = TRUE;
+							else
+							{
+								f = FALSE;
+								if (FInitVM(i))
+									f = ColdStart(i);
+							}
+						}
 						else
 						{
-							v.rgvm[i].fColdReset = TRUE;	// uh oh, couldn't load VM state, it will come up fresh
-							FInitVM(i);
+							// can't restore state? we need a reboot or we'll hang. It seems hacky
+							// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
+							f = FALSE;
+							if (FInitVM(i))
+								f = ColdStart(i);
 						}
+						free(pPersist);
 					}
 					else
 					{
 						// can't restore state? we need a reboot or we'll hang. It seems hacky
 						// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
-						v.rgvm[i].fColdReset = TRUE;
-						FInitVM(i);
+						f = FALSE;
+						if (FInitVM(i))
+							f = ColdStart(i);
 					}
-					free(pPersist);
-				}
-				else
-				{
-					// can't restore state? we need a reboot or we'll hang. It seems hacky
-					// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
-					v.rgvm[i].fColdReset = TRUE;
-					FInitVM(i);
 				}
 
 				// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
 				// it will happen when our window is created
-				if (vi.hdc)
-					CreateNewBitmap(i);
+				if (f && vi.hdc)
+					f = CreateNewBitmap(i);
+				if (f)
+					v.cVM++;
 			}
+
+			if (!f)
+				v.rgvm[i].fValidVM = FALSE;	// mark every valid VM that really isn't as invalid.
 		}
 
-		// now select the instance that was current when we saved
-		SelectInstance(v.iVM);
+		// now select the instance that was current when we saved (or find something good)
+		if (v.cVM > 0)
+			SelectInstance(v.iVM);
 	}
 	
 	if (h != -1)
@@ -483,18 +488,29 @@ LTryAgain:
         }
 #endif
 
-    return f && v.cVM;	// must have an instance loaded to count as success
+	// if we only partially loaded, free the stuff that did.
+	if (!f && v.cVM)
+	{
+		for (int z = 0; z < MAX_VM; z++)
+		{
+			if (v.rgvm[z].fValidVM)
+				DeleteVM(z);
+		}
+		return FALSE;
+	}
+
+	return f && v.cVM;
 }
 
 //
-// If properties are dirty, prompt user to save properties to INI or registry
-//
 // NULL = save to INI file that becomes the auto-start up file
+// NON-NULL = save to a specific file
 //
 BOOL SaveProperties(char *szIn)
 {
     char rgch[MAX_PATH];
     int h;
+	BOOL f = FALSE;
 
 	if (szIn == NULL)
 	{
@@ -510,7 +526,7 @@ BOOL SaveProperties(char *szIn)
 			_close(h);
 			int h2 = MessageBox(vi.hWnd, "File exists. Overwrite?", "File Exists", MB_YESNO);
 			if (h2 == IDNO)
-				return FALSE;
+				return FALSE;	// we don't differentiate between file exists real failure
 		}
 		h = _open(szIn, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
 	}
@@ -528,17 +544,29 @@ BOOL SaveProperties(char *szIn)
 	if (h != -1)
 	{
 		_lseek(h, 0L, SEEK_SET);
-		_write(h, &v, sizeof(v));
+		int l = _write(h, &v, sizeof(v));
 
-		for (int i = 0; i < MAX_VM; i++)
+		if (l == sizeof(v))
 		{
-			if (v.rgvm[i].fValidVM)
+			f = TRUE;
+			for (int i = 0; i < MAX_VM && f; i++)
 			{
-				DWORD cb;
-				char *pPersist;
-				FSaveStateVM(i, (char **)&pPersist, (int *)&cb);
-				_write(h, &cb, sizeof(DWORD));
-				_write(h, pPersist, cb);
+				if (v.rgvm[i].fValidVM)
+				{
+					f = FALSE;
+					DWORD cb;
+					char *pPersist;
+					if (FSaveStateVM(i, &pPersist, (int *)&cb))
+					{
+						l = _write(h, &cb, sizeof(DWORD));
+						if (l == sizeof(DWORD))
+						{
+							l = _write(h, pPersist, cb);
+							if (l == (int)cb)
+								f = TRUE;	// it all worked! Something was saved
+						}
+					}
+				}
 			}
 		}
 		_close(h);
@@ -547,10 +575,50 @@ BOOL SaveProperties(char *szIn)
 	if (szIn == NULL)
 		SetCurrentDirectory(rgch);
     
-	return h != -1;
+	return f;
 }
 
 #if 0
+#if 0
+BOOL OpenTheINI(HWND hWnd, char *psz)
+{
+	OPENFILENAME OpenFileName;
+
+	// Fill in the OPENFILENAME structure to support a template and hook.
+	OpenFileName.lStructSize = sizeof(OPENFILENAME);
+	OpenFileName.hwndOwner = hWnd;
+	OpenFileName.hInstance = NULL;
+	OpenFileName.lpstrFilter =
+		"Configuration Files (*.cfg;*.ini)\0*.cfg;*.ini\0All Files\0*.*\0\0";
+	OpenFileName.lpstrCustomFilter = NULL;
+	OpenFileName.nMaxCustFilter = 0;
+	OpenFileName.nFilterIndex = 0;
+	OpenFileName.lpstrFile = psz;
+	OpenFileName.nMaxFile = MAX_PATH;
+	OpenFileName.lpstrFileTitle = NULL;
+	OpenFileName.nMaxFileTitle = 0;
+	OpenFileName.lpstrInitialDir = NULL;
+	OpenFileName.lpstrTitle = "Select Configuration File";
+	OpenFileName.nFileOffset = 0;
+	OpenFileName.nFileExtension = 0;
+	OpenFileName.lpstrDefExt = NULL;
+	OpenFileName.lCustData = 0;
+	OpenFileName.lpfnHook = NULL;
+	OpenFileName.lpTemplateName = NULL;
+	OpenFileName.Flags = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST \
+		| OFN_CREATEPROMPT;
+
+	// Call the common dialog function.
+	if (GetOpenFileName(&OpenFileName))
+	{
+		strcpy(psz, OpenFileName.lpstrFile);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+#endif
+
 BOOL SaveState(BOOL fSave)
 {
 	return TRUE;
