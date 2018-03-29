@@ -599,11 +599,12 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		break;
 
 	case 0x149:         // Page Up
-						// toggle higher clock speed
 
 		if (fDown)
 		{
 #if 0
+			// toggle higher clock speed
+
 			clockMult++;
 
 			if (clockMult > 64)
@@ -612,7 +613,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			printf("clock multiplier = %u\n", clockMult);
 #endif
 			//SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
-			TimeTravel();
+			TimeTravel(v.iVM);
 		}
 		return TRUE;	// don't let ATARI see this
 

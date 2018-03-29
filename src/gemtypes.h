@@ -720,7 +720,7 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type);
 void DeleteVM(int);
 void FixAllMenus();
 
-BOOL SelectInstance(unsigned int);
+BOOL SelectInstance(int);
 
 #define vmCur (*vi.pvmCur)
 #define osCur v.rgosinfo[vmCur.iOS]

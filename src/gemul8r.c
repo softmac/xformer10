@@ -65,9 +65,6 @@ ICpuExec *vpci;
 BOOL fDebug;
 static int nFirstTile; // at which instance does tiling start?
 
-// forward references
-BOOL SelectInstance(int iVM);
-
 #include "shellapi.h"
 
 //
@@ -853,6 +850,9 @@ void CreateVMMenu()
 //
 void FixAllMenus()
 {
+	// use the active tile or if not tiled, the main instance. If tiled without anything active, don't allow anything
+	int inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+
 	// not implemented yet
 	//EnableMenuItem(vi.hMenu, IDM_EXPORTDOS, MF_GRAYED);
 
@@ -868,6 +868,27 @@ void FixAllMenus()
 	CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
 
+	// some menu items not appropriate if tiling, but there's no current tile to do anything to
+	// it could do it on 
+	EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_COLORMONO, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_WARMSTART, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
+
+	// toggle BASIC also has to be relevant
+	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, ((!v.fTiling || sVM >= 0)  && FIsAtari8bit(v.rgvm[inst].bfHW)) ? MF_ENABLED : MF_GRAYED);
+
+	// also, don't let them delete the last VM
+	EnableMenuItem(vi.hMenu, IDM_DELVM, ((!v.fTiling || sVM >= 0) && v.cVM > 1) ? 0 : MF_GRAYED);
+
+	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
+
+#if 0 // delete all VMs not supported
+	// grey out some things if there are no VMs at all
+	//EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
+#endif
+
 	// Initialize the virtual disk menu items to show the associated file path with each drive.
 	// Grey the unload option for a disk that isn't loaded
 
@@ -877,36 +898,45 @@ void FixAllMenus()
 	char mNew[MAX_PATH + 10];
 	mii.dwTypeData = mNew;
 
-	// call them D1: <filespec> - grey an unload choice if nothing is loaded there, and grey them all in tiled mode
-	sprintf(mNew, "&D1: %s ...", vi.pvmCur->rgvd[0].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D1, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_D1U, (vi.pvmCur->rgvd[0].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, (vi.pvmCur->rgvd[0].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-
-	sprintf(mNew, "&D2: %s ...", vi.pvmCur->rgvd[1].sz);
-	SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
-	EnableMenuItem(vi.hMenu, IDM_D2, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_D2U, (vi.pvmCur->rgvd[1].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (vi.pvmCur->rgvd[1].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-
-	//sprintf(mNew, "&D3: %s ...", vi.pvmCur->rgvd[2].sz);
-	//SetMenuItemInfo(vi.hMenu, IDM_D3, FALSE, &mii);
-	//EnableMenuItem(vi.hMenu, IDM_D3, !v.fTiling ? 0 : MF_GRAYED);
-	//EnableMenuItem(vi.hMenu, IDM_D3U, (vi.pvmCur->rgvd[2].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-	//sprintf(mNew, "&D4: %s ...", vi.pvmCur->rgvd[3].sz);
-	//SetMenuItemInfo(vi.hMenu, IDM_D4, FALSE, &mii);
-	//EnableMenuItem(vi.hMenu, IDM_D4, !v.fTiling ? 0 : MF_GRAYED);
-	//EnableMenuItem(vi.hMenu, IDM_D4U, (vi.pvmCur->rgvd[3].sz[0] && !v.fTiling) ? 0 : MF_GRAYED);
-
-	// only 8 bit ATARI supports cartridges right now
-	if (FIsAtari8bit(vmCur.bfHW))
+	if (inst != -1)
 	{
+		// call them D1: <filespec> - grey an unload choice if nothing is loaded there, and grey them all in tiled mode
+		sprintf(mNew, "&D1: %s ...", v.rgvm[inst].rgvd[0].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D1, 0);	// might be grey from before
+		EnableMenuItem(vi.hMenu, IDM_D1U, (v.rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, v.rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
 
+		sprintf(mNew, "&D2: %s ...", v.rgvm[inst].rgvd[1].sz);
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D2, 0);
+		EnableMenuItem(vi.hMenu, IDM_D2U, (v.rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (v.rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+	}
+
+	// no active instance
+	else
+	{
+		sprintf(mNew, "&D1: ...");
+		SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D1, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_D1U, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, MF_GRAYED);
+		
+		sprintf(mNew, "&D2: ...");
+		SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
+		EnableMenuItem(vi.hMenu, IDM_D2, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_D2U, MF_GRAYED);
+		EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, MF_GRAYED);
+	}
+
+	// only 8 bit ATARI supports cartridges right now, and there has to be a valid instance
+	if (FIsAtari8bit(vmCur.bfHW) && inst >= 0)
+	{
 		// show the name of the current cartridge, if there is one
-		if (vi.pvmCur->rgcart.fCartIn)
+		if (v.rgvm[inst].rgcart.fCartIn)
 		{
-			sprintf(mNew, "&Cartridge %s ...", vi.pvmCur->rgcart.szName);
+			sprintf(mNew, "&Cartridge %s ...", v.rgvm[inst].rgcart.szName);
 			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
 		}
 		else
@@ -915,33 +945,17 @@ void FixAllMenus()
 			SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
 		}
 
-		// grey "remove cart" if there isn't one, grey them both if tiling
-		EnableMenuItem(vi.hMenu, IDM_CART, !v.fTiling ? 0 : MF_GRAYED);
-		EnableMenuItem(vi.hMenu, IDM_NOCART, (vi.pvmCur->rgcart.fCartIn && !v.fTiling) ? 0 : MF_GRAYED);
+		// grey "remove cart" if there isn't one
+		EnableMenuItem(vi.hMenu, IDM_CART, 0); // might be grey from before
+		EnableMenuItem(vi.hMenu, IDM_NOCART, (v.rgvm[inst].rgcart.fCartIn) ? 0 : MF_GRAYED);
 	}
 	else
 	{
+		sprintf(mNew, "&Cartridge...");
+		SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
 		EnableMenuItem(vi.hMenu, IDM_CART, MF_GRAYED);
 		EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
 	}
-
-	// don't let them delete the last VM (or anything if tiling)
-	EnableMenuItem(vi.hMenu, IDM_DELVM, (v.cVM > 1 && !v.fTiling) ? 0 : MF_GRAYED);
-
-	// no color/mono switch (that's per instance), cold starting, warm starting or stretching when tiling
-	//EnableMenuItem(vi.hMenu, IDM_COLORMONO, !v.fTiling ? 0 : MF_GRAYED);
-	//EnableMenuItem(vi.hMenu, IDM_COLDSTART, !v.fTiling ? 0 : MF_GRAYED);
-	//EnableMenuItem(vi.hMenu, IDM_WARMSTART, !v.fTiling ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
-	
-	// toggle BASIC also has to be relevant
-	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, FIsAtari8bit(vmCur.bfHW) ? MF_ENABLED : MF_GRAYED);
-
-#if 0 // delete all VMs not supported
-	// grey out some things if there are no VMs at all
-	//EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
-#endif
 
 	// Now fix the FILE menu's list of all valid VM's
 	CreateVMMenu();
@@ -960,7 +974,7 @@ void FixAllMenus()
 		mii.dwTypeData = mNew;
 		strcpy(mNew, rgszVM[zz + 1]);
 		SetMenuItemInfo(vi.hMenu, IDM_ADDVM1 + zz, FALSE, &mii); // show the name of the type of VM (eg. ATARI 800)
-		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM || v.fTiling) ? MF_GRAYED : MF_ENABLED);	// grey it if too many
+		EnableMenuItem(vi.hMenu, IDM_ADDVM1 + zz, (v.cVM == MAX_VM) ? MF_GRAYED : MF_ENABLED);	// grey it if too many
 	}
 #endif
 
@@ -1296,6 +1310,8 @@ int CALLBACK WinMain(
 
 			else if (_stricmp(sFile + len - 3, "gem") == 0)
 			{
+				fSkipLoad = FALSE;	// changed our mind, loading this .gem file
+
 				// delete all of our VMs we accidently made before we found the .gem file
 				for (int z = 0; z < MAX_VM; z++)
 				{
@@ -2403,7 +2419,7 @@ BOOL SelectInstance(int iVM)
 	if (iVM >= MAX_VM)
 		iVM = 0;
 
-	unsigned int old = iVM;
+	int old = iVM;
 
 	while (!v.rgvm[iVM].fValidVM)
 	{
@@ -2849,6 +2865,290 @@ int GetTileFromPos(int xPos, int yPos)
 	return -1;
 }
 
+
+// Extract all the DOS files from this disk image and save them to the PC hard drive
+//
+BOOL SaveATARIDOS(int drive)
+{
+	int inst = (v.fTiling && sVM > 0) ? sVM : (v.fTiling? -1 : v.iVM);	// use the active tile if there is one
+
+	if (inst == -1)
+		return TRUE;
+
+	// Any changes you've made to the disk are immediately saved, thankfully
+	//FUnmountDiskVM(v.iVM, 0);
+	//FMountDiskVM(v.iVM, 0);
+
+	char szDir[MAX_PATH];
+	szDir[0] = 0;
+	DISKINFO *pdi = PdiOpenDisk(v.rgvm[inst].rgvd[drive].dt, (long)v.rgvm[inst].rgvd[drive].sz, DI_READONLY);
+
+	// oops, something wrong with the disk image file
+	if (!pdi)
+		return TRUE;	// don't show an error, there's no actual disk image
+
+	CntReadDiskDirectory(pdi, szDir, NULL);
+
+	BOOL fB, fh = TRUE;
+
+	// save all the files in binary, then text format
+	// !!! or ask them to rename the files to ".txt" or auto detect?
+	for (int ij = 0; ij < pdi->cfd * 2; ij++)
+	{
+
+		szDir[0] = 0;
+		strcat(szDir, v.rgvm[inst].rgvd[drive].sz);
+		strcat(szDir, "_Files");
+
+		// Create a directory named after the disk image for all of its files
+		if (ij == 0)
+			fB = CreateDirectory(szDir, NULL);
+
+		strcat(szDir, "\\");					// add '\'
+		strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);	// add the filename
+		if (ij >= pdi->cfd)
+			strcat(szDir, ".txt");	// 2nd time around, save everything as text
+
+									// get file size
+		ULONG cbSize = CbReadFileContents(pdi, NULL, &pdi->pfd[ij % pdi->cfd]);
+
+		if (cbSize > 0)
+		{
+			unsigned char *szFile = malloc(cbSize);
+			if (!szFile)
+			{
+				fh = FALSE;
+				break;
+			}
+
+			cbSize = CbReadFileContents(pdi, szFile, &pdi->pfd[ij % pdi->cfd]);
+
+			int h = _open(szDir, _O_BINARY | _O_RDONLY);
+			if (h != -1)
+			{
+				_close(h);
+				char ods[MAX_PATH];
+				sprintf(ods, "\"%s\" exists. Overwrite?", szDir);
+				int h2 = MessageBox(vi.hWnd, ods, "File Exists", MB_YESNO);
+				if (h2 == IDNO)
+					continue;
+			}
+			h = _open(szDir, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+
+			// 2nd time around, convert the buffer to text (ATASCII -> ASCII)
+			// !!! Check ATARIWRITER format is just plain ATASCII
+			if (h != -1 && ij >= pdi->cfd)
+			{
+				// a buffer for the ASCII (maximum 2 characters per character)
+				unsigned char *szA = malloc(cbSize * 2);
+				unsigned char *szA1 = szA;
+				int cbA = 0;
+				if (!szA)
+				{
+					fh = FALSE;
+					_close(h);
+					free(szFile);
+					break;
+				}
+
+				for (unsigned int ind = 0; ind < cbSize; ind++)
+				{
+					// first one is CR, subsequent ones are LF
+					if (szFile[ind] == 0x9b)
+					{
+						*szA++ = 0x0d;
+						*szA++ = 0x0a;
+						cbA += 2;
+					}
+					// TAB
+					else if (szFile[ind] == 0x7f)
+					{
+						*szA++ = 0x09;
+						cbA++;
+					}
+					// BACKSPACE
+					else if (szFile[ind] == 0x7e)
+					{
+						*szA++ = 0x08;
+						cbA++;
+					}
+					else
+					{
+						*szA++ = szFile[ind];
+						cbA++;
+					}
+				}
+				fB = _write(h, szA1, cbA);
+
+				// something in the process failed
+				if (fB != cbA)
+					fh = FALSE;
+
+				free(szA1);
+			}
+			else if (h != -1)
+			{
+				fB = _write(h, szFile, cbSize);
+
+				// something in the process failed
+				if (fB != (BOOL)cbSize)
+					fh = FALSE;
+			}
+
+			_close(h);
+			free(szFile);
+
+			// something in the process failed
+			if (h == -1)
+				fh = FALSE;
+		}
+	}
+
+	fB = CloseDiskPdi(pdi);
+
+	return fh;
+}
+
+
+void ShowAbout()
+{
+	char rgch[1120], rgch2[64], rgchVer[32];
+	OSVERSIONINFO oi;
+
+	oi.dwOSVersionInfoSize = sizeof(oi);
+	GetVersionEx(&oi);  // REVIEW: requires Win32s 1.2+
+
+	switch (oi.dwPlatformId)
+	{
+	default:
+	case VER_PLATFORM_WIN32_WINDOWS:
+		strcpy(rgchVer, "Windows 95/98/Me");
+		break;
+
+	case VER_PLATFORM_WIN32s:
+		strcpy(rgchVer, "Win32s");
+		break;
+
+	case VER_PLATFORM_WIN32_NT:
+		strcpy(rgchVer, "Windows");
+
+		if (oi.dwMajorVersion < 5)
+		{
+			strcpy(rgchVer, "Windows NT");
+		}
+		else if (oi.dwMajorVersion == 5)
+		{
+			if (oi.dwMinorVersion == 0)
+			{
+				strcpy(rgchVer, "Windows 2000");
+			}
+			else if (oi.dwMinorVersion == 1)
+			{
+				strcpy(rgchVer, "Windows XP");
+			}
+			else
+			{
+				strcpy(rgchVer, "Windows 2003");
+			}
+		}
+		else if (oi.dwMajorVersion == 6)
+		{
+			if ((oi.dwBuildNumber & 65535) <= 6000)
+			{
+				strcpy(rgchVer, "Windows Vista");
+			}
+			else if (oi.dwMinorVersion == 0)
+			{
+				strcpy(rgchVer, "Windows Vista / Server 2008");
+			}
+			else if (oi.dwMinorVersion == 1)
+			{
+				strcpy(rgchVer, "Windows 7 / Server 2008 R2");
+			}
+			else if (oi.dwMinorVersion == 2)
+			{
+				if ((oi.dwBuildNumber & 65535) < 8400)
+					strcpy(rgchVer, "Windows 8 Beta");
+				else if ((oi.dwBuildNumber & 65535) == 8400)
+					strcpy(rgchVer, "Windows 8 Consumer Preview");
+				else if ((oi.dwBuildNumber & 65535) < 9200)
+					strcpy(rgchVer, "Windows 8 pre-release");
+				else
+					// !!! It says this for Windows 10!
+					strcpy(rgchVer, "Windows 8");
+			}
+			else
+			{
+				strcpy(rgchVer, "Windows 8 or later");
+			}
+		}
+		else
+		{
+			strcpy(rgchVer, "Windows 8 or later");
+		}
+		break;
+	};
+
+	sprintf(rgch2, "About %s", vi.szAppName);
+
+	sprintf(rgch, "%s Community Release\n"
+		"Darek's Classic Computer Emulator.\n"
+		"Version 9.90 - built on %s\n"
+		"%2d-bit %s release.\n\n"
+		"Copyright (C) 1986-2018 Darek Mihocka.\n"
+		"All Rights Reserved.\n\n"
+
+#ifdef XFORMER
+		"Atari OS and BASIC used with permission.\n"
+		"Copyright (C) 1979-1984 Atari Corp.\n\n"
+#endif
+
+		"Many thanks to: "
+		"Ignac Kolenko, "
+		"Ed Malkiewicz, "
+		"Bill Huey, "
+		"\n"
+#if defined(ATARIST) || defined(SOFTMAC)
+		"Christian Bauer, "
+		"Simon Biber, "
+		"\n"
+		"William Condie, "
+		"Phil Cummins, "
+		"Kyle Fox, "
+		"\n"
+		"Manuel Perez, "
+		"Ray Ruvinskiy, "
+		"Joel Walter, "
+		"\n"
+		"Jim Watters, "
+#endif
+		"Danny Miller, "
+		"Robert Birmingham, "
+		"and Derek Yenzer.\n\n"
+
+		"Windows version: %d.%02d (build %d)\n"
+		"Windows platform: %s\n"
+		,
+		vi.szAppName,
+		__DATE__,
+		sizeof(void *) * 8,
+#if defined(_M_AMD64)
+		"x64",
+#elif defined(_M_IX86)
+		"x86",
+#elif defined(_M_IX86)	// !!! _M_ARM
+		"ARM",
+#else
+		"",		// !!! ARM64
+#endif
+		oi.dwMajorVersion, oi.dwMinorVersion,
+		oi.dwBuildNumber & 65535,
+		rgchVer,
+		0);
+
+	MessageBox(GetFocus(), rgch, rgch2, MB_OK);
+}
+
 /****************************************************************************
 
     FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -2870,6 +3170,7 @@ int GetTileFromPos(int xPos, int yPos)
 
 ****************************************************************************/
 
+
 LRESULT CALLBACK WndProc(
         HWND hWnd,     // window handle
         UINT message,      // type of message
@@ -2880,16 +3181,15 @@ LRESULT CALLBACK WndProc(
     Assert((hWnd == vi.hWnd) || (vi.hWnd == NULL));
 
     switch (message)
-        {
-    case WM_CREATE:
+    {
+    
+	case WM_CREATE:
         vi.hdc = GetDC(hWnd);
-        SetTextAlign(vi.hdc, TA_NOUPDATECP);
+		SetTextAlign(vi.hdc, TA_NOUPDATECP);
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
         SetBkMode(vi.hdc, TRANSPARENT);
 
-        //FCreateOurPalette();
-		
-		// now that we have a DC make all the buffers for the screens of all the instances
+    	// now that we have a DC make all the buffers for the screens of all the instances
 		for (int iVM = 0; iVM < MAX_VM; iVM++)
 		{
 			if (v.rgvm[iVM].fValidVM)
@@ -2898,7 +3198,7 @@ LRESULT CALLBACK WndProc(
 
 		// if we were saved in fullscreen mode, then actually go into fullscreen
 		if (v.fFullScreen) {
-			v.fFullScreen = FALSE;	// think we aren't in it yet
+			v.fFullScreen = FALSE;	// so we think we aren't in it yet
 			
 			// vi.hWnd won't be set until this WM_CREATE finishes
 			// and other stuff isn't set up yet, so don't Send the message immediately, Post it.
@@ -2909,15 +3209,12 @@ LRESULT CALLBACK WndProc(
 		InitSound();
 
 //        SetTimer(hWnd, 0, 100, NULL);
-
 //        SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-
 //        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
         TrayMessage(hWnd, NIM_ADD, 0,
             LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), NULL);
 
-        return 0;
         break;
 
     case WM_MOVE:
@@ -2943,10 +3240,12 @@ LRESULT CALLBACK WndProc(
         break;
 
     case WM_SIZE:
+
 #if !defined(NDEBUG)
         printf("WM_SIZE x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
 #endif
 
+		// This code hasn't been enabled in years
         if (vi.fInDirectXMode)
           {
             RECT Rect;
@@ -2962,8 +3261,9 @@ LRESULT CALLBACK WndProc(
 					if (!IsIconic(vi.hWnd))
 						GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 		
-    //    CreateNewBitmap();
-    //    return 0;
+		// If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
+		sWheelOffset = 0;
+
         break;
 
     case WM_DISPLAYCHANGE:
@@ -2986,7 +3286,6 @@ LRESULT CALLBACK WndProc(
 			CreateNewBitmap(iVM);	// fix every instance's bitmap
 		}
 
-   //   return 0;
         break;
 
 #if !defined(NDEBUG)
@@ -3142,22 +3441,10 @@ break;
         UpdateOverlay();
 
         EndPaint(hWnd, &ps);
-// PrintScreenStats(); printf("WM_PAINT after GDI StretchBlt\n");
+		
+		// PrintScreenStats(); printf("WM_PAINT after GDI StretchBlt\n");
         }
-        return 0;
-
-#if 0
-    case WM_PALETTECHANGED:
-        if ((HWND)uParam == vi.hWnd)
-            break;
-        // fall through
-
-    case WM_QUERYNEWPALETTE:
-        if (FCreateOurPalette())
-            InvalidateRect(hWnd, NULL, TRUE);
-        return 0;
-        break;
-#endif
+		 break;
 
        case WM_SETCURSOR:
 
@@ -3277,7 +3564,18 @@ break;
         break;
 
 #if 0
-    case WM_SYSCOMMAND:
+	case WM_PALETTECHANGED:
+		if ((HWND)uParam == vi.hWnd)
+			break;
+		// fall through
+
+	case WM_QUERYNEWPALETTE:
+		if (FCreateOurPalette())
+			InvalidateRect(hWnd, NULL, TRUE);
+		return 0;
+		break;
+	
+	case WM_SYSCOMMAND:
         switch(uParam&0xFFF0)
             {
         default:
@@ -3312,281 +3610,14 @@ break;
 		case IDM_IMPORTDOS2:
 
 			int drive = wmId - IDM_IMPORTDOS1;
-
-			// Any changes you've made to the disk are not saved until the drive is un-mounted and re-mounted
-			//FUnmountDiskVM(v.iVM, 0);
-			//FMountDiskVM(v.iVM, 0);
-
-			char szDir[MAX_PATH];
-			szDir[0] = 0;
-			DISKINFO *pdi = PdiOpenDisk(vi.pvmCur->rgvd[drive].dt, (long)vi.pvmCur->rgvd[drive].sz, DI_READONLY);
-
-			// oops, something wrong with the disk image file
-			if (!pdi)
-				break;
-
-			CntReadDiskDirectory(pdi, szDir, NULL);
-			
-			BOOL fB, fh = TRUE;
-
-			// save all the files in binary, then text format
-			// !!! or ask them to rename the files to ".txt" or auto detect?
-			for (int ij = 0; ij < pdi->cfd * 2; ij++)
-			{
-			
-				szDir[0] = 0;
-				strcat(szDir, vi.pvmCur->rgvd[drive].sz);
-				strcat(szDir, "_Files");
-
-				// Create a directory named after the disk image for all of its files
-				if (ij == 0)
-					fB = CreateDirectory(szDir, NULL);
-
-				strcat(szDir, "\\");					// add '\'
-				strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);	// add the filename
-				if (ij >= pdi->cfd)
-					strcat(szDir, ".txt");	// 2nd time around, save everything as text
-
-				// get file size
-				ULONG cbSize = CbReadFileContents(pdi, NULL, &pdi->pfd[ij % pdi->cfd]);
-				
-				if (cbSize > 0)
-				{
-					unsigned char *szFile = malloc(cbSize);
-					if (!szFile)
-					{
-						fh = FALSE;
-						break;
-					}
-
-					cbSize = CbReadFileContents(pdi, szFile, &pdi->pfd[ij % pdi->cfd]);
-
-					int h = _open(szDir, _O_BINARY | _O_RDONLY);
-					if (h != -1)
-					{
-						_close(h);
-						char ods[MAX_PATH];
-						sprintf(ods, "\"%s\" exists. Overwrite?", szDir);
-						int h2 = MessageBox(vi.hWnd, ods, "File Exists", MB_YESNO);
-						if (h2 == IDNO)
-							continue;
-					}
-					h = _open(szDir, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
-					
-					// 2nd time around, convert the buffer to text (ATASCII -> ASCII)
-					// !!! Check ATARIWRITER format is just plain ATASCII
-					if (h != -1 && ij >= pdi->cfd)
-					{
-						// a buffer for the ASCII (maximum 2 characters per character)
-						unsigned char *szA = malloc(cbSize * 2);
-						unsigned char *szA1 = szA;
-						int cbA = 0;
-						if (!szA)
-						{
-							fh = FALSE;
-							_close(h);
-							free(szFile);
-							break;
-						}
-
-						for (unsigned int ind = 0; ind < cbSize; ind++)
-						{
-							// first one is CR, subsequent ones are LF
-							if (szFile[ind] == 0x9b)
-							{
-								*szA++ = 0x0d;
-								*szA++ = 0x0a;
-								cbA += 2;
-							}
-							// TAB
-							else if (szFile[ind] == 0x7f)
-							{
-								*szA++ = 0x09;
-								cbA++;
-							}
-							// BACKSPACE
-							else if (szFile[ind] == 0x7e)
-							{
-								*szA++ = 0x08;
-								cbA++;
-							}
-							else
-							{
-								*szA++ = szFile[ind];
-								cbA++;
-							}
-						}
-						fB = _write(h, szA1, cbA);
-						
-						// something in the process failed
-						if (fB != cbA)
-							fh = FALSE;
-						
-						free(szA1);
-					}					
-					else if (h != -1)
-					{
-						fB = _write(h, szFile, cbSize);
-						
-						// something in the process failed
-						if (fB != (BOOL)cbSize)
-							fh = FALSE;
-					}
-
-					_close(h);
-					free(szFile);
-					
-					// something in the process failed
-					if (h == -1)
-						fh = FALSE;
-				}
-			}
-			
-			fB = CloseDiskPdi(pdi);
-
-			if (!fh)
+			if (!SaveATARIDOS(drive))
 				MessageBox(vi.hWnd, "Not every file saved successfully", "Extract ATARI DOS Files", MB_OK);
-
 			break;
 
 		// bring up our ABOUT MessageBox
 		case IDM_ABOUT:
 
-			char rgch[1120], rgch2[64], rgchVer[32];
-			OSVERSIONINFO oi;
-
-			oi.dwOSVersionInfoSize = sizeof(oi);
-			GetVersionEx(&oi);  // REVIEW: requires Win32s 1.2+
-
-			switch (oi.dwPlatformId)
-			{
-			default:
-			case VER_PLATFORM_WIN32_WINDOWS:
-				strcpy(rgchVer, "Windows 95/98/Me");
-				break;
-
-			case VER_PLATFORM_WIN32s:
-				strcpy(rgchVer, "Win32s");
-				break;
-
-			case VER_PLATFORM_WIN32_NT:
-				strcpy(rgchVer, "Windows");
-
-				if (oi.dwMajorVersion < 5)
-				{
-					strcpy(rgchVer, "Windows NT");
-				}
-				else if (oi.dwMajorVersion == 5)
-				{
-					if (oi.dwMinorVersion == 0)
-					{
-						strcpy(rgchVer, "Windows 2000");
-					}
-					else if (oi.dwMinorVersion == 1)
-					{
-						strcpy(rgchVer, "Windows XP");
-					}
-					else
-					{
-						strcpy(rgchVer, "Windows 2003");
-					}
-				}
-				else if (oi.dwMajorVersion == 6)
-				{
-					if ((oi.dwBuildNumber & 65535) <= 6000)
-					{
-						strcpy(rgchVer, "Windows Vista");
-					}
-					else if (oi.dwMinorVersion == 0)
-					{
-						strcpy(rgchVer, "Windows Vista / Server 2008");
-					}
-					else if (oi.dwMinorVersion == 1)
-					{
-						strcpy(rgchVer, "Windows 7 / Server 2008 R2");
-					}
-					else if (oi.dwMinorVersion == 2)
-					{
-						if ((oi.dwBuildNumber & 65535) < 8400)
-							strcpy(rgchVer, "Windows 8 Beta");
-						else if ((oi.dwBuildNumber & 65535) == 8400)
-							strcpy(rgchVer, "Windows 8 Consumer Preview");
-						else if ((oi.dwBuildNumber & 65535) < 9200)
-							strcpy(rgchVer, "Windows 8 pre-release");
-						else
-							// !!! It says this for Windows 10!
-							strcpy(rgchVer, "Windows 8");
-					}
-					else
-					{
-						strcpy(rgchVer, "Windows 8 or later");
-					}
-				}
-				else
-				{
-					strcpy(rgchVer, "Windows 8 or later");
-				}
-				break;
-			};
-
-			sprintf(rgch2, "About %s", vi.szAppName);
-
-			sprintf(rgch, "%s Community Release\n"
-				"Darek's Classic Computer Emulator.\n"
-				"Version 9.90 - built on %s\n"
-				"%2d-bit %s release.\n\n"
-				"Copyright (C) 1986-2018 Darek Mihocka.\n"
-				"All Rights Reserved.\n\n"
-
-#ifdef XFORMER
-				"Atari OS and BASIC used with permission.\n"
-				"Copyright (C) 1979-1984 Atari Corp.\n\n"
-#endif
-
-				"Many thanks to: "
-				"Ignac Kolenko, "
-				"Ed Malkiewicz, "
-				"Bill Huey, "
-				"\n"
-#if defined(ATARIST) || defined(SOFTMAC)
-				"Christian Bauer, "
-				"Simon Biber, "
-				"\n"
-				"William Condie, "
-				"Phil Cummins, "
-				"Kyle Fox, "
-				"\n"
-				"Manuel Perez, "
-				"Ray Ruvinskiy, "
-				"Joel Walter, "
-				"\n"
-				"Jim Watters, "
-#endif
-				"Danny Miller, "
-				"Robert Birmingham, "
-				"and Derek Yenzer.\n\n"
-
-				"Windows version: %d.%02d (build %d)\n"
-				"Windows platform: %s\n"
-				,
-				vi.szAppName,
-				__DATE__,
-				sizeof(void *) * 8,
-#if defined(_M_AMD64)
-				"x64",
-#elif defined(_M_IX86)
-				"x86",
-#elif defined(_M_IX86)	// !!! _M_ARM
-				"ARM",
-#else
-				"",		// !!! ARM64
-#endif
-				oi.dwMajorVersion, oi.dwMinorVersion,
-				oi.dwBuildNumber & 65535,
-				rgchVer,
-				0);
-
-			MessageBox(GetFocus(), rgch, rgch2, MB_OK);
+			ShowAbout();
 			break;
 
 		// toggle fullscreen mode
@@ -3634,8 +3665,14 @@ break;
 				POINT pt;
 				if (GetCursorPos(&pt))
 					if (ScreenToClient(vi.hWnd, &pt))
-						sVM = GetTileFromPos(pt.x, pt.y);
-
+					{
+						int s = GetTileFromPos(pt.x, pt.y);
+						if (s != sVM)
+						{
+							sVM = s;
+							FixAllMenus();	// new active VM changes things
+						}
+					}
 			} else {
 				SelectInstance(sVM >= 0 ? sVM : nFirstTile);	// bring the one with focus up
 			}
@@ -3649,6 +3686,28 @@ break;
 			FixAllMenus();
 			return 0;
 			
+		case IDM_TIMETRAVEL:
+			
+			// until we make a way to communicate this to our VM, the VM has to handle it themselves
+			// by seeing the keystroke
+			
+			// send the to active tile
+			if (v.fTiling && sVM >= 0)
+			{
+				SelectInstance(sVM);
+				FWinMsgVM(vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);	// PAGE UP
+				SelectInstance(v.iVM);
+			}
+			// nobody to send it to
+			else if (v.fTiling)
+				;
+
+			// send it to our own and only place
+			else
+				FWinMsgVM(vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);
+				
+			break;
+
 		// toggle COLOR/B&W
 		case IDM_COLORMONO:
 
@@ -3665,11 +3724,23 @@ break;
 
 		// Delete this instance, and choose another
 		case IDM_DELVM:
-			DeleteVM(v.iVM);
-			SelectInstance(v.iVM + 1);	// go to the next one
-			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
-			sVM = -1;	// the one in focus may be gone
-			break;
+
+			// our active instance
+			int inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			
+			assert(inst != -1);
+			if (inst != -1)
+			{
+				DeleteVM(inst);
+				
+				// we deleted the current one
+				if (inst == (int)v.iVM)
+					SelectInstance(inst + 1);	// go to the next one
+
+				sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
+				sVM = -1;	// the one in focus may be gone
+				FixAllMenus();
+			}break;
 
 		case IDM_NEW:
 
@@ -3683,9 +3754,9 @@ break;
 			// now make the default ones
 			CreateAllVMs();
 			SelectInstance(0);
-			FixAllMenus();	// in case we're tiling and not spending the time
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone
+			FixAllMenus();	// in case we're tiling and not spending the time
 			break;
 
 		// unless Darek gets really busy, this should be enough VM types
@@ -3735,6 +3806,8 @@ break;
 			// Init it, Create the screen buffer for it, and now go to that instance!
 			FInitVM(vmNew);
 			CreateNewBitmap(vmNew);	// we've already created our window, so we need to do this manually now
+			
+			// even if we're tiling, what the heck
 			SelectInstance(vmNew);
 
 #endif
@@ -3748,26 +3821,39 @@ break;
 		// choose a cartridge to use
 		case IDM_CART:
 
-			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgcart.szName, FALSE, 1))
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+
+			assert(inst != -1);
+
+			if (inst != -1 && OpenTheFile(vi.hWnd, v.rgvm[inst].rgcart.szName, FALSE, 1))
 			{
-				ReadCart(v.iVM);
+				ReadCart(inst);
 				FixAllMenus();
-				SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0);	// that requires a reboot!
+				FColdbootVM(inst);	// that requires a reboot!
 			}
 			break;
 
 		// rip the cartridge out
 		case IDM_NOCART:
-			vi.pvmCur->rgcart.fCartIn = FALSE;	// unload the cartridge
-			vi.pvmCur->rgcart.szName[0] = 0; // erase the name
 
-			// this will require a reboot, I assume for all types of VMs?
-			FUnInitVM(v.iVM);
-			FInitVM(v.iVM);
-			
-			FixAllMenus();
-			
-			SendMessage(vi.hWnd, WM_COMMAND, IDM_COLDSTART, 0); // requires reboot
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+
+			if (inst != -1)
+			{
+				v.rgvm[inst].rgcart.fCartIn = FALSE;	// unload the cartridge
+				v.rgvm[inst].rgcart.szName[0] = 0; // erase the name
+
+				// this will require a reboot, I assume for all types of VMs?
+				FUnInitVM(inst);
+				FInitVM(inst);
+
+				FixAllMenus();
+
+				FColdbootVM(inst);
+			}
 
 			break;
 
@@ -3776,6 +3862,10 @@ break;
 		// Choose a file to use for the virtual disks
 
 		case IDM_D1:
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+			
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[0].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
@@ -3785,6 +3875,10 @@ break;
 			break;
 
 		case IDM_D2:
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+			
 			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[1].sz, FALSE, 0))
 			{
 				vi.pvmCur->rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
@@ -3793,88 +3887,64 @@ break;
 			}
 			break;
 
-#if 0
-		case IDM_D3:
-			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[2].sz, FALSE, 0))
-			{
-				vi.pvmCur->rgvd[2].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FMountDiskVM(v.iVM, 2);
-				FixAllMenus();
-			}
-			break;
-
-		case IDM_D4:
-			if (OpenTheFile(vi.hWnd, vi.pvmCur->rgvd[3].sz, FALSE, 0))
-			{
-				vi.pvmCur->rgvd[3].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
-				FMountDiskVM(v.iVM, 3);
-				FixAllMenus();
-			}
-			break;
-#endif
 
 		// unmount a drive
 
 		case IDM_D1U:
-			FUnmountDiskVM(v.iVM, 0);	// do this before tampering
-			strcpy(vi.pvmCur->rgvd[0].sz, "");
-			vi.pvmCur->rgvd[0].dt = DISK_NONE;
-			FixAllMenus();
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+			
+			if (inst != -1)
+			{
+				FUnmountDiskVM(inst, 0);	// do this before tampering
+				strcpy(v.rgvm[inst].rgvd[0].sz, "");
+				v.rgvm[inst].rgvd[0].dt = DISK_NONE;
+				FixAllMenus();
+			}
 			break;
 
 		case IDM_D2U:
-			FUnmountDiskVM(v.iVM, 1);	// do this before tampering
-			strcpy(vi.pvmCur->rgvd[1].sz, "");
-			vi.pvmCur->rgvd[1].dt = DISK_NONE;
-			FixAllMenus();
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+			
+			if (inst != -1)
+			{
+				FUnmountDiskVM(inst, 1);	// do this before tampering
+				strcpy(v.rgvm[inst].rgvd[1].sz, "");
+				v.rgvm[inst].rgvd[1].dt = DISK_NONE;
+				FixAllMenus();
+			}
 			break;
-		
-#if 0
-		case IDM_D3U:
-			FUnmountDiskVM(v.iVM, 2);
-			strcpy(vi.pvmCur->rgvd[2].sz, "");
-			vi.pvmCur->rgvd[2].dt = DISK_NONE;
-			FixAllMenus();
-			break;
-		
-		case IDM_D4U:
-			FUnmountDiskVM(v.iVM, 3);
-			strcpy(vi.pvmCur->rgvd[3].sz, "");
-			vi.pvmCur->rgvd[3].dt = DISK_NONE;
-			FixAllMenus();
-			break;		
-#endif
-
-#if 0
-        case IDM_PROPERTIES:
-            DialogBox(vi.hInst,
-                MAKEINTRESOURCE(IDD_PROPERTIES),
-                vi.hWnd,
-                Properties);
-            if (!FIsAtari8bit(vmCur.bfHW))
-                AddToPacket(FIsMac(vmCur.bfHW) ? 0xDF : 0xB8);  // Alt  key up
-            break;
-#endif
-
 
 #ifdef XFORMER // !!! really hacky support for toggle basic
 		case IDM_TOGGLEBASIC:
-			char *pCandy;
-			int cb;
-			FSaveStateVM(v.iVM, &pCandy, &cb);
-			pCandy += 16 + 65536 + 30;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
-			WORD *ramtop = (WORD *)pCandy;
-			if (*ramtop == 0xC000)
-				*ramtop = 0xA000;
-			else
-				*ramtop = 0xC000;
-			// fall through to COLDSTART
+			// our active instance
+			inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			assert(inst != -1);
+
+			// It's a keystroke combo, so it's not as simple as sending the right key to the VM
+			if (inst != -1)
+			{
+				char *pCandy;
+				int cb;
+				FSaveStateVM(v.iVM, &pCandy, &cb);
+				pCandy += 16 + 65536 + 30;	// yet I think including atari.h is too hacky :-) Works for 32 and x64
+				WORD *ramtop = (WORD *)pCandy;
+				if (*ramtop == 0xC000)
+					*ramtop = 0xA000;
+				else
+					*ramtop = 0xC000;
+			}
+
+			FColdbootVM(inst);
+
+			break;
 #endif
 
 		// Ctrl-F10, must come after IDM_TOGGLEBASIC
         case IDM_COLDSTART:
-            
-			//vmCur.fColdReset = TRUE;	// schedule a reboot, only works on current VM
             
 			// cold start the tile in focus (or nothing)
 			if (v.fTiling && sVM >= 0)
@@ -3884,7 +3954,6 @@ break;
 			else if (!v.fTiling)
 				FColdbootVM(v.iVM);
 			
-			return 0;
             break;
 
 		// F10
@@ -3898,59 +3967,18 @@ break;
 				FWarmbootVM(v.iVM);
 			break;
 
-#if 0
-        case IDM_F11:
-            // Use F11 to also clear counters
-#if PERFCOUNT
-            cntInstr = 0;
-            cntCodeMiss = 0;
-            cntAccess = 0;
-            cntDataMiss = 0;
-#endif
-
-            // On the Mac, refresh the Mac floppy disk drives
-			// This msg is disabled now, TODO fix it
-            if (FIsMac(vmCur.bfHW))
-                {
-#ifdef SOFTMAC
-                vmachw.fDisk1Dirty = fTrue;
-                vmachw.fDisk2Dirty = fTrue;
-#endif
-                // vsthw[v.iVM].fMediaChange = fTrue;
-
-                FMountDiskVM(v.iVM, 8);	// TODO make sure that unmounts first
-                }
-            else
-
-            // if the mouse is captured in window, release it
-            // otherwise capture it
-			// TODO disabled right now, why was this only for !MAC?
-            if (vi.fGEMMouse && !vi.fInDirectXMode)
-                {
-                ShowWindowsMouse();
-                }
-            else
-                {
-                ShowGEMMouse();
-                }
-
-            return 0;
-            break;
-#endif
-
-		// cycle through all the instances
+		// cycle through all the instances - isn't allowed during tiling
         case IDM_NEXTVM:
             SelectInstance(v.iVM + 1);
-            return 0;	// for sure?
             break;
 
 		case IDM_PREVVM:
 			SelectInstance(-1);	// go backwards
-			return 0;
 			break;
 
 		char chFN[MAX_PATH];
 		BOOL f;
+
 		case IDM_SAVEAS:
 			chFN[0] = 0;	// necessary!
 			f = OpenTheFile(vi.hWnd, chFN, TRUE, 2);
@@ -3962,16 +3990,71 @@ break;
 			chFN[0] = 0;	// necessary!
 			f = OpenTheFile(vi.hWnd, chFN, FALSE, 2);
 			if (f)
-				LoadProperties(chFN);
-			else
-			FixAllMenus();
+				f = LoadProperties(chFN);
+
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone
+			FixAllMenus();
 
 			break;
 
+		// !!! Fix or remove. Retail only?
+		case IDM_DEBUGGER:
+			ShowWindowsMouse();
+			vi.fDebugBreak = TRUE;
+			CreateDebuggerWindow();
+			return 0;
+			break;
+
 #if 0
-        case IDM_CTRLF11:
+		case IDM_PROPERTIES:
+			DialogBox(vi.hInst,
+				MAKEINTRESOURCE(IDD_PROPERTIES),
+				vi.hWnd,
+				Properties);
+			if (!FIsAtari8bit(vmCur.bfHW))
+				AddToPacket(FIsMac(vmCur.bfHW) ? 0xDF : 0xB8);  // Alt  key up
+			break;
+
+		case IDM_F11:
+			// Use F11 to also clear counters
+#if PERFCOUNT
+			cntInstr = 0;
+			cntCodeMiss = 0;
+			cntAccess = 0;
+			cntDataMiss = 0;
+#endif
+
+			// On the Mac, refresh the Mac floppy disk drives
+			// This msg is disabled now, TODO fix it
+			if (FIsMac(vmCur.bfHW))
+			{
+#ifdef SOFTMAC
+				vmachw.fDisk1Dirty = fTrue;
+				vmachw.fDisk2Dirty = fTrue;
+#endif
+				// vsthw[v.iVM].fMediaChange = fTrue;
+
+				FMountDiskVM(v.iVM, 8);	// TODO make sure that unmounts first
+			}
+			else
+
+				// if the mouse is captured in window, release it
+				// otherwise capture it
+				// TODO disabled right now, why was this only for !MAC?
+				if (vi.fGEMMouse && !vi.fInDirectXMode)
+				{
+					ShowWindowsMouse();
+				}
+				else
+				{
+					ShowGEMMouse();
+				}
+
+			return 0;
+			break;
+
+		case IDM_CTRLF11:
 #if 0
 		{
             POINT pt;
@@ -4002,17 +4085,8 @@ break;
             return 0;
             break;
 #endif
-#endif
 
-        case IDM_DEBUGGER:
-            ShowWindowsMouse();
-            vi.fDebugBreak = TRUE;
-            CreateDebuggerWindow();
-            return 0;
-            break;
-
-#if 0
-        case IDM_DISKPROPS:
+		case IDM_DISKPROPS:
             DialogBox(vi.hInst,       // current instance
                 MAKEINTRESOURCE(IDD_DISKS), // dlg resource to use
                 hWnd,          // parent handle
@@ -4074,7 +4148,7 @@ break;
 
         default:
 
-			// We have asked to switch to a certain VM
+			// We have asked to switch to a certain VM? Not allowed when tiling
 
 			if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM)
 			{
@@ -4165,6 +4239,7 @@ break;
     case WM_SYSKEYUP:
     case WM_KEYDOWN:
     case WM_KEYUP:
+
         // Catch the keystroke for Menu key so that it doesn't
         // register as an F10 (and reboot Atari BASIC!)
         // The Menu key still functions as expected.
@@ -4239,8 +4314,14 @@ break;
 		POINT pt;
 		if (GetCursorPos(&pt))
 			if (ScreenToClient(vi.hWnd, &pt))
-				sVM = GetTileFromPos(pt.x, pt.y);
-
+			{
+				int s = GetTileFromPos(pt.x, pt.y);
+				if (s != sVM)
+				{
+					sVM = s;
+					FixAllMenus();
+				}
+			}
 		break;
 
     case WM_RBUTTONDOWN:
@@ -4366,7 +4447,12 @@ break;
 				int xPos = LOWORD(lParam);
 				int yPos = HIWORD(lParam);
 
-				sVM = GetTileFromPos(xPos, yPos);
+				int s = GetTileFromPos(xPos, yPos);
+				if (s != sVM)
+				{
+					sVM = s;
+					FixAllMenus();
+				}
 			}
 
 			return 0;
@@ -5666,7 +5752,7 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int nType)
     OpenFileName.lpstrTitle        = fCreate ? "Save As..." : "Select a File...";
     OpenFileName.nFileOffset       = 0;
     OpenFileName.nFileExtension    = 0;
-    OpenFileName.lpstrDefExt       = NULL;
+    OpenFileName.lpstrDefExt       = (fCreate && nType == 2) ? "gem" : NULL;
     OpenFileName.lCustData         = 0;
     OpenFileName.lpfnHook            = NULL;
     OpenFileName.lpTemplateName    = NULL;

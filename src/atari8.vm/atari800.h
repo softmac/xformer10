@@ -41,11 +41,18 @@ BYTE poly17[(1 << 17) - 1];
 int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4]; 	// each voice keeps track of its own poly position
 unsigned int random17pos;	// needs to be unsigned
 ULONGLONG random17last;	// instruction count last time a random number was asked for
-BOOL fPolyValid;
 
-void TimeTravel();
-void TimeTravelPrepare();
-void TimeTravelReset();
+// Time Travel stuff
+
+void TimeTravel(unsigned);
+void TimeTravelPrepare(unsigned);
+void TimeTravelReset(unsigned);
+BOOL TimeTravelInit(unsigned);
+void TimeTravelFree(unsigned);
+
+ULONGLONG ullTimeTravelTime[MAX_VM];	// the time stamp of a snapshot
+char cTimeTravelPos[MAX_VM];	// which is the current snapshot?
+char *Time[MAX_VM][3];		// 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
 
 //
 // Scan line structure
@@ -168,90 +175,7 @@ typedef struct
 
 #pragma pack(4)
 
-// TimeTravel - keep this in sync with the real thing
-typedef struct
-{
-	// 6502 register context
-
-	WORD m_regPC, m_regSP;
-	BYTE m_regA, m_regY, m_regX, m_regP;
-
-	WORD m_regEA;
-	BYTE m_mdEA;
-
-	WORD m_fKeyPressed;	 // xkey.c
-	WORD m_oldshift;	 // xkey.c
-	BOOL m_wShiftChanged;// xkey.c
-
-						 // 6502 address space
-	BYTE m_rgbMem[65536];
-
-	// fTrace:  non-zero for single opcode execution
-	// fSIO:    non-zero for SIO call
-	// mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
-	// cntTick: mode display countdown timer (18 Hz ticks)
-
-	BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, m_fDebugger;
-
-	WORD m_wFrame, m_wScan;
-	signed short m_wLeft;
-	signed short m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
-	BYTE m_WSYNC_Seen;
-	BYTE m_WSYNC_Waited;
-
-	WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
-	WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;
-	BYTE m_bJoyBut;
-
-	// size of RAM ($A000 or $C000)
-
-	WORD FAR m_ramtop;
-
-	WORD m_fStop;
-	WORD m_wStartScan, m_wScanMin, m_wScanMac;
-
-	WORD m_fJoy, m_fSoundOn, m_fAutoStart;
-
-	// virtual guest vertical blanks ("jiffies")
-
-	ULONG m_countJiffies;
-
-	// virtual guest instructions
-
-	ULONG m_countInstr;
-
-	// clock multiplier 
-
-	ULONG m_clockMult;
-
-	SL m_rgsl[NTSCY];     // 256 scan line structures
-	PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
-
-	SL m_sl;            // current scan line display info
-	WORD m_cbWidth, m_cbDisp;
-	WORD m_hshift;
-
-	BYTE m_iscan;
-	BYTE m_scans;
-	WORD m_wAddr;
-
-	BYTE m_fWait;       // wait until next VBI
-	BYTE m_fFetch;      // fetch next DL instruction
-	BYTE m_fDataChanged;
-
-	WORD m_fNMIPending;
-	WORD m_fIRQPending;
-
-	BYTE m_bCartType;   // type of cartridge
-	BYTE m_btickByte;   // current value of 18 Hz timer
-	BYTE m_bshftByte;   // current value of shift state
-	BYTE m_cVBI;        // count of VBIs since last tick
-
-	ULONGLONG m_ullTimeTravelTime;
-	unsigned char m_cTimeTravelPos;
-
-} CANDYHWPROTO;
-
+// CANDY
 typedef struct
 {
     // 6502 register context
@@ -329,10 +253,6 @@ typedef struct
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
     BYTE m_cVBI;        // count of VBIs since last tick
-
-	ULONGLONG m_ullTimeTravelTime;
-	unsigned char m_cTimeTravelPos;
-	char FAR m_Time[3][sizeof(CANDYHWPROTO)];
 
 	char FAR m_rgbSwapSelf[2048];	// extended XL memory
 	char FAR m_rgbSwapC000[4096];
@@ -416,9 +336,6 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)
-#define ullTimeTravelTime CANDY_STATE(ullTimeTravelTime)
-#define cTimeTravelPos    CANDY_STATE(cTimeTravelPos)
-#define Time          CANDY_STATE(Time)
 #define rgbSwapSelf  CANDY_STATE(rgbSwapSelf)
 #define rgbSwapC000  CANDY_STATE(rgbSwapC000)
 #define rgbSwapD800  CANDY_STATE(rgbSwapD800)
