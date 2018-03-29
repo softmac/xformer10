@@ -80,61 +80,103 @@ BOOL fDumpHW;
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 
 
-void TimeTravelPrepare()
+// get ready for time travel!
+BOOL TimeTravelInit(unsigned iVM)
 {
+	BOOL fI = TRUE;
+
+	// Initialize Time Travel
+	for (unsigned i = 0; i < 3; i++)
+	{
+		if (!Time[iVM][i])
+			Time[iVM][i] = malloc(sizeof(CANDYHW));
+		if (!Time[iVM][i])
+			fI = FALSE;
+		_fmemset(Time[iVM][i], 0, sizeof(CANDYHW));
+	}
+
+	if (!fI)
+		TimeTravelFree(iVM);
+
+	return fI;
+}
+
+// all done with time traveling, I'm exhausted
+//
+void TimeTravelFree(unsigned iVM)
+{
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	for (unsigned i = 0; i < 3; i++)
+	{
+		if (Time[iVM][i])
+			free(Time[iVM][i]);
+		Time[iVM][i] = NULL;
+	}
+}
+
+
+// call this constantly every frame, it will save a state every 5 seconds
+//
+void TimeTravelPrepare(unsigned iVM)
+{
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	
 	const ULONGLONG s5 = 29830 * 60 * 5;	// 5 seconds
-	unsigned char *pPersist;
-	unsigned int cbPersist;
+	char *pPersist;
+	int cbPersist;
+
+	// assumes we only get called when we are the current VM
 
 	ULONGLONG cCur = GetCycles();
-	ULONGLONG cTest = cCur -ullTimeTravelTime;
+	ULONGLONG cTest = cCur - ullTimeTravelTime[iVM];
 	
 	// time to save a snapshot (every 5 seconds)
 	if (cTest >= s5)
 	{
-		SaveStateAtari(v.iVM, &pPersist, &cbPersist);
-		_fmemcpy(&Time[cTimeTravelPos], pPersist, sizeof(CANDYHWPROTO));
-		ullTimeTravelTime = cCur;
-		cTimeTravelPos++;
-		if (cTimeTravelPos == 3)
-			cTimeTravelPos = 0;
+		SaveStateAtari(iVM, &pPersist, &cbPersist);
+		_fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, sizeof(CANDYHW));
+		ullTimeTravelTime[iVM] = cCur;
+		cTimeTravelPos[iVM]++;
+		if (cTimeTravelPos[iVM] == 3)
+			cTimeTravelPos[iVM] = 0;
 	}
 }
 
 
 // Omega13 - go back in time 13 seconds
 //
-void TimeTravel()
+void TimeTravel(unsigned iVM)
 {
-	// Two 5-second snapshots ago will be from 10-15 seconds back in time
-	CANDYHW *pC = &Time[cTimeTravelPos];
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-	assert(pC->m_ullTimeTravelTime > 0);
-	LoadStateAtari(v.iVM, &Time[cTimeTravelPos], sizeof(CANDYHW));	// restore our snapshot
+	// Two 5-second snapshots ago will be from 10-15 seconds back in time
+	LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], sizeof(CANDYHW));	// restore our snapshot
 
 	// set up for going back to this same point until more time passes
-	TimeTravelReset();
+	TimeTravelReset(iVM);
 }
 
 // Call this at a point where you can't go back in time from... Cold Start, Warm Start, LoadState (e.g cartridge may be removed)
 //
-void TimeTravelReset()
+void TimeTravelReset(unsigned iVM)
 {
-	unsigned char *pPersist;
-	unsigned int cbPersist;
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	char *pPersist;
+	int cbPersist;
 
 	// reset our clock to "have not saved any states yet"
-	ullTimeTravelTime = GetCycles();
-	cTimeTravelPos = 0;
+	ullTimeTravelTime[iVM] = GetCycles();
+	cTimeTravelPos[iVM] = 0;
 
-	SaveStateAtari(v.iVM, &pPersist, &cbPersist);	// get our current state
+	SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
 
 	// initialize all our saved states to now, so that going back in time takes us back here.
 	for (unsigned i = 0; i < 3; i++)
 	{
-		CANDYHW *pC = &Time[i];
-		_fmemcpy(&Time[i], pPersist, sizeof(CANDYHWPROTO));
-		pC->m_ullTimeTravelTime = GetCycles();	// time stamp it 
+		_fmemcpy(Time[iVM][i], pPersist, sizeof(CANDYHW));
+		ullTimeTravelTime[iVM] = GetCycles();	// time stamp it 
 	}
 }
 
@@ -185,6 +227,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	static BOOL fInited;
 	if (!fInited) // static, only 1 instance needs to do this
 	{
+		int j, p;
 		extern void * jump_tab[512];
 		extern void * jump_tab_RO[256];
 		unsigned i;
@@ -194,14 +237,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 			jump_tab[i] = jump_tab_RO[i];
 		}
 
-		fInited = TRUE;
-	}
-
-	// Initialize the poly counters
-	if (fPolyValid == FALSE)
-	{
-		int j, p;
-
+		// Initialize the poly counters
 		// run through all the poly counters and remember the results in a table
 		// so we can look them up and not have to do expensive calculations while emulating
 		
@@ -247,7 +283,8 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		}
 		random17pos = 0;
 		random17last = 0;
-		fPolyValid = TRUE;	// no need to ever do this again
+
+		fInited = TRUE;
 	}
 
 	// reset the cycle counter now and each cold start (we may not get a cold start)
@@ -308,8 +345,14 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
  // DumpROMS();
 
-    return TRUE;
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	
+	// Initialize everything, or we'll think time travel pointers are valid
+	_fmemset(&vrgcandy[iVM], 0, sizeof(CANDYHW));
+
+	return TRUE;
 }
+
 
 // Initialize a VM. Either call this to create a default new instance and then ColdBoot it,
 //or call LoadState to restore a previous one, not both.
@@ -319,6 +362,10 @@ BOOL __cdecl InitAtari(int iVM)
 //	BYTE bshiftSav; // already a global with that name!
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+
+	// Initialize the time travel pointers (freed in Uninit, and Load will free and alloc new ones that it will need)
+	if (!TimeTravelInit(iVM))
+		return FALSE;
 
 	// initialize our state (doesn't seem to help)
 	//_fmemset(vpcandyCur, 0, sizeof(CANDYHW));
@@ -403,6 +450,10 @@ BOOL __cdecl UninitAtari(int iVM)
 	rgbMem[0xbffd] = 0;	// no special R cartridge
 
     UninitAtariDisks(iVM);
+
+	// !!! If there was an UninstallVM function, I could do that there, and not have to possibly re-init in LoadStateVM!
+	TimeTravelFree(iVM);
+
     return TRUE;
 }
 
@@ -473,7 +524,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	TimeTravelReset(); // state is now a valid anchor point
+	TimeTravelReset(iVM); // state is now a valid anchor point
 
     return TRUE;
 
@@ -633,7 +684,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	TimeTravelReset(); // state is now a valid anchor point
+	TimeTravelReset(iVM); // state is now a valid anchor point
 
 	return TRUE;
 }
@@ -642,6 +693,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 //
 BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 {
+	// there are some time travel pointers in the structure, we need to be smart enough not to use them
 	*ppPersist = (char *)&vrgcandy[iVM];
 	*pcbPersist = sizeof(vrgcandy[iVM]);
 	return TRUE;
@@ -656,8 +708,9 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	if (cbPersist != sizeof(vrgcandy[iVM]))
 		return FALSE;
 
+	// load our state
 	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
-	
+
 	if (!FInitSerialPort(v.rgvm[iVM].iCOM))
 		v.rgvm[iVM].iCOM = 0;
 	if (!InitPrinter(v.rgvm[iVM].iLPT))
@@ -675,7 +728,11 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	TimeTravelReset(); // state is now a valid anchor point
+	// Since we don't have an UninstallVM fn, I have to alloc/free in InitVM/UninitVM
+	// but sometimes LoadStateVM is called instead of Init
+	TimeTravelInit(iVM);	// alloc space for our saved states
+
+	TimeTravelReset(iVM); // state is now a valid anchor point
 
 	return TRUE;
 }
@@ -761,7 +818,7 @@ void DoVBI()
 	// process joysticks before the vertical blank, just because.
 	// Very slow if joysticks not installed, so skip the code
 	// When tiling, only the tile in focus gets input
-	if ((!v.fTiling || sVM == v.iVM) && vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+	if ((!v.fTiling || sVM == (int)v.iVM) && vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
 		JOYINFO ji;
 		MMRESULT mm = joyGetPos(0, &ji);
 		if (mm == 0) {
@@ -939,7 +996,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// we process the audio after the whole frame is done, but the VBLANK starts at 241
 			if (wScan >= NTSCY)
 			{			
-				TimeTravelPrepare();
+				TimeTravelPrepare(v.iVM);
 				
 				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 
@@ -1454,8 +1511,8 @@ void ReadCart(int iVM)
 	_close(h);
 
 	// what kind of cartridge is it?
-	
-	unsigned char *pb = rgbSwapCart[iVM];
+	// must be unsigned to look compare the byte values inside
+	unsigned char *pb = (unsigned char *)rgbSwapCart[iVM];
 	
 	if (cb <= 8192)
 		bCartType = CART_8K;
