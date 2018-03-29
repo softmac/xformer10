@@ -118,8 +118,10 @@ void TimeTravelFree(unsigned iVM)
 
 // call this constantly every frame, it will save a state every 5 seconds
 //
-void TimeTravelPrepare(unsigned iVM)
+BOOL TimeTravelPrepare(unsigned iVM)
 {
+	BOOL f = TRUE;
+
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 	
 	const ULONGLONG s5 = 29830 * 60 * 5;	// 5 seconds
@@ -134,32 +136,47 @@ void TimeTravelPrepare(unsigned iVM)
 	// time to save a snapshot (every 5 seconds)
 	if (cTest >= s5)
 	{
-		SaveStateAtari(iVM, &pPersist, &cbPersist);
+		f = SaveStateAtari(iVM, &pPersist, &cbPersist);
+		
+		if (!f || cbPersist != sizeof(CANDYHW) || Time[iVM][cTimeTravelPos[iVM]] == NULL)
+			return FALSE;
+
 		_fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, sizeof(CANDYHW));
+		
 		ullTimeTravelTime[iVM] = cCur;
+		
 		cTimeTravelPos[iVM]++;
 		if (cTimeTravelPos[iVM] == 3)
 			cTimeTravelPos[iVM] = 0;
 	}
+	return f;
 }
 
 
 // Omega13 - go back in time 13 seconds
 //
-void TimeTravel(unsigned iVM)
+BOOL TimeTravel(unsigned iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
+	BOOL f = FALSE;
+	
+	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance, just in case
+
+	if (Time[iVM][cTimeTravelPos[iVM]] == NULL)
+		return FALSE;
 
 	// Two 5-second snapshots ago will be from 10-15 seconds back in time
-	LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], sizeof(CANDYHW));	// restore our snapshot
+	if (LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], sizeof(CANDYHW)))	// restore our snapshot
+	{
+		// set up for going back to this same point until more time passes
+		f = TimeTravelReset(iVM);
+	}
 
-	// set up for going back to this same point until more time passes
-	TimeTravelReset(iVM);
+	return f;
 }
 
 // Call this at a point where you can't go back in time from... Cold Start, Warm Start, LoadState (e.g cartridge may be removed)
 //
-void TimeTravelReset(unsigned iVM)
+BOOL TimeTravelReset(unsigned iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
@@ -170,14 +187,23 @@ void TimeTravelReset(unsigned iVM)
 	ullTimeTravelTime[iVM] = GetCycles();
 	cTimeTravelPos[iVM] = 0;
 
-	SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
+	BOOL f = SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
+
+	if (!f || cbPersist != sizeof(CANDYHW))
+		return FALSE;
 
 	// initialize all our saved states to now, so that going back in time takes us back here.
 	for (unsigned i = 0; i < 3; i++)
 	{
+		if (Time[iVM][i] == NULL)
+			return FALSE;
+
 		_fmemcpy(Time[iVM][i], pPersist, sizeof(CANDYHW));
+		
 		ullTimeTravelTime[iVM] = GetCycles();	// time stamp it 
 	}
+
+	return TRUE;
 }
 
 
@@ -377,14 +403,6 @@ BOOL __cdecl InitAtari(int iVM)
 	v.rgvm[iVM].bfMon = monColrTV;
 	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);	// we only have 8, others have 9
 
-	// default to a DOS disk image for a newly created instance
-	// loading an empty instance from a file calls LoadState, not Init and won't get this default disk image
-	if (v.rgvm[iVM].rgvd[0].dt == DISK_NONE)
-	{
-		v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
-		strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");
-	}
-
 	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
 	// unless Shift-F10 changes it
 	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
@@ -416,7 +434,8 @@ BOOL __cdecl InitAtari(int iVM)
 	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
 	// If our saved state had a cartridge, load it back in
-    ReadCart(iVM);
+    // !!! I don't report an error, just run the VM without the cart
+	ReadCart(iVM);
 
     if (!FInitSerialPort(v.rgvm[iVM].iCOM))
 		v.rgvm[iVM].iCOM = 0;
@@ -464,6 +483,7 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
     PVD pvd = &v.rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
+		// !!! needs to return a value
         AddDrive(iVM, i, (BYTE *)pvd->sz);
 
     return TRUE;
@@ -472,10 +492,14 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
 BOOL __cdecl InitAtariDisks(int iVM)
 {
     int i;
+	BOOL f;
 
-    for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
-        MountAtariDisk(iVM, i);
-
+	for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
+	{
+		f = MountAtariDisk(iVM, i);
+		if (!f)
+			return FALSE;
+	}
     return TRUE;
 }
 
@@ -524,10 +548,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	TimeTravelReset(iVM); // state is now a valid anchor point
-
-    return TRUE;
-
+	return TimeTravelReset(iVM); // state is now a valid anchor point
 }
 
 // Cold Start the machine - the first one is currently done when it first becomes the active instance
@@ -539,7 +560,10 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
-	InitAtariDisks(iVM);
+	BOOL f = InitAtariDisks(iVM);
+
+	if (!f)
+		return FALSE;
 
 	cntTick = 255;
     QueryTickCtr();
@@ -684,9 +708,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	TimeTravelReset(iVM); // state is now a valid anchor point
-
-	return TRUE;
+	return TimeTravelReset(iVM); // state is now a valid anchor point
 }
 
 // SAVE: return a pointer to our data, and how big it is
@@ -705,7 +727,7 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 //
 BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 {
-	if (cbPersist != sizeof(vrgcandy[iVM]))
+	if (cbPersist != sizeof(vrgcandy[iVM]) || pPersist == NULL)
 		return FALSE;
 
 	// load our state
@@ -716,7 +738,10 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	if (!InitPrinter(v.rgvm[iVM].iLPT))
 		v.rgvm[iVM].iLPT = 0;
 
-	InitAtariDisks(iVM);
+	BOOL f = InitAtariDisks(iVM);
+
+	if (!f)
+		return f;
 
 	// If our saved state had a cartridge, load it back in
 	ReadCart(iVM);
@@ -730,11 +755,11 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
 	// Since we don't have an UninstallVM fn, I have to alloc/free in InitVM/UninitVM
 	// but sometimes LoadStateVM is called instead of Init
-	TimeTravelInit(iVM);	// alloc space for our saved states
+	f = FALSE;
+	if (TimeTravelInit(iVM))	// alloc space for our saved states
+		f = TimeTravelReset(iVM); // state is now a valid anchor point
 
-	TimeTravelReset(iVM); // state is now a valid anchor point
-
-	return TRUE;
+	return f;
 }
 
 
@@ -1472,7 +1497,7 @@ void UpdatePorts()
 
 // Read in the cartridge
 //
-void ReadCart(int iVM)
+BOOL ReadCart(int iVM)
 {
 	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
 
@@ -1495,27 +1520,33 @@ void ReadCart(int iVM)
 		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
 		{
 			_close(h);
-			return;
+			return FALSE;
 		}
 
 		l = _lseek(h, 0L, SEEK_SET);
 
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
-		
+
 		cb = _read(h, rgbSwapCart[iVM], cb);
 
 		v.rgvm[iVM].rgcart.cbData = cb;
 		v.rgvm[iVM].rgcart.fCartIn = TRUE;
 	}
+	else
+		return FALSE;
+
 	_close(h);
 
 	// what kind of cartridge is it?
 	// must be unsigned to look compare the byte values inside
 	unsigned char *pb = (unsigned char *)rgbSwapCart[iVM];
 	
-	if (cb <= 8192)
+	if (cb == 8192 || cb == 4096)	// is there such a thing as a 4K cartridge?
 		bCartType = CART_8K;
+
+	else if (cb < 8192)
+		return FALSE;
 
 	else if (cb == 16384)
 	{
@@ -1555,6 +1586,7 @@ void ReadCart(int iVM)
 		v.rgvm[iVM].rgcart.fCartIn = FALSE;
 	}
 #endif
+	return TRUE;
 }
 
 

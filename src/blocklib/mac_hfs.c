@@ -880,7 +880,8 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
 			int pos = ((sec - 1) % 4) << 7;	// where in the buffer did the 128 bytes we're interested in go?
 
 			unsigned int cbT = rgb[pos + 127];
-			Assert(cbT == 125 || j == count - 1);	// only the last sector should be short
+			if (cbT != 125 && j != count - 1)	// only the last sector should be short, this is a corrupted file
+				return 0;
 
 			// just provide the memory requirement if NULL
 			if (pb)

@@ -13,6 +13,8 @@
     
 ****************************************************************************/
 
+#if defined(ATARIST) || defined(SOFTMAC)
+
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "gemtypes.h"
@@ -71,6 +73,7 @@ static unsigned int cSockets = 8;
 
 #define cScktMax 64
 #define wScktMsk (cScktMax-1)
+
 
 int InPort()
 {
@@ -334,7 +337,6 @@ void ListROMs(HWND hDlg, ULONG wf)
     SendDlgItemMessage(hDlg, IDC_COMBOTOSLIST, CB_SETCURSEL, 0, 0);
 }
 
-#if defined(ATARIST) || defined(SOFTMAC)
 
 void UpdateDIPs(HWND hDlg, int w)
 {
@@ -2383,5 +2385,5 @@ LRESULT CALLBACK FirstTimeProc(
     lParam; // This will prevent 'unused formal parameter' warnings
 }
 
-#endif // ATARIST
+#endif // ATARIST || SOFTMAC
 
