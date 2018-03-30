@@ -46,9 +46,8 @@ BYTE const * const rgszModes[6] =
 #define NORMALx 320
 #define WIDEx 384
 
-BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
 
-void ShowCountDownLine()
+void ShowCountDownLine(int iVM)
 {
     int i = wScan - (wStartScan + wcScans - 12);
 
@@ -58,7 +57,7 @@ void ShowCountDownLine()
         {
         char *pch;
         int cch;
-        BYTE *qch = vvmi.pvBits;
+        BYTE *qch = vrgvmi[iVM].pvBits;
         BYTE colfg;
 
 		if (cntTick < 2)
@@ -114,7 +113,7 @@ void ShowCountDownLine()
         }
 }
 
-void DrawPlayers(WORD NEAR *pw)
+void DrawPlayers(int iVM, WORD NEAR *pw)
 {
     int i;
     int j;
@@ -215,7 +214,7 @@ void DrawPlayers(WORD NEAR *pw)
 #pragma optimize("",off)
 #endif
 
-void DrawMissiles(WORD NEAR *pw, int fFifth)
+void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
 {
     int i;
     int cw;
@@ -344,7 +343,7 @@ Ldm:
 
 #pragma optimize("",on)
 
-__inline void IncDLPC()
+__inline void IncDLPC(int iVM)
 {
     DLPC = (DLPC & 0xFC00) | ((DLPC+1) & 0x03FF);
 }
@@ -360,31 +359,34 @@ __inline void IncDLPC()
 // cbWidth is boosted to the next size if horiz scrolling
 // wAddr is the start of screen memory set by a LMS (load memory scan)
 
-BOOL ProcessScanLine()
+BOOL ProcessScanLine(int iVM)
 {
+	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
+
 	// scan lines per line of each graphics mode
-    static const WORD mpMdScans[16] =
+    static const WORD mpMdScans[19] =
         {
-        1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1
+        1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1, 1, 1, 1
         };
 
 	// BYTES per line of each graphics mode for NARROW playfield
-    static const WORD mpMdBytes[16] =
+    static const WORD mpMdBytes[19] =
         {
-        0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32
+        0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32, 32, 32, 32
         };
 
     // table that says how many bits of data to shift for each
     // 2 clock horizontal delay
 
-    static const WORD mpmdbits[16] =
+    static const WORD mpmdbits[19] =
         {
-        0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4
+        0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
         };
 
     int i, j;
-	// !!! if this is ever implemented, make sure it's OK as a static
-    static WORD rgfChanged = 0;
+	
+	// !!! used to be static! Not even used
+    WORD rgfChanged = 0;
 
 	// don't do anything in the invisible retrace sections
 	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
@@ -408,13 +410,13 @@ BOOL ProcessScanLine()
 
         if (fDumpHW)
             printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
-                 wScan, DLPC, cpuPeekB(DLPC));
+                 wScan, DLPC, cpuPeekB(iVM, DLPC));
 #endif
 
-        sl.modehi = cpuPeekB(DLPC);
+        sl.modehi = cpuPeekB(iVM, DLPC);
         sl.modelo = sl.modehi & 0x0F;
         sl.modehi >>= 4;
-        IncDLPC();
+        IncDLPC(iVM);
 
 		// vertical scroll bit enabled
         if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
@@ -449,9 +451,9 @@ BOOL ProcessScanLine()
             {
             WORD w;
 
-            w = cpuPeekB(DLPC);
-            IncDLPC();
-            w |= (cpuPeekB(DLPC) << 8);
+            w = cpuPeekB(iVM, DLPC);
+            IncDLPC(iVM);
+            w |= (cpuPeekB(iVM, DLPC) << 8);
 
             DLPC = w;
             }
@@ -466,10 +468,10 @@ BOOL ProcessScanLine()
 			// LMS (load memory scan) attached to this line to give start of screen memory
             if (sl.modehi & 4)
                 {
-                wAddr = cpuPeekB(DLPC);
-                IncDLPC();
-                wAddr |= (cpuPeekB(DLPC) << 8);
-                IncDLPC();
+                wAddr = cpuPeekB(iVM, DLPC);
+                IncDLPC(iVM);
+                wAddr |= (cpuPeekB(iVM, DLPC) << 8);
+                IncDLPC(iVM);
                 }
             break;
             }
@@ -491,9 +493,9 @@ BOOL ProcessScanLine()
         if (fDumpHW)
             printf("DLI interrupt at scan %d\n", wScan);
 #endif
-        Interrupt();
+        Interrupt(iVM);
           NMIST = 0x80 | 0x1F;	// want DLI
-        regPC = cpuPeekW(0xFFFA);
+        regPC = cpuPeekW(iVM, 0xFFFA);
     }
 
     // Check playfield width and set cbWidth (number of bytes read by Antic)
@@ -581,18 +583,18 @@ BOOL ProcessScanLine()
 		// single line resolution
         if (sl.dmactl & 0x10)
             {
-            pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 1024 + wScan);
-            pmg.grafp1 = cpuPeekB((pmg.pmbase << 8) + 1280 + wScan);
-            pmg.grafp2 = cpuPeekB((pmg.pmbase << 8) + 1536 + wScan);
-            pmg.grafp3 = cpuPeekB((pmg.pmbase << 8) + 1792 + wScan);
+            pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
+            pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
+            pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
+            pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
             }
 		// double line resolution
         else
             {
-            pmg.grafp0 = cpuPeekB((pmg.pmbase << 8) + 512 + (wScan >>1));
-            pmg.grafp1 = cpuPeekB((pmg.pmbase << 8) + 640 + (wScan >>1));
-            pmg.grafp2 = cpuPeekB((pmg.pmbase << 8) + 768 + (wScan >>1));
-            pmg.grafp3 = cpuPeekB((pmg.pmbase << 8) + 896 + (wScan >>1));
+            pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >>1));
+            pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >>1));
+            pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >>1));
+            pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >>1));
             }
         // !!! GRAFPX = pmg.grafpX;
         }
@@ -606,10 +608,10 @@ BOOL ProcessScanLine()
 	{
 		// single res
 		if (sl.dmactl & 0x10)
-			pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 768 + wScan);
+			pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + wScan);
 		// double res
 		else
-			pmg.grafm = cpuPeekB((pmg.pmbase << 8) + 384 + (wScan >> 1));
+			pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1));
 
 		//GRAFM = pmg.grafm;
 	}
@@ -668,10 +670,7 @@ BOOL ProcessScanLine()
 
 // !!! RENDER section used to be called separately
 
-	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now
-
-	// we don't need to remember it after this function, so static is OK
-	static BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
+	BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
 	//static BYTE sModeLast;	// last ANTIC mode we saw
 
 	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
@@ -704,7 +703,10 @@ BOOL ProcessScanLine()
 #define fDisp       0x8000
 #define fAll        0xFFFF
 
-    if (sl.modelo != psl->modelo) rgfChanged |= fModelo;
+#if 0
+	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now?
+	
+	if (sl.modelo != psl->modelo) rgfChanged |= fModelo;
     if (sl.modehi != psl->modehi) rgfChanged |= fModehi;
     if (sl.scan   != psl->scan  ) rgfChanged |= fScan;    
     if (sl.addr   != psl->addr  ) rgfChanged |= fAddr;    
@@ -732,11 +734,13 @@ BOOL ProcessScanLine()
         rgfChanged |= fAll;
         }
 #endif
+#endif
 
     // HACK! HACK! render everything all the time until the screen
     // corruption is figured out
-    // !!! This makes it OK to not check CHBASE all the time in ExecuteAtari()
+    // !!! Darek says This makes it OK to not check CHBASE all the time in ExecuteAtari()
 	// only do this if CHBASE changed for that scan line, we don't cache CHBASE per scan line
+	// ? but we do, don't we?
 	rgfChanged |= fAll;
 
     // Even if rgfChanged is 0 at this point, we have to check the 10 to 48
@@ -771,8 +775,8 @@ BOOL ProcessScanLine()
 		else
 		{
 			for (i = 0; i < cbWidth; i++)
-				sl.rgb[i] = cpuPeekB((wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
-			rgbSpecial = cpuPeekB((wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
+				sl.rgb[i] = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
+			rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
 		}
 
 		if (fDataChanged || memcmp(&sl.rgb, &psl->rgb[0], cbWidth))
@@ -789,7 +793,7 @@ BOOL ProcessScanLine()
     {
         // redraw scan line
 
-        BYTE *qch0 = vvmi.pvBits;
+        BYTE *qch0 = vrgvmi[iVM].pvBits;
         BYTE FAR *qch = qch0;
 
         BYTE b1, b2;
@@ -920,7 +924,7 @@ BOOL ProcessScanLine()
 						vpix23 = (vpix >= 8 && (sl.rgb[i] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
 						// CHBASE must be on an even page boundary
-						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
+						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
 					}
 					// we ARE in the blank part
 					else {
@@ -967,7 +971,7 @@ BOOL ProcessScanLine()
 							vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
 							// CHBASE must be on an even page boundary
-							v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
+							v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
 						}
 						// we ARE in the blank part
 						else {
@@ -997,11 +1001,11 @@ BOOL ProcessScanLine()
 				{
 					if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
 						// !!! was 0xFC
-						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+						b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
 					else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
-						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+						b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
 					else if ((vpix >= 8) && ((b1 & 0x7F) >= 0x60))
-						b2 = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
+						b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
 					else
 						b2 = 0;
 
@@ -1093,20 +1097,20 @@ BOOL ProcessScanLine()
 					// see comments for modes 2 & 3
 					int index = 0;
 
-					v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
+					v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
 					u = v << (index << 3);
 
 					if (hshift % 8)
 					{
 						index += 1;
-						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
+						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
 						u |= (v << (index << 3));
 					}
 
 					b2 = (BYTE)(u >> hshift);
                 }
                 else
-                    b2 = cpuPeekB(((sl.chbase & 0xFE) <<8) + ((b1 & 0x7F)<<3) + vpix);
+                    b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) <<8) + ((b1 & 0x7F)<<3) + vpix);
 
                 for (j = 0; j < 4; j++)
                 {
@@ -1173,13 +1177,13 @@ BOOL ProcessScanLine()
 						// see comments for modes 2 & 3
 						int index = 0;
 						
-						v = cpuPeekB(((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
+						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
 						u = v << (index << 3);
 
 						if (hshift % 8)
 						{
 							index += 1;
-							v = cpuPeekB(((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
+							v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
 							u |= (v << (index << 3));
 						}
 
@@ -1207,7 +1211,7 @@ BOOL ProcessScanLine()
                     }
                     else
                     {
-                        b2 = cpuPeekB((sl.chbase << 8)
+                        b2 = cpuPeekB(iVM, (sl.chbase << 8)
                             + ((b1 & 0x3F) << 3) + vpix);
 
                         for (j = 0; j < 8; j++)
@@ -1579,12 +1583,18 @@ BOOL ProcessScanLine()
 				// copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
 				for (j = 0; j < 4; j++)
 				{
-					// don't walk off the beginning of the array later on
-					BYTE last = *(qch - 1), last2 = *(qch - 2);
+					// don't walk off the beginning of the array
+					BYTE last, last2;
+
 					if (i == 0 && j == 0)
 					{
-							last = col2;
-							last2 = col2;
+						last = col2;
+						last2 = col2;
+					}
+					else
+					{
+						last = *(qch - 1);
+						last2 = *(qch - 2);
 					}
 
 					// EVEN - (unwind the loop for speed)
@@ -1621,10 +1631,12 @@ BOOL ProcessScanLine()
 					// ODD
 					
 					// don't walk off the beginning of the array later on
-					last = *(qch - 1), last2 = *(qch - 2);
+					last = *(qch - 1);
 					if (i == 0 && j == 0)
 						last2 = col2;
-					
+					else
+						last2 = *(qch - 2);
+
 					// which bit is this bit position?
 					k = (index - (j << 1) - 1);
 
@@ -1798,12 +1810,12 @@ BOOL ProcessScanLine()
 
     if (sl.fpmg)
         {
-        BYTE *qch = vvmi.pvBits;
+        BYTE *qch = vrgvmi[iVM].pvBits;
 
 		// now set the bits in rgpix corresponding to players and missiles
 		// missiles go underneath the players, at least in Ms. Pacman. !!! RIVERAID breaks if missiles drawn first, no missile collision
-		DrawPlayers((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
-		DrawMissiles((WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);	// 5th player?
+		DrawPlayers(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
+		DrawMissiles(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);	// 5th player?
 
 #ifndef NDEBUG
     if (0)
@@ -1897,7 +1909,7 @@ BOOL ProcessScanLine()
 
     if (cntTick)
         {
-        ShowCountDownLine();
+        ShowCountDownLine(iVM);
         }
 
 #if 0 // !!! rainbow #ifndef NDEBUG
@@ -1977,7 +1989,7 @@ Lnextscan:
 #endif
 }
 
-void ForceRedraw()
+void ForceRedraw(int iVM)
 {
     memset(rgsl,0,sizeof(rgsl));
 }

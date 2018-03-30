@@ -116,19 +116,18 @@ void CALLBACK MyWaveOutProc(
 }
 
 // WRITE SOME AUDIO TO THE WAVE BUFFER
+// This is OK not being thread safe, because only one thread is allowed in at a time, and we never switch which
+// thread is allowed in unless all threads are asleep
 //
-void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
+void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 {
 
-
 	// only do sound for the tiled VM in focus
-	if (v.fTiling && sVM != (int)v.iVM)
-	{
+	if (v.fTiling && sVM != (int)iVM)
 		return;
-	}
 
 	// 8 bit code
-	if (!FIsAtari68K(vmCur.bfHW)) {
+	if (!FIsAtari68K(v.rgvm[iVM].bfHW)) {
 #ifdef XFORMER
 		// write from wherever we left off(sOldSample) to now(iCurSample). If it becomes full, play it.
 		assert(iCurSample <= SAMPLES_PER_VOICE);
@@ -192,7 +191,7 @@ void SoundDoneCallback(LPWAVEHDR pwhdr, int iCurSample)
 			rgvoice[3].volume = 0;	// !!! hack for MULE, the single bad sample is at the end of the buffer
 		}
 
-		if (vmCur.fSound) {
+		if (v.rgvm[iVM].fSound) {
 
 			// figure out the freq and pulse width of each voice
 			int freq[4];
@@ -962,14 +961,14 @@ void InitSound()
 #endif
 }
 
-
-void InitMIDI()
+// do we really want to allow each VM to independently decide to do MIDI or not?
+void InitMIDI(int iVM)
 {
     MIDIINCAPS  mic;
     MIDIOUTCAPS moc;
     int i, iMac = 0;
 
-    if (!vmCur.fMIDI)
+    if (!v.rgvm[iVM].fMIDI)
         return;
 
 #if !defined(_M_ARM)
@@ -978,7 +977,7 @@ void InitMIDI()
     DebugStr("number of MIDI output devices = %d\n", iMac);
 
     if (iMac == 0)
-        vmCur.fMIDI = FALSE;
+        v.rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {
@@ -995,7 +994,7 @@ void InitMIDI()
     DebugStr("number of MIDI input devices = %d\n", iMac);
 
     if (iMac == 0)
-        vmCur.fMIDI = FALSE;
+        v.rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {

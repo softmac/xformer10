@@ -25,6 +25,8 @@ extern int Y8;		// number of valid scan lines
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
+#define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
+
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
@@ -53,6 +55,9 @@ void TimeTravelFree(unsigned);
 ULONGLONG ullTimeTravelTime[MAX_VM];	// the time stamp of a snapshot
 char cTimeTravelPos[MAX_VM];	// which is the current snapshot?
 char *Time[MAX_VM][3];		// 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
+
+// my own printf that *works*
+void ODS(char *fmt, ...);
 
 //
 // Scan line structure
@@ -231,8 +236,10 @@ typedef struct
 
     ULONG m_clockMult;
 
+	// !!! this is unnecessary bloat!
     SL m_rgsl[NTSCY];     // 256 scan line structures
-    PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
+    
+	PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
 
     SL m_sl;            // current scan line display info
     WORD m_cbWidth, m_cbDisp;
@@ -254,6 +261,16 @@ typedef struct
     BYTE m_bshftByte;   // current value of shift state
     BYTE m_cVBI;        // count of VBIs since last tick
 
+	// the 8 status bits must be together and in the same order as in the 6502
+	unsigned char m_srN;
+	unsigned char    m_srV;
+	unsigned char    m_srB;
+	unsigned char    m_srD;
+	unsigned char    m_srI;
+	unsigned char    m_srZ;
+	unsigned char    m_srC;
+	unsigned char    m_pad;
+
 	char FAR m_rgbSwapSelf[2048];	// extended XL memory
 	char FAR m_rgbSwapC000[4096];
 	char FAR m_rgbSwapD800[10240];
@@ -269,11 +286,10 @@ typedef struct
 
 #pragma pack()
 
-extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
+extern CANDYHW vrgcandy[MAX_VM];
 
-// #define CANDY_STATE(name) vrgcandy[v.iVM].m_##name
-// #define CANDY_STATE(name) vrgcandy[0].m_##name
- #define CANDY_STATE(name) vpcandyCur->m_##name
+// make sure your local variable iVM is set to the instance you are before using
+#define CANDY_STATE(name) vrgcandy[iVM].m_##name
 
 #define rgbMem        CANDY_STATE(rgbMem)
 #define regPC         CANDY_STATE(regPC)
@@ -284,6 +300,14 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 #define regP          CANDY_STATE(regP)
 #define regEA         CANDY_STATE(regEA)
 #define mdEA          CANDY_STATE(mdEA)
+#define srN           CANDY_STATE(srN)
+#define srV           CANDY_STATE(srV)
+#define srB           CANDY_STATE(srB)
+#define srD           CANDY_STATE(srD)
+#define srI           CANDY_STATE(srI)
+#define srZ           CANDY_STATE(srZ)
+#define srC           CANDY_STATE(srC)
+#define pad           CANDY_STATE(pad)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
 #define wLeftMax      CANDY_STATE(wLeftMax)
@@ -364,21 +388,21 @@ extern CANDYHW vrgcandy[MAX_VM], *vpcandyCur;
 // Platform specific stuff
 //
 
-#define pbtick _pbtick()
-__inline BYTE FAR *_pbtick()
+#define pbtick _pbtick(iVM)
+__inline BYTE *_pbtick(int iVM)
 {
     btickByte = (BYTE)(GetTickCount() / 50);
     return &btickByte;
 }
-#define pbshift _pbshift()
-__inline BYTE FAR *_pbshift()
+#define pbshift _pbshift(iVM)
+__inline BYTE *_pbshift(int iVM)
 {
     return &bshftByte;
 }
 
 //
 // 6502 condition codes in P register: NV_BDIZC
-//
+// !!! just use the 6502.h defines
 
 #define NBIT 0x80
 #define VBIT 0x40
@@ -387,7 +411,6 @@ __inline BYTE FAR *_pbshift()
 #define IBIT 0x04
 #define ZBIT 0x02
 #define CBIT 0x01
-
 
 //
 // Atari 800 hardware read registers
@@ -598,51 +621,42 @@ __inline BYTE FAR *_pbshift()
 // Function prototypes
 //
 
-void mon(void);
+void mon(int);
+void __cdecl Go6502(int);
+void Interrupt(int);
+void CheckKey(int);
+void UpdatePorts(int);
+void SIOV(int);
+void DeleteDrive(int, int);
+void AddDrive(int, int, BYTE *);
+BOOL ProcessScanLine(int);
+void ForceRedraw(int);
+void __cdecl SwapMem(int, BYTE mask, BYTE flags, WORD pc);
+void InitBanks(int);
+void CchDisAsm(int, unsigned int *puMem);
+void CchShowRegs(int);
 
-void __cdecl Go6502(void);
-void Interrupt(void);
-void CheckKey(void);
+extern int fXFCable;	// !!! left uninitialized and used
+
+//int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
+//void ReadROMs();
 //void ReadJoy(void);
 //void MyReadJoy(void);
-
 //void SaveVideo(void);
 //void RestoreVideo(void);
 //void WaitForVRetrace(void);
-void UpdatePorts(void);
-
 //void InitSIOV(int, char **);
 //void DiskConfig(void);
-
-void SIOV();
-void DeleteDrive(int, int);
-void AddDrive(int, int, BYTE *);
-
-extern int fXFCable;	// !!! left uninitialized and used
 //extern unsigned uBaudClock;
-
 //void _SIO_Init(void);
 //void _SIO_Calibrate(void);
-int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
-
 //void InitSoundBlaster();
-
-BOOL ProcessScanLine();
-void ForceRedraw();
-
-void __cdecl SwapMem(BYTE mask, BYTE flags, WORD pc);
-void InitBanks(int);
-//void ReadROMs();
-
-void CchDisAsm(unsigned int *puMem);
-void CchShowRegs(void);
 
 //
 // Various ROM data and swap buffers
 //
 
 extern char FAR rgbAtariOSB[]; // Atari 400/800 ROMs
-
 extern char FAR rgbXLXEBAS[], FAR rgbXLXED800[];  // XL/XE ROMs
 extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 
@@ -670,18 +684,18 @@ BOOL __cdecl WarmbootAtari(int);
 BOOL __cdecl ColdbootAtari(int);
 BOOL __cdecl SaveStateAtari(int, char **, int *);
 BOOL __cdecl LoadStateAtari(int, char *, int);
-BOOL __cdecl DumpHWAtari(void);
-BOOL __cdecl TraceAtari(BOOL, BOOL);
-BOOL __cdecl ExecuteAtari(BOOL, BOOL);
-BOOL __cdecl KeyAtari(HWND, UINT, WPARAM, LPARAM);
-BOOL __cdecl DumpRegsAtari(void);
-BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC);
-BYTE __cdecl PeekBAtari(int addr);
-WORD __cdecl PeekWAtari(int addr);
-ULONG __cdecl PeekLAtari(int addr);
-BOOL  __cdecl PokeLAtari(int addr, ULONG l);
-BOOL  __cdecl PokeWAtari(int addr, WORD w);
-BOOL  __cdecl PokeBAtari(int addr, BYTE b);
+BOOL __cdecl DumpHWAtari(int);
+BOOL __cdecl TraceAtari(int, BOOL, BOOL);
+BOOL __cdecl ExecuteAtari(int, BOOL, BOOL);
+BOOL __cdecl KeyAtari(int, HWND, UINT, WPARAM, LPARAM);
+BOOL __cdecl DumpRegsAtari(int);
+BOOL __cdecl DisasmAtari(int, char *pch, ADDR *pPC);
+BYTE __cdecl PeekBAtari(int, ADDR addr);
+WORD __cdecl PeekWAtari(int, ADDR addr);
+ULONG __cdecl PeekLAtari(int, ADDR addr);
+BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
+BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
+BOOL  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
 
 
 //

@@ -76,15 +76,22 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 	v.rgvm[i].fValidVM = f;
 
 	if (f)
+	{
 		v.cVM++;
-	
+
+		// we're so trusting we don't even want the thread ID or handle. Tell it which VM it is
+		iThreadVM[i] = i;
+		fKillThread[i] = FALSE;
+		HANDLE h = CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL);
+	}
+
 	// decide on an app level?
 	v.rgvm[i].fSound = TRUE;
 	v.rgvm[i].fJoystick = TRUE;
 
 	return f;
 }
-
+ 
 // This will Uninit and delete the VM, freeing it's bitmap, etc.
 //
 void DeleteVM(int iVM)
@@ -105,6 +112,10 @@ void DeleteVM(int iVM)
 		vrgvmi[iVM].hbm = NULL;
 	}
 	
+	// kill the thread executing this event
+	fKillThread[iVM] = TRUE;
+	SetEvent(hGoEvent[iVM]);
+
 	FUnInitVM(iVM);
 	v.rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
 	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
@@ -447,9 +458,14 @@ LTryAgain:
 				if (f && vi.hdc)
 					f = CreateNewBitmap(i);
 				if (f)
+				{
 					v.cVM++;
+					// create a thread to execute this VM
+					iThreadVM[i] = i;
+					fKillThread[i] = FALSE;
+					HANDLE h = CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL);
+				}
 			}
-
 			if (!f)
 				v.rgvm[i].fValidVM = FALSE;	// mark every valid VM that really isn't as invalid.
 		}

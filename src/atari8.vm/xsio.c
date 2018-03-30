@@ -216,8 +216,6 @@ void InitSIOV(int iVM, int argc, char **argv)
 {
     int i, iArgv = 0;
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 #ifdef HDOS16ORDOS32
     _bios_printer(_PRINTER_INIT, 0, 0);
 #endif
@@ -350,7 +348,7 @@ void InitSIOV(int iVM, int argc, char **argv)
 #define LIGHT_TRANSLATION 0
 #define HEAVY_TRANSLATION 16
 
-void BUS1()
+void BUS1(int iVM)
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
@@ -361,8 +359,6 @@ void BUS1()
     static BYTE fConcurrent = FALSE;
 
 //    printf("in bus handler, regPC = %04X\n", regPC);
-
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
     switch (regPC & 0x00F0)
         {
@@ -428,9 +424,9 @@ void BUS1()
 
         if (fConcurrent)
             {
-            cpuPokeB (746,0);   // error bits
-            cpuPokeB (748,0);   // unknown
-            cpuPokeB (749,0);   // characters to be sent
+            cpuPokeB (iVM, 746,0);   // error bits
+            cpuPokeB (iVM, 748,0);   // unknown
+            cpuPokeB (iVM, 749,0);   // characters to be sent
 
             // do character pending
 
@@ -439,16 +435,16 @@ void BUS1()
 #endif
 
             if (0x0100 & wStat)
-                cpuPokeB (747,1);
+                cpuPokeB (iVM, 747,1);
             else
-                cpuPokeB (747,0);
+                cpuPokeB (iVM, 747,0);
 //    printf("%d",cpuPeekB(747)); fflush(stdout);
             }
         else
             {
             // block mode status
 
-            cpuPokeB (746,0);   // error bits
+            cpuPokeB (iVM, 746,0);   // error bits
 
             // BIOS returns CD in bit 7, DSR in bit 5, CTS in bit 4
             // Atari needs CD in bit 3, DSR in bit 7, CTS in bit 5
@@ -458,7 +454,7 @@ void BUS1()
             wStat |= oldstat;
             oldstat = (BYTE)(wStat >> 1) & 0x54;
 
-            cpuPokeB (747,(BYTE)wStat);   // handshake bits
+            cpuPokeB (iVM, 747,(BYTE)wStat);   // handshake bits
             }
 
         break;
@@ -468,7 +464,7 @@ void BUS1()
         printf("XIO %d, aux1 = %d, aux2 = %d\n", cpuPeekB(0x22), cpuPeekB(0x2A), cpuPeekB(0x2B));
 #endif
 
-        switch (cpuPeekB(0x22))
+        switch (cpuPeekB(iVM, 0x22))
             {
         default:
             break;
@@ -483,7 +479,7 @@ void BUS1()
             {
             int baud = 300;
 
-            switch (cpuPeekB(0x2A) & 15)
+            switch (cpuPeekB(iVM, 0x2A) & 15)
                 {
             default:
                 break;
@@ -532,7 +528,7 @@ void BUS1()
 
         case 38:     // translation and parity
 
-            mdTranslation = cpuPeekB(0x2A) & 48;
+            mdTranslation = cpuPeekB(iVM, 0x2A) & 48;
 #if DEBUGCOM
             printf("mdTranslation set to %d\n", mdTranslation);
 #endif
@@ -551,11 +547,11 @@ void BUS1()
         if ((wCOM != 0) && (wCOM != 1))
             break;
 
-        cpuPokeB (583, cpuPeekB(247) | 1); // tell OS that device 1 is a CIO device
+        cpuPokeB (iVM, 583, cpuPeekB(iVM, 247) | 1); // tell OS that device 1 is a CIO device
 
-        cpuPokeB (797,'R');
-        cpuPokeB (798,0x8F);
-        cpuPokeB (799,0xE4);
+        cpuPokeB (iVM, 797,'R');
+        cpuPokeB (iVM, 798,0x8F);
+        cpuPokeB (iVM, 799,0xE4);
         break;
 
     case 0x70:  // SIO vector
@@ -565,18 +561,18 @@ void BUS1()
         break;
         }
 
-    cpuPokeB (0x343,(BYTE)wRetStat);
+    cpuPokeB (iVM, 0x343,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat & 0x80) ? 0 : ZBIT);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
     regP |= CBIT; // indicate that command completed successfully
 
-    regPC = cpuPeekW(regSP+1) + 1;        // do an RTS
+    regPC = cpuPeekW(iVM, regSP+1) + 1;        // do an RTS
     regSP = (regSP + 2) & 255 | 256;
 }
 
-void SIOV()
+void SIOV(int iVM)
 {
     WORD wDev, wDrive, wCom, wStat, wBuff, wSector, bAux1, bAux2;
     WORD  wBytes;
@@ -589,11 +585,9 @@ void SIOV()
     BYTE rgb[256];
     WORD i;
 
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
-
     if (regPC != 0xE459)
         {
-        BUS1();
+        BUS1(iVM);
         return;
         }
 
@@ -610,23 +604,23 @@ void SIOV()
     printf("Aux2 = %2x\n", cpuPeekB(0x30B));
 #endif
 
-    wDev = cpuPeekB(0x300);
-    wDrive = cpuPeekB(0x301)-1;
-    wCom = cpuPeekB(0x302);
-    wStat = cpuPeekB(0x303);
-    wBuff = cpuPeekW(0x304);
-    wTimeout = cpuPeekW(0x306);
-    wBytes = cpuPeekW(0x308);
-    wSector = cpuPeekW(0x30A);
-    bAux1 = cpuPeekB(0x30A);
-    bAux2 = cpuPeekB(0x30B);
+    wDev = cpuPeekB(iVM, 0x300);
+    wDrive = cpuPeekB(iVM, 0x301)-1;
+    wCom = cpuPeekB(iVM, 0x302);
+    wStat = cpuPeekB(iVM, 0x303);
+    wBuff = cpuPeekW(iVM, 0x304);
+    wTimeout = cpuPeekW(iVM, 0x306);
+    wBytes = cpuPeekW(iVM, 0x308);
+    wSector = cpuPeekW(iVM, 0x30A);
+    bAux1 = cpuPeekB(iVM, 0x30A);
+    bAux2 = cpuPeekB(iVM, 0x30B);
 
     if (wDev == 0x31)       /* disk drives */
         {
         if ((wDrive < 0) || (wDrive >= MAX_DRIVES))
             goto lCable;
 
-        pdrive = &rgDrives[v.iVM][wDrive];
+        pdrive = &rgDrives[iVM][wDrive];
 
         md = pdrive->mode;
 
@@ -699,11 +693,11 @@ lNAK:
           /*  printf("SIO command 'S'\n"); */
 
             /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
-            cpuPokeB (wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (pdrive->fWP ? 8 : 0));
+            cpuPokeB (iVM, wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (pdrive->fWP ? 8 : 0));
 
-            cpuPokeB (wBuff++, 0xFF);         /* controller */
-            cpuPokeB (wBuff++, 0xE0);         /* format timeout */
-            cpuPokeB (wBuff, 0x00);           /* unused */
+            cpuPokeB (iVM, wBuff++, 0xFF);         /* controller */
+            cpuPokeB (iVM, wBuff++, 0xE0);         /* format timeout */
+            cpuPokeB (iVM, wBuff, 0x00);           /* unused */
             break;
             
         /* get configuration */
@@ -712,38 +706,38 @@ lNAK:
             if (md == MD_HD)
                 {
                 pdrive->wSectorMac--;
-                cpuPokeB (wBuff++, 1);   /* tracks */
-                cpuPokeB (wBuff++, 0);    /* ?? */
-                cpuPokeB (wBuff++, pdrive->wSectorMac & 255);   /* ?? */
-                cpuPokeB (wBuff++, pdrive->wSectorMac >> 8);    /* sectors/track */
-                cpuPokeB (wBuff++, 0x00);         /* ?? */
+                cpuPokeB (iVM, wBuff++, 1);   /* tracks */
+                cpuPokeB (iVM, wBuff++, 0);    /* ?? */
+                cpuPokeB (iVM, wBuff++, pdrive->wSectorMac & 255);   /* ?? */
+                cpuPokeB (iVM, wBuff++, pdrive->wSectorMac >> 8);    /* sectors/track */
+                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
                 pdrive->wSectorMac++;
                 }
             else
                 {
-                cpuPokeB (wBuff++, 0x28);         /* tracks */
-                cpuPokeB (wBuff++, 0x02);         /* ?? */
-                cpuPokeB (wBuff++, 0x00);         /* ?? */
-                cpuPokeB (wBuff++, (md == MD_ED) ? 0x1A : 0x12); /* secs/track */
-                cpuPokeB (wBuff++, 0x00);         /* ?? */
+                cpuPokeB (iVM, wBuff++, 0x28);         /* tracks */
+                cpuPokeB (iVM, wBuff++, 0x02);         /* ?? */
+                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
+                cpuPokeB (iVM, wBuff++, (md == MD_ED) ? 0x1A : 0x12); /* secs/track */
+                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
                 }
 
             if (fDD)
                 {
-                cpuPokeB (wBuff++, 0x04);     /* density: 4 = dbl  0 = sng */
-                cpuPokeB (wBuff++, 0x01);     /* bytes/sector hi */
-                cpuPokeB (wBuff++, 0x00);     /* bytes/sector lo */
+                cpuPokeB (iVM, wBuff++, 0x04);     /* density: 4 = dbl  0 = sng */
+                cpuPokeB (iVM, wBuff++, 0x01);     /* bytes/sector hi */
+                cpuPokeB (iVM, wBuff++, 0x00);     /* bytes/sector lo */
                 }
             else
                 {
-                cpuPokeB (wBuff++, 0x00);     /* density: 4 = dbl  0 = sng */
-                cpuPokeB (wBuff++, 0x00);     /* bytes/sector hi */
-                cpuPokeB (wBuff++, 0x80);     /* bytes/sector lo */
+                cpuPokeB (iVM, wBuff++, 0x00);     /* density: 4 = dbl  0 = sng */
+                cpuPokeB (iVM, wBuff++, 0x00);     /* bytes/sector hi */
+                cpuPokeB (iVM, wBuff++, 0x80);     /* bytes/sector lo */
                 }
-            cpuPokeB (wBuff++, 0xFF);         /* unused */
-            cpuPokeB (wBuff++, 0xFF);         /* unused */
-            cpuPokeB (wBuff++, 0xFF);         /* unused */
-            cpuPokeB (wBuff, 0xFF);           /* unused */
+            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (iVM, wBuff, 0xFF);           /* unused */
             break;
 
         /* set configuration - we don't support it */
@@ -899,7 +893,7 @@ lNAK:
         case 'S': 
             while (timeout--)
                 {
-                if (FPrinterReady())
+                if (FPrinterReady(iVM))
                     {
                     wRetStat = SIO_OK;
                     break;
@@ -933,14 +927,14 @@ lNAK:
 
                 while (timeout--)
                     {
-                    if (FPrinterReady())
+                    if (FPrinterReady(iVM))
                         {
                         if (ch != 155)
-                            ByteToPrinter(ch);
+                            ByteToPrinter(iVM, ch);
                         else
                             {
-                            ByteToPrinter(13);
-                            ByteToPrinter(10);
+                            ByteToPrinter(iVM, 13);
+                            ByteToPrinter(iVM, 10);
                             }
 
                         wRetStat = SIO_OK;
@@ -974,12 +968,12 @@ lCable:
 #endif
 
 lExit:
-    cpuPokeB (0x303,(BYTE)wRetStat);
+    cpuPokeB (iVM, 0x303,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
-    regPC = cpuPeekW(regSP+1) + 1;        // do an RTS
+    regPC = cpuPeekW(iVM, regSP+1) + 1;        // do an RTS
     regSP = (regSP + 2) & 255 | 256;
 
 #if 0

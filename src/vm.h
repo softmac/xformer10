@@ -68,8 +68,8 @@ enum
 // the VMs here. The UI must manualy "extern" them, so that the linker only
 // links in the VMs (and thus CPUs) that are actually referenced.
 //
-
-extern VMINFO *vpvm;
+//
+//extern VMINFO *vpvm;
 
 // a VM address
 
@@ -83,7 +83,7 @@ typedef unsigned long int  ADDR;
 //
 
 // some functions can operate on any instance, and they take a parameter (which instance)
-// and need to look at the state of that instance, not vpvm (the current one)
+// and need to look at the state of that instance
 
 BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
 {
@@ -92,27 +92,17 @@ BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
 
 BOOL __inline FInitVM(int iVM)
 {
-    if (v.rgvm[iVM].pvmi->pfnInit == NULL)
-        return FALSE;
-
     return v.rgvm[iVM].pvmi->pfnInit(iVM);
 }
 
 BOOL __inline FUnInitVM(int iVM)
 {
-	//if (v.rgvm[iVM].pvmi == NULL)
-	//	return TRUE;
-
-    if (v.rgvm[iVM].pvmi->pfnUnInit == NULL)
-        return TRUE;
-
     return v.rgvm[iVM].pvmi->pfnUnInit(iVM);
 }
 
 BOOL __inline FInitDisksVM(int iVM)
 {
-	// why do we all of a sudden trust pfnInitDisks not to be NULL?
-    return v.rgvm[iVM].pvmi->pfnInitDisks(iVM);
+	return v.rgvm[iVM].pvmi->pfnInitDisks(iVM);
 }
 
 BOOL __inline FUnInitDisksVM(int iVM)
@@ -125,16 +115,14 @@ BOOL __inline FColdbootVM(int iVM)
     return v.rgvm[iVM].pvmi->pfnColdboot(iVM);
 }
 
-// so far, this only gets called on the current instance
 BOOL __inline FWarmbootVM(int iVM)
 {
     return v.rgvm[iVM].pvmi->pfnWarmboot(iVM);
 }
 
-// so far, this only gets called on the current instance
-BOOL __inline FExecVM(BOOL fStep, BOOL fCont)
+BOOL __inline FExecVM(int iVM, BOOL fStep, BOOL fCont)
 {
-	return v.rgvm[v.iVM].pvmi->pfnExec(fStep, fCont);
+	return v.rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
 }
 
 BOOL __inline FSaveStateVM(int iVM, char **ppPersist, int *pcbPersist)
@@ -157,24 +145,21 @@ BOOL __inline FUnmountDiskVM(int iVM, int i)
     return v.rgvm[iVM].pvmi->pfnUnmountDisk(iVM, i);
 }
 
-BOOL __inline FWinMsgVM(HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)
+BOOL __inline FWinMsgVM(int iVM, HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)
 {
-    if (vpvm == NULL)
-        return TRUE;
-
-    return vpvm->pfnWinMsg(hWnd, msg, uParam, lParam);
+    return v.rgvm[iVM].pvmi->pfnWinMsg(iVM, hWnd, msg, uParam, lParam);
 }
 
-BOOL __cdecl m68k_DumpRegs();
+BOOL __cdecl m68k_DumpRegs(int iVM);
 
-BOOL __inline FDumpRegsVM()
+BOOL __inline FDumpRegsVM(int iVM)
 {
-    return vpvm->pfnDumpRegs();
+    return v.rgvm[iVM].pvmi->pfnDumpRegs(iVM);
 }
 
-BOOL __inline FDumpHWVM()
+BOOL __inline FDumpHWVM(int iVM)
 {
-    return vpvm->pfnDumpHW(0);
+    return v.rgvm[iVM].pvmi->pfnDumpHW(iVM);
 }
 
 //
@@ -182,12 +167,11 @@ BOOL __inline FDumpHWVM()
 //
 
 void __fastcall ZapRange(ULONG addr, ULONG cb);
-
-ULONG __inline vmPeekB(ULONG ea)
+ULONG __inline vmPeekB(int iVM, ULONG ea)
 {
     BYTE b = 0;
 
-    vpvm->pfnReadHWByte(ea, &b);
+	v.rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, &b);
 
     return b;
 }
@@ -196,7 +180,7 @@ ULONG __inline vmPeekW(int iVM, ULONG ea)
 {
     WORD w = 0;
 
-    v.rgvm[iVM].pvmi->pfnReadHWWord(ea, &w);
+    v.rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, &w);
 
     return w;
 }
@@ -205,92 +189,92 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
 {
     ULONG l = 0;
 
-    v.rgvm[iVM].pvmi->pfnReadHWLong(ea, &l);
+    v.rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, &l);
 
     return l;
 }
 
-HRESULT __inline ReadPhysicalByte(ULONG ea, BYTE *pb)
+HRESULT __inline vmPokeB(int iVM, ULONG ea, BYTE b)
 {
-    return vpvm->pfnReadHWByte(ea, pb);
+	ZapRange(ea, sizeof(BYTE));
+	return v.rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
 }
 
-HRESULT __inline ReadPhysicalWord(ULONG ea, WORD *pw)
+HRESULT __inline vmPokeW(int iVM, ULONG ea, WORD w)
 {
-    return vpvm->pfnReadHWWord(ea, pw);
+	ZapRange(ea, sizeof(WORD));
+	return v.rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
 }
 
-HRESULT __inline ReadPhysicalLong(ULONG ea, ULONG *pl)
+HRESULT __inline vmPokeL(int iVM, ULONG ea, ULONG l)
 {
-    return vpvm->pfnReadHWLong(ea, pl);
+	ZapRange(ea, sizeof(LONG));
+	return v.rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
 }
 
-HRESULT __inline vmPokeB(ULONG ea, BYTE b)
+HRESULT __inline ReadPhysicalByte(int iVM, ULONG ea, BYTE *pb)
+{
+    return v.rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, pb);
+}
+
+HRESULT __inline ReadPhysicalWord(int iVM, ULONG ea, WORD *pw)
+{
+    return v.rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, pw);
+}
+
+HRESULT __inline ReadPhysicalLong(int iVM, ULONG ea, ULONG *pl)
+{
+    return v.rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
+}
+
+HRESULT __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
     ZapRange(ea, sizeof(BYTE));
-    return vpvm->pfnWriteHWByte(ea, &b);
+    return v.rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
 }
 
-HRESULT __inline vmPokeW(ULONG ea, WORD w)
+HRESULT __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
     ZapRange(ea, sizeof(WORD));
-    return vpvm->pfnWriteHWWord(ea, &w);
+    return v.rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
 }
 
-HRESULT __inline vmPokeL(ULONG ea, ULONG l)
+HRESULT __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
     ZapRange(ea, sizeof(LONG));
-    return vpvm->pfnWriteHWLong(ea, &l);
+    return v.rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
 }
 
-HRESULT __inline WritePhysicalByte(ULONG ea, BYTE *pb)
+ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
 {
-    ZapRange(ea, sizeof(BYTE));
-    return vpvm->pfnWriteHWByte(ea, pb);
-}
-
-HRESULT __inline WritePhysicalWord(ULONG ea, WORD *pw)
-{
-    ZapRange(ea, sizeof(WORD));
-    return vpvm->pfnWriteHWWord(ea, pw);
-}
-
-HRESULT __inline WritePhysicalLong(ULONG ea, ULONG *pl)
-{
-    ZapRange(ea, sizeof(LONG));
-    return vpvm->pfnWriteHWLong(ea, pl);
-}
-
-ULONG __inline LockMemoryVM(ULONG ea, ULONG cb, void **ppv)
-{
-    if (vpvm == NULL)
+    if (v.rgvm[iVM].pvmi == NULL)
         return TRUE;
 
-    if (vpvm->pfnLockBlock == NULL)
+    if (v.rgvm[iVM].pvmi->pfnLockBlock == NULL)
         return FALSE;
 
-    return vpvm->pfnLockBlock(ea, cb, ppv);
+    return v.rgvm[iVM].pvmi->pfnLockBlock(iVM, ea, cb, ppv);
 }
 
-ULONG __inline UnlockMemoryVM(ULONG ea, ULONG cb)
+ULONG __inline UnlockMemoryVM(int iVM, ULONG ea, ULONG cb)
 {
-    if (vpvm == NULL)
+    if (v.rgvm[iVM].pvmi == NULL)
         return TRUE;
 
-    if (vpvm->pfnUnlockBlock == NULL)
+    if (v.rgvm[iVM].pvmi->pfnUnlockBlock == NULL)
         return FALSE;
 
-    return vpvm->pfnUnlockBlock(ea, cb);
+    return v.rgvm[iVM].pvmi->pfnUnlockBlock(iVM, ea, cb);
 }
 
-__inline BYTE * MapAddressVM(ULONG ea)
+__inline BYTE * MapAddressVM(int iVM, ULONG ea)
 {
-    return vpvm->pfnMapAddress(ea);
+    return v.rgvm[iVM].pvmi->pfnMapAddress(iVM, ea);
 }
 
-__inline BYTE * MapWritableAddressVM(ULONG ea)
+__inline BYTE * MapWritableAddressVM(int iVM, ULONG ea)
 {
-    return vpvm->pfnMapAddressRW(ea);
+    return v.rgvm[iVM].pvmi->pfnMapAddressRW(iVM, ea);
 }
 
 

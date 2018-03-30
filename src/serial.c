@@ -391,7 +391,7 @@ void SetDTR(BOOL f)
     EscapeCommFunction(hComm, f ? SETDTR : CLRDTR);
 }
 
-LONG GetModemStatus()
+ULONG GetModemStatus()
 {
 // Atari ST's port has these bits:
 // bit 6, RS-232 ring

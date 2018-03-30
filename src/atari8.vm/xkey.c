@@ -19,28 +19,28 @@
 // CheckKey() is called during the vertical blank to process the keyboard buffer which is filled
 // by KeyAtari() in response to windows messages for keys, mouse, joystick
 //
-void CheckKey()
+void CheckKey(int iVM)
 {
     BYTE scan = 0;
     BYTE ch = 0;
     WORD shift = 0;
     WORD dshift = 0;
-	BOOL fForceCtrl = FALSE;
+	//BOOL fForceCtrl = FALSE;
      
     extern BYTE rgbMapScans[1024];
 
 // printf("in CheckKey\n");
 
-    if (vvmi.keyhead != vvmi.keytail)
+    if (vrgvmi[iVM].keyhead != vrgvmi[iVM].keytail)
         {
-        scan = vvmi.rgbKeybuf[vvmi.keytail++];
-        ch   = vvmi.rgbKeybuf[vvmi.keytail++];
-        vvmi.keytail &= 1023;
+        scan = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
+        ch   = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
+        vrgvmi[iVM].keytail &= 1023;
 
 		DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
-        if ((vvmi.keytail & 1) || (vvmi.keyhead & 1))
-            vvmi.keytail = vvmi.keyhead = 0;
+        if ((vrgvmi[iVM].keytail & 1) || (vrgvmi[iVM].keyhead & 1))
+            vrgvmi[iVM].keytail = vrgvmi[iVM].keyhead = 0;
         }
 
     if (scan == 255)
@@ -272,7 +272,7 @@ void CheckKey()
 			if (ch == 0)                    // numlock off
 				{
 				rPADATA &= ~5;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -283,7 +283,7 @@ void CheckKey()
 			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
 				{
 				rPADATA &= ~1;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -294,7 +294,7 @@ void CheckKey()
 			if (ch == 0)                    // numlock off
 				{
 				rPADATA &= ~9;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -305,7 +305,7 @@ void CheckKey()
 			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
 				{
 				rPADATA &= ~4;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -316,7 +316,7 @@ void CheckKey()
 			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
 				{
 				rPADATA |= 15;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -327,7 +327,7 @@ void CheckKey()
 			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
 				{
 				rPADATA &= ~8;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -338,7 +338,7 @@ void CheckKey()
 			if (ch == 0)                    // numlock off
 				{
 				rPADATA &= ~6;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -349,7 +349,7 @@ void CheckKey()
 			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
 				{
 				rPADATA &= ~2;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -360,7 +360,7 @@ void CheckKey()
 			if (ch == 0)                    // numlock off
 				{
 				rPADATA &= ~10;
-				UpdatePorts();
+				UpdatePorts(iVM);
 				return;
 				}
 			else
@@ -370,7 +370,7 @@ void CheckKey()
 		case 0x52: // numeric 0
 			if (ch == 0)                    // numlock off
 				{
-//				TRIG0 &= ~1;                // JOY 0 fire button down
+				TRIG0 &= ~1;                // JOY 0 fire button down
 				return;
 				}
 
@@ -384,10 +384,9 @@ void CheckKey()
 
 lookitup:
     
-	// it's annoying to need to press CTRL to work the arrows, etc.
 	int sh = shift;
-	if (fForceCtrl)
-		sh = shift | 4;
+	
+	//if (fForceCtrl) sh = shift | 4;
 
 	KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
 
@@ -418,13 +417,11 @@ lookit2:
 // Decide whether or not to pass the key to ATARI
 // RETURN TRUE to hide the key from Windows, FALSE to let Windows see it
 
-BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
+BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 {
     int ch, scan;
     MSG msg;
     BOOL fDown =  (lParam & 0x80000000) == 0;
-
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
 
 	scan = (lParam >> 16) & 0xFF;
     ch = uParam;
@@ -579,7 +576,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		else
 			rPADATA |= mpJoyBit[scan - 0x48];
 
-		UpdatePorts();
+		UpdatePorts(iVM);
 
 		// !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee)
 		// pause the game on any keystroke! Playing without a joystick and using the arrow keys would
@@ -618,7 +615,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			printf("clock multiplier = %u\n", clockMult);
 #endif
 			//SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
-			TimeTravel(v.iVM);
+			TimeTravel(iVM);
 		}
 		return FALSE;	// don't let ATARI see this
 
@@ -730,21 +727,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			CONSOL |= 0x04;
 		return TRUE; // don't let ATARI see special function key presses
 
-	case 0x44: // F10
-
-		// shift F10 - shortcut to toggle ATARI BASIC and reboot
-		// this is special to ATARI 8 bit VMs, so we handle this ourselves
-		if (fDown && (*pbshift & wAnyShift))
-		{
- 			if (ramtop == 0xC000)
-				ramtop = 0xA000;
-			else
-				ramtop = 0xC000;
-			ColdStart(v.iVM);
-		}
-		return TRUE;
-
 #if 0
+	// not implemented, and anyway, a VM thread can't call ColdStart!
 	case 0x58:
 		// ctrl F12 - next cartridge
 		if (fDown && (*pbshift & wCtrl))
@@ -803,8 +787,9 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 	case 0x46: // Scrl Lock
         if (fDown)
             *pbshift ^= wScrlLock;
-        else
-            DisplayStatus();
+        //else
+        //    DisplayStatus();
+		
 		return FALSE; // don't let ATARI see special key presses
 
     case 0x3A: // Caps Lock
@@ -815,8 +800,8 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         break;
         }
 
-    AddToPacket(fDown ? scan : 0);
-    AddToPacket(fDown ? ch   : 0);
+    AddToPacket(iVM, fDown ? scan : 0);
+    AddToPacket(iVM, fDown ? ch   : 0);
     
     return FALSE;	// by default, let windows see the key - eg. to operate menus
 }
@@ -824,7 +809,7 @@ BOOL FKeyMsg800(HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 // Process Thread messages for keys and joystick, and Windows messages for keybaord, mouse, and joystick
 // Return FALSE if we still want Windows to handle the key, TRUE if we'd like to eat it
 //
-BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
+BOOL __cdecl KeyAtari(int iVM, HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
 {
     switch (message)
         {
@@ -839,7 +824,7 @@ BOOL __cdecl KeyAtari(HWND hWnd, UINT message, WPARAM uParam, LPARAM lParam)
 #if 0
     case WM_CHAR:
 #endif
-        return FKeyMsg800(hWnd, message, uParam, lParam);
+        return FKeyMsg800(iVM, hWnd, message, uParam, lParam);
 
 // we don't use these custom thread messages
 #if 0
@@ -984,12 +969,11 @@ printf("joy0move %d %d\n", uParam, lParam);
 
 // if we closed using ALT-F4 it will have saved the state that ALT is down
 //
-void ControlKeyUp8()
+void ControlKeyUp8(int iVM)
 {
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
-
 	*pbshift &= ~wCtrl;
 	*pbshift &= ~wAlt;
+	*pbshift &= ~wAnyShift;
 }
 
 #endif // XFORMER

@@ -22,19 +22,8 @@
 
 PFN pfnPokeB;
 
-// the 8 status bits must be together and in the same order as in the 6502
-
-uint8_t    srN;
-uint8_t    srV;
-uint8_t    srB;
-uint8_t    srD;
-uint8_t    srI;
-uint8_t    srZ;
-uint8_t    srC;
-uint8_t    pad;
-
 // jump tables (when used)
-typedef void (__fastcall * PFNOP)(CANDYHW *vpcandyCur);
+typedef void (__fastcall * PFNOP)(int iVM);
 PFNOP jump_tab_RO[256];
 PFNOP jump_tab[256];
 
@@ -355,15 +344,15 @@ int __cdecl xprintf(const char *format, ...)
     return retval;
 }
 
-uint8_t READ_BYTE(uint32_t ea)
+uint8_t READ_BYTE(int iVM, uint32_t ea)
 {
 //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
 	if (ea == 0xD20A) {
 		// we've been asked for a random number. How many times would the poly counter have advanced?
 		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
-		// !!! this assumes 30 instructions per scanline always (not true) and that we quit when wLeft == 0 (not true) 
-		int cur = (wFrame * 262 * 30 + wScan * 30 + (30 - wLeft));
+		// !!! this assumes 30 instructions per scanline always (not true)
+		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
 		int delta = cur - random17last;
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
@@ -373,13 +362,13 @@ uint8_t READ_BYTE(uint32_t ea)
     return rgbMem[ea];
 }
 
-uint16_t READ_WORD(uint32_t ea)
+uint16_t READ_WORD(int iVM, uint32_t ea)
 {
     return rgbMem[ea] | (rgbMem[ea+1] << 8);
 }
 
 
-void WRITE_BYTE(uint32_t ea, uint8_t val)
+void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 {
 //if (ea > 65535) printf("ea too large! %08X\n", ea);
 //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
@@ -389,7 +378,7 @@ void WRITE_BYTE(uint32_t ea, uint8_t val)
     return; // 0;
 }
 
-void WRITE_WORD(uint32_t ea, uint16_t val)
+void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 {
     rgbMem[ea + 0] = ((val >> 0) & 255);
     rgbMem[ea + 1] = ((val >> 8) & 255);
@@ -404,15 +393,17 @@ void WRITE_WORD(uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-#define HANDLER_END()	if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); } 
-						//--wLeft; (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
+#define HANDLER_END()	if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+						//--wLeft; (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
 							
 // don't let a scan line end until there's an instruction that affects the PC !!! We may do >>30 instructions!
-#define HANDLER_END_FLOW()  if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(regPC++)])(pcandy); }
+#define HANDLER_END_FLOW()  if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
 
-#define HANDLER(opcode) void __fastcall opcode (CANDYHW *pcandy) { \
-  countInstr++; \
-  __assume(vpcandyCur == pcandy);
+#define HANDLER(opcode) void __fastcall opcode (int iVM) {
+
+// !!! until somebody actually looks at the instruction counter, don't waste time keeping track of it
+//#define HANDLER(opcode) void __fastcall opcode (int iVM) { \
+//  countInstr++;
 
 #if 0
     xprintf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X  ", \
@@ -428,71 +419,66 @@ void WRITE_WORD(uint32_t ea, uint16_t val)
     xprintf("\n");
 #endif
 
-#define HELPER(opcode) __forceinline __fastcall opcode (CANDYHW *pcandy) { \
-  __assume(vpcandyCur == pcandy);
+#define HELPER(opcode) __forceinline __fastcall opcode (int iVM) {
 
-#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (CANDYHW *pcandy, arg1) { \
-  __assume(vpcandyCur == pcandy);
+#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (int iVM, arg1) {
 
-#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (CANDYHW *pcandy, arg1, arg2) { \
-  __assume(vpcandyCur == pcandy);
+#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (int iVM, arg1, arg2) {
 
-#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode (CANDYHW *pcandy, arg1, arg2, arg3) { \
-  __assume(vpcandyCur == pcandy);
-
+#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode ( int iVM, arg1, arg2, arg3) {
 
 void HELPER(EA_imm)
 {
     mdEA = EAimm;
-    regEA = READ_BYTE(regPC++);
+    regEA = READ_BYTE(iVM, regPC++);
 } }
 
 // zp
 void HELPER(EA_zp)
 {
-    mdEA = EAzp;  regEA = READ_BYTE(regPC++);
+    mdEA = EAzp;  regEA = READ_BYTE(iVM, regPC++);
 } }
 
 // zp,X
 void HELPER(EA_zpX)
 {
-    mdEA = EAzp;  regEA = (READ_BYTE(regPC++) + regX) & 255;
+    mdEA = EAzp;  regEA = (READ_BYTE(iVM, regPC++) + regX) & 255;
 } }
 
 // zp,Y
 void HELPER(EA_zpY)
 {
-    mdEA = EAzp;  regEA = (READ_BYTE(regPC++) + regY) & 255;
+    mdEA = EAzp;  regEA = (READ_BYTE(iVM, regPC++) + regY) & 255;
 } }
 
 // (zp,X)
 void HELPER(EA_zpXind)
 {
-    mdEA = EAabs; regEA = (READ_BYTE(regPC++) + regX) & 255; regEA = READ_WORD(regEA);
+    mdEA = EAabs; regEA = (READ_BYTE(iVM, regPC++) + regX) & 255; regEA = READ_WORD(iVM, regEA);
 } }
 
 // (zp),y
 void HELPER(EA_zpYind)
 {
-    mdEA = EAabs; regEA = READ_BYTE(regPC++); regEA = READ_WORD(regEA) + regY;
+    mdEA = EAabs; regEA = READ_BYTE(iVM, regPC++); regEA = READ_WORD(iVM, regEA) + regY;
 } }
 
 // abs
 void HELPER(EA_abs)
 {
-    mdEA = EAabs; regEA = READ_WORD(regPC); regPC += 2;
+    mdEA = EAabs; regEA = READ_WORD(iVM, regPC); regPC += 2;
 } }
 
 // abs,X
 void HELPER(EA_absX)
 {
-    mdEA = EAabs; regEA = READ_WORD(regPC) + regX; regPC += 2;
+    mdEA = EAabs; regEA = READ_WORD(iVM, regPC) + regX; regPC += 2;
 } }
 
 // abs,Y
 void HELPER(EA_absY)
 {
-    mdEA = EAabs; regEA = READ_WORD(regPC) + regY; regPC += 2;
+    mdEA = EAabs; regEA = READ_WORD(iVM, regPC) + regY; regPC += 2;
 } }
 
 #define ADD_COUT_VEC(sum, op1, op2) \
@@ -530,52 +516,52 @@ void HELPER3(update_VCC, BYTE diff, BYTE op1, BYTE op2) { srC = 0x80 & ~SUB_COUT
 
 void HELPER(AND_com)
 {
-    regA &= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regA);
+    regA &= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regA);
 } }
 
 void HELPER(ORA_com)
 {
-    regA |= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regA);
+    regA |= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regA);
 } }
 
 void HELPER(EOR_com)
 {
-    regA ^= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regA);
+    regA ^= (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regA);
 } }
 
 void HELPER(LDA_com)
 {
-    regA = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regA);
+    regA = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regA);
 } }
 
 void HELPER(LDX_com)
 {
-    regX = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regX);
+    regX = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regX);
 } }
 
 void HELPER(LDY_com)
 {
-    regY = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA); update_NZ(pcandy, regY);
+    regY = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regY);
 } }
 
 void HELPER1(ST_zp, BYTE x)
 {
-    WRITE_BYTE(regEA, x);
+    WRITE_BYTE(iVM, regEA, x);
 } }
 
 void HELPER1(ST_com, BYTE x)
 {
-    if (regEA >= ramtop) { regPC--; (*pfnPokeB)(regEA,x); regPC++; } else WRITE_BYTE(regEA, x);
+    if (regEA >= ramtop) { regPC--; (*pfnPokeB)(iVM, regEA,x); regPC++; } else WRITE_BYTE(iVM, regEA, x);
 } }
 
 void HELPER1(Jcc_com, int f)
 {
-    WORD offset = (signed short)(signed char) READ_BYTE(regPC++); if (f) regPC += offset;
+    WORD offset = (signed short)(signed char) READ_BYTE(iVM, regPC++); if (f) regPC += offset;
 } }
 
 void HELPER(BIT_com)
 {
-    BYTE b = READ_BYTE(regEA);
+    BYTE b = READ_BYTE(iVM, regEA);
 
     srN = b & 0x80;
     srV = b & 0x40;
@@ -584,61 +570,61 @@ void HELPER(BIT_com)
 
 void HELPER(INC_mem)
 {
-    BYTE b = READ_BYTE(regEA) + 1;
+    BYTE b = READ_BYTE(iVM, regEA) + 1;
 
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
 } }
 
 void HELPER(DEC_mem)
 {
-    BYTE b = READ_BYTE(regEA) - 1;
+    BYTE b = READ_BYTE(iVM, regEA) - 1;
 
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
 } }
 
 void HELPER(ASL_mem)
 {
-    BYTE b = READ_BYTE(regEA);
+    BYTE b = READ_BYTE(iVM, regEA);
     BYTE newC = b & 0x80;
 
     b += b;
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
     srC = newC;
 } }
 
 void HELPER(LSR_mem)
 {
-    BYTE b = READ_BYTE(regEA);
+    BYTE b = READ_BYTE(iVM, regEA);
     BYTE newC = b << 7;
 
     b = b >> 1;
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
     srC = newC;
 } }
 
 void HELPER(ROL_mem)
 {
-    BYTE b = READ_BYTE(regEA);
+    BYTE b = READ_BYTE(iVM, regEA);
     BYTE newC = b & 0x80;
 
     b += b + (srC != 0);
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
     srC = newC;
 } }
 
 void HELPER(ROR_mem)
 {
-    BYTE b = READ_BYTE(regEA);
+    BYTE b = READ_BYTE(iVM, regEA);
     BYTE newC = b << 7;
 
     b = (b >> 1) | (srC & 0x80);
-    ST_com(pcandy, b);
-    update_NZ(pcandy, b);
+    ST_com(iVM, b);
+    update_NZ(iVM, b);
     srC = newC;
 } }
 
@@ -670,20 +656,20 @@ void HELPER(UnpackP)
 
 void HELPER1(CMP_com, BYTE reg)
 {
-    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA);
+    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA);
     BYTE diff = reg - op2;
 
-    update_NZ(pcandy, diff);
-    update_CC(pcandy, diff, reg, op2);
+    update_NZ(iVM, diff);
+    update_CC(iVM, diff, reg, op2);
 } }
 
 void HELPER(ADC_com)
 {
-    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA);
+    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA);
     BYTE tCF = (srC != 0);
     BYTE sum = regA + op2 + tCF;
 
-    update_VC(pcandy, sum, regA, op2);
+    update_VC(iVM, sum, regA, op2);
 
     if (srD)
         {
@@ -703,16 +689,16 @@ void HELPER(ADC_com)
         }
 
     regA = sum;
-    update_NZ(pcandy, sum);
+    update_NZ(iVM, sum);
 } }
 
 void HELPER(SBC_com)
 {
-    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(regEA);
+    BYTE op2 = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA);
     BYTE tCF = (srC == 0);
     BYTE diff = regA - op2 - tCF;
 
-    update_VCC(pcandy, diff, regA, op2);
+    update_VCC(iVM, diff, regA, op2);
 
     if (srD)
         {
@@ -732,20 +718,20 @@ void HELPER(SBC_com)
         }
 
     regA = diff;
-    update_NZ(pcandy, diff);
+    update_NZ(iVM, diff);
 } }
 
 void HELPER1(PushByte, BYTE b)
 {
-    WRITE_BYTE(regSP, b);
+    WRITE_BYTE(iVM, regSP, b);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
 void HELPER1(PushWord, WORD w)
 {
-    WRITE_BYTE(regSP, w >> 8);
+    WRITE_BYTE(iVM, regSP, w >> 8);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
-    WRITE_BYTE(regSP, w & 0xFF);
+    WRITE_BYTE(iVM, regSP, w & 0xFF);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
@@ -754,7 +740,7 @@ BYTE HELPER(PopByte)
     BYTE b;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    b = READ_BYTE(regSP);
+    b = READ_BYTE(iVM, regSP);
 
     return b;
 } }
@@ -764,9 +750,9 @@ WORD HELPER(PopWord)
     WORD w;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w = READ_BYTE(regSP);
+    w = READ_BYTE(iVM, regSP);
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w |= READ_BYTE(regSP) << 8;
+    w |= READ_BYTE(iVM, regSP) << 8;
 
     return w;
 } }
@@ -781,10 +767,11 @@ HANDLER(op00)
 
 // ORA (zp,X)
 
+
 HANDLER(op01)
 {
-    EA_zpXind(pcandy);
-    ORA_com(pcandy);
+    EA_zpXind(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -792,8 +779,8 @@ HANDLER(op01)
 
 HANDLER(op05)
 {
-    EA_zp(pcandy);
-    ORA_com(pcandy);
+    EA_zp(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -801,8 +788,8 @@ HANDLER(op05)
 
 HANDLER(op06)
 {
-    EA_zp(pcandy);
-    ASL_mem(pcandy);
+    EA_zp(iVM);
+    ASL_mem(iVM);
     HANDLER_END();
 }
 
@@ -810,8 +797,8 @@ HANDLER(op06)
 
 HANDLER(op08)
 {
-    PackP(pcandy);
-    PushByte(pcandy, regP);
+    PackP(iVM);
+    PushByte(iVM, regP);
     HANDLER_END();
 }
 
@@ -819,8 +806,8 @@ HANDLER(op08)
 
 HANDLER(op09)
 {
-    EA_imm(pcandy);
-    ORA_com(pcandy);
+    EA_imm(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -831,7 +818,7 @@ HANDLER(op0A)
     BYTE newC = regA & 0x80;
 
     regA += regA;
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     srC = newC;
     HANDLER_END();
 }
@@ -840,17 +827,17 @@ HANDLER(op0A)
 
 HANDLER(op0D)
 {
-    EA_abs(pcandy);
-    ORA_com(pcandy);
-    HANDLER_END();
+	EA_abs(iVM);
+	ORA_com(iVM);
+	HANDLER_END();
 }
 
 // ASL abs
 
 HANDLER(op0E)
 {
-    EA_abs(pcandy);
-    ASL_mem(pcandy);
+    EA_abs(iVM);
+    ASL_mem(iVM);
     HANDLER_END();
 }
 
@@ -858,7 +845,7 @@ HANDLER(op0E)
 
 HANDLER(op10)
 {
-    Jcc_com(pcandy, (srN & 0x80) == 0);
+    Jcc_com(iVM, (srN & 0x80) == 0);
     HANDLER_END_FLOW();
 }
 
@@ -866,8 +853,8 @@ HANDLER(op10)
 
 HANDLER(op11)
 {
-    EA_zpYind(pcandy);
-    ORA_com(pcandy);
+    EA_zpYind(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -875,8 +862,8 @@ HANDLER(op11)
 
 HANDLER(op15)
 {
-    EA_zpX(pcandy);
-    ORA_com(pcandy);
+    EA_zpX(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -884,8 +871,8 @@ HANDLER(op15)
 
 HANDLER(op16)
 {
-    EA_zpX(pcandy);
-    ASL_mem(pcandy);
+    EA_zpX(iVM);
+    ASL_mem(iVM);
     HANDLER_END();
 }
 
@@ -901,8 +888,8 @@ HANDLER(op18)
 
 HANDLER(op19)
 {
-    EA_absY(pcandy);
-    ORA_com(pcandy);
+    EA_absY(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -910,8 +897,8 @@ HANDLER(op19)
 
 HANDLER(op1D)
 {
-    EA_absX(pcandy);
-    ORA_com(pcandy);
+    EA_absX(iVM);
+    ORA_com(iVM);
     HANDLER_END();
 }
 
@@ -919,8 +906,8 @@ HANDLER(op1D)
 
 HANDLER(op1E)
 {
-    EA_absX(pcandy);
-    ASL_mem(pcandy);
+    EA_absX(iVM);
+    ASL_mem(iVM);
     HANDLER_END();
 }
 
@@ -928,9 +915,9 @@ HANDLER(op1E)
 
 HANDLER(op20)
 {
-    EA_abs(pcandy);
+    EA_abs(iVM);
 
-    PushWord(pcandy, regPC - 1);
+    PushWord(iVM, regPC - 1);
 
     regPC = regEA;
 	
@@ -957,8 +944,8 @@ HANDLER(op20)
 
 HANDLER(op21)
 {
-    EA_zpXind(pcandy);
-    AND_com(pcandy);
+    EA_zpXind(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -966,8 +953,8 @@ HANDLER(op21)
 
 HANDLER(op24)
 {
-    EA_zp(pcandy);
-    BIT_com(pcandy);
+    EA_zp(iVM);
+    BIT_com(iVM);
     HANDLER_END();
 }
 
@@ -975,8 +962,8 @@ HANDLER(op24)
 
 HANDLER(op25)
 {
-    EA_zp(pcandy);
-    AND_com(pcandy);
+    EA_zp(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -984,8 +971,8 @@ HANDLER(op25)
 
 HANDLER(op26)
 {
-    EA_zp(pcandy);
-    ROL_mem(pcandy);
+    EA_zp(iVM);
+    ROL_mem(iVM);
     HANDLER_END();
 }
 
@@ -993,8 +980,8 @@ HANDLER(op26)
 
 HANDLER(op28)
 {
-    regP = PopByte(pcandy);
-    UnpackP(pcandy);
+    regP = PopByte(iVM);
+    UnpackP(iVM);
     HANDLER_END();
 }
 
@@ -1002,8 +989,8 @@ HANDLER(op28)
 
 HANDLER(op29)
 {
-    EA_imm(pcandy);
-    AND_com(pcandy);
+    EA_imm(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1014,7 +1001,7 @@ HANDLER(op2A)
     BYTE newC = regA & 0x80;
 
     regA += regA + (srC != 0);
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     srC = newC;
     HANDLER_END();
 }
@@ -1023,8 +1010,8 @@ HANDLER(op2A)
 
 HANDLER(op2C)
 {
-    EA_abs(pcandy);
-    BIT_com(pcandy);
+    EA_abs(iVM);
+    BIT_com(iVM);
     HANDLER_END();
 }
 
@@ -1032,8 +1019,8 @@ HANDLER(op2C)
 
 HANDLER(op2D)
 {
-    EA_abs(pcandy);
-    AND_com(pcandy);
+    EA_abs(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1041,8 +1028,8 @@ HANDLER(op2D)
 
 HANDLER(op2E)
 {
-    EA_abs(pcandy);
-    ROL_mem(pcandy);
+    EA_abs(iVM);
+    ROL_mem(iVM);
     HANDLER_END();
 }
 
@@ -1050,7 +1037,7 @@ HANDLER(op2E)
 
 HANDLER(op30)
 {
-    Jcc_com(pcandy, (srN & 0x80) != 0);
+    Jcc_com(iVM, (srN & 0x80) != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1058,8 +1045,8 @@ HANDLER(op30)
 
 HANDLER(op31)
 {
-    EA_zpYind(pcandy);
-    AND_com(pcandy);
+    EA_zpYind(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1067,8 +1054,8 @@ HANDLER(op31)
 
 HANDLER(op35)
 {
-    EA_zpX(pcandy);
-    AND_com(pcandy);
+    EA_zpX(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1076,8 +1063,8 @@ HANDLER(op35)
 
 HANDLER(op36)
 {
-    EA_zpX(pcandy);
-    ROL_mem(pcandy);
+    EA_zpX(iVM);
+    ROL_mem(iVM);
     HANDLER_END();
 }
 
@@ -1093,8 +1080,8 @@ HANDLER(op38)
 
 HANDLER(op39)
 {
-    EA_absY(pcandy);
-    AND_com(pcandy);
+    EA_absY(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1102,8 +1089,8 @@ HANDLER(op39)
 
 HANDLER(op3D)
 {
-    EA_absX(pcandy);
-    AND_com(pcandy);
+    EA_absX(iVM);
+    AND_com(iVM);
     HANDLER_END();
 }
 
@@ -1111,8 +1098,8 @@ HANDLER(op3D)
 
 HANDLER(op3E)
 {
-    EA_absX(pcandy);
-    ROL_mem(pcandy);
+    EA_absX(iVM);
+    ROL_mem(iVM);
     HANDLER_END();
 }
 
@@ -1120,10 +1107,10 @@ HANDLER(op3E)
 
 HANDLER(op40)
 {
-    regP = PopByte(pcandy);
-    UnpackP(pcandy);
+    regP = PopByte(iVM);
+    UnpackP(iVM);
     srB = 0;
-    regPC = PopWord(pcandy);
+    regPC = PopWord(iVM);
     HANDLER_END_FLOW();
 }
 
@@ -1131,8 +1118,8 @@ HANDLER(op40)
 
 HANDLER(op41)
 {
-    EA_zpXind(pcandy);
-    EOR_com(pcandy);
+    EA_zpXind(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1140,8 +1127,8 @@ HANDLER(op41)
 
 HANDLER(op45)
 {
-    EA_zp(pcandy);
-    EOR_com(pcandy);
+    EA_zp(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1149,8 +1136,8 @@ HANDLER(op45)
 
 HANDLER(op46)
 {
-    EA_zp(pcandy);
-    LSR_mem(pcandy);
+    EA_zp(iVM);
+    LSR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1158,7 +1145,7 @@ HANDLER(op46)
 
 HANDLER(op48)
 {
-    PushByte(pcandy, regA);
+    PushByte(iVM, regA);
     HANDLER_END();
 }
 
@@ -1166,8 +1153,8 @@ HANDLER(op48)
 
 HANDLER(op49)
 {
-    EA_imm(pcandy);
-    EOR_com(pcandy);
+    EA_imm(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1178,7 +1165,7 @@ HANDLER(op4A)
     BYTE newC = regA << 7;
 
     regA >>= 1;
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     srC = newC;
     HANDLER_END();
 }
@@ -1187,7 +1174,7 @@ HANDLER(op4A)
 
 HANDLER(op4C)
 {
-    EA_abs(pcandy);
+    EA_abs(iVM);
 
     regPC = regEA;
 
@@ -1214,8 +1201,8 @@ HANDLER(op4C)
 
 HANDLER(op4D)
 {
-    EA_abs(pcandy);
-    EOR_com(pcandy);
+    EA_abs(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1223,8 +1210,8 @@ HANDLER(op4D)
 
 HANDLER(op4E)
 {
-    EA_abs(pcandy);
-    LSR_mem(pcandy);
+    EA_abs(iVM);
+    LSR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1232,7 +1219,7 @@ HANDLER(op4E)
 
 HANDLER(op50)
 {
-    Jcc_com(pcandy, srV == 0);
+    Jcc_com(iVM, srV == 0);
     HANDLER_END_FLOW();
 }
 
@@ -1240,8 +1227,8 @@ HANDLER(op50)
 
 HANDLER(op51)
 {
-    EA_zpYind(pcandy);
-    EOR_com(pcandy);
+    EA_zpYind(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1249,8 +1236,8 @@ HANDLER(op51)
 
 HANDLER(op55)
 {
-    EA_zpX(pcandy);
-    EOR_com(pcandy);
+    EA_zpX(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1258,8 +1245,8 @@ HANDLER(op55)
 
 HANDLER(op56)
 {
-    EA_zpX(pcandy);
-    LSR_mem(pcandy);
+    EA_zpX(iVM);
+    LSR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1275,8 +1262,8 @@ HANDLER(op58)
 
 HANDLER(op59)
 {
-    EA_absY(pcandy);
-    EOR_com(pcandy);
+    EA_absY(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1284,8 +1271,8 @@ HANDLER(op59)
 
 HANDLER(op5D)
 {
-    EA_absX(pcandy);
-    EOR_com(pcandy);
+    EA_absX(iVM);
+    EOR_com(iVM);
     HANDLER_END();
 }
 
@@ -1293,8 +1280,8 @@ HANDLER(op5D)
 
 HANDLER(op5E)
 {
-    EA_absX(pcandy);
-    LSR_mem(pcandy);
+    EA_absX(iVM);
+    LSR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1302,7 +1289,7 @@ HANDLER(op5E)
 
 HANDLER(op60)
 {
-    regPC = PopWord(pcandy) + 1;
+    regPC = PopWord(iVM) + 1;
 
     if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
@@ -1319,8 +1306,8 @@ HANDLER(op60)
 
 HANDLER(op61)
 {
-    EA_zpXind(pcandy);
-    ADC_com(pcandy);
+    EA_zpXind(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1328,8 +1315,8 @@ HANDLER(op61)
 
 HANDLER(op65)
 {
-    EA_zp(pcandy);
-    ADC_com(pcandy);
+    EA_zp(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1337,8 +1324,8 @@ HANDLER(op65)
 
 HANDLER(op66)
 {
-    EA_zp(pcandy);
-    ROR_mem(pcandy);
+    EA_zp(iVM);
+    ROR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1346,8 +1333,8 @@ HANDLER(op66)
 
 HANDLER(op68)
 {
-    regA = PopByte(pcandy);
-    update_NZ(pcandy, regA);
+    regA = PopByte(iVM);
+    update_NZ(iVM, regA);
     HANDLER_END();
 }
 
@@ -1355,8 +1342,8 @@ HANDLER(op68)
 
 HANDLER(op69)
 {
-    EA_imm(pcandy);
-    ADC_com(pcandy);
+    EA_imm(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1367,7 +1354,7 @@ HANDLER(op6A)
     BYTE newC = regA << 7;
 
     regA = (regA >> 1) | (srC & 0x80);
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     srC = newC;
     HANDLER_END();
 }
@@ -1376,8 +1363,8 @@ HANDLER(op6A)
 
 HANDLER(op6C)
 {
-    EA_abs(pcandy);
-    regPC = READ_WORD(regEA);
+    EA_abs(iVM);
+    regPC = READ_WORD(iVM, regEA);
 
     HANDLER_END_FLOW();
 }
@@ -1386,8 +1373,8 @@ HANDLER(op6C)
 
 HANDLER(op6D)
 {
-    EA_abs(pcandy);
-    ADC_com(pcandy);
+    EA_abs(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1395,8 +1382,8 @@ HANDLER(op6D)
 
 HANDLER(op6E)
 {
-    EA_abs(pcandy);
-    ROR_mem(pcandy);
+    EA_abs(iVM);
+    ROR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1404,7 +1391,7 @@ HANDLER(op6E)
 
 HANDLER(op70)
 {
-    Jcc_com(pcandy, srV != 0);
+    Jcc_com(iVM, srV != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1412,8 +1399,8 @@ HANDLER(op70)
 
 HANDLER(op71)
 {
-    EA_zpYind(pcandy);
-    ADC_com(pcandy);
+    EA_zpYind(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1421,8 +1408,8 @@ HANDLER(op71)
 
 HANDLER(op75)
 {
-    EA_zpX(pcandy);
-    ADC_com(pcandy);
+    EA_zpX(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1430,8 +1417,8 @@ HANDLER(op75)
 
 HANDLER(op76)
 {
-    EA_zpX(pcandy);
-    ROR_mem(pcandy);
+    EA_zpX(iVM);
+    ROR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1447,8 +1434,8 @@ HANDLER(op78)
 
 HANDLER(op79)
 {
-    EA_absY(pcandy);
-    ADC_com(pcandy);
+    EA_absY(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1456,8 +1443,8 @@ HANDLER(op79)
 
 HANDLER(op7D)
 {
-    EA_absX(pcandy);
-    ADC_com(pcandy);
+    EA_absX(iVM);
+    ADC_com(iVM);
     HANDLER_END();
 }
 
@@ -1465,8 +1452,8 @@ HANDLER(op7D)
 
 HANDLER(op7E)
 {
-    EA_absX(pcandy);
-    ROR_mem(pcandy);
+    EA_absX(iVM);
+    ROR_mem(iVM);
     HANDLER_END();
 }
 
@@ -1474,8 +1461,8 @@ HANDLER(op7E)
 
 HANDLER(op81)
 {
-    EA_zpXind(pcandy);
-    ST_com(pcandy, regA);
+    EA_zpXind(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1484,8 +1471,8 @@ HANDLER(op81)
 HANDLER(op84)
 {
  
-   EA_zp(pcandy);
-    WRITE_BYTE(regEA, regY);
+   EA_zp(iVM);
+    WRITE_BYTE(iVM, regEA, regY);
     HANDLER_END();
 }
 
@@ -1493,8 +1480,8 @@ HANDLER(op84)
 
 HANDLER(op85)
 {
-    EA_zp(pcandy);
-    WRITE_BYTE(regEA, regA);
+    EA_zp(iVM);
+    WRITE_BYTE(iVM, regEA, regA);
     HANDLER_END();
 }
 
@@ -1502,8 +1489,8 @@ HANDLER(op85)
 
 HANDLER(op86)
 {
-    EA_zp(pcandy);
-    WRITE_BYTE(regEA, regX);
+    EA_zp(iVM);
+    WRITE_BYTE(iVM, regEA, regX);
     HANDLER_END();
 }
 
@@ -1511,7 +1498,7 @@ HANDLER(op86)
 
 HANDLER(op88)
 {
-    update_NZ(pcandy, --regY);
+    update_NZ(iVM, --regY);
     HANDLER_END();
 }
 
@@ -1520,7 +1507,7 @@ HANDLER(op88)
 HANDLER(op8A)
 {
     regA = regX;
-    update_NZ(pcandy, regX);
+    update_NZ(iVM, regX);
     HANDLER_END();
 }
 
@@ -1528,8 +1515,8 @@ HANDLER(op8A)
 
 HANDLER(op8C)
 {
-    EA_abs(pcandy);
-    ST_com(pcandy, regY);
+    EA_abs(iVM);
+    ST_com(iVM, regY);
     HANDLER_END()
 }
 
@@ -1537,8 +1524,8 @@ HANDLER(op8C)
 
 HANDLER(op8D)
 {
-    EA_abs(pcandy);
-    ST_com(pcandy, regA);
+    EA_abs(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1546,8 +1533,8 @@ HANDLER(op8D)
 
 HANDLER(op8E)
 {
-    EA_abs(pcandy);
-    ST_com(pcandy, regX);
+    EA_abs(iVM);
+    ST_com(iVM, regX);
     HANDLER_END();
 }
 
@@ -1555,7 +1542,7 @@ HANDLER(op8E)
 
 HANDLER(op90)
 {
-    Jcc_com(pcandy, (srC & 0x80) == 0);
+    Jcc_com(iVM, (srC & 0x80) == 0);
     HANDLER_END_FLOW();
 }
 
@@ -1563,8 +1550,8 @@ HANDLER(op90)
 
 HANDLER(op91)
 {
-    EA_zpYind(pcandy);
-    ST_com(pcandy, regA);
+    EA_zpYind(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1572,8 +1559,8 @@ HANDLER(op91)
 
 HANDLER(op94)
 {
-    EA_zpX(pcandy);
-    ST_com(pcandy, regY);
+    EA_zpX(iVM);
+    ST_com(iVM, regY);
     HANDLER_END();
 }
 
@@ -1581,8 +1568,8 @@ HANDLER(op94)
 
 HANDLER(op95)
 {
-    EA_zpX(pcandy);
-    ST_com(pcandy, regA);
+    EA_zpX(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1590,8 +1577,8 @@ HANDLER(op95)
 
 HANDLER(op96)
 {
-    EA_zpY(pcandy);
-    ST_com(pcandy, regX);
+    EA_zpY(iVM);
+    ST_com(iVM, regX);
     HANDLER_END();
 }
 
@@ -1600,7 +1587,7 @@ HANDLER(op96)
 HANDLER(op98)
 {
     regA = regY;
-    update_NZ(pcandy, regY);
+    update_NZ(iVM, regY);
     HANDLER_END();
 }
 
@@ -1608,8 +1595,8 @@ HANDLER(op98)
 
 HANDLER(op99)
 {
-    EA_absY(pcandy);
-    ST_com(pcandy, regA);
+    EA_absY(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1625,8 +1612,8 @@ HANDLER(op9A)
 
 HANDLER(op9D)
 {
-    EA_absX(pcandy);
-    ST_com(pcandy, regA);
+    EA_absX(iVM);
+    ST_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1634,8 +1621,8 @@ HANDLER(op9D)
 
 HANDLER(opA0)
 {
-    EA_imm(pcandy);
-    LDY_com(pcandy);
+    EA_imm(iVM);
+    LDY_com(iVM);
     HANDLER_END();
 }
 
@@ -1643,8 +1630,8 @@ HANDLER(opA0)
 
 HANDLER(opA1)
 {
-    EA_zpXind(pcandy);
-    LDA_com(pcandy);
+    EA_zpXind(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1652,8 +1639,8 @@ HANDLER(opA1)
 
 HANDLER(opA2)
 {
-    EA_imm(pcandy);
-    LDX_com(pcandy);
+    EA_imm(iVM);
+    LDX_com(iVM);
     HANDLER_END();
 }
 
@@ -1661,8 +1648,8 @@ HANDLER(opA2)
 
 HANDLER(opA4)
 {
-    EA_zp(pcandy);
-    LDY_com(pcandy);
+    EA_zp(iVM);
+    LDY_com(iVM);
     HANDLER_END();
 }
 
@@ -1670,8 +1657,8 @@ HANDLER(opA4)
 
 HANDLER(opA5)
 {
-    EA_zp(pcandy);
-    LDA_com(pcandy);
+    EA_zp(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1679,8 +1666,8 @@ HANDLER(opA5)
 
 HANDLER(opA6)
 {
-    EA_zp(pcandy);
-    LDX_com(pcandy);
+    EA_zp(iVM);
+    LDX_com(iVM);
     HANDLER_END();
 }
 
@@ -1689,7 +1676,7 @@ HANDLER(opA6)
 HANDLER(opA8)
 {
     regY = regA;
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     HANDLER_END();
 }
 
@@ -1697,8 +1684,8 @@ HANDLER(opA8)
 
 HANDLER(opA9)
 {
-    EA_imm(pcandy);
-    LDA_com(pcandy);
+    EA_imm(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1707,7 +1694,7 @@ HANDLER(opA9)
 HANDLER(opAA)
 {
     regX = regA;
-    update_NZ(pcandy, regA);
+    update_NZ(iVM, regA);
     HANDLER_END();
 }
 
@@ -1715,8 +1702,8 @@ HANDLER(opAA)
 
 HANDLER(opAC)
 {
-    EA_abs(pcandy);
-    LDY_com(pcandy);
+    EA_abs(iVM);
+    LDY_com(iVM);
     HANDLER_END();
 }
 
@@ -1724,8 +1711,8 @@ HANDLER(opAC)
 
 HANDLER(opAD)
 {
-    EA_abs(pcandy);
-	LDA_com(pcandy);
+    EA_abs(iVM);
+	LDA_com(iVM);
 
     HANDLER_END();
 }
@@ -1734,8 +1721,8 @@ HANDLER(opAD)
 
 HANDLER(opAE)
 {
-    EA_abs(pcandy);
-    LDX_com(pcandy);
+    EA_abs(iVM);
+    LDX_com(iVM);
     HANDLER_END();
 }
 
@@ -1743,7 +1730,7 @@ HANDLER(opAE)
 
 HANDLER(opB0)
 {
-    Jcc_com(pcandy, (srC & 0x80) != 0);
+    Jcc_com(iVM, (srC & 0x80) != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1751,8 +1738,8 @@ HANDLER(opB0)
 
 HANDLER(opB1)
 {
-    EA_zpYind(pcandy);
-    LDA_com(pcandy);
+    EA_zpYind(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1760,8 +1747,8 @@ HANDLER(opB1)
 
 HANDLER(opB4)
 {
-    EA_zpX(pcandy);
-    LDY_com(pcandy);
+    EA_zpX(iVM);
+    LDY_com(iVM);
     HANDLER_END()
 }
 
@@ -1769,8 +1756,8 @@ HANDLER(opB4)
 
 HANDLER(opB5)
 {
-    EA_zpX(pcandy);
-    LDA_com(pcandy);
+    EA_zpX(iVM);
+    LDA_com(iVM);
     HANDLER_END()
 }
 
@@ -1778,8 +1765,8 @@ HANDLER(opB5)
 
 HANDLER(opB6)
 {
-    EA_zpY(pcandy);
-    LDX_com(pcandy);
+    EA_zpY(iVM);
+    LDX_com(iVM);
     HANDLER_END()
 }
 
@@ -1795,8 +1782,8 @@ HANDLER(opB8)
 
 HANDLER(opB9)
 {
-    EA_absY(pcandy);
-    LDA_com(pcandy);
+    EA_absY(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1805,7 +1792,7 @@ HANDLER(opB9)
 HANDLER(opBA)
 {
     regX = (BYTE)(regSP & 255);
-    update_NZ(pcandy, regX);
+    update_NZ(iVM, regX);
     HANDLER_END();
 }
 
@@ -1813,8 +1800,8 @@ HANDLER(opBA)
 
 HANDLER(opBC)
 {
-    EA_absX(pcandy);
-    LDY_com(pcandy);
+    EA_absX(iVM);
+    LDY_com(iVM);
     HANDLER_END();
 }
 
@@ -1822,8 +1809,8 @@ HANDLER(opBC)
 
 HANDLER(opBD)
 {
-    EA_absX(pcandy);
-    LDA_com(pcandy);
+    EA_absX(iVM);
+    LDA_com(iVM);
     HANDLER_END();
 }
 
@@ -1831,8 +1818,8 @@ HANDLER(opBD)
 
 HANDLER(opBE)
 {
-    EA_absY(pcandy);
-    LDX_com(pcandy);
+    EA_absY(iVM);
+    LDX_com(iVM);
     HANDLER_END();
 }
 
@@ -1840,8 +1827,8 @@ HANDLER(opBE)
 
 HANDLER(opC0)
 {
-    EA_imm(pcandy);
-    CMP_com(pcandy, regY);
+    EA_imm(iVM);
+    CMP_com(iVM, regY);
     HANDLER_END();
 }
 
@@ -1849,8 +1836,8 @@ HANDLER(opC0)
 
 HANDLER(opC1)
 {
-    EA_zpXind(pcandy);
-    CMP_com(pcandy, regA);
+    EA_zpXind(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1858,8 +1845,8 @@ HANDLER(opC1)
 
 HANDLER(opC4)
 {
-    EA_zp(pcandy);
-    CMP_com(pcandy, regY);
+    EA_zp(iVM);
+    CMP_com(iVM, regY);
     HANDLER_END();
 }
 
@@ -1867,8 +1854,8 @@ HANDLER(opC4)
 
 HANDLER(opC5)
 {
-    EA_zp(pcandy);
-    CMP_com(pcandy, regA);
+    EA_zp(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1876,8 +1863,8 @@ HANDLER(opC5)
 
 HANDLER(opC6)
 {
-    EA_zp(pcandy);
-    DEC_mem(pcandy);
+    EA_zp(iVM);
+    DEC_mem(iVM);
     HANDLER_END();
 }
 
@@ -1885,7 +1872,7 @@ HANDLER(opC6)
 
 HANDLER(opC8)
 {
-    update_NZ(pcandy, ++regY);
+    update_NZ(iVM, ++regY);
     HANDLER_END();
 }
 
@@ -1893,8 +1880,8 @@ HANDLER(opC8)
 
 HANDLER(opC9)
 {
-    EA_imm(pcandy);
-    CMP_com(pcandy, regA);
+    EA_imm(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1902,7 +1889,7 @@ HANDLER(opC9)
 
 HANDLER(opCA)
 {
-    update_NZ(pcandy, --regX);
+    update_NZ(iVM, --regX);
     HANDLER_END();
 }
 
@@ -1910,8 +1897,8 @@ HANDLER(opCA)
 
 HANDLER(opCC)
 {
-    EA_abs(pcandy);
-    CMP_com(pcandy, regY);
+    EA_abs(iVM);
+    CMP_com(iVM, regY);
     HANDLER_END();
 }
 
@@ -1919,8 +1906,8 @@ HANDLER(opCC)
 
 HANDLER(opCD)
 {
-    EA_abs(pcandy);
-    CMP_com(pcandy, regA);
+    EA_abs(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1928,8 +1915,8 @@ HANDLER(opCD)
 
 HANDLER(opCE)
 {
-    EA_abs(pcandy);
-    DEC_mem(pcandy);
+    EA_abs(iVM);
+    DEC_mem(iVM);
     HANDLER_END()
 }
 
@@ -1937,7 +1924,7 @@ HANDLER(opCE)
 
 HANDLER(opD0)
 {
-    Jcc_com(pcandy, srZ != 0);
+    Jcc_com(iVM, srZ != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1945,8 +1932,8 @@ HANDLER(opD0)
 
 HANDLER(opD1)
 {
-    EA_zpYind(pcandy);
-    CMP_com(pcandy, regA);
+    EA_zpYind(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1954,8 +1941,8 @@ HANDLER(opD1)
 
 HANDLER(opD5)
 {
-    EA_zpX(pcandy);
-    CMP_com(pcandy, regA);
+    EA_zpX(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1963,8 +1950,8 @@ HANDLER(opD5)
 
 HANDLER(opD6)
 {
-    EA_zpX(pcandy);
-    DEC_mem(pcandy);
+    EA_zpX(iVM);
+    DEC_mem(iVM);
     HANDLER_END();
 }
 
@@ -1980,8 +1967,8 @@ HANDLER(opD8)
 
 HANDLER(opD9)
 {
-    EA_absY(pcandy);
-    CMP_com(pcandy, regA);
+    EA_absY(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1989,8 +1976,8 @@ HANDLER(opD9)
 
 HANDLER(opDD)
 {
-    EA_absX(pcandy);
-    CMP_com(pcandy, regA);
+    EA_absX(iVM);
+    CMP_com(iVM, regA);
     HANDLER_END();
 }
 
@@ -1998,14 +1985,14 @@ HANDLER(opDD)
 
 HANDLER(opDE)
 {
-    EA_absX(pcandy);
-    DEC_mem(pcandy);
+    EA_absX(iVM);
+    DEC_mem(iVM);
     HANDLER_END();
 }
 
 HANDLER(opDF)
 {
-    EA_imm(pcandy);
+    EA_imm(iVM);
 #if 0
     cmp   al,0DFh
     jne   short @F
@@ -2022,8 +2009,8 @@ HANDLER(opDF)
 
 HANDLER(opE0)
 {
-    EA_imm(pcandy);
-    CMP_com(pcandy, regX);
+    EA_imm(iVM);
+    CMP_com(iVM, regX);
     HANDLER_END();
 }
 
@@ -2031,8 +2018,8 @@ HANDLER(opE0)
 
 HANDLER(opE1)
 {
-    EA_zpXind(pcandy);
-    SBC_com(pcandy);
+    EA_zpXind(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2040,8 +2027,8 @@ HANDLER(opE1)
 
 HANDLER(opE4)
 {
-    EA_zp(pcandy);
-    CMP_com(pcandy, regX);
+    EA_zp(iVM);
+    CMP_com(iVM, regX);
     HANDLER_END();
 }
 
@@ -2049,8 +2036,8 @@ HANDLER(opE4)
 
 HANDLER(opE5)
 {
-    EA_zp(pcandy);
-    SBC_com(pcandy);
+    EA_zp(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2058,8 +2045,8 @@ HANDLER(opE5)
 
 HANDLER(opE6)
 {
-    EA_zp(pcandy);
-    INC_mem(pcandy);
+    EA_zp(iVM);
+    INC_mem(iVM);
     HANDLER_END();
 }
 
@@ -2067,7 +2054,7 @@ HANDLER(opE6)
 
 HANDLER(opE8)
 {
-    update_NZ(pcandy, ++regX);
+    update_NZ(iVM, ++regX);
     HANDLER_END();
 }
 
@@ -2075,8 +2062,8 @@ HANDLER(opE8)
 
 HANDLER(opE9)
 {
-    EA_imm(pcandy);
-    SBC_com(pcandy);
+    EA_imm(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2091,8 +2078,8 @@ HANDLER(opEA)
 
 HANDLER(opEC)
 {
-    EA_abs(pcandy);
-    CMP_com(pcandy, regX);
+    EA_abs(iVM);
+    CMP_com(iVM, regX);
     HANDLER_END();
 }
 
@@ -2100,8 +2087,8 @@ HANDLER(opEC)
 
 HANDLER(opED)
 {
-    EA_abs(pcandy);
-    SBC_com(pcandy);
+    EA_abs(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2109,8 +2096,8 @@ HANDLER(opED)
 
 HANDLER(opEE)
 {
-    EA_abs(pcandy);
-    INC_mem(pcandy);
+    EA_abs(iVM);
+    INC_mem(iVM);
     HANDLER_END();
 }
 
@@ -2118,7 +2105,7 @@ HANDLER(opEE)
 
 HANDLER(opF0)
 {
-    Jcc_com(pcandy, srZ == 0);
+    Jcc_com(iVM, srZ == 0);
     HANDLER_END_FLOW();
 }
 
@@ -2126,8 +2113,8 @@ HANDLER(opF0)
 
 HANDLER(opF1)
 {
-    EA_zpYind(pcandy);
-    SBC_com(pcandy);
+    EA_zpYind(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2135,8 +2122,8 @@ HANDLER(opF1)
 
 HANDLER(opF5)
 {
-    EA_zpX(pcandy);
-    SBC_com(pcandy);
+    EA_zpX(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2144,8 +2131,8 @@ HANDLER(opF5)
 
 HANDLER(opF6)
 {
-    EA_zpX(pcandy);
-    INC_mem(pcandy);
+    EA_zpX(iVM);
+    INC_mem(iVM);
     HANDLER_END();
 }
 
@@ -2161,8 +2148,8 @@ HANDLER(opF8)
 
 HANDLER(opF9)
 {
-    EA_absY(pcandy);
-    SBC_com(pcandy);
+    EA_absY(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2170,8 +2157,8 @@ HANDLER(opF9)
 
 HANDLER(opFD)
 {
-    EA_absX(pcandy);
-    SBC_com(pcandy);
+    EA_absX(iVM);
+    SBC_com(iVM);
     HANDLER_END();
 }
 
@@ -2179,8 +2166,8 @@ HANDLER(opFD)
 
 HANDLER(opFE)
 {
-    EA_absX(pcandy);
-    INC_mem(pcandy);
+    EA_absX(iVM);
+    INC_mem(iVM);
     HANDLER_END();
 }
 
@@ -2449,13 +2436,13 @@ PFNOP jump_tab_RO[256] =
     unused,
 };
 
-void __cdecl Go6502()
+void __cdecl Go6502(int iVM)
 {
     WORD bias = fTrace ? wLeft - 1 : 0;
 
     wLeft = fTrace ? 1 : wLeft;
 
-    UnpackP(vpcandyCur);
+    UnpackP(iVM);
 
     do
         {
@@ -2469,10 +2456,10 @@ void __cdecl Go6502()
         if (t != t2) printf("BAD FLAGS STATE\n");
 #endif
 
-	        (*jump_tab_RO[READ_BYTE(regPC++)])(vpcandyCur);
+	        (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM);
         } while (wLeft > 0);
 
-    PackP(vpcandyCur);
+    PackP(iVM);
 
     //if (wLeft < 0) wLeft = 0;
 
