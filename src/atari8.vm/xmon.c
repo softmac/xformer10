@@ -344,7 +344,7 @@ unsigned int b;
     *pch++ = rgchHex[b&0xF];
     }
 
-void mon()            /* the 6502 monitor */
+void mon(int iVM)            /* the 6502 monitor */
     {
     char chCom;                 /* command character */
     char ch;
@@ -420,7 +420,7 @@ void mon()            /* the 6502 monitor */
                 for (cNum=0; cNum<HEXCOLS; cNum++)
                     {
                     BtoPch(&rgchOut[7 + 3*cNum + (cNum>=HEXCOLS/2)],
-                          ch = cpuPeekB(uMemDump++));
+                          ch = cpuPeekB(iVM, uMemDump++));
                     rgchOut[cNum+58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
                     if (uMemDump == u2)
                         break;
@@ -436,7 +436,7 @@ void mon()            /* the 6502 monitor */
 
             for (cNum=0; cNum<20; cNum++)
                 {
-                CchDisAsm(&uMemDasm);
+                CchDisAsm(iVM, &uMemDasm);
                 Cconws(szCR);
                 }
             }
@@ -445,7 +445,7 @@ void mon()            /* the 6502 monitor */
             {
             /* dump/modify registers */
 
-            CchShowRegs();
+            CchShowRegs(iVM);
             }
 
         else if (chCom == 'H')
@@ -458,7 +458,7 @@ void mon()            /* the 6502 monitor */
             {
             FColdbootVM(v.iVM);
             FExecVM(v.iVM, FALSE,TRUE);
-            CchShowRegs();
+            CchShowRegs(iVM);
             }
         else if (chCom == ':')
             {
@@ -466,7 +466,7 @@ void mon()            /* the 6502 monitor */
             if (!FGetWord(&u1))
                 Cconws("invalid address");
             else while (FGetByte(&u2))
-                cpuPokeB(u1++, u2);
+                cpuPokeB(iVM, u1++, u2);
             }
         else if (chCom == 'M')
             {
@@ -533,9 +533,9 @@ void mon()            /* the 6502 monitor */
             while ((cLines--) && (regPC >= 0x200) && (regPC != bp))
                 {
                 u = regPC;
-                CchDisAsm(&u);
+                CchDisAsm(iVM, &u);
                 FExecVM(v.iVM, TRUE,FALSE);
-                CchShowRegs();
+                CchShowRegs(iVM);
                 }
             }
         else
@@ -545,7 +545,7 @@ void mon()            /* the 6502 monitor */
     fMON=FALSE;
     }
 
-void CchShowRegs()
+void CchShowRegs(int iVM)
     {
     printf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X P:%02X ", 
         regPC, regA, regX, regY, regSP, regP);
@@ -560,18 +560,17 @@ void CchShowRegs()
         (regP & CBIT) ? 'C' : '.');
 
     printf("%02X %02X %02X\n",
-        cpuPeekB(((regSP + 1) & 255) + 0x100),
-        cpuPeekB(((regSP + 2) & 255) + 0x100),
-        cpuPeekB(((regSP + 3) & 255) + 0x100));
+        cpuPeekB(iVM, ((regSP + 1) & 255) + 0x100),
+        cpuPeekB(iVM, ((regSP + 2) & 255) + 0x100),
+        cpuPeekB(iVM, ((regSP + 3) & 255) + 0x100));
     }
 
 
 /* Disassemble instruction at location uMem to space filled buffer pch. */
 /* Returns with puMem incremented appropriate number of bytes. */
 
-void CchDisAsm(puMem)
-unsigned int *puMem;
-    {
+void CchDisAsm(int iVM, unsigned int *puMem)
+{
     char rgch[32];
     char *pch = rgch;
     unsigned char bOpcode;
@@ -587,7 +586,7 @@ unsigned int *puMem;
     pch += 5;
 
     /* get opcode */
-    bOpcode = cpuPeekB(*puMem);
+    bOpcode = cpuPeekB(iVM, *puMem);
     BtoPch(pch, bOpcode);
 
     /* get packed opcode mnemonic and addressing mode */
@@ -604,7 +603,7 @@ unsigned int *puMem;
     case 0x08:
     case 0x09:
     case 0x0C:
-        BtoPch(pch + 6, cpuPeekB(*puMem + 2));
+        BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
 
     /* one operand */
     case 0x01:
@@ -614,7 +613,7 @@ unsigned int *puMem;
     case 0x05:
     case 0x06:
     case 0x0B:
-        BtoPch(pch + 3, cpuPeekB(*puMem + 1));
+        BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
 
     /* no operands */
     case 0x00:
@@ -638,21 +637,21 @@ unsigned int *puMem;
 
     case 0x01:
         pch = Blit("#$", pch);
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         *puMem += 1;
         pch += 2;
         break;
 
     case 0x02:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         *puMem += 1;
         break;
 
     case 0x03:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         pch = Blit(",X",pch);
         *puMem += 1;
@@ -660,7 +659,7 @@ unsigned int *puMem;
 
     case 0x04:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         pch = Blit(",Y",pch);
         *puMem += 1;
@@ -668,7 +667,7 @@ unsigned int *puMem;
 
     case 0x05:
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         pch = Blit(",X)", pch);
         *puMem += 1;
@@ -676,7 +675,7 @@ unsigned int *puMem;
 
     case 0x06:
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         pch = Blit("),Y", pch);
         *puMem += 1;
@@ -684,18 +683,18 @@ unsigned int *puMem;
 
     case 0x07:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem + 1));
+        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         *puMem += 2;
         break;
 
     case 0x08:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem + 1));
+        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         *puMem += 2;
         pch = Blit(",X", pch);
@@ -703,9 +702,9 @@ unsigned int *puMem;
 
     case 0x09:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(*puMem + 1));
+        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         *puMem += 2;
         pch = Blit(",Y", pch);
@@ -720,7 +719,7 @@ unsigned int *puMem;
         unsigned uMem;
 
         *pch++ = '$';
-        uMem = (*puMem + 1 + (int)((char)cpuPeekB(*puMem)));
+        uMem = (*puMem + 1 + (int)((char)cpuPeekB(iVM, *puMem)));
         BtoPch(pch, uMem>>8);
         pch += 2;
         BtoPch(pch, (char)uMem);
@@ -732,9 +731,9 @@ unsigned int *puMem;
     case 0x0C:
 
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(*puMem + 1));
+        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(*puMem));
+        BtoPch(pch, cpuPeekB(iVM, *puMem));
         pch += 2;
         *pch++ = ')';
         *puMem += 2;

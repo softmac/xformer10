@@ -69,6 +69,17 @@ static int nFirstTile; // at which instance does tiling start?
 
 #include "shellapi.h"
 
+void ODS(char *fmt, ...)
+{
+	char dest[1024 * 16];
+	va_list argptr;
+	va_start(argptr, fmt);
+	vsprintf(dest, fmt, argptr);
+	va_end(argptr);
+	OutputDebugString(dest);
+}
+
+
 //
 // Tray handling
 //
@@ -180,7 +191,7 @@ COMMENTS:
 
 ****************************************************************************/
 
-void DisplayStatus()
+void DisplayStatus(int iVM)
 {
     char rgch0[256], rgch[256];
 
@@ -216,7 +227,12 @@ void DisplayStatus()
 
 	// put our instance name in the title, which may have changed recently
 	char pInst[MAX_PATH];
-	CreateInstanceName(v.iVM, pInst);
+	pInst[0] = 0;
+	
+	// no tile in focus? No name for the title bar
+	if (iVM >= 0)
+	    CreateInstanceName(iVM, pInst);
+	
 	sprintf(rgch0, "%s - %s", vi.szAppName, pInst);
 #endif
 
@@ -259,7 +275,7 @@ void DisplayStatus()
     strcat(rgch0, rgch);
 
 	// make every VM support braking
-    if (FIsAtari8bit(vmCur.bfHW))
+    if (FIsAtari8bit(v.rgvm[iVM].bfHW))
     {
 		// are we running at normal speed or turbo speed
         sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo",
@@ -641,6 +657,27 @@ void ClearSystemPalette(void)
 }
 #endif
 
+// Each VM waits its turn, does one frame of execution and video and audio, and signals it's done.
+// Rinse and repeat until it is killed
+//
+DWORD VMThread(LPVOID l)
+{
+	int iVM = *(int *)l;
+
+	while (1)
+	{
+		WaitForSingleObject(hGoEvent[iVM], INFINITE);
+
+		if (fKillThread[iVM])
+			return 0;
+
+		FExecVM(iVM, FALSE, TRUE);
+
+		SetEvent(hDoneEvent[iVM]);
+
+	}
+}
+
 //
 // This is a dummy thread that runs at lowest priority.
 // Its job is to keep the processor busy so that CheckClockSpeed works
@@ -989,7 +1026,7 @@ void FixAllMenus()
 	}
 
 	// something that changed the menus probably changes the title bar
-	DisplayStatus();
+	DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
 }
 
 
@@ -1261,13 +1298,20 @@ int CALLBACK WinMain(
         };
     }
 
+	// Create all our thread events before starting to load things
+	for (int iVM = 0; iVM < MAX_VM; iVM++)
+	{
+		hGoEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
+		hDoneEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
+	}
+
 	// In case we start up with a parameter on the cmd line
 	BOOL fSkipLoad = FALSE;
 
 #ifdef XFORMER
 
-//	char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
-//	lpCmdLine = test;
+	//char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\archon.bin\"";
+	//lpCmdLine = test;
 	
 	// assume we're loading the default .ini file
 	char *lpLoad = NULL;
@@ -1353,11 +1397,14 @@ int CALLBACK WinMain(
 	}
 #endif
 
-	// If we loaded more than 1 instance, come up in tiled, fullscreen mode
+	BOOL fMaximize = FALSE;
+
+	// If we loaded more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
 	if (v.cVM > 1)
 	{
 		v.fTiling = TRUE;
-		v.fFullScreen = TRUE;
+		v.fFullScreen = FALSE;
+		fMaximize = TRUE;
 	}
 
 	// Try to load previously saved properties, the persisted PROPS structure
@@ -1457,7 +1504,9 @@ int CALLBACK WinMain(
 
     // Attach the menu, make the window visible; update its client area; and return "success"
 	SetMenu(vi.hWnd, vi.hMenu);
-    ShowWindow(vi.hWnd, nCmdShow); // Show the window
+	
+	// When dragging/dropping >1 instance, we default to coming up maximized and tiled
+    ShowWindow(vi.hWnd, fMaximize ? SW_MAXIMIZE : nCmdShow);
     UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
 
     // Initialize SCSI
@@ -1611,7 +1660,7 @@ int CALLBACK WinMain(
 #ifdef XFORMER
                 vi.fInDebugger = TRUE;
                 vi.fExecuting = FALSE;
-                mon();
+                mon(v.iVM);
                 vi.fExecuting = TRUE;
 #endif
                 }
@@ -1619,25 +1668,77 @@ int CALLBACK WinMain(
         }
 
 		// !!! not per instance, just a general "we're executing". Make sure you cold start a VM above before running it!
-        else if (vi.fExecuting)
-        {
+		else if (vi.fExecuting)
+		{
+
+			// =====================
+			// THIS IS OUR MAIN LOOP
+			// =====================
+
+			HANDLE hV[MAX_VM];	// current executing VM list
+			int iV = 0;
+
+			// Tell the thread(s) to go.
+			if (v.fTiling)
+			{
+				// tell each thread to go. Build the array of events we need to wait on
+				for (int iVM = 0; iVM < MAX_VM; iVM++)
+				{
+					if (v.rgvm[iVM].fValidVM)
+					{
+						SetEvent(hGoEvent[iVM]);
+						hV[iV++] = hDoneEvent[iVM];
+					}
+				}
+
+				// !!! no chance for a thread to fail and tell us to stop executing and debug it
+
+				// wait for them all to complete one frame
+				WaitForMultipleObjects(v.cVM, hV, TRUE, INFINITE);
+			}
+			else
+			{
+				SetEvent(hGoEvent[v.iVM]);
+				WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
+			}
 			
-			// !!! this is a global. If any VM fails, we stop and, I guess, get a chance to debug it?
-            vi.fExecuting = (FExecVM(FALSE, TRUE) == 0);
+			static ULONGLONG cCYCLES = 0;
+			static ULONGLONG cErr = 0;
+			static unsigned lastVM = 0;
+
+			RenderBitmap();
+
+			// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+			// don't let errors propogate
+			
+			const ULONGLONG cJif = 29830; // 1789790 / 60
+			ULONGLONG cCur = GetCycles() - cCYCLES;
+
+			// report back how long it took
+			cEmulationSpeed = cCur * 1000000 / cJif;
+
+			while (fBrakes && ((cJif - cErr) > cCur)) {
+				Sleep(1);
+				cCur = GetCycles() - cCYCLES;
+			}
+		
+			cErr = cCur - (cJif - cErr);
+			if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+			cCYCLES = GetCycles();
+		
 
 			// every second, update our clock speed indicator
 			// When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
 			static ULONGLONG sCJ;
-			ULONGLONG cCJ = GetCycles();
-			if (cCJ - sCJ >= 1789790 && (!v.fTiling || sVM == (int)v.iVM))
+			cCur = GetCycles();
+			if (cCur - sCJ >= 1789790)
 			{
-				DisplayStatus();
-				sCJ = cCJ;
+				int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+				if (ids >= 0)
+					DisplayStatus(ids);
+				sCJ = cCur;
 			}
 
-			// run all the instances at the same time in tiling mode
-			if (v.fTiling)
-                SelectInstance(v.iVM + 1);
         }
 
     } // forever
@@ -2358,25 +2459,25 @@ void EnterMode(BOOL fGraphics)
 //
 BOOL FToggleMonitor(int iVM)
 {
-    ULONG bfSav = vmCur.bfMon;
+    ULONG bfSav = v.rgvm[iVM].bfMon;
     int i;
 
     // loop through all the bits in wfMon trying to find a different bit
 
     for(;;)
         {
-        vmCur.bfMon <<= 1;
+        v.rgvm[iVM].bfMon <<= 1;
 
-        if (vmCur.bfMon == 0)
-            vmCur.bfMon = 1;
+        if (v.rgvm[iVM].bfMon == 0)
+            v.rgvm[iVM].bfMon = 1;
 
-        if (vmCur.bfMon & vmCur.pvmi->wfMon)
+        if (v.rgvm[iVM].bfMon & v.rgvm[iVM].pvmi->wfMon)
             break;
         }
 
     // if it's the same bit, no other monitors
 
-    if (bfSav == vmCur.bfMon)
+    if (bfSav == v.rgvm[iVM].bfMon)
         {
 #if 0
         MessageBeep(0xFFFFFFFF);
@@ -2401,7 +2502,7 @@ BOOL FToggleMonitor(int iVM)
         vsthw[iVM].rgrgb[i].rgbReserved = 0;
         }
 
-    vsthw[iVM].fMono = FMonoFromBf(vmCur.bfMon);
+    vsthw[iVM].fMono = FMonoFromBf(v.rgvm[iVM].bfMon);
 
 #if 1
       SetBitmapColors(v.iVM);
@@ -2410,9 +2511,9 @@ BOOL FToggleMonitor(int iVM)
 
     InvalidateRect(vi.hWnd, NULL, 0);
 #ifdef XFORMER
-    if (FIsAtari8bit(vmCur.bfHW))
+    if (FIsAtari8bit(v.rgvm[iVM].bfHW))
         {
-        ForceRedraw();
+        ForceRedraw(iVM);
         }
 #endif
     MarkAllPagesDirty();
@@ -2453,12 +2554,15 @@ void SelectInstance(int iVM)
 	assert(v.rgvm[iVM].fValidVM);
 
 	// This is what you need to do to switch to an instance
-	v.iVM = iVM;
-	vi.pvmCur = &v.rgvm[v.iVM];
-    vi.pvmiCur = &vrgvmi[v.iVM];
-    vpvm = vi.pvmCur->pvmi;
+	// only the main GEM UI cares about the concept of a current instance now! Everything else is thread safe
+	// with no concept of "current", but taking an instance as an argument
 
-	// a menu or title bar might need to change. When Tiling, don't let it do this every 1/60s.
+	v.iVM = iVM;					// current VM #
+	vi.pvmCur = &v.rgvm[v.iVM];		// current VM structure (persistable)
+    								// vi = global INST structure (not persistable)
+									// v = itself is global PROPS structure (persistable)
+
+	// a menu or title bar might need to change.
 	if (!v.fTiling)
 		FixAllMenus();
 
@@ -3531,30 +3635,41 @@ break;
     case WM_SETFOCUS:
         DebugStr("WM_SETFOCUS\n");
 
+		int iVM = (v.fTiling && sVM > 0) ? sVM : (v.fTiling ? -1 : v.iVM);	// use the active tile if there is one
+
         vi.fHaveFocus = TRUE;
         ShowGEMMouse();
 
 #if !defined(NDEBUG)
-        DisplayStatus();
+        //DisplayStatus();
 #endif
 
         if (FIsMac(vmCur.bfHW))
             {
             vi.fRefreshScreen = TRUE;
-            AddToPacket(0xF5);  // Ctrl key up
-            AddToPacket(0xDF);  // Alt  key up
-            }
-        else if (FIsAtari68K(vmCur.bfHW))
-            {
-            vi.fRefreshScreen = TRUE;
-            AddToPacket(0x9D);  // Ctrl key up
-            AddToPacket(0xB8);  // Alt  key up
-            }
+			if (iVM >= 0)
+			{
+				AddToPacket(iVM, 0xF5);  // Ctrl key up
+				AddToPacket(iVM, 0xDF);  // Alt  key up
+			}
+		}
+		else if (FIsAtari68K(vmCur.bfHW))
+		{
+			vi.fRefreshScreen = TRUE;
+			if (iVM >= 0)
+			{
+				AddToPacket(iVM, 0x9D);  // Ctrl key up
+				AddToPacket(iVM, 0xB8);  // Alt  key up
+			}
+		}
         else if (FIsAtari8bit(vmCur.bfHW))
-            {
+        {
 #ifdef XFORMER
-            ControlKeyUp8();	// if we ALT-F4 to close or ALT-TAB to cycle apps, it will think ALT is still down when we come back up
-            ForceRedraw();
+			if (iVM >= 0)
+			{
+				ControlKeyUp8(iVM);	// if we ALT-F4 to close or ALT-TAB to cycle apps, it will think ALT is still down when we come back up
+				ForceRedraw(iVM);
+			}
 #endif
 		}
 
@@ -3575,7 +3690,7 @@ break;
         ReleaseCapture();
 
 #if !defined(NDEBUG)
-        DisplayStatus();
+        //DisplayStatus();
 #endif
         vi.fHaveFocus = FALSE;
 
@@ -3687,7 +3802,7 @@ break;
 		case IDM_STRETCH:
 			v.fZoomColor = !v.fZoomColor;
 			CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
-			DisplayStatus(); // affects title bar
+			DisplayStatus(v.iVM); // affects title bar
 			break;
 
 		// toggle tile mode
@@ -3733,9 +3848,7 @@ break;
 			// send the to active tile
 			if (v.fTiling && sVM >= 0)
 			{
-				SelectInstance(sVM);
-				FWinMsgVM(vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);	// PAGE UP
-				SelectInstance(v.iVM);
+				FWinMsgVM(sVM, vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);	// PAGE UP
 			}
 			// nobody to send it to
 			else if (v.fTiling)
@@ -3743,7 +3856,7 @@ break;
 
 			// send it to our own and only place
 			else
-				FWinMsgVM(vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);
+				FWinMsgVM(v.iVM, vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);
 				
 			break;
 
@@ -4213,7 +4326,7 @@ break;
 
 			if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM)
 			{
-				int iVM = IDM_VM1 - wmId;	// we want the VM this far from the end
+				iVM = IDM_VM1 - wmId;	// we want the VM this far from the end
 				int zl;
 
 				// find the VM that far from the end
@@ -4329,7 +4442,7 @@ break;
 				if (!v.fTiling)
 				{
 					// tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
-					if (FWinMsgVM(hWnd, message, uParam, lParam))
+					if (FWinMsgVM(v.iVM, hWnd, message, uParam, lParam))
 						return TRUE;
 				}
 				
@@ -4338,9 +4451,7 @@ break;
 				{
 					if (sVM >= 0)
 					{
-						SelectInstance(sVM);
-						BOOL bb = FWinMsgVM(hWnd, message, uParam, lParam);
-						SelectInstance(v.iVM);
+						BOOL bb = FWinMsgVM(sVM, hWnd, message, uParam, lParam);
 						if (bb)
 							return TRUE;
 					}
@@ -4428,21 +4539,25 @@ break;
         vmachw.fVIA2 = TRUE;
 #endif
 
-        if (FIsAtari8bit(vmCur.bfHW))
+		iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+		
+		if (FIsAtari8bit(vmCur.bfHW))
 		{
 #if !defined(NDEBUG)
             printf("LBUTTONDOWN\n");
 #endif
 
 			// MOUSE LEFT button is joystick FIRE
-            FWinMsgVM(hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
+			if (iVM >= 0)
+				FWinMsgVM(iVM, hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
 			
 			// continue to do Tiling code
         }
 		else
 		{
 			if (!vi.fVMCapture)
-				return FWinMsgVM(hWnd, message, uParam, lParam);
+				if (iVM >= 0)
+					return FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);
 
 			if (vi.fExecuting && vi.fVMCapture && !vi.fGEMMouse)
 			{
@@ -4466,28 +4581,35 @@ break;
 			}
 		}
 
-        // fall through into generic mouse cases
+		break;
 
     case WM_LBUTTONUP:
-        if (FIsAtari8bit(vmCur.bfHW))
-            {
+		iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+		if (FIsAtari8bit(vmCur.bfHW))
+        {
 #if !defined(NDEBUG)
             printf("LBUTTONUP\n");
 #endif
 
 			// MOUSE button up is JOYSTICK BUTTON UP
-            return FWinMsgVM(hWnd, MM_JOY1BUTTONUP, 0, 0);
-            }
+			if (iVM >= 0)
+				return FWinMsgVM(iVM, hWnd, MM_JOY1BUTTONUP, 0, 0);
+        }
+		else
+		{
+			if (!vi.fVMCapture)
+				if (iVM >= 0)
+					return FWinMsgVM(iVM, hWnd, message, uParam, lParam);
+		}
 
-        if (!vi.fVMCapture)
-            return FWinMsgVM(hWnd, message, uParam, lParam);
-
-    case WM_RBUTTONUP:
+	case WM_RBUTTONUP:
         vi.fHaveFocus = TRUE;  // HACK
-        if (vi.fExecuting && (vi.fGEMMouse || !vi.fVMCapture))
+		iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+		if (vi.fExecuting && (vi.fGEMMouse || !vi.fVMCapture))
             {
             vi.fGEMMouse = FALSE;
-            FWinMsgVM(hWnd, message, uParam, lParam);
+            if (iVM >= 0)
+				FWinMsgVM(iVM, hWnd, message, uParam, lParam);
             vi.fMouseMoved = FALSE;
             vi.fGEMMouse = vi.fVMCapture;
             }
@@ -4495,9 +4617,11 @@ break;
         break;
 
     case WM_MOUSEMOVE:
+		iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
         if (FIsAtari8bit(vmCur.bfHW))
         {
-	        FWinMsgVM(hWnd, message, uParam, lParam);	// give mouse move to the VM !!! not listening to whether to eat it
+			if (iVM >= 0)
+				FWinMsgVM(iVM, hWnd, message, uParam, lParam);	// give mouse move to the VM !!! not listening to whether to eat it
 
 			// in Tile Mode, make note of which tile we are hovering over
 			// !!! In the future, send all joy and key input there
@@ -4563,11 +4687,19 @@ break;
 		if (v.fSaveOnExit)
 			SaveProperties(NULL);
 
-		// delete all of our VMs
+		// delete all of our VMs and kill their threads
 		for (int z = 0; z < MAX_VM; z++)
 		{
 			if (v.rgvm[z].fValidVM)
 				DeleteVM(z);
+		}
+
+		for (iVM = 0; iVM < MAX_VM; iVM++)
+		{
+			if (hGoEvent[iVM])
+				CloseHandle(hGoEvent[iVM]);
+			if (hDoneEvent[iVM])
+				CloseHandle(hDoneEvent[iVM]);
 		}
 
 		FInitSerialPort(0);
@@ -6154,11 +6286,10 @@ ULONG BfFromWfI(ULONG wf, int i)
 // Add a byte to the IKBD input buffer
 //
 
-// !!! only works on the current instance
-void AddToPacket(ULONG b)
+void AddToPacket(int iVM, ULONG b)
 {
-    vvmi.rgbKeybuf[vvmi.keyhead++] = (BYTE)b;
-    vvmi.keyhead &= 1023;
+    vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keyhead++] = (BYTE)b;
+    vrgvmi[iVM].keyhead &= 1023;
 	
 #if defined(ATARIST) || defined(SOFTMAC)
     vsthw[v.iVM].gpip &= 0xEF; // to indicate characters available

@@ -16,15 +16,15 @@
 // 6502 specific implementation of the CPU API
 //
 
-void __cdecl Go6502(void);
+void __cdecl Go6502(int);
 
-__inline BOOL cpuExec(void)
+__inline BOOL cpuExec(int iVM)
 {
-    Go6502();
+    Go6502(iVM);
     return TRUE;
 }
 
-__inline BOOL cpuDisasm(char *pch, ADDR *pPC)
+__inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
 {
     // stub out for now
 
@@ -33,13 +33,13 @@ __inline BOOL cpuDisasm(char *pch, ADDR *pPC)
     return TRUE;
 }
 
-__inline BYTE cpuPeekB(ADDR addr)
+__inline BYTE cpuPeekB(int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
     return rgbMem[addr];
 }
 
-__inline BOOL cpuPokeB(ADDR addr, BYTE b)
+__inline BOOL cpuPokeB(int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -47,14 +47,14 @@ __inline BOOL cpuPokeB(ADDR addr, BYTE b)
     return TRUE;
 }
 
-__inline WORD cpuPeekW(ADDR addr)
+__inline WORD cpuPeekW(int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     return *(WORD FAR *)&rgbMem[addr];
 }
 
-__inline BOOL cpuPokeW(ADDR addr, WORD w)
+__inline BOOL cpuPokeW(int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -74,7 +74,7 @@ __inline BOOL cpuInit(PFNL pvmPokeB)
 }
 
 
-__inline BOOL cpuReset()
+__inline BOOL cpuReset(int iVM)
 {
 	
 	// clear all registers
@@ -87,7 +87,7 @@ __inline BOOL cpuReset()
 	// set initial SP = $FF
 
 	regSP = 0x1FF;
-	regPC = cpuPeekW(0xFFFC);
+	regPC = cpuPeekW(iVM, 0xFFFC);
 
 	return TRUE;
 }

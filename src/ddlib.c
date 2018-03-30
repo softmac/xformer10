@@ -156,7 +156,7 @@ BOOL FInitDirectDraw()
 
 BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 {
-    DDSCAPS caps;
+//    DDSCAPS caps;
     HRESULT err;
     HDC hdc;
 
@@ -319,7 +319,7 @@ void ClearSurface()
 
     if (lpbSurface = LockSurface(&i))
         {
-        for (j = 0; j < ddsd.dwHeight; j++)
+        for (j = 0; j < (int)ddsd.dwHeight; j++)
             {
             memset(lpbSurface, 0, ddsd.dwWidth);
             lpbSurface += ddsd.lPitch;

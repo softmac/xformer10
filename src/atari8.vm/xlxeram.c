@@ -64,8 +64,6 @@ void InitBanks(int iVM)
     // used to be static (which is bad), but we want this every time, don't we?
 	BYTE fFirst = TRUE;
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
     _fmemset(rgbSwapSelf, 0, sizeof(rgbSwapSelf));
     _fmemset(rgbSwapC000, 0, sizeof(rgbSwapC000));
     _fmemset(rgbSwapD800, 0, sizeof(rgbSwapD800));
@@ -128,10 +126,8 @@ void InitBanks(int iVM)
 // Routine to swap the Atari ROMs in and out of address space.
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
-void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
+void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags, WORD pc)
 {
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
-
 	if (mdXLXE == md800)
 		return;
 
@@ -174,7 +170,7 @@ void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
         }
 
 	// don't do any BASIC swapping if a cartridge is present. The Sofware will try, but the hardware doesn't allow it
-    if ((mask & BASIC_MASK) && !v.rgvm[v.iVM].rgcart.fCartIn)
+    if ((mask & BASIC_MASK) && !v.rgvm[iVM].rgcart.fCartIn)
         {
         int cb = 8192;
 

@@ -72,13 +72,9 @@ VMINFO const vmi800 =
 // our machine specific data for each instance (ATARI specific stuff)
 //
 CANDYHW vrgcandy[MAX_VM];
-CANDYHW *vpcandyCur = &vrgcandy[0]; // default to first instance
 
 //BYTE bshiftSav;	// was a local too
 BOOL fDumpHW;
-
-#define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
-
 
 // get ready for time travel!
 BOOL TimeTravelInit(unsigned iVM)
@@ -105,8 +101,6 @@ BOOL TimeTravelInit(unsigned iVM)
 //
 void TimeTravelFree(unsigned iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	for (unsigned i = 0; i < 3; i++)
 	{
 		if (Time[iVM][i])
@@ -122,8 +116,6 @@ BOOL TimeTravelPrepare(unsigned iVM)
 {
 	BOOL f = TRUE;
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-	
 	const ULONGLONG s5 = 29830 * 60 * 5;	// 5 seconds
 	char *pPersist;
 	int cbPersist;
@@ -136,6 +128,11 @@ BOOL TimeTravelPrepare(unsigned iVM)
 	// time to save a snapshot (every 5 seconds)
 	if (cTest >= s5)
 	{
+		// don't remember that we were holding down shift, control or ALT, or going back in time will act like
+		// they're still pressed because they won't see our letting go.
+		// VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
+		ControlKeyUp8(iVM);
+
 		f = SaveStateAtari(iVM, &pPersist, &cbPersist);
 		
 		if (!f || cbPersist != sizeof(CANDYHW) || Time[iVM][cTimeTravelPos[iVM]] == NULL)
@@ -159,8 +156,6 @@ BOOL TimeTravel(unsigned iVM)
 {
 	BOOL f = FALSE;
 	
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance, just in case
-
 	if (Time[iVM][cTimeTravelPos[iVM]] == NULL)
 		return FALSE;
 
@@ -178,14 +173,17 @@ BOOL TimeTravel(unsigned iVM)
 //
 BOOL TimeTravelReset(unsigned iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	char *pPersist;
 	int cbPersist;
 
 	// reset our clock to "have not saved any states yet"
 	ullTimeTravelTime[iVM] = GetCycles();
 	cTimeTravelPos[iVM] = 0;
+
+	// don't remember that we were holding down shift, control or ALT, or going back in time will act like
+	// they're still pressed because they won't see our letting go.
+	// VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
+	ControlKeyUp8(iVM);
 
 	BOOL f = SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
 
@@ -369,10 +367,8 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         }
 #endif
 
- // DumpROMS();
+	// DumpROMS();
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-	
 	// Initialize everything, or we'll think time travel pointers are valid
 	_fmemset(&vrgcandy[iVM], 0, sizeof(CANDYHW));
 
@@ -387,14 +383,9 @@ BOOL __cdecl InitAtari(int iVM)
 {
 //	BYTE bshiftSav; // already a global with that name!
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	// Initialize the time travel pointers (freed in Uninit, and Load will free and alloc new ones that it will need)
 	if (!TimeTravelInit(iVM))
 		return FALSE;
-
-	// initialize our state (doesn't seem to help)
-	//_fmemset(vpcandyCur, 0, sizeof(CANDYHW));
 
 	// These things are the same for each machine type
 
@@ -527,20 +518,18 @@ BOOL __cdecl UninitAtariDisks(int iVM)
 //
 BOOL __cdecl WarmbootAtari(int iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	// tell the CPU which 
 	cpuInit(PokeBAtari);
 
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
-    regPC = cpuPeekW((mdXLXE != md800) ? 0xFFFC : 0xFFFA);
+    regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;	// delay for banner messages
     QueryTickCtr();
 	//countJiffies = 0;
 
 	fBrakes = TRUE;	// go back to real time
-	wScan = NTSCY;	// start at top of screen again
+	wScan = 0;	// start at top of screen again
 
 	// too slow to do anytime but startup
 	//InitSound();	// need to reset and queue audio buffers
@@ -558,8 +547,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
     unsigned addr;
 	//OutputDebugString("\n\nCOLD START\n\n");
 
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	BOOL f = InitAtariDisks(iVM);
 
 	if (!f)
@@ -571,7 +558,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	
 	fBrakes = TRUE; // go back to real time
 	clockMult = 1;	// per instance speed-up
-	wScan = NTSCY;	// start at top of screen again
+	wScan = 0;	// start at top of screen again
 	wFrame = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
@@ -596,7 +583,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	InitCart(iVM);
 
     // reset the registers, and say which HW it is running
-    cpuReset();
+    cpuReset(iVM);
 	cpuInit(PokeBAtari);
 
 	// XL's need hardware to cold start, and can only warm start through emulation.
@@ -618,7 +605,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     for (addr = 0xD000; addr < 0xD5FE; addr++)
     {
-        cpuPokeB(addr,0xFF);
+        cpuPokeB(iVM, addr,0xFF);
     }
 
     // CTIA/GTIA reset
@@ -631,7 +618,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     TRIG1 = 1;
     TRIG2 = 1;
 	// XL cartridge sense line, without this warm starts can try to run an non-existent cartridge
-	TRIG3 = (mdXLXE != md800 && !(v.rgvm[v.iVM].rgcart.fCartIn)) ? 0 : 1;
+	TRIG3 = (mdXLXE != md800 && !(v.rgvm[iVM].rgcart.fCartIn)) ? 0 : 1;
     *(ULONG *)MXPF  = 0;
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
@@ -763,7 +750,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 }
 
 
-BOOL __cdecl DumpHWAtari()
+BOOL __cdecl DumpHWAtari(int iVM)
 {
 #ifndef NDEBUG
 //    RestoreVideo();
@@ -796,7 +783,7 @@ BOOL __cdecl DumpHWAtari()
     printf("AUDF3  %02X AUDC3  %02X AUDF4  %02X AUDC4  %02X\n",
         AUDF3, AUDC3, AUDF4, AUDC4);
     printf("AUDCTL %02X  $87   %02X   $88  %02X  $A2  %02X\n",
-       AUDCTL, cpuPeekB(0x87), cpuPeekB(0x88), cpuPeekB(0xA2));
+       AUDCTL, cpuPeekB(iVM, 0x87), cpuPeekB(iVM, 0x88), cpuPeekB(iVM, 0xA2));
 
 //    ForceRedraw();
 #endif // DEBUG
@@ -804,19 +791,19 @@ BOOL __cdecl DumpHWAtari()
 }
 
 // push PC and P on the stack
-void Interrupt()
+void Interrupt(int iVM)
 {
-    cpuPokeB(regSP, regPC >> 8);  regSP = (regSP-1) & 255 | 256;
-    cpuPokeB(regSP, regPC & 255); regSP = (regSP-1) & 255 | 256;
-	cpuPokeB(regSP, regP);          regSP = (regSP-1) & 255 | 256;
+    cpuPokeB(iVM, regSP, regPC >> 8);  regSP = (regSP-1) & 255 | 256;
+    cpuPokeB(iVM, regSP, regPC & 255); regSP = (regSP-1) & 255 | 256;
+	cpuPokeB(iVM, regSP, regP);          regSP = (regSP-1) & 255 | 256;
 
     regP |= IBIT;
 }
 
-BOOL __cdecl TraceAtari(BOOL fStep, BOOL fCont)
+BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 {
     fTrace = TRUE;
-    ExecuteAtari(fStep, fCont);
+    ExecuteAtari(iVM, fStep, fCont);
     fTrace = FALSE;
 
     return TRUE;
@@ -824,7 +811,7 @@ BOOL __cdecl TraceAtari(BOOL fStep, BOOL fCont)
 
 // What happens when it's scan line 241 and it's time to start the VBI
 //
-void DoVBI()
+void DoVBI(int iVM)
 {
 	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 	wLeftMax = wLeft;
@@ -835,15 +822,15 @@ void DoVBI()
 	if (NMIEN & 0x40) {
 		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
 		// every scan line now until it's done, then resume
-		Interrupt();
+		Interrupt(iVM);
 		NMIST = 0x40 | 0x1F;	// want VBI
-		regPC = cpuPeekW(0xFFFA);
+		regPC = cpuPeekW(iVM, 0xFFFA);
 	}
 
 	// process joysticks before the vertical blank, just because.
 	// Very slow if joysticks not installed, so skip the code
 	// When tiling, only the tile in focus gets input
-	if ((!v.fTiling || sVM == (int)v.iVM) && vmCur.fJoystick && vi.rgjc[0].wNumButtons > 0) {
+	if ((!v.fTiling || sVM == (int)iVM) && v.rgvm[iVM].fJoystick && vi.rgjc[0].wNumButtons > 0) {
 		JOYINFO ji;
 		MMRESULT mm = joyGetPos(0, &ji);
 		if (mm == 0) {
@@ -868,7 +855,7 @@ void DoVBI()
 			else if (dir > 0)
 				rPADATA &= ~2;              // down
 
-			UpdatePorts();
+			UpdatePorts(iVM);
 
 			if (ji.wButtons)
 				TRIG0 &= ~1;                // JOY 0 fire button down
@@ -900,7 +887,7 @@ void DoVBI()
 				else if (dir > 0)
 					rPADATA &= ~ 32;              // down
 
-				UpdatePorts();
+				UpdatePorts(iVM);
 
 				if (ji.wButtons)
 					TRIG1 &= ~1;                // JOY 0 fire button down
@@ -910,10 +897,10 @@ void DoVBI()
 		}
 	}
 
-	CheckKey();	// process the ATARI keyboard buffer
+	CheckKey(iVM);	// process the ATARI keyboard buffer
 
 	if (fTrace)
-		ForceRedraw();	// it might do this anyway
+		ForceRedraw(iVM);	// it might do this anyway
 
 	// every VBI, shadow the hardware registers
 	// to their higher locations
@@ -956,17 +943,17 @@ void DoVBI()
 
 	// decrement printer timer
 
-	if (vi.cPrintTimeout && vmCur.fShare)
+	if (vi.cPrintTimeout && v.rgvm[iVM].fShare)
 	{
 		vi.cPrintTimeout--;
 		if (vi.cPrintTimeout == 0)
 		{
-			FlushToPrinter();
+			FlushToPrinter(iVM);
 			UnInitPrinter();
 		}
 	}
 	else
-	FlushToPrinter();
+	FlushToPrinter(iVM);
 }
 
 // The big loop! Do a single horizontal scan line (or if it's time, the vertical blank as scan line 251)
@@ -974,10 +961,8 @@ void DoVBI()
 // or if tracing, only do one scan line
 //
 // !!! fStep and fCont are ignored for now!
-BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
+BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 {
-	vpcandyCur = &vrgcandy[v.iVM];	// make sure we're looking at the proper instance
-
 	// tell the 6502 which HW it is running this time
 	cpuInit(PokeBAtari);
 
@@ -992,74 +977,28 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 #ifndef NDEBUG
 			// Display scan line here
 			if (fDumpHW) {
-				WORD PCt = cpuPeekW(0x200);
-				extern void CchDisAsm(unsigned int *);
+				WORD PCt = cpuPeekW(iVM, 0x200);
+				extern void CchDisAsm(int, unsigned int *);
 				int i;
 
 				printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
-					cpuPeekB(DLPC));
+					cpuPeekB(iVM, DLPC));
 				for (i = 0; i < 60; i++)
 				{
-					CchDisAsm(&PCt); printf("\n");
+					CchDisAsm(iVM, &PCt); printf("\n");
 				}
 				PCt = regPC;
 				for (i = 0; i < 60; i++)
 				{
-					CchDisAsm(&PCt); printf("\n");
+					CchDisAsm(iVM, &PCt); printf("\n");
 				}
-				FDumpHWVM();
+				FDumpHWVM(iVM);
 			}
 #endif // DEBUG
 
 			// if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
 			if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
 				CONSOL |= 4;
-
-			// next scan line
-			wScan = wScan + 1;
-
-			// we process the audio after the whole frame is done, but the VBLANK starts at 241
-			if (wScan >= NTSCY)
-			{			
-				TimeTravelPrepare(v.iVM);
-				
-				SoundDoneCallback(vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
-
-				wScan = 0;
-				wFrame++;	// count how many frames we've drawn. Does anybody care?
-
-				// should be safe as static
-				static ULONGLONG cCYCLES = 0;
-				static ULONGLONG cErr = 0;
-				static unsigned lastVM = 0;
-
-				// in tiling mode, run all of the instances, and then wait for time to catch up
-				if (!v.fTiling || v.iVM <= lastVM) // = if there's only 1 VM
-				{
-					RenderBitmap();	// !!! used to render in VBI, if compat bugs appear. Try it only when dirty. Use DDraw.
-									
-					// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-					// don't let errors propogate
-					const ULONGLONG cJif = 29830; // 1789790 / 60
-					ULONGLONG cCur = GetCycles() - cCYCLES;
-
-					// report back how long it took
-					cEmulationSpeed = cCur * 1000000 / cJif;
-
-					while (fBrakes && ((cJif - cErr) > cCur * clockMult)) {
-						Sleep(1);
-						cCur = GetCycles() - cCYCLES;
-					}
-					cErr = cCur - (cJif - cErr);
-					if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-					cCYCLES = GetCycles();
-				}
-				lastVM = v.iVM;
-
-				// exit each frame to let the next VM run (if Tiling) and to update the clock speed on the status bar (always)
-				//if (v.fTiling)
-					fStop = fTrue;
-			}
 
 			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
 			// 21 should be right for Gr.0 but for some reason 18 is?
@@ -1102,7 +1041,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			else if (wScan == STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				DoVBI();	// it's huge, it bloats this function to inline it.
+				DoVBI(iVM);	// it's huge, it bloats this function to inline it.
 			}
 
 			else if (wScan > STARTSCAN + Y8 + 1)
@@ -1118,12 +1057,12 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			if (IRQST != 255)
 			{
 				//        printf("IRQ interrupt\n");
-				Interrupt();
-				regPC = cpuPeekW(0xFFFE);
+				Interrupt(iVM);
+				regPC = cpuPeekW(iVM, 0xFFFE);
 			}
 		}
 
-		ProcessScanLine();	// do the DLI, and fill the bitmap
+		ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
 
 		// some programs check "mirrors" instead of $D40B
 		// if we are resuming after a WSYNC, VCOUNT will be one higher
@@ -1131,7 +1070,11 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 
 		// Execute about one horizontal scan line's worth of 6502 code
 		WSYNC_Seen = FALSE;
-		Go6502();
+
+		Go6502(iVM);
+
+		//if (iVM == 1) ODS("T%d Frame=%d wScan = %d PC=%d\n", iVM, wFrame, wScan, regPC);
+
 		if (!WSYNC_Seen)
 			WSYNC_Waited = FALSE;
 
@@ -1141,7 +1084,24 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 			// REVIEW: need to check if PC == $E459 and if so make sure
 			// XL/XE ROMs are swapped in, otherwise ignore
 			fSIO = 0;
-			SIOV();
+			SIOV(iVM);
+		}
+
+		// next scan line
+		wScan = wScan + 1;
+
+		// we process the audio after the whole frame is done, but the VBLANK starts at 241
+		if (wScan >= NTSCY)
+		{
+			TimeTravelPrepare(iVM);
+
+			SoundDoneCallback(iVM, vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
+
+			wScan = 0;
+			wFrame++;	// count how many frames we've drawn. Does anybody care?
+
+			// exit each frame to let the next VM run (if Tiling) and to update the clock speed on the status bar (always)
+			fStop = fTrue;
 		}
 
     } while (!fTrace && !fStop);
@@ -1153,7 +1113,7 @@ BOOL __cdecl ExecuteAtari(BOOL fStep, BOOL fCont)
 // Stubs
 //
 
-BOOL __cdecl DumpRegsAtari()
+BOOL __cdecl DumpRegsAtari(int iVM)
 {
     // later
 
@@ -1161,7 +1121,7 @@ BOOL __cdecl DumpRegsAtari()
 }
 
 
-BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC)
+BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 {
     // later
 
@@ -1169,44 +1129,44 @@ BOOL __cdecl DisasmAtari(char *pch, ADDR *pPC)
 }
 
 
-BYTE __cdecl PeekBAtari(int addr)
+BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
     // reads always read directly
 
-    return cpuPeekB(addr);
+    return cpuPeekB(iVM, addr);
 }
 
 
-WORD __cdecl PeekWAtari(int addr)
+WORD __cdecl PeekWAtari(int iVM, ADDR addr)
 {
     // reads always read directly
 
-    return cpuPeekW(addr);
+    return cpuPeekW(iVM, addr);
 }
 
 
-ULONG __cdecl PeekLAtari(int addr)
+ULONG __cdecl PeekLAtari(int iVM, ADDR addr)
 {
     // reads always read directly
 
-    return cpuPeekW(addr);
+    return cpuPeekW(iVM, addr);
 }
 
 
-BOOL __cdecl PokeWAtari(int addr, WORD w)
+BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 {
-    PokeBAtari(addr, w & 255);
-    PokeBAtari(addr+1, w >> 8);
+    PokeBAtari(iVM, addr, w & 255);
+    PokeBAtari(iVM, addr+1, w >> 8);
     return TRUE;
 }
 
 
-BOOL __cdecl PokeLAtari(int addr, ULONG w)
+BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 {
     return TRUE;
 }
 
-BOOL __cdecl PokeBAtari(int addr, BYTE b)
+BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
     addr &= 65535;
@@ -1223,7 +1183,7 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
         flushall();
 #endif
 
-        cpuPokeB(addr, b);
+        cpuPokeB(iVM, addr, b);
         return TRUE;
     }
 
@@ -1233,7 +1193,7 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
 
 		// don't allow writing to cartridge memory, but do allow writing to special extended XL/XE RAM
 		if (mdXLXE == md800 ||
-			(v.rgvm[v.iVM].rgcart.fCartIn && addr < 0xC000 && addr >= 0xc000 - v.rgvm[v.iVM].rgcart.cbData))
+			(v.rgvm[iVM].rgcart.fCartIn && addr < 0xC000u && addr >= 0xc000u - v.rgvm[iVM].rgcart.cbData))
 		{
 			break;
 		}
@@ -1269,7 +1229,7 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
             // write to XL/XE RAM under ROM
 
             if ((addr < 0xD000) || (addr >= 0xD800))
-                cpuPokeB(addr, b);
+                cpuPokeB(iVM, addr, b);
 
             break;
             }
@@ -1343,7 +1303,7 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
 			// we're (wScan / 262) of the way through the scan lines and (wLeftMax - wLeft) of the way through this scan line
 			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
-				SoundDoneCallback(vi.rgwhdr, iCurSample);
+				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
 		}
         break;
 
@@ -1384,23 +1344,23 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
             {
             // it is a control register
 
-            cpuPokeB(PACTLea + (addr & 1), b & 0x3C);
+            cpuPokeB(iVM, PACTLea + (addr & 1), b & 0x3C);
             }
         else
             {
             // it is either a data or ddir register. Check the control bit
 
-            if (cpuPeekB(PACTLea + addr) & 4)
+            if (cpuPeekB(iVM, PACTLea + addr) & 4)
                 {
                 // it is a data register. Update only bits that are marked as write.
 
-                BYTE bMask = cpuPeekB(wPADDIRea + addr);
-                bOld  = cpuPeekB(wPADATAea + addr);
+                BYTE bMask = cpuPeekB(iVM, wPADDIRea + addr);
+                bOld  = cpuPeekB(iVM, wPADATAea + addr);
                 BYTE bNew  = (b & bMask) | (bOld & ~bMask);
 
                 if (bOld != bNew)
                     {
-                    cpuPokeB(wPADATAea + addr, bNew);
+                    cpuPokeB(iVM, wPADATAea + addr, bNew);
 
                     if ((addr == 1) && (mdXLXE != md800))
                         {
@@ -1413,7 +1373,7 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
                             wPBDATA |= 0x7C;
                             }
 
-                        SwapMem(bOld ^ bNew, bNew, 0);
+                        SwapMem(iVM, bOld ^ bNew, bNew, 0);
                         }
                     }
                 }
@@ -1421,13 +1381,13 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
                 {
                 // it is a data direction register.
 
-                cpuPokeB(wPADDIRea + addr, b);
+                cpuPokeB(iVM, wPADDIRea + addr, b);
                 }
             }
 
         // update PORTA and PORTB read registers
 
-        UpdatePorts();
+        UpdatePorts(iVM);
         break;
 
     case 0xD4:      // ANTIC
@@ -1467,14 +1427,14 @@ BOOL __cdecl PokeBAtari(int addr, BYTE b)
 
     case 0xD5:      // Cartridge bank select
 //        printf("addr = %04X, b = %02X\n", addr, b);
-        BankCart(v.iVM, addr & 255, b);
+        BankCart(iVM, addr & 255, b);
         break;
     }
 
     return TRUE;
 }
 
-void UpdatePorts()
+void UpdatePorts(int iVM)
 {
     if (PACTL & 4)
         {
@@ -1499,8 +1459,6 @@ void UpdatePorts()
 //
 BOOL ReadCart(int iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	unsigned char *pch = (unsigned char *)v.rgvm[iVM].rgcart.szName;
 
 	int h;
@@ -1594,8 +1552,6 @@ BOOL ReadCart(int iVM)
 //
 void InitCart(int iVM)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	// no cartridge
 	if (!(v.rgvm[iVM].rgcart.fCartIn))
 	{
@@ -1649,8 +1605,6 @@ void InitCart(int iVM)
 //
 void BankCart(int iVM, int iBank, int value)
 {
-	vpcandyCur = &vrgcandy[iVM];	// make sure we're looking at the proper instance
-
 	PCART pcart = &(v.rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
 	int i;

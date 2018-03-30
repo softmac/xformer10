@@ -75,25 +75,25 @@ BOOL InitPrinter(int iLPT)
 }
 
 
-BOOL FPrinterReady()
+BOOL FPrinterReady(int iVM)
 {
-    return (vmCur.iLPT != 0);
+    return (v.rgvm[iVM].iLPT != 0);
 }
 
 
-BOOL FlushToPrinter()
+BOOL FlushToPrinter(int iVM)
 {
     int cch;
 
-    if (vmCur.iLPT == 0)
+    if (v.rgvm[iVM].iLPT == 0)
         return TRUE;
 
     if (vhPrinter == INVALID_HANDLE_VALUE)
-        InitPrinter(vmCur.iLPT);
+        InitPrinter(v.rgvm[iVM].iLPT);
 
-    if (vcchBuf && (vmCur.iLPT != 0))
+    if (vcchBuf && (v.rgvm[iVM].iLPT != 0))
         {
-        WriteFile(vhPrinter, vrgbBuffer, vcchBuf, &cch, NULL);
+        WriteFile(vhPrinter, vrgbBuffer, vcchBuf, (LPDWORD)&cch, NULL);
         vcchBuf = 0;
         vi.cPrintTimeout = 200*30;
         }
@@ -101,31 +101,31 @@ BOOL FlushToPrinter()
 }
 
 
-BOOL ByteToPrinter(unsigned char ch)
+BOOL ByteToPrinter(int iVM, unsigned char ch)
 {
     DebugStr("FOutputToPrinter:outputting %c\n", ch);
 
     if (vhPrinter == INVALID_HANDLE_VALUE)
-        InitPrinter(vmCur.iLPT);
+        InitPrinter(v.rgvm[iVM].iLPT);
 
-    if (vmCur.iLPT != 0)
+    if (v.rgvm[iVM].iLPT != 0)
         {
         vrgbBuffer[vcchBuf++] = ch;
         vi.cPrintTimeout = 200*30;
 
         if (vcchBuf >= CCHBUFMAX)
-            FlushToPrinter();
+            FlushToPrinter(iVM);
         }
 
     return TRUE;
 }
 
 
-BOOL StringToPrinter(char *pch)
+BOOL StringToPrinter(int iVM, char *pch)
 {
     while (*pch)
         {
-        if (!ByteToPrinter(*pch++))
+        if (!ByteToPrinter(iVM, *pch++))
             return FALSE;
         }
 

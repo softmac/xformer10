@@ -88,6 +88,13 @@ extern int sVM;	// which tile you're hovering over, -1 means none so this must b
 #define _FRANCAIS   0
 #define _NEDERLANDS 0
 
+HANDLE hGoEvent[MAX_VM];	// please execute
+HANDLE hDoneEvent[MAX_VM];	// I'm done executing
+BOOL fKillThread[MAX_VM];	// time to die
+int iThreadVM[MAX_VM];		// which VM a thread is
+
+DWORD VMThread(LPVOID l);	// thread proc
+
 //
 // Basic Types
 //
@@ -113,7 +120,6 @@ typedef int                BOOL;
 
 typedef void           (__cdecl *PFN) (int x, ...);
 typedef BOOL          (__cdecl *PFNL)(int x, ...);
-typedef BOOL		   (__cdecl *PFNLH)(HWND x, ...);
 typedef BYTE *         (__cdecl *PFNP)(int x, ...);
 
 typedef void *         (__fastcall *PHNDLR)(void *, long);
@@ -625,7 +631,7 @@ typedef struct _vminfo
 	PFNL pfnWarmboot;       // VM resets hardware (warmboot)
 	PFNL pfnExec;           // VM execute code
 	PFNL pfnTrace;          // Execute one single instruction in the VM
-	PFNLH pfnWinMsg;         // handles Windows messages
+	PFNL pfnWinMsg;         // handles Windows messages
 	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
 	PFNL pfnDumpHW;         // dumps hardware state
 	PFNL pfnDisasm;         // Disassemble code in VM as ASCII
@@ -728,7 +734,8 @@ BOOL ColdStart(int);
 void SelectInstance(int);
 
 #define vmCur (*vi.pvmCur)
-#define osCur v.rgosinfo[vmCur.iOS]
+
+//#define osCur v.rgosinfo[vmCur.iOS]
 
 //
 // Per-VM instance data (is not saved between sessions)
@@ -751,12 +758,9 @@ typedef struct VMINST
 
 extern VMINST vrgvmi[MAX_VM];
 
-#define vpvmi ((VMINST *)&vrgvmi[v.iVM])
-#define vvmi  (*(VMINST *)&vrgvmi[v.iVM])
-// #define vvmi  (*(VMINST *)vi.pvmiCur)
 
-// __declspec(thread) VMINST vmi;
-
+#define vpvmi ((VMINST *)&vrgvmi[iVM])
+#define vvmi  (*(VMINST *)&vrgvmi[iVM])
 
 typedef struct
 {
@@ -916,7 +920,7 @@ typedef struct
     BYTE *pbRAM[4];     // host pointer to first guest byte of RAM block
 
     PVM  pvmCur;        // pointer to v.rgvm[v.iVM]
-    PVMINST pvmiCur;    // pointer to vrgvmi[v.iVM]
+    PVMINST pvmiCur;    // UNUSED pointer to vrgvmi[v.iVM]
 
 #if defined(ATARIST) || defined(SOFTMAC)
     REGS *pregs;        // pointer to registers and large memory block
@@ -1029,6 +1033,8 @@ typedef struct  _GENPORT_WRITE_INPUT {
 // enables DEBUG output
 extern BOOL fDebug;
 
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
+
 // #define vpregs vi.pregs
 #define vpregs   ((REGS *)(&vregs))
 #define vpregs2 ((REGS2 *)(&vi.regs2))
@@ -1041,7 +1047,7 @@ ULONG KeyIn(void);
 BOOL __cdecl F486(void);
 void ScreenRefresh(void);
 void __cdecl InitSTHW(void);
-void AddToPacket(ULONG);
+void AddToPacket(int, ULONG);
 BOOL FReadSector(void *, ULONG, ULONG, ULONG);
 BOOL FWriteSector(void *, ULONG, ULONG, ULONG);
 void EnterMode(BOOL);
@@ -1128,7 +1134,7 @@ int CallMacLineA(void);
 BOOL FInitGemDosHooks();
 BOOL FResetGemDosHooks();
 ULONG CallGEMDOS();
-
+#endif
 
 // gemul8r.c
 
@@ -1136,6 +1142,7 @@ ULONG CallGEMDOS();
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(int);
 void RenderBitmap();
+void AddToPacket(int, ULONG);
 
 //BOOL OpenThePath(HWND hWnd, char *psz);
 BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int type);
@@ -1145,8 +1152,8 @@ BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int type);
 
 BOOL InitPrinter(int);
 BOOL UnInitPrinter(void);
-BOOL ByteToPrinter(unsigned char);
-BOOL FlushToPrinter(void);
+BOOL ByteToPrinter(int, unsigned char);
+BOOL FlushToPrinter(int);
 BOOL FPrinterReady();
 
 
@@ -1183,15 +1190,16 @@ BOOL FWriteSerialPort(BYTE b);
 // sound.c
 
 //void TestSound(void);
-void SoundDoneCallback(LPWAVEHDR, int);
+void SoundDoneCallback(int, LPWAVEHDR, int);
 //void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
 void CaptureJoysticks();
 void ReleaseJoysticks();
-void InitMIDI();
+void InitMIDI(int);
 void InitSound();
 void UninitSound();
 
+#if defined(ATARIST) || defined(SOFTMAC) || defined(SOFTMAC2) || defined(POWERMAC)
 // blitter.c
 
 void DoBlitter(struct _blitregs *);
@@ -1200,6 +1208,7 @@ void DoBlitter(struct _blitregs *);
 
 BOOL FWriteYamaha(int, int);
 BOOL FReadYamaha(void);
+#endif
 
 // ddlib.c
 BOOL FInitDirectDraw();
@@ -1211,11 +1220,12 @@ void ClearSurface();
 //BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
 //BOOL FCyclePalette(BOOL fForward);
 
+
 // xatari.c
-void ForceRedraw();
+void ForceRedraw(int iVM);
 
 // xkey.c
-void ControlKeyUp8();
+void ControlKeyUp8(int iVM);
 
 // xmon.c
 void mon();
