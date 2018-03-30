@@ -274,14 +274,9 @@ void DisplayStatus(int iVM)
 
     strcat(rgch0, rgch);
 
-	// make every VM support braking
-    if (FIsAtari8bit(v.rgvm[iVM].bfHW))
-    {
-		// are we running at normal speed or turbo speed
-        sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo",
-						cEmulationSpeed ? ((int)(100000000 / cEmulationSpeed)) : 0);
-        strcat(rgch0, rgch);
-    }
+	// are we running at normal speed or turbo speed
+    sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo", cEmulationSpeed ? ((int)(100000000 / cEmulationSpeed)) : 0);
+    strcat(rgch0, rgch);
 		
     if (v.fZoomColor)
     {
@@ -1734,8 +1729,7 @@ int CALLBACK WinMain(
 			if (cCur - sCJ >= 1789790)
 			{
 				int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
-				if (ids >= 0)
-					DisplayStatus(ids);
+				DisplayStatus(ids);
 				sCJ = cCur;
 			}
 
