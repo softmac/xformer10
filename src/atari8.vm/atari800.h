@@ -18,8 +18,6 @@
 
 #include "common.h"
 
-extern int X8;		// valid width of screen including black bars on sides (320 normal playfield)
-extern int Y8;		// number of valid scan lines
 #define STARTSCAN 8	// scan line ANTIC starts drawing at
 #define NTSCY 262	// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
@@ -30,12 +28,21 @@ extern int Y8;		// number of valid scan lines
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
+#define X8 352		// screen width
+#define Y8 240		// screen height
+
+#define CART_8K      0
+#define CART_16K     1
+#define CART_OSSA    2   // Mac65 etc.
+#define CART_OSSB    3   //
+#define CART_XEGS	 4
+
 #define MAX_CART_SIZE 131072
 char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
-// !!! globals should be OK as at worst the sound glitches in tile mode (it does that anyway until I support
-// setting focus in tile mode. Globals should only help the randomizer ???
+// globals are OK as only 1 thread does sound at a time
+// RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)
 BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter
 BYTE poly5[(1 << 5) - 1];
 BYTE poly9[(1 << 9) - 1];
@@ -55,9 +62,6 @@ void TimeTravelFree(unsigned);
 ULONGLONG ullTimeTravelTime[MAX_VM];	// the time stamp of a snapshot
 char cTimeTravelPos[MAX_VM];	// which is the current snapshot?
 char *Time[MAX_VM][3];		// 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
-
-// my own printf that *works*
-void ODS(char *fmt, ...);
 
 //
 // Scan line structure
@@ -99,6 +103,8 @@ typedef struct
     BYTE fpmg;                  // PMG are present on scan line
     BYTE fVscrol;               // line is vertically scrolled
 } SL;
+
+// PMG Player Missile Graphics structure
 
 typedef struct
 {
@@ -180,7 +186,8 @@ typedef struct
 
 #pragma pack(4)
 
-// CANDY
+// CANDY - our persistable state, including SL (scan line) and PMG (player-missile graphics)
+
 typedef struct
 {
     // 6502 register context
@@ -235,9 +242,6 @@ typedef struct
     // clock multiplier 
 
     ULONG m_clockMult;
-
-	// !!! this is unnecessary bloat!
-    SL m_rgsl[NTSCY];     // 256 scan line structures
     
 	PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
 
@@ -271,15 +275,13 @@ typedef struct
 	unsigned char    m_srC;
 	unsigned char    m_pad;
 
-	char FAR m_rgbSwapSelf[2048];	// extended XL memory
-	char FAR m_rgbSwapC000[4096];
-	char FAR m_rgbSwapD800[10240];
+	char m_rgbSwapSelf[2048];	// extended XL memory
+	char m_rgbSwapC000[4096];
+	char m_rgbSwapD800[10240];
 
 #if XE
-	char HUGE m_rgbXEMem[4][16384];
-	// !!! the actual memory found at rgbMem $4000 in an XE is a duplicate of either this or one of the banks above
-	// I could save 16K of persistance data by keeping this inside the proper bank of rgbXEMem
-	char FAR m_rgbSwapXEMem[16384];
+	int m_iXESwap;					// which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
+	char HUGE m_rgbXEMem[4][16384];	// !!! doesn't need to be HUGE anymore?
 #endif // XE
 
 } CANDYHW;
@@ -342,7 +344,6 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define countJiffies  CANDY_STATE(countJiffies)
 #define countInstr    CANDY_STATE(countInstr)
 #define clockMult     CANDY_STATE(clockMult)
-#define rgsl          CANDY_STATE(rgsl)
 #define pmg           CANDY_STATE(pmg)
 #define sl            CANDY_STATE(sl)
 #define cbWidth       CANDY_STATE(cbWidth)
@@ -360,13 +361,13 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)
-#define rgbSwapSelf  CANDY_STATE(rgbSwapSelf)
-#define rgbSwapC000  CANDY_STATE(rgbSwapC000)
-#define rgbSwapD800  CANDY_STATE(rgbSwapD800)
+#define rgbSwapSelf   CANDY_STATE(rgbSwapSelf)
+#define rgbSwapC000   CANDY_STATE(rgbSwapC000)
+#define rgbSwapD800   CANDY_STATE(rgbSwapD800)
 
 #if XE
+#define iXESwap		  CANDY_STATE(iXESwap)
 #define rgbXEMem	  CANDY_STATE(rgbXEMem)
-#define rgbSwapXEMem  CANDY_STATE(rgbSwapXEMem)
 #endif
 
 #include "6502.h"
@@ -402,7 +403,7 @@ __inline BYTE *_pbshift(int iVM)
 
 //
 // 6502 condition codes in P register: NV_BDIZC
-// !!! just use the 6502.h defines
+// we could just use the 6502.h defines, you know
 
 #define NBIT 0x80
 #define VBIT 0x40
@@ -631,7 +632,7 @@ void DeleteDrive(int, int);
 void AddDrive(int, int, BYTE *);
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);
-void __cdecl SwapMem(int, BYTE mask, BYTE flags, WORD pc);
+void __cdecl SwapMem(int, BYTE mask, BYTE flags);
 void InitBanks(int);
 void CchDisAsm(int, unsigned int *puMem);
 void CchShowRegs(int);
@@ -661,13 +662,12 @@ extern char FAR rgbXLXEBAS[], FAR rgbXLXED800[];  // XL/XE ROMs
 extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 
 //
-// The 3 hardware modes
+// The 3 hardware modes our VM can have
 //
 
 #define md800 0
 #define mdXL  1
 #define mdXE  2
-
 
 //
 // Function prototypes of the Atari 800 VM API

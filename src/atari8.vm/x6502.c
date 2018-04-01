@@ -332,7 +332,7 @@ int __cdecl xprintf(const char *format, ...)
             h = OpenFile("\\GEMUL8R.LOG", &ofs, OF_CREATE);
 
         if (1 && retval)
-            WriteFile(h, rgch, retval, &i, NULL);
+            WriteFile((HANDLE)h, rgch, retval, &i, NULL);
         }
 
     if (1 && retval && vi.pszOutput)
@@ -353,7 +353,7 @@ uint8_t READ_BYTE(int iVM, uint32_t ea)
 		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
 		// !!! this assumes 30 instructions per scanline always (not true)
 		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
-		int delta = cur - random17last;
+		int delta = (int)(cur - random17last);
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
 		RANDOM = poly17[random17pos];

@@ -31,6 +31,7 @@
 #define IDM_TURBO	                    40033
 #define IDM_COLORMONO                   40032
 #define IDM_TIMETRAVEL                  40034
+#define IDM_AUTOLOAD					40035
 #define IDM_D1                          40238
 #define IDM_D2                          40239
 #define IDM_D3                          40242

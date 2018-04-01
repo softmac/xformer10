@@ -419,6 +419,8 @@ lookit2:
 
 BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 {
+	message;
+
     int ch, scan;
     MSG msg;
     BOOL fDown =  (lParam & 0x80000000) == 0;

@@ -31,12 +31,12 @@ const WORD mppmbw[5] =
 
 BYTE const * const rgszModes[6] =
     {
-    " ATARI 800 (NO CARTRIDGE)",
-    " ATARI 800XL (NO CARTRIDGE)",
-    " ATARI 130XE (NO CARTRIDGE)",
-    " ATARI 800 + CARTRIDGE",
-    " ATARI 800XL + CARTRIDGE",
-    " ATARI 130XE + CARTRIDGE",
+    (BYTE const * const )" ATARI 800 (NO CARTRIDGE)",
+	(BYTE const * const)" ATARI 800XL (NO CARTRIDGE)",
+	(BYTE const * const)" ATARI 130XE (NO CARTRIDGE)",
+	(BYTE const * const)" ATARI 800 + CARTRIDGE",
+	(BYTE const * const)" ATARI 800XL + CARTRIDGE",
+	(BYTE const * const)" ATARI 130XE + CARTRIDGE",
     };
 
 #define vcbScan X8
@@ -96,10 +96,10 @@ void ShowCountDownLine(int iVM)
                 pch++;
             }
 
-        if ((i == 7) && (cntTick == 1))
-            {
-            memset(rgsl,1,sizeof(rgsl));
-            }
+		if ((i == 7) && (cntTick == 1))
+		{
+			//memset(rgsl, 1, sizeof(rgsl));
+		}
 
         if (i == 7)
             cntTick--;
@@ -398,9 +398,6 @@ BOOL ProcessScanLine(int iVM)
         fWait = 0;	// not doing JVB
         fFetch = 1;	// start by grabbing a DLIST instruction
 	}
-
-	// current scan line structure
-	SL *psl = &rgsl[wScan];
 
 	// grab a DLIST instruction - not in JVB, done previous instruction, and ANTIC is on.
     if (!fWait && fFetch && (DMACTL & 32))
@@ -703,6 +700,9 @@ BOOL ProcessScanLine(int iVM)
 #define fDisp       0x8000
 #define fAll        0xFFFF
 
+	// remove the code that attempted to avoid unnecessary rendering when nothing changed, until then, keep this hack
+	SL *psl = &sl;
+
 #if 0
 	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now?
 	
@@ -735,6 +735,10 @@ BOOL ProcessScanLine(int iVM)
         }
 #endif
 #endif
+
+	// !!! we no longer support trying to save time and skip some rendering if things are the same.
+	// It won't save much time, and it's really hard to get right
+	// This is for variables rgfChanged and fDataChanged
 
     // HACK! HACK! render everything all the time until the screen
     // corruption is figured out
@@ -911,7 +915,7 @@ BOOL ProcessScanLine(int iVM)
 				// non-zero horizontal scroll
                 if (hshift)
                 {
-					ULONGLONG u, v;
+					ULONGLONG u, vv;
 					UINT vpix23;
 
 					// we need to look at 1 or 2 of the characters ending in the current character, depending on how much shift.
@@ -924,26 +928,26 @@ BOOL ProcessScanLine(int iVM)
 						vpix23 = (vpix >= 8 && (sl.rgb[i] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
 						// CHBASE must be on an even page boundary
-						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
+						vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
 					}
 					// we ARE in the blank part
 					else {
-						v = 0;
+						vv = 0;
 					}
 
 					// mimic obscure quirky ANTIC behaviour - scans 8 and 9 go missing under these circumstances
 					if ((sl.rgb[i] & 0x7f) < 0x60 && (iscan == 8 || iscan == 9))
-						v = 0;
+						vv = 0;
 					
 					if (sl.rgb[i] & 0x80)
 					{
 						if (sl.chactl & 1)  // blank (blink) flag
-							v = 0;
+							vv = 0;
 						if (sl.chactl & 2)  // inverse flag
-							v = ~v & 0xff;
+							vv = ~vv & 0xff;
 					}
 					
-					u = v;
+					u = vv;
 
 					if (hshift %8)
 					{
@@ -971,26 +975,26 @@ BOOL ProcessScanLine(int iVM)
 							vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
 							// CHBASE must be on an even page boundary
-							v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
+							vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
 						}
 						// we ARE in the blank part
 						else {
-							v = 0;
+							vv = 0;
 						}
 
 						// mimic obscure quirky ANTIC behaviour
 						if (rgb < 0x60 && (iscan == 8 || iscan == 9))
-							v = 0;
+							vv = 0;
 					
 						if (rgb & 0x80)
 						{
 							if (sl.chactl & 1)  // blank (blink) flag
-								v = 0;
+								vv = 0;
 							if (sl.chactl & 2)  // inverse flag
-								v = ~v & 0xff;
+								vv = ~vv & 0xff;
 						}
 
-						u += (v << (index << 3));
+						u += (vv << (index << 3));
 					}
 
 					// now do the shifting
@@ -1092,19 +1096,19 @@ BOOL ProcessScanLine(int iVM)
                 {
                     // non-zero horizontal scroll
 
-					ULONGLONG u, v;
+					ULONGLONG u, vv;
 
 					// see comments for modes 2 & 3
 					int index = 0;
 
-					v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
-					u = v << (index << 3);
+					vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
+					u = vv << (index << 3);
 
 					if (hshift % 8)
 					{
 						index += 1;
-						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
-						u |= (v << (index << 3));
+						vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
+						u |= (vv << (index << 3));
 					}
 
 					b2 = (BYTE)(u >> hshift);
@@ -1172,19 +1176,19 @@ BOOL ProcessScanLine(int iVM)
 					{
 						// non-zero horizontal scroll
 
-						ULONGLONG u, v;
+						ULONGLONG u, vv;
 
 						// see comments for modes 2 & 3
 						int index = 0;
 						
-						v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
-						u = v << (index << 3);
+						vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
+						u = vv << (index << 3);
 
 						if (hshift % 8)
 						{
 							index += 1;
-							v = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
-							u |= (v << (index << 3));
+							vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
+							u |= (vv << (index << 3));
 						}
 
 						b2 = (BYTE)(u >> hshift);
@@ -1991,7 +1995,8 @@ Lnextscan:
 
 void ForceRedraw(int iVM)
 {
-    memset(rgsl,0,sizeof(rgsl));
+	iVM;
+    //memset(rgsl,0,sizeof(rgsl));
 }
 
 #endif // XFORMER

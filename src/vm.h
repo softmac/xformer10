@@ -87,79 +87,79 @@ typedef unsigned long int  ADDR;
 
 BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
 {
-    return v.rgvm[iVM].pvmi->pfnInstall(iVM, pvmi, type);
+    return rgvm[iVM].pvmi->pfnInstall(iVM, pvmi, type);
 }
 
 BOOL __inline FInitVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnInit(iVM);
+    return rgvm[iVM].pvmi->pfnInit(iVM);
 }
 
 BOOL __inline FUnInitVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnUnInit(iVM);
+    return rgvm[iVM].pvmi->pfnUnInit(iVM);
 }
 
 BOOL __inline FInitDisksVM(int iVM)
 {
-	return v.rgvm[iVM].pvmi->pfnInitDisks(iVM);
+	return rgvm[iVM].pvmi->pfnInitDisks(iVM);
 }
 
 BOOL __inline FUnInitDisksVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnUnInitDisks(iVM);
+    return rgvm[iVM].pvmi->pfnUnInitDisks(iVM);
 }
 
 BOOL __inline FColdbootVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnColdboot(iVM);
+    return rgvm[iVM].pvmi->pfnColdboot(iVM);
 }
 
 BOOL __inline FWarmbootVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnWarmboot(iVM);
+    return rgvm[iVM].pvmi->pfnWarmboot(iVM);
 }
 
 BOOL __inline FExecVM(int iVM, BOOL fStep, BOOL fCont)
 {
-	return v.rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
+	return rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
 }
 
 BOOL __inline FSaveStateVM(int iVM, char **ppPersist, int *pcbPersist)
 {
-	return v.rgvm[iVM].pvmi->pfnSaveState(iVM, ppPersist, pcbPersist);
+	return rgvm[iVM].pvmi->pfnSaveState(iVM, ppPersist, pcbPersist);
 }
 
 BOOL __inline FLoadStateVM(int iVM, char *pPersist, int cbPersist)
 {
-	return v.rgvm[iVM].pvmi->pfnLoadState(iVM, pPersist, cbPersist);
+	return rgvm[iVM].pvmi->pfnLoadState(iVM, pPersist, cbPersist);
 }
 
 BOOL __inline FMountDiskVM(int iVM, int i)
 {
-    return v.rgvm[iVM].pvmi->pfnMountDisk(iVM, i);
+    return rgvm[iVM].pvmi->pfnMountDisk(iVM, i);
 }
 
 BOOL __inline FUnmountDiskVM(int iVM, int i)
 {
-    return v.rgvm[iVM].pvmi->pfnUnmountDisk(iVM, i);
+    return rgvm[iVM].pvmi->pfnUnmountDisk(iVM, i);
 }
 
 BOOL __inline FWinMsgVM(int iVM, HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)
 {
-    return v.rgvm[iVM].pvmi->pfnWinMsg(iVM, hWnd, msg, uParam, lParam);
+    return rgvm[iVM].pvmi->pfnWinMsg(iVM, hWnd, msg, uParam, lParam);
 }
 
 BOOL __cdecl m68k_DumpRegs(int iVM);
 
 BOOL __inline FDumpRegsVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnDumpRegs(iVM);
+    return rgvm[iVM].pvmi->pfnDumpRegs(iVM);
 }
 
 BOOL __inline FDumpHWVM(int iVM)
 {
-    return v.rgvm[iVM].pvmi->pfnDumpHW(iVM);
+    return rgvm[iVM].pvmi->pfnDumpHW(iVM);
 }
 
 //
@@ -171,7 +171,7 @@ ULONG __inline vmPeekB(int iVM, ULONG ea)
 {
     BYTE b = 0;
 
-	v.rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, &b);
+	rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, &b);
 
     return b;
 }
@@ -180,7 +180,7 @@ ULONG __inline vmPeekW(int iVM, ULONG ea)
 {
     WORD w = 0;
 
-    v.rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, &w);
+    rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, &w);
 
     return w;
 }
@@ -189,7 +189,7 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
 {
     ULONG l = 0;
 
-    v.rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, &l);
+    rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, &l);
 
     return l;
 }
@@ -197,84 +197,84 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
 HRESULT __inline vmPokeB(int iVM, ULONG ea, BYTE b)
 {
 	ZapRange(ea, sizeof(BYTE));
-	return v.rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
+	return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
 }
 
 HRESULT __inline vmPokeW(int iVM, ULONG ea, WORD w)
 {
 	ZapRange(ea, sizeof(WORD));
-	return v.rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
+	return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
 }
 
 HRESULT __inline vmPokeL(int iVM, ULONG ea, ULONG l)
 {
 	ZapRange(ea, sizeof(LONG));
-	return v.rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
+	return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
 }
 
 HRESULT __inline ReadPhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
-    return v.rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, pb);
+    return rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, pb);
 }
 
 HRESULT __inline ReadPhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
-    return v.rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, pw);
+    return rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, pw);
 }
 
 HRESULT __inline ReadPhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
-    return v.rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
+    return rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
 }
 
 HRESULT __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
     ZapRange(ea, sizeof(BYTE));
-    return v.rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
+    return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
 }
 
 HRESULT __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
     ZapRange(ea, sizeof(WORD));
-    return v.rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
+    return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
 }
 
 HRESULT __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
     ZapRange(ea, sizeof(LONG));
-    return v.rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
+    return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
 }
 
 ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
 {
-    if (v.rgvm[iVM].pvmi == NULL)
+    if (rgvm[iVM].pvmi == NULL)
         return TRUE;
 
-    if (v.rgvm[iVM].pvmi->pfnLockBlock == NULL)
+    if (rgvm[iVM].pvmi->pfnLockBlock == NULL)
         return FALSE;
 
-    return v.rgvm[iVM].pvmi->pfnLockBlock(iVM, ea, cb, ppv);
+    return rgvm[iVM].pvmi->pfnLockBlock(iVM, ea, cb, ppv);
 }
 
 ULONG __inline UnlockMemoryVM(int iVM, ULONG ea, ULONG cb)
 {
-    if (v.rgvm[iVM].pvmi == NULL)
+    if (rgvm[iVM].pvmi == NULL)
         return TRUE;
 
-    if (v.rgvm[iVM].pvmi->pfnUnlockBlock == NULL)
+    if (rgvm[iVM].pvmi->pfnUnlockBlock == NULL)
         return FALSE;
 
-    return v.rgvm[iVM].pvmi->pfnUnlockBlock(iVM, ea, cb);
+    return rgvm[iVM].pvmi->pfnUnlockBlock(iVM, ea, cb);
 }
 
 __inline BYTE * MapAddressVM(int iVM, ULONG ea)
 {
-    return v.rgvm[iVM].pvmi->pfnMapAddress(iVM, ea);
+    return rgvm[iVM].pvmi->pfnMapAddress(iVM, ea);
 }
 
 __inline BYTE * MapWritableAddressVM(int iVM, ULONG ea)
 {
-    return v.rgvm[iVM].pvmi->pfnMapAddressRW(iVM, ea);
+    return rgvm[iVM].pvmi->pfnMapAddressRW(iVM, ea);
 }
 
 
