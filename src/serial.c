@@ -39,14 +39,14 @@ BOOL FWriteSerialPort(BYTE b)
     if (hComm == INVALID_HANDLE_VALUE)
         return FALSE;
 
-    ClearCommError(hComm, &dummy, &ComStat);
+    ClearCommError(hComm, (LPDWORD)&dummy, &ComStat);
     DebugStr("ComStat = %08X, %08X, %d, %d\n", dummy, *(int *)&ComStat, ComStat.cbInQue, ComStat.cbOutQue);
 
-    f = WriteFile(hComm, &b, 1, &cch, NULL);
+    f = WriteFile(hComm, &b, 1, (LPDWORD)&cch, NULL);
     if (!f)
         {
         DebugStr("Writefile FAILED, error = %08X\n", GetLastError());
-        ClearCommError(hComm, &dummy, &ComStat);
+        ClearCommError(hComm, (LPDWORD)&dummy, &ComStat);
         DebugStr("ComStat = %08X, %08X, %d, %d\n", dummy, *(int *)&ComStat, ComStat.cbInQue, ComStat.cbOutQue);
         }
     return cch;
@@ -68,7 +68,7 @@ int CchSerialPending()
         return 0;
         }
 
-    ClearCommError(hComm, &dummy, &ComStat);
+    ClearCommError(hComm, (LPDWORD)&dummy, &ComStat);
 
     ComStat.cbInQue &= 2047;
 //    DebugStr("CchSerialPending returning %d\n", ComStat.cbInQue);
@@ -83,14 +83,15 @@ int CchSerialPending()
 BOOL CchSerialRead(char *rgb, int cchRead)
 {
     int    cch = 0;
-    BOOL f = ReadFile(hComm, rgb, cchRead, &cch, NULL);
-
+    BOOL f = ReadFile(hComm, rgb, cchRead, (LPDWORD)&cch, NULL);
+	if (!f)
+		return 0;
     DebugStr("CchSerialRead returning %d %02X\n", cch, rgb[0]);
     return cch;
 }
 
 
-void __inline CheckError(BOOL f, int iCOM, HANDLE hComm, char *pch)
+void __inline CheckError(BOOL f, int iCOM, HANDLE hComm2, char *pch)
 {
     char rgch[256];
     char rgchErr[256];
@@ -106,7 +107,7 @@ void __inline CheckError(BOOL f, int iCOM, HANDLE hComm, char *pch)
 #elif
 #error
 #endif
-    sprintf(rgch, "%s\nh = %08X\nerror = %08X", pch, hComm, GetLastError());
+    sprintf(rgch, "%s\nh = %08X\nerror = %08X", pch, (unsigned)hComm2, GetLastError());
     if (!f)
         MessageBox(GetFocus(), rgch, rgchErr, MB_OK|MB_ICONHAND);
 }
@@ -135,7 +136,7 @@ BOOL FInitSerialPort(int iCOM)
     if ((iCOM < 1) || (iCOM > 4))
         return FALSE;
 
-    rgch[3] = '0' + iCOM;
+    rgch[3] = (char)('0' + iCOM);
         
     hComm = CreateFile(rgch, GENERIC_READ | GENERIC_WRITE,
         0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -411,7 +412,7 @@ ULONG GetModemStatus()
         }
     else
         {
-        GetCommModemStatus(hComm, &l);
+        GetCommModemStatus(hComm, (LPDWORD)&l);
 
         if (l & MS_RING_ON)
             new &= ~0x40;

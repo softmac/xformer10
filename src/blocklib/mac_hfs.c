@@ -44,16 +44,11 @@ typedef struct Btree_header_node
 
 typedef union B_node
 {
-    struct
-        {
         ND      nd;
-        unsigned char    rgbX[];
-        };
-    struct
-        {
-        unsigned char rgb[512];
-        unsigned short   rgofs[];
-        };
+        unsigned char    *rgbX;
+
+		unsigned char rgb[512];
+        unsigned short   *rgofs;
 } NODE;
 
 typedef struct B_key
@@ -62,7 +57,7 @@ typedef struct B_key
     char    res1;
     long    dirID;
     unsigned char cbName;
-    unsigned char    sz[];
+    unsigned char    *sz;
 } KEY;
 
 typedef struct B_rec
@@ -72,8 +67,6 @@ typedef struct B_rec
 
     union
         {
-        struct
-            {
             unsigned char filFlag;
             unsigned char filType;
             unsigned long l[4];
@@ -91,17 +84,13 @@ typedef struct B_rec
             unsigned short filClumpSize;
             unsigned char rgbDataExtent[12];
             unsigned char rgbRsrcExtent[12];
-            };
-    
-        struct
-            {
-            unsigned short dirFlag;
+        
+			unsigned short dirFlag;
             unsigned short dirVal;
             unsigned long dirID;
             unsigned long dirCrDat;
             unsigned long dirMdDat;
             unsigned long dirBkDat;
-            };
         };
 } REC;
 
@@ -121,7 +110,7 @@ typedef struct mfs_rec
     unsigned long filCrDat;
     unsigned long filMdDat;
     unsigned char cbName;
-    unsigned char     sz[];
+    unsigned char     *sz;
 } MREC;
 
 
@@ -150,13 +139,15 @@ typedef struct msdos_rec
 // Helper routines
 //
 
-void SzFrom8_3(char szTo[], char szFrom[])
+void SzFrom8_3(char *szTo, char *szFrom)
 {
     int i;
 
     for (i = 0; i < 12; i++)
         {
-        char sz[2] = { szFrom[i - (i > 8)], 0 };
+		char sz[2];
+		sz[0] = szFrom[i - (i > 8)];
+		sz[1] = 0;
 
         if (i == 8)
             sz[0] = '.';
@@ -254,7 +245,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
 
             bthn.nd.ndFLink = SwapL(bthn.nd.ndFLink);
             bthn.nd.ndBLink = SwapL(bthn.nd.ndBLink);
-            bthn.nd.ndNRecs = SwapW(bthn.nd.ndNRecs);
+            bthn.nd.ndNRecs = (short)SwapW(bthn.nd.ndNRecs);
 
 #if TRACEDISK
             printf("B-Tree Header Node  F link    = %d\n", bthn.nd.ndFLink);
@@ -265,13 +256,13 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
 
             // display the B-Tree header record
 
-            bthn.bthDepth    = SwapW(bthn.bthDepth);
+            bthn.bthDepth    = (short)SwapW(bthn.bthDepth);
             bthn.bthRoot     = SwapL(bthn.bthRoot);
             bthn.bthNRecs    = SwapL(bthn.bthNRecs);
             bthn.bthFNode    = SwapL(bthn.bthFNode);
             bthn.bthLNode    = SwapL(bthn.bthLNode);
-            bthn.bthNodeSize = SwapW(bthn.bthNodeSize);
-            bthn.bthKeyLen   = SwapW(bthn.bthKeyLen);
+            bthn.bthNodeSize = (short)SwapW(bthn.bthNodeSize);
+            bthn.bthKeyLen   = (short)SwapW(bthn.bthKeyLen);
             bthn.bthNNodes   = SwapL(bthn.bthNNodes);
 #if TRACEDISK
             printf("B-Tree Header Node  depth     = %d\n", bthn.bthDepth);
@@ -305,7 +296,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
     
                 node.nd.ndFLink = SwapL(node.nd.ndFLink);
                 node.nd.ndBLink = SwapL(node.nd.ndBLink);
-                node.nd.ndNRecs = SwapW(node.nd.ndNRecs);
+                node.nd.ndNRecs = (short)SwapW(node.nd.ndNRecs);
 #if TRACEDISK
                 printf("\n\nNode #%d\n", i);
                 printf("Node  F link    = %d\n", node.nd.ndFLink);
@@ -327,7 +318,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
                     SYSTEMTIME st;
                     long parentID, fileID;
 
-                    node.rgofs[-1-j] = SwapW(node.rgofs[-1-j]);
+                    node.rgofs[-1-j] = (short)SwapW(node.rgofs[-1-j]);
                     pKey = (KEY *)&node.rgb[node.rgofs[-1-j]];
 
                     cbKey = pKey->cb;
@@ -703,7 +694,7 @@ Lfindit:
 
             croot = rgb[17] + (rgb[18] << 8);
 
-            for (i = 0; i < croot/(512/sizeof(MSREC)); i++)
+            for (i = 0; i < (int)(croot/(512/sizeof(MSREC))); i++)
                 {
                 unsigned char rgbBig[512*1024];
                 int cbBig = 512;
@@ -777,7 +768,7 @@ Lnextdir:
                         strcat((char *)szTmp, fd.cFileName);
                         strcat((char *)szTmp, "\\");
 
-                        if (!strncmp((const char *)szTmp, (const char *)szDir, strlen(szTmp)))
+                        if (!strncmp((const char *)szTmp, (const char *)szDir, strlen((const char *)szTmp)))
                             {
                             // file size for a directory is set to 0
                             fd.nFileSizeLow = sizeof(rgbBig);

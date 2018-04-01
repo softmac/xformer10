@@ -96,6 +96,7 @@ void CALLBACK MyWaveOutProc(
 	DWORD_PTR dwParam1,
 	DWORD_PTR dwParam2)
 {
+	hwo; uMsg; dwInstance; dwParam1; dwParam2;
 #ifndef NDEBUG
 	if (uMsg == WOM_DONE) {
 		int cx = 0;
@@ -127,7 +128,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 		return;
 
 	// 8 bit code
-	if (!FIsAtari68K(v.rgvm[iVM].bfHW)) {
+	if (!FIsAtari68K(rgvm[iVM].bfHW)) {
 #ifdef XFORMER
 		// write from wherever we left off(sOldSample) to now(iCurSample). If it becomes full, play it.
 		assert(iCurSample <= SAMPLES_PER_VOICE);
@@ -191,7 +192,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 			rgvoice[3].volume = 0;	// !!! hack for MULE, the single bad sample is at the end of the buffer
 		}
 
-		if (v.rgvm[iVM].fSound) {
+		if (rgvm[iVM].fSound) {
 
 			// figure out the freq and pulse width of each voice
 			int freq[4];
@@ -968,7 +969,7 @@ void InitMIDI(int iVM)
     MIDIOUTCAPS moc;
     int i, iMac = 0;
 
-    if (!v.rgvm[iVM].fMIDI)
+    if (!rgvm[iVM].fMIDI)
         return;
 
 #if !defined(_M_ARM)
@@ -977,7 +978,7 @@ void InitMIDI(int iVM)
     DebugStr("number of MIDI output devices = %d\n", iMac);
 
     if (iMac == 0)
-        v.rgvm[iVM].fMIDI = FALSE;
+        rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {
@@ -994,7 +995,7 @@ void InitMIDI(int iVM)
     DebugStr("number of MIDI input devices = %d\n", iMac);
 
     if (iMac == 0)
-        v.rgvm[iVM].fMIDI = FALSE;
+        rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {

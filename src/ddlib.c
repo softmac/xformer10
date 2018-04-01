@@ -156,6 +156,8 @@ BOOL FInitDirectDraw()
 
 BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 {
+	fReInit;
+
 //    DDSCAPS caps;
     HRESULT err;
     HDC hdc;

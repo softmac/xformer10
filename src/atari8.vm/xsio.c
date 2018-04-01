@@ -68,7 +68,7 @@ void DeleteDrive(int iVM, int i)
         _close(rgDrives[iVM][i].h);
 
     rgDrives[iVM][i].mode = MD_OFF;
-    rgDrives[iVM][i].h    = -1;
+    rgDrives[iVM][i].h    = (WORD)-1;
 }
 
 
@@ -89,23 +89,23 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
     if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
         _close(rgDrives[iVM][i].h);
 
-    h = _open(pchPath, _O_BINARY | _O_RDWR);
+    h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
     rgDrives[iVM][i].fWP = 0;   // assume file opened for R/W
 
     if (h == -1)
         {
-        h = _open(pchPath, _O_BINARY | _O_RDONLY);
+        h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDONLY);
         if (h == -1)
             goto Lbadfile;
 
         rgDrives[iVM][i].fWP = 1;  // file is read-only or in use
         }
 
-    rgDrives[iVM][i].h = h;
+    rgDrives[iVM][i].h = (WORD)h;
     rgDrives[iVM][i].wSectorMac = 720;
     rgDrives[iVM][i].mode = MD_SD;
-    strcpy(rgDrives[iVM][i].path,pchPath);
+    strcpy(rgDrives[iVM][i].path, (const char *)pchPath);
 
     if (_read(h,&sc,2) == 2)
         {
@@ -168,7 +168,7 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
 
                 {
                 int j;
-                char *pch = pchPath, *pchT;
+				char *pch = (char *)pchPath;
 
                 memset(rgDrives[iVM][i].name,' ',12);
 
@@ -382,7 +382,7 @@ void BUS1(int iVM)
         if (0x0100 & wStat)
             {
             wStat = 0;
-            CchSerialRead(&wStat, 1);
+            CchSerialRead((char *)&wStat, 1);
 
 #if DEBUGCOM
             printf("G%04X", wStat); fflush(stdout);
@@ -832,8 +832,7 @@ lNAK:
 
                         _lseek(pdrive->h,(ULONG)((wSector-4) * 125L),SEEK_SET);
 
-                        if ((rgbMem[wBuff+127] =
-                                _read(pdrive->h,&rgbMem[wBuff],125)) < 125)
+                        if ((rgbMem[wBuff+127] = (BYTE)_read(pdrive->h,&rgbMem[wBuff],125)) < 125)
                             {
                             rgbMem[wBuff+125] = 0x00;
                             rgbMem[wBuff+126] = 0x00;
@@ -866,7 +865,7 @@ lNAK:
                     wRetStat = SIO_DEVDONE;
                     break;
                     }
-                if (_write(pdrive->h,&rgbMem[wBuff],wBytes) < wBytes)
+                if (_write(pdrive->h, (LPCCH)&rgbMem[wBuff],wBytes) < wBytes)
                     wRetStat = SIO_DEVDONE;
                 else
                     wRetStat = SIO_OK;

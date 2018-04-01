@@ -61,45 +61,19 @@ void DumpBlocks()
 
 void InitBanks(int iVM)
 {
-    // used to be static (which is bad), but we want this every time, don't we?
-	BYTE fFirst = TRUE;
-
     _fmemset(rgbSwapSelf, 0, sizeof(rgbSwapSelf));
     _fmemset(rgbSwapC000, 0, sizeof(rgbSwapC000));
     _fmemset(rgbSwapD800, 0, sizeof(rgbSwapD800));
 
-    if (fFirst && (mdXLXE == mdXE))
-    {
+    if (mdXLXE == mdXE)
+	{
 #if XE
-        int i;
+		iXESwap = -1;	// never swapped yet
 
-        for (i = 0; i < 4; i++)
-            {
+        for (int i = 0; i < 4; i++)
             _fmemset(&rgbXEMem[i], 0, 16384);
-            }
-
-        _fmemset(rgbSwapXEMem, 0, 16384);
 #endif
-
-        fFirst = FALSE;
     }
-
-#if XE
-	// !!! what was the case for doing this before?
-    else if (mdXLXE == mdXE)
-    {
-        // swap out any extended memory that may be in
-
-        if ((wPBDATA & EXTCPU_MASK) == EXTCPU_OUT)
-            {
-            // enable main CPU memory at $4000
-
-            int iBank = iBankFromPortB(wPBDATA);
-
-            _fmemcpy(rgbXEMem[iBank], &rgbMem[0x4000], 16384);
-            }
-    }
-#endif // XE
 
     // enable OS ROMs
 
@@ -113,10 +87,8 @@ void InitBanks(int iVM)
         _fmemcpy(&rgbMem[0xD800], rgbAtariOSB, 10240);
         }
 
-#if 0
-    printf("InitBanks:    ");
-    DumpBlocks();
-#endif
+    //printf("InitBanks:    ");
+    //DumpBlocks();
 }
 
 
@@ -126,23 +98,16 @@ void InitBanks(int iVM)
 // Routine to swap the Atari ROMs in and out of address space.
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
-void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags, WORD pc)
+void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 {
 	if (mdXLXE == md800)
 		return;
 
-#ifdef NEWSWAP
-    BYTE mask = oldflags ^ flags;
-#else
-    BYTE oldflags = xmask ^ flags;
     BYTE mask = xmask;
-#endif
 
-#if 0
-    printf("SwapMem: mask = %02X, flags = %02X, pc = %04X\n", mask&255, flags&255, pc);
-    printf("SwapMem entr: ");
-    DumpBlocks();
-#endif
+    //printf("SwapMem: mask = %02X, flags = %02X, pc = %04X\n", mask&255, flags&255, pc);
+    //printf("SwapMem entr: ");
+    //DumpBlocks();
 
 	// SELF-TEST gets swapped out if the OS is being swapped out
 	if ((mask & OS_MASK) && (flags & OS_MASK) == OS_OUT)
@@ -170,7 +135,7 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags, WORD pc)
         }
 
 	// don't do any BASIC swapping if a cartridge is present. The Sofware will try, but the hardware doesn't allow it
-    if ((mask & BASIC_MASK) && !v.rgvm[iVM].rgcart.fCartIn)
+    if ((mask & BASIC_MASK) && !rgvm[iVM].rgcart.fCartIn)
         {
         int cb = 8192;
 
@@ -209,37 +174,60 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags, WORD pc)
 
 #if XE
 
-	// !!! ANTIC reading from a different bank is not supported!
+	// !!! ANTIC reading from a different bank than the CPU is not supported yet!
 
-		// !!! is this really the way it works?
-		if (mask & EXTCPU_MASK)
-        {
-        // XE's extended RAM got banked on or off
+	if (mask & EXTCPU_MASK)
+    {
+		// XE's extended RAM got banked on or off
 
-        if ((flags & EXTCPU_MASK) == EXTCPU_OUT)
-            {
-            // enable main CPU memory at $4000
-
-            int iBank = iBankFromPortB(oldflags);
-
-            _fmemcpy(rgbXEMem[iBank], &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbSwapXEMem,    16384);
-            }
-        else
-            {
-            // enable extended CPU memory at $4000
-
-            int iBank = iBankFromPortB(flags);
-
-            _fmemcpy(rgbSwapXEMem, &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
-            }
+		// enable main CPU memory at $4000
+		if ((flags & EXTCPU_MASK) == EXTCPU_OUT)
+		{
+			// we have swapped it out, so put it back. Otherwise, don't overwrite it with garbage
+			if (iXESwap >= 0)
+			{
+				char tmp[16384];
+				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
+				_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+				iXESwap = -1;
+			}
         }
 
-    else if (mask & BANK_MASK)
+		// enable extended CPU memory at $4000
+		else
         {
+            int iBank = iBankFromPortB(flags);
+
+			// if it's not already there
+			if (iXESwap != iBank)
+			{
+				// swap the current one back to where it belongs
+				if (iXESwap != -1)
+				{
+					char tmp[16384];
+					_fmemcpy(tmp, &rgbMem[0x4000], 16384);
+					_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
+					_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+					iXESwap = -1;
+				}
+
+				// now do the swap we want
+				char tmp[16384];
+				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
+				_fmemcpy(rgbXEMem[iBank], tmp, 16384);
+				iXESwap = iBank;
+			}
+		}
+    }
+
+#if 0
+	// !!! I don't think you're supposed to swap without the mask. Surely the EXT_CPU mask will be set?
+    else if (mask & BANK_MASK)
+    {
         if ((flags & EXTCPU_MASK) == EXTCPU_IN)
-            {
+        {
             // XE's extended RAM changed banks
 
             int iBankNew = iBankFromPortB(flags);
@@ -247,8 +235,9 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags, WORD pc)
 
             _fmemcpy(rgbXEMem[iBankOld], &rgbMem[0x4000], 16384);
             _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBankNew], 16384);
-            }
         }
+    }
+#endif
 #endif // XE
 
 #if 0
@@ -330,11 +319,5 @@ void ReadROMs()
 	}
 }
 #endif
-
-#else  // !XFORMER
-
-void __cdecl SwapMem(BYTE xmask, BYTE flags, WORD pc)
-{
-}
 
 #endif // XFORMER

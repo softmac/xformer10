@@ -972,10 +972,10 @@ void AddROMsToVM()
         {
         for (j = 0; j < MAXOSUsable; j++)
             {
-            if (v.rgvm[i].fValidVM &&
-                (v.rgvm[i].pvmi->wfROM & v.rgosinfo[j].osType))
-                if (v.rgvm[i].iOS == -1)
-                    v.rgvm[i].iOS = j;
+            if (rgvm[i].fValidVM &&
+                (rgvm[i].pvmi->wfROM & v.rgosinfo[j].osType))
+                if (rgvm[i].iOS == -1)
+                    rgvm[i].iOS = j;
             }
         }
 }
@@ -993,7 +993,7 @@ int WScanROMs(BOOL fScanROMs, BOOL fScanMagiC, BOOL fScanFloppy, BOOL fScanNet)
     int i;
 
     for (i = 0; i < MAX_VM; i++)
-        v.rgvm[i].iOS = -1;
+        rgvm[i].iOS = -1;
     }
 
     // clear ROM info, but don't clear global path area
@@ -2167,9 +2167,9 @@ BOOL FInstallROMs()
     case osDiskImg:
         Assert (v.rgosinfo[vmCur.iOS].version != 0);
 
-        if ((v.rgosinfo[vmCur.iOS].szImg[0]) && (v.rgosinfo[v.rgvm[iVM].iOS].szImg[1] > 3))
+        if ((v.rgosinfo[vmCur.iOS].szImg[0]) && (v.rgosinfo[rgvm[iVM].iOS].szImg[1] > 3))
             {
-            if (!CbReadROMImage(v.rgosinfo[v.rgvm[iVM].iOS].szImg, cbROM, lLoadAddr))
+            if (!CbReadROMImage(v.rgosinfo[rgvm[iVM].iOS].szImg, cbROM, lLoadAddr))
                 {
                 goto Lfail;
                 }
@@ -2182,7 +2182,7 @@ BOOL FInstallROMs()
         OutPort(0);
         SkipROMs(cbSocket * (ichip & wScktMsk));
 
-        if (v.rgosinfo[v.rgvm[iVM].iOS].cbOS > 0x40000)
+        if (v.rgosinfo[rgvm[iVM].iOS].cbOS > 0x40000)
             {
             // 512K Mac ROM (4 x 128K)
             ReadROM010_4(FALSE, lLoadAddr);
@@ -2190,7 +2190,7 @@ BOOL FInstallROMs()
             ReadROM010_4(FALSE, lLoadAddr+2);
             ReadROM010_4(FALSE, lLoadAddr+3);
             }
-        else if (v.rgosinfo[v.rgvm[iVM].iOS].cChip == 4)
+        else if (v.rgosinfo[rgvm[iVM].iOS].cChip == 4)
             {
             // 256K Mac ROM (4 x 64K)
             ReadROM512_4(FALSE, lLoadAddr);
@@ -2198,13 +2198,13 @@ BOOL FInstallROMs()
             ReadROM512_4(FALSE, lLoadAddr+2);
             ReadROM512_4(FALSE, lLoadAddr+3);
             }
-        else if (v.rgosinfo[v.rgvm[iVM].iOS].cbOS > 0x20000)
+        else if (v.rgosinfo[rgvm[iVM].iOS].cbOS > 0x20000)
             {
             // 256K Mac ROM (2 x 128K)
             ReadROM010(FALSE, lLoadAddr);
             ReadROM010(FALSE, lLoadAddr+1);
             }
-        else if (v.rgosinfo[v.rgvm[iVM].iOS].cbOS > 0x10000)
+        else if (v.rgosinfo[rgvm[iVM].iOS].cbOS > 0x10000)
             {
             // 128K Mac ROM (2 x 64K)
             ReadROM512(FALSE, lLoadAddr);
@@ -2220,19 +2220,19 @@ BOOL FInstallROMs()
 
     case osMagic_2:
     case osMagic_4:
-        if (!FIsAtari68K(v.rgvm[iVM].bfHW))
+        if (!FIsAtari68K(rgvm[iVM].bfHW))
             goto Lfail;
-        ReadMagiC(v.rgosinfo[v.rgvm[iVM].iOS].szImg);
+        ReadMagiC(v.rgosinfo[rgvm[iVM].iOS].szImg);
         goto Lexit;
 
     case osMagicPC:
-        if (!FIsAtari68K(v.rgvm[iVM].bfHW))
+        if (!FIsAtari68K(rgvm[iVM].bfHW))
             goto Lfail;
-        ReadMagiC_PC(v.rgosinfo[v.rgvm[iVM].iOS].szImg);
+        ReadMagiC_PC(v.rgosinfo[rgvm[iVM].iOS].szImg);
         goto Lexit;
 
     case osTOS1X_D:
-        if (!FIsAtari68K(v.rgvm[iVM].bfHW))
+        if (!FIsAtari68K(rgvm[iVM].bfHW))
             goto Lfail;
         ReadTOS_RAM(v.rgosinfo[vmCur.iOS].szImg);
         goto Lexit;

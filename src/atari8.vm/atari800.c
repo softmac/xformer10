@@ -14,16 +14,12 @@
 
 
 #include "atari800.h"
- 
-int X8 = 352;
-int Y8 = 240;
 
 //
 // Our VM's VMINFO structure
 //
 
 #ifdef XFORMER
-
 
 VMINFO const vmi800 =
     {
@@ -35,6 +31,11 @@ VMINFO const vmi800 =
     ram48K | ram64K | ram128K,
     osAtari48 | osAtariXL | osAtariXE,
     monGreyTV | monColrTV,
+	X8,		// screen width
+	Y8,		// screen height
+	TRUE,	// fUsesCart
+	FALSE,	// fUsesMouse
+	TRUE,	// fUsesJoystick
     InstallAtari,
     InitAtari,
     UninitAtari,
@@ -73,7 +74,6 @@ VMINFO const vmi800 =
 //
 CANDYHW vrgcandy[MAX_VM];
 
-//BYTE bshiftSav;	// was a local too
 BOOL fDumpHW;
 
 // get ready for time travel!
@@ -204,7 +204,392 @@ BOOL TimeTravelReset(unsigned iVM)
 	return TRUE;
 }
 
+// push PC and P on the stack
+void Interrupt(int iVM)
+{
+	cpuPokeB(iVM, regSP, regPC >> 8);  regSP = (regSP - 1) & 255 | 256;
+	cpuPokeB(iVM, regSP, regPC & 255); regSP = (regSP - 1) & 255 | 256;
+	cpuPokeB(iVM, regSP, regP);          regSP = (regSP - 1) & 255 | 256;
 
+	regP |= IBIT;
+}
+
+// What happens when it's scan line 241 and it's time to start the VBI
+//
+void DoVBI(int iVM)
+{
+	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
+	wLeftMax = wLeft;
+
+#ifndef NDEBUG
+	fDumpHW = 0;
+#endif
+	if (NMIEN & 0x40) {
+		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+		// every scan line now until it's done, then resume
+		Interrupt(iVM);
+		NMIST = 0x40 | 0x1F;	// want VBI
+		regPC = cpuPeekW(iVM, 0xFFFA);
+	}
+
+	// process joysticks before the vertical blank, just because.
+	// Very slow if joysticks not installed, so skip the code
+	// When tiling, only the tile in focus gets input
+	if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick && vi.rgjc[0].wNumButtons > 0) {
+		JOYINFO ji;
+		MMRESULT mm = joyGetPos(0, &ji);
+		if (mm == 0) {
+
+			int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+			dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
+
+			rPADATA |= 12;                  // assume joystick centered
+
+			if (dir < 0)
+				rPADATA &= ~4;              // left
+			else if (dir > 0)
+				rPADATA &= ~8;              // right
+
+			dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+			dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
+
+			rPADATA |= 3;                   // assume joystick centered
+
+			if (dir < 0)
+				rPADATA &= ~1;              // up
+			else if (dir > 0)
+				rPADATA &= ~2;              // down
+
+			UpdatePorts(iVM);
+
+			if (ji.wButtons)
+				TRIG0 &= ~1;                // JOY 0 fire button down
+			else
+				TRIG0 |= 1;                 // JOY 0 fire button up
+		}
+		if (vi.rgjc[1].wNumButtons > 0)
+		{
+			mm = joyGetPos(1, &ji);
+			if (mm == 0) {
+
+				int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
+				dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
+
+				rPADATA |= 192;                  // assume joystick centered
+
+				if (dir < 0)
+					rPADATA &= ~64;              // left
+				else if (dir > 0)
+					rPADATA &= ~128;              // right
+
+				dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
+				dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
+
+				rPADATA |= 48;                   // assume joystick centered
+
+				if (dir < 0)
+					rPADATA &= ~16;              // up
+				else if (dir > 0)
+					rPADATA &= ~32;              // down
+
+				UpdatePorts(iVM);
+
+				if (ji.wButtons)
+					TRIG1 &= ~1;                // JOY 0 fire button down
+				else
+					TRIG1 |= 1;                 // JOY 0 fire button up
+			}
+		}
+	}
+
+	CheckKey(iVM);	// process the ATARI keyboard buffer
+
+	if (fTrace)
+		ForceRedraw(iVM);	// it might do this anyway
+
+							// every VBI, shadow the hardware registers
+							// to their higher locations
+
+							// !!! Do this quicker in PeekBAtari() as they are read
+
+	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
+	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
+	memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
+	memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
+
+	memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
+	memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
+	memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
+	memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
+
+	memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
+	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
+	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
+
+#if 0 // !!! now we try drawing at scan line 262, not at the start of the VBI and hope it didn't break anything
+	if (wScanMin > wScanMac)
+	{
+		assert(0);
+		// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
+	}
+	else
+	{
+		extern void RenderBitmap();
+		RenderBitmap();	// tell Gemulator to actually draw the window
+	}
+	wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
+	wScanMac = 0;
+#endif
+
+	// Gem window has a message, stop the loop to process it
+	MSG msg;
+	if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
+		fStop = TRUE;
+
+	// decrement printer timer
+
+	if (vi.cPrintTimeout && rgvm[iVM].fShare)
+	{
+		vi.cPrintTimeout--;
+		if (vi.cPrintTimeout == 0)
+		{
+			FlushToPrinter(iVM);
+			UnInitPrinter();
+		}
+	}
+	else
+		FlushToPrinter(iVM);
+}
+
+void UpdatePorts(int iVM)
+{
+	if (PACTL & 4)
+	{
+		BYTE b = wPADATA ^ rPADATA;
+
+		PORTA = (b & wPADDIR) ^ rPADATA;
+	}
+	else
+		PORTA = wPADDIR;
+
+	if (PBCTL & 4)
+	{
+		BYTE b = wPBDATA ^ rPBDATA;
+
+		PORTB = (b & wPBDDIR) ^ rPBDATA;
+	}
+	else
+		PORTB = wPBDDIR;
+}
+
+// Read in the cartridge
+//
+BOOL ReadCart(int iVM)
+{
+	unsigned char *pch = (unsigned char *)rgvm[iVM].rgcart.szName;
+
+	int h;
+	int cb = 0;
+	long l;
+
+	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
+	if (h != -1)
+	{
+#ifndef NDEBUG
+		printf("reading %s\n", pch);
+#endif
+
+		l = _lseek(h, 0L, SEEK_END);
+		cb = min(l, MAX_CART_SIZE);
+
+		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
+		{
+			_close(h);
+			return FALSE;
+		}
+
+		l = _lseek(h, 0L, SEEK_SET);
+
+		//      printf("size of %s is %d bytes\n", pch, cb);
+		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
+
+		cb = _read(h, rgbSwapCart[iVM], cb);
+
+		rgvm[iVM].rgcart.cbData = cb;
+		rgvm[iVM].rgcart.fCartIn = TRUE;
+	}
+	else
+		return FALSE;
+
+	_close(h);
+
+	// what kind of cartridge is it?
+	// must be unsigned to look compare the byte values inside
+	unsigned char *pb = (unsigned char *)rgbSwapCart[iVM];
+
+	if (cb == 8192 || cb == 4096)	// is there such a thing as a 4K cartridge?
+		bCartType = CART_8K;
+
+	else if (cb < 8192)
+		return FALSE;
+
+	else if (cb == 16384)
+	{
+		// copies of the INIT and START addresses and the CART PRESENT byte appear in both cartridge areas - not banked
+		if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0)
+			bCartType = CART_16K;
+
+		// start area is in the lower half which wouldn't exist yet if we were banked
+		else if (pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
+			bCartType = CART_16K;
+
+		// last bank is the main bank, other banks are 0, 3, 4.
+		else if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 3 && pb[12287] == 4)
+			bCartType = CART_OSSA;
+
+		// first bank is the main bank, other banks are 0, 9 1.
+		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
+			bCartType = CART_OSSB;
+
+		// assume it's a normal 16K cartridge
+		else
+			bCartType = CART_16K;
+	}
+
+	// assume >16K is an XEGS cart
+	else
+	{
+		bCartType = CART_XEGS;
+	}
+
+
+#if 0
+	// unknown cartridge, do not attempt to run it
+	else
+	{
+		rgvm[iVM].rgcart.cbData = 0;
+		rgvm[iVM].rgcart.fCartIn = FALSE;
+	}
+#endif
+	return TRUE;
+}
+
+
+// SWAP in the cartridge
+//
+void InitCart(int iVM)
+{
+	// no cartridge
+	if (!(rgvm[iVM].rgcart.fCartIn))
+	{
+		// convenience for Atari 800, we can ask for BASIC to be put in
+		if (rgvm[iVM].bfHW == vmAtari48 && ramtop == 0xA000)
+		{
+			_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
+			ramtop = 0xA000;
+		}
+		return;
+	}
+
+	PCART pcart = &(rgvm[iVM].rgcart);
+	unsigned int cb = pcart->cbData;
+	char *pb = rgbSwapCart[iVM];
+
+	if (bCartType == CART_8K)
+	{
+		_fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
+		ramtop = 0xA000;
+	}
+	else if (bCartType == CART_16K)
+	{
+		_fmemcpy(&rgbMem[0x8000], pb, 16384);
+		ramtop = 0x8000;
+	}
+	// main bank is the last one
+	else if (bCartType == CART_OSSA)
+	{
+		_fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
+		ramtop = 0xA000;
+	}
+	// main bank is the first one
+	else if (bCartType == CART_OSSB)
+	{
+		_fmemcpy(&rgbMem[0xB000], pb, 4096);
+		ramtop = 0xA000;
+	}
+	// 8K main bank is the last one
+	else if (bCartType == CART_XEGS)
+	{
+		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
+		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
+		ramtop = 0x8000;
+	}
+
+	return;
+}
+
+// Swap out cartridge banks
+//
+void BankCart(int iVM, int iBank, int value)
+{
+	PCART pcart = &(rgvm[iVM].rgcart);
+	unsigned int cb = pcart->cbData;
+	int i;
+	char *pb = rgbSwapCart[iVM];
+
+	// we are not a banking cartridge
+	if (ramtop == 0xC000 || !(rgvm[iVM].rgcart.fCartIn) || cb <= 8192 || bCartType <= CART_16K)
+		return;
+
+	// banks are 0, 3, 4, main
+	if (bCartType == CART_OSSA)
+	{
+		i = (iBank == 0 ? 0 : (iBank == 3 ? 1 : (iBank == 4 ? 2 : -1)));
+		assert(i != -1);
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+	}
+
+#if 0
+	// banks are 0, 4, 3, main
+	if (bCartType == CART_OSSA_DIFFERENT)
+	{
+		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
+		//assert(i != -1);	//!!! swapping cartridge out to RAM not supported, why does ACTION do this?
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+	}
+#endif
+
+	// banks are main, 0, 9, 1
+	else if (bCartType == CART_OSSB)
+	{
+		if (!(iBank & 8) && !(iBank & 1))
+			i = 1;
+		else if (!(iBank & 8) && (iBank & 1))
+			i = 3;
+		else if ((iBank & 8) && (iBank & 1))
+			i = 2;
+		else
+			i = -1;
+
+		assert(i != -1);
+		if (i != -1)
+			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+	}
+
+	// 8k banks, given as contents, not the address
+	else if (bCartType == CART_XEGS)
+	{
+		while ((unsigned int)value >= cb >> 13)
+			value -= (cb >> 13);
+		//assert(FALSE);	// bad bank #
+
+		_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
+	}
+}
+
+#ifndef NDEBUG
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
     FILE *fp;
@@ -241,11 +626,18 @@ void DumpROMS()
     DumpROM("atarixlc.c", "rgbXLXEC000", rgbXLXEC000, 0xC000, 0x1000); //  4K
     DumpROM("atarixlo.c", "rgbXLXED800", rgbXLXED800, 0xD800, 0x2800); // 10K
 }
+#endif
+
+//
+// And finally, our entries for the VM function table
+//
 
 // call me when first creating the instance. Provide our machine types VMINFO and the type of machine you want (800 vs. XL vs. XE)
 //
 BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
+	pvmi;
+
 	// Install an Atari 8-bit VM
 
 	static BOOL fInited;
@@ -332,24 +724,24 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	switch (type)
 	{
 	case vmAtari48:
-		v.rgvm[iVM].bfHW = vmAtari48;
-		v.rgvm[iVM].iOS = 0;
-		v.rgvm[iVM].bfRAM = ram48K;
-		strcpy(v.rgvm[iVM].szModel, rgszVM[1]);
+		rgvm[iVM].bfHW = vmAtari48;
+		rgvm[iVM].iOS = 0;
+		rgvm[iVM].bfRAM = ram48K;
+		strcpy(rgvm[iVM].szModel, rgszVM[1]);
 		break;
 
 	case vmAtariXL:
-		v.rgvm[iVM].bfHW = vmAtariXL;
-		v.rgvm[iVM].iOS = 1;
-		v.rgvm[iVM].bfRAM = ram64K;
-		strcpy(v.rgvm[iVM].szModel, rgszVM[2]);
+		rgvm[iVM].bfHW = vmAtariXL;
+		rgvm[iVM].iOS = 1;
+		rgvm[iVM].bfRAM = ram64K;
+		strcpy(rgvm[iVM].szModel, rgszVM[2]);
 		break;
 
 	case vmAtariXE:
-		v.rgvm[iVM].bfHW = vmAtariXE;
-		v.rgvm[iVM].iOS = 2;
-		v.rgvm[iVM].bfRAM = ram128K;
-		strcpy(v.rgvm[iVM].szModel, rgszVM[3]);
+		rgvm[iVM].bfHW = vmAtariXE;
+		rgvm[iVM].iOS = 2;
+		rgvm[iVM].bfRAM = ram128K;
+		strcpy(rgvm[iVM].szModel, rgszVM[3]);
 		break;
 
 	default:
@@ -389,14 +781,14 @@ BOOL __cdecl InitAtari(int iVM)
 
 	// These things are the same for each machine type
 
-	v.rgvm[iVM].fCPUAuto = TRUE;
-	v.rgvm[iVM].bfCPU = cpu6502;
-	v.rgvm[iVM].bfMon = monColrTV;
-	v.rgvm[iVM].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);	// we only have 8, others have 9
+	rgvm[iVM].fCPUAuto = TRUE;
+	rgvm[iVM].bfCPU = cpu6502;
+	rgvm[iVM].bfMon = monColrTV;
+	rgvm[iVM].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);	// we only have 8, others have 9
 
 	// by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
 	// unless Shift-F10 changes it
-	ramtop = (v.rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+	ramtop = (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
 	wStartScan = STARTSCAN;	// this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
 
     // save shift key status, why? !!! this only happens at boot time now until shutdown
@@ -405,7 +797,7 @@ BOOL __cdecl InitAtari(int iVM)
 	//*pbshift |= wScrlLock;
 	//countInstr = 1;
 
-	switch (v.rgvm[iVM].bfHW)
+	switch (rgvm[iVM].bfHW)
 	{
 	default:
 		mdXLXE = md800;
@@ -422,16 +814,16 @@ BOOL __cdecl InitAtari(int iVM)
 		break;
 	}
 
-	v.rgvm[iVM].bfRAM = BfFromWfI(v.rgvm[iVM].pvmi->wfRAM, mdXLXE);
+	rgvm[iVM].bfRAM = BfFromWfI(rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
 	// If our saved state had a cartridge, load it back in
     // !!! I don't report an error, just run the VM without the cart
 	ReadCart(iVM);
 
-    if (!FInitSerialPort(v.rgvm[iVM].iCOM))
-		v.rgvm[iVM].iCOM = 0;
-    if (!InitPrinter(v.rgvm[iVM].iLPT))
-		v.rgvm[iVM].iLPT = 0;
+    if (!FInitSerialPort(rgvm[iVM].iCOM))
+		rgvm[iVM].iCOM = 0;
+    if (!InitPrinter(rgvm[iVM].iLPT))
+		rgvm[iVM].iLPT = 0;
 
 	// !!! We have at least 3 variables for whether or not to use sound
 	fSoundOn = TRUE;
@@ -471,7 +863,7 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
 {
 	UnmountAtariDisk(iVM, i);	// make sure all emulator types know to do this first
 
-    PVD pvd = &v.rgvm[iVM].rgvd[i];
+    PVD pvd = &rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
 		// !!! needs to return a value
@@ -485,7 +877,7 @@ BOOL __cdecl InitAtariDisks(int iVM)
     int i;
 	BOOL f;
 
-	for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
+	for (i = 0; i < rgvm[iVM].ivdMac; i++)
 	{
 		f = MountAtariDisk(iVM, i);
 		if (!f)
@@ -496,7 +888,7 @@ BOOL __cdecl InitAtariDisks(int iVM)
 
 BOOL __cdecl UnmountAtariDisk(int iVM, int i)
 {
-    PVD pvd = &v.rgvm[iVM].rgvd[i];
+    PVD pvd = &rgvm[iVM].rgvd[i];
 
 		if (pvd->dt == DISK_IMAGE)
 			DeleteDrive(iVM, i);
@@ -508,7 +900,7 @@ BOOL __cdecl UninitAtariDisks(int iVM)
 {
     int i;
 
-    for (i = 0; i < v.rgvm[iVM].ivdMac; i++)
+    for (i = 0; i < rgvm[iVM].ivdMac; i++)
         UnmountAtariDisk(iVM, i);
 
     return TRUE;
@@ -565,11 +957,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 #if 0 // doesn't change
     if (mdXLXE == md800)
-        v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
+        rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
     else if (mdXLXE == mdXL)
-		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
+		rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
     else
-		v.rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
+		rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
 #endif
     
 	//DisplayStatus(); this might not be the active instance
@@ -618,7 +1010,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     TRIG1 = 1;
     TRIG2 = 1;
 	// XL cartridge sense line, without this warm starts can try to run an non-existent cartridge
-	TRIG3 = (mdXLXE != md800 && !(v.rgvm[iVM].rgcart.fCartIn)) ? 0 : 1;
+	TRIG3 = (mdXLXE != md800 && !(rgvm[iVM].rgcart.fCartIn)) ? 0 : 1;
     *(ULONG *)MXPF  = 0;
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
@@ -720,10 +1112,10 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	// load our state
 	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
 
-	if (!FInitSerialPort(v.rgvm[iVM].iCOM))
-		v.rgvm[iVM].iCOM = 0;
-	if (!InitPrinter(v.rgvm[iVM].iLPT))
-		v.rgvm[iVM].iLPT = 0;
+	if (!FInitSerialPort(rgvm[iVM].iCOM))
+		rgvm[iVM].iCOM = 0;
+	if (!InitPrinter(rgvm[iVM].iLPT))
+		rgvm[iVM].iLPT = 0;
 
 	BOOL f = InitAtariDisks(iVM);
 
@@ -790,16 +1182,6 @@ BOOL __cdecl DumpHWAtari(int iVM)
     return TRUE;
 }
 
-// push PC and P on the stack
-void Interrupt(int iVM)
-{
-    cpuPokeB(iVM, regSP, regPC >> 8);  regSP = (regSP-1) & 255 | 256;
-    cpuPokeB(iVM, regSP, regPC & 255); regSP = (regSP-1) & 255 | 256;
-	cpuPokeB(iVM, regSP, regP);          regSP = (regSP-1) & 255 | 256;
-
-    regP |= IBIT;
-}
-
 BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 {
     fTrace = TRUE;
@@ -809,153 +1191,6 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
     return TRUE;
 }
 
-// What happens when it's scan line 241 and it's time to start the VBI
-//
-void DoVBI(int iVM)
-{
-	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-	wLeftMax = wLeft;
-
-#ifndef NDEBUG
-	fDumpHW = 0;
-#endif
-	if (NMIEN & 0x40) {
-		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-		// every scan line now until it's done, then resume
-		Interrupt(iVM);
-		NMIST = 0x40 | 0x1F;	// want VBI
-		regPC = cpuPeekW(iVM, 0xFFFA);
-	}
-
-	// process joysticks before the vertical blank, just because.
-	// Very slow if joysticks not installed, so skip the code
-	// When tiling, only the tile in focus gets input
-	if ((!v.fTiling || sVM == (int)iVM) && v.rgvm[iVM].fJoystick && vi.rgjc[0].wNumButtons > 0) {
-		JOYINFO ji;
-		MMRESULT mm = joyGetPos(0, &ji);
-		if (mm == 0) {
-
-			int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-			dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-
-			rPADATA |= 12;                  // assume joystick centered
-
-			if (dir < 0)
-				rPADATA &= ~4;              // left
-			else if (dir > 0)
-				rPADATA &= ~8;              // right
-
-			dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-			dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-
-			rPADATA |= 3;                   // assume joystick centered
-
-			if (dir < 0)
-				rPADATA &= ~1;              // up
-			else if (dir > 0)
-				rPADATA &= ~2;              // down
-
-			UpdatePorts(iVM);
-
-			if (ji.wButtons)
-				TRIG0 &= ~1;                // JOY 0 fire button down
-			else
-				TRIG0 |= 1;                 // JOY 0 fire button up
-		}
-		if (vi.rgjc[1].wNumButtons > 0)
-		{
-			mm = joyGetPos(1, &ji);
-			if (mm == 0) {
-
-				int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
-				dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
-
-				rPADATA |= 192;                  // assume joystick centered
-
-				if (dir < 0)
-					rPADATA &= ~ 64;              // left
-				else if (dir > 0)
-					rPADATA &= ~ 128;              // right
-
-				dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
-				dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
-
-				rPADATA |= 48;                   // assume joystick centered
-
-				if (dir < 0)
-					rPADATA &= ~ 16;              // up
-				else if (dir > 0)
-					rPADATA &= ~ 32;              // down
-
-				UpdatePorts(iVM);
-
-				if (ji.wButtons)
-					TRIG1 &= ~1;                // JOY 0 fire button down
-				else
-					TRIG1 |= 1;                 // JOY 0 fire button up
-			}
-		}
-	}
-
-	CheckKey(iVM);	// process the ATARI keyboard buffer
-
-	if (fTrace)
-		ForceRedraw(iVM);	// it might do this anyway
-
-	// every VBI, shadow the hardware registers
-	// to their higher locations
-	
-	// !!! Do this quicker in PeekBAtari() as they are read
-
-	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
-	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
-	memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
-	memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
-
-	memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
-	memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
-	memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
-	memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
-
-	memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
-	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
-	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
-
-#if 0 // !!! now we try drawing at scan line 262, not at the start of the VBI and hope it didn't break anything
-	if (wScanMin > wScanMac)
-	{
-		assert(0);
-		// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
-	}
-	else
-	{
-		extern void RenderBitmap();
-		RenderBitmap();	// tell Gemulator to actually draw the window
-	}
-	wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
-	wScanMac = 0;
-#endif
-
-	// Gem window has a message, stop the loop to process it
-	MSG msg;
-	if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-	fStop = fTrue;
-
-	// decrement printer timer
-
-	if (vi.cPrintTimeout && v.rgvm[iVM].fShare)
-	{
-		vi.cPrintTimeout--;
-		if (vi.cPrintTimeout == 0)
-		{
-			FlushToPrinter(iVM);
-			UnInitPrinter();
-		}
-	}
-	else
-	FlushToPrinter(iVM);
-}
-
 // The big loop! Do a single horizontal scan line (or if it's time, the vertical blank as scan line 251)
 // Either continue until there's a message for our window, or cycle through all instances every frame,
 // or if tracing, only do one scan line
@@ -963,6 +1198,8 @@ void DoVBI(int iVM)
 // !!! fStep and fCont are ignored for now!
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 {
+	fCont; fStep;
+
 	// tell the 6502 which HW it is running this time
 	cpuInit(PokeBAtari);
 
@@ -977,7 +1214,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 #ifndef NDEBUG
 			// Display scan line here
 			if (fDumpHW) {
-				WORD PCt = cpuPeekW(iVM, 0x200);
+				UINT PCt = cpuPeekW(iVM, 0x200);
 				extern void CchDisAsm(int, unsigned int *);
 				int i;
 
@@ -1101,7 +1338,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			wFrame++;	// count how many frames we've drawn. Does anybody care?
 
 			// exit each frame to let the next VM run (if Tiling) and to update the clock speed on the status bar (always)
-			fStop = fTrue;
+			fStop = TRUE;
 		}
 
     } while (!fTrace && !fStop);
@@ -1115,6 +1352,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 BOOL __cdecl DumpRegsAtari(int iVM)
 {
+	iVM;
+
     // later
 
     return TRUE;
@@ -1123,7 +1362,9 @@ BOOL __cdecl DumpRegsAtari(int iVM)
 
 BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 {
-    // later
+	pPC; pch; iVM;
+	
+	// later
 
     return TRUE;
 }
@@ -1163,6 +1404,7 @@ BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 
 BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 {
+	iVM; addr; w;
     return TRUE;
 }
 
@@ -1193,7 +1435,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
 		// don't allow writing to cartridge memory, but do allow writing to special extended XL/XE RAM
 		if (mdXLXE == md800 ||
-			(v.rgvm[iVM].rgcart.fCartIn && addr < 0xC000u && addr >= 0xc000u - v.rgvm[iVM].rgcart.cbData))
+			(rgvm[iVM].rgcart.fCartIn && addr < 0xC000u && addr >= 0xc000u - rgvm[iVM].rgcart.cbData))
 		{
 			break;
 		}
@@ -1341,17 +1583,17 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         //
 
         if (addr & 2)
-            {
+        {
             // it is a control register
 
             cpuPokeB(iVM, PACTLea + (addr & 1), b & 0x3C);
-            }
+        }
         else
-            {
+        {
             // it is either a data or ddir register. Check the control bit
 
             if (cpuPeekB(iVM, PACTLea + addr) & 4)
-                {
+            {
                 // it is a data register. Update only bits that are marked as write.
 
                 BYTE bMask = cpuPeekB(iVM, wPADDIRea + addr);
@@ -1359,31 +1601,32 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                 BYTE bNew  = (b & bMask) | (bOld & ~bMask);
 
                 if (bOld != bNew)
-                    {
+                {
                     cpuPokeB(iVM, wPADATAea + addr, bNew);
 
                     if ((addr == 1) && (mdXLXE != md800))
-                        {
-                        // Writing a new value to PORT B on the XL/XE.
+                    {
+                        
+						// Writing a new value to PORT B on the XL/XE.
 
                         if (mdXLXE != mdXE)
-                            {
+                        {
                             // in 800XL mode, mask bank select bits
                             bNew |= 0x7C;
                             wPBDATA |= 0x7C;
-                            }
-
-                        SwapMem(iVM, bOld ^ bNew, bNew, 0);
                         }
+
+                        SwapMem(iVM, bOld ^ bNew, bNew);
                     }
                 }
+            }
             else
-                {
+            {
                 // it is a data direction register.
 
                 cpuPokeB(iVM, wPADDIRea + addr, b);
-                }
             }
+        }
 
         // update PORTA and PORTB read registers
 
@@ -1434,231 +1677,4 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     return TRUE;
 }
 
-void UpdatePorts(int iVM)
-{
-    if (PACTL & 4)
-        {
-        BYTE b = wPADATA ^ rPADATA;
-
-        PORTA = (b & wPADDIR) ^ rPADATA;
-        }
-    else
-        PORTA = wPADDIR;
-
-    if (PBCTL & 4)
-        {
-        BYTE b = wPBDATA ^ rPBDATA;
-
-        PORTB = (b & wPBDDIR) ^ rPBDATA;
-        }
-    else
-        PORTB = wPBDDIR;
-}
-
-// Read in the cartridge
-//
-BOOL ReadCart(int iVM)
-{
-	unsigned char *pch = (unsigned char *)v.rgvm[iVM].rgcart.szName;
-
-	int h;
-	int cb = 0;
-	long l;
-
-	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
-	if (h != -1)
-	{
-#ifndef NDEBUG
-		printf("reading %s\n", pch);
-#endif
-
-		l = _lseek(h, 0L, SEEK_END);
-		cb = min(l, MAX_CART_SIZE);
-
-		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
-		{
-			_close(h);
-			return FALSE;
-		}
-
-		l = _lseek(h, 0L, SEEK_SET);
-
-		//      printf("size of %s is %d bytes\n", pch, cb);
-		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
-
-		cb = _read(h, rgbSwapCart[iVM], cb);
-
-		v.rgvm[iVM].rgcart.cbData = cb;
-		v.rgvm[iVM].rgcart.fCartIn = TRUE;
-	}
-	else
-		return FALSE;
-
-	_close(h);
-
-	// what kind of cartridge is it?
-	// must be unsigned to look compare the byte values inside
-	unsigned char *pb = (unsigned char *)rgbSwapCart[iVM];
-	
-	if (cb == 8192 || cb == 4096)	// is there such a thing as a 4K cartridge?
-		bCartType = CART_8K;
-
-	else if (cb < 8192)
-		return FALSE;
-
-	else if (cb == 16384)
-	{
-		// copies of the INIT and START addresses and the CART PRESENT byte appear in both cartridge areas - not banked
-		if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0)
-			bCartType = CART_16K;
-
-		// start area is in the lower half which wouldn't exist yet if we were banked
-		else if (pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
-			bCartType = CART_16K;
-
-		// last bank is the main bank, other banks are 0, 3, 4.
-		else if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 3 && pb[12287] == 4)
-			bCartType = CART_OSSA;
-
-		// first bank is the main bank, other banks are 0, 9 1.
-		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
-			bCartType = CART_OSSB;
-
-		// assume it's a normal 16K cartridge
-		else
-			bCartType = CART_16K;
-	}
-
-	// assume >16K is an XEGS cart
-	else
-	{
-		bCartType = CART_XEGS;
-	}
-
-
-#if 0
-	// unknown cartridge, do not attempt to run it
-	else
-	{
-		v.rgvm[iVM].rgcart.cbData = 0;
-		v.rgvm[iVM].rgcart.fCartIn = FALSE;
-	}
-#endif
-	return TRUE;
-}
-
-
-// SWAP in the cartridge
-//
-void InitCart(int iVM)
-{
-	// no cartridge
-	if (!(v.rgvm[iVM].rgcart.fCartIn))
-	{
-		// convenience for Atari 800, we can ask for BASIC to be put in
-		if (v.rgvm[iVM].bfHW == vmAtari48 && ramtop == 0xA000)
-		{
-			_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
-			ramtop = 0xA000;
-		}
-		return;
-	}
-
-	PCART pcart = &(v.rgvm[iVM].rgcart);
-	unsigned int cb = pcart->cbData;
-	char *pb = rgbSwapCart[iVM];
-
-	if (bCartType == CART_8K)
-	{
-		_fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
-		ramtop = 0xA000;
-	}
-	else if (bCartType == CART_16K)
-	{
-		_fmemcpy(&rgbMem[0x8000], pb, 16384);
-		ramtop = 0x8000;
-	}
-	// main bank is the last one
-	else if (bCartType == CART_OSSA)
-	{
-		_fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
-		ramtop = 0xA000;
-	}
-	// main bank is the first one
-	else if (bCartType == CART_OSSB)
-	{
-		_fmemcpy(&rgbMem[0xB000], pb, 4096);
-		ramtop = 0xA000;
-	}
-	// 8K main bank is the last one
-	else if (bCartType == CART_XEGS)
-	{
-		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
-		ramtop = 0x8000;
-	}
-
-	return;
-}
-
-// Swap out cartridge banks
-//
-void BankCart(int iVM, int iBank, int value)
-{
-	PCART pcart = &(v.rgvm[iVM].rgcart);
-	unsigned int cb = pcart->cbData;
-	int i;
-	char *pb = rgbSwapCart[iVM];
-
-	// we are not a banking cartridge
-	if (ramtop == 0xC000 || !(v.rgvm[iVM].rgcart.fCartIn)  || cb <= 8192 || bCartType <= CART_16K)
-		return;
-
-	// banks are 0, 3, 4, main
-	if (bCartType == CART_OSSA)
-	{
-		i = (iBank == 0 ? 0 : (iBank == 3 ? 1 : (iBank == 4 ? 2 : -1)));
-		assert(i != -1);
-		if (i != -1)
-			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
-	}
-
-#if 0
-	// banks are 0, 4, 3, main
-	if (bCartType == CART_OSSA_DIFFERENT)
-	{
-		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
-		//assert(i != -1);	//!!! swapping cartridge out to RAM not supported, why does ACTION do this?
-		if (i != -1)
-			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
-	}
-#endif
-
-	// banks are main, 0, 9, 1
-	else if (bCartType == CART_OSSB)
-	{
-		if (!(iBank & 8) && !(iBank & 1))
-			i = 1;
-		else if (!(iBank & 8) && (iBank & 1))
-			i = 3;
-		else if ((iBank & 8) && (iBank & 1))
-			i = 2;
-		else
-			i = -1;
-
-		assert(i != -1);
-		if (i != -1)
-			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
-	}
-
-	// 8k banks, given as contents, not the address
-	else if (bCartType == CART_XEGS)
-	{
-		while ((unsigned int)value >= cb >> 13)
-			value -= (cb >> 13);
-		//assert(FALSE);	// bad bank #
-		
-		_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
-	}
-}
 #endif // XFORMER

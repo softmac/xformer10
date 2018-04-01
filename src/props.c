@@ -41,7 +41,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 
 
 //
-// Add a new virtual machine to v.rgvm - return which instance it found
+// Add a new virtual machine to rgvm - return which instance it found
 // It will Install only... the caller needs to set a disk or cartridge image after this
 // before calling Init, ColdStart and CreateNewBitmap
 //
@@ -51,9 +51,9 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
     int i;
     
     // first try to find an empty slot in the rgvm array
-    for (i = 0; i < MAX_VM; i++)
+	for (i = 0; i < MAX_VM; i++)
     {
-        if (!v.rgvm[i].fValidVM)
+        if (!rgvm[i].fValidVM)
             break;
     }
 
@@ -69,11 +69,9 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
         *pi = i;
 
 	// our jump table for the routines. FInstallVM will crash if we don't do this first
-	v.rgvm[i].pvmi = (VMINFO *)pvmi;
+	rgvm[i].pvmi = (VMINFO *)pvmi;
 
 	BOOL f = FInstallVM(i, (VMINFO *)pvmi, type);
-
-	v.rgvm[i].fValidVM = f;
 
 	if (f)
 	{
@@ -82,12 +80,15 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 		// we're so trusting we don't even want the thread ID or handle. Tell it which VM it is
 		iThreadVM[i] = i;
 		fKillThread[i] = FALSE;
-		HANDLE h = CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL);
+		if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
+			f = FALSE;
 	}
 
+	rgvm[i].fValidVM = f;
+
 	// decide on an app level?
-	v.rgvm[i].fSound = TRUE;
-	v.rgvm[i].fJoystick = TRUE;
+	rgvm[i].fSound = TRUE;
+	rgvm[i].fJoystick = TRUE;
 
 	return f;
 }
@@ -96,7 +97,7 @@ BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
 //
 void DeleteVM(int iVM)
 {
-	if (!v.rgvm[iVM].fValidVM)
+	if (!rgvm[iVM].fValidVM)
 		return;
 
 	if (vrgvmi[iVM].hdcMem)
@@ -117,11 +118,17 @@ void DeleteVM(int iVM)
 	SetEvent(hGoEvent[iVM]);
 
 	FUnInitVM(iVM);
-	v.rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
-	memset(&v.rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
+	rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
+	memset(&rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
+	rgvm[iVM].cbSize = sizeof(VM);	// init the size for validity
 	
 	v.cVM--;	// one fewer valid instance now
+	
+	sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
+	sVM = -1;	// the one in focus may be gone
 
+	SelectInstance(v.iVM);	// better find a new valid current instance or we'll crash
+	
 	if (v.cVM)
 		FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }
@@ -144,33 +151,14 @@ void InitProperties()
 	v.cCards = 1;
 
 	v.fNoDDraw = 2;      // on NT 4.0 some users won't be able to load DirectX
-	v.fZoomColor = fFalse; // make the window large
-	v.fNoMono = fTrue;  // in case user is running an ATI video card
-	v.fSaveOnExit = fTrue;  // automatically save settings on exit
+	v.fZoomColor = FALSE; // make the window large
+	v.fNoMono = TRUE;  // in case user is running an ATI video card
+	v.fSaveOnExit = TRUE;  // automatically save settings on exit
 
-	// check for original Windows 95 which had buggy ASPI drivers
-
-	OSVERSIONINFO oi;
-
-	oi.dwOSVersionInfoSize = sizeof(oi);
-	GetVersionEx(&oi);
-
-	switch (oi.dwPlatformId)
-	{
-	default:
-		//    case VER_PLATFORM_WIN32_WINDOWS:
-		if ((oi.dwBuildNumber & 0xFFFF) == 950)
-			v.fNoSCSI = TRUE;   // Windows 95 has boned SCSI support
-		break;
-
-	case VER_PLATFORM_WIN32s:
-	case VER_PLATFORM_WIN32_NT:
-		break;
-	}
-
+#if defined (ATARIST) || defined (SOFTMAC)
 	// Initialize default ROM directory to current directory
-
 	strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
+#endif
 
 	return;
 }
@@ -193,8 +181,8 @@ BOOL CreateAllVMs()
 // !!! if you want to put a default disk in the drive for a new VM, this is the place to do it
 // if one is shipped and its directory location is well known
 #if 0
-	v.rgvm[iVM].rgvd[0].dt = DISK_IMAGE;	// and 1 and 2 too
-	strcpy(v.rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// doesn't work, not in right dir
+	rgvm[iVM].rgvd[0].dt = DISK_IMAGE;	// and 1 and 2 too
+	strcpy(rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// doesn't work, not in right dir
 #endif
 
 	f = FALSE;
@@ -238,15 +226,15 @@ BOOL CreateAllVMs()
     // initialize the default Atari ST VM (68000 mode)
 
     AddVM(&vmiST, NULL);
-    strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[5]);
+    strcpy(rgvm[v.cVM-1].szModel, rgszVM[5]);
 
     // initialize the default Atari ST VM (68030 mode)
 
     AddVM(&vmiST, NULL);
-    strcpy(v.rgvm[v.cVM-1].szModel, rgszVM[5]);
-    strcat(v.rgvm[v.cVM-1].szModel, "/030");
-    v.rgvm[v.cVM-1].fCPUAuto = FALSE;
-    v.rgvm[v.cVM-1].bfCPU = cpu68030;
+    strcpy(rgvm[v.cVM-1].szModel, rgszVM[5]);
+    strcat(rgvm[v.cVM-1].szModel, "/030");
+    rgvm[v.cVM-1].fCPUAuto = FALSE;
+    rgvm[v.cVM-1].bfCPU = cpu68030;
 #endif
 
 #ifdef SOFTMAC
@@ -282,10 +270,10 @@ BOOL CreateAllVMs()
 //
 // NULL = save to INI file that becomes the auto-start up file
 //
-// !!! Our PROPS structure is huge, containing all 108 or so instance data even when only 1 instance is being used
-// !!! This bloats memory usage and disk usage
+// fPropsOnly means we are not auto-loading the previous session, so get the global props, like window size, but no VM data
+// All existing VM data is always erased
 //
-BOOL LoadProperties(char *szIn)
+BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 {
     PROPS vTmp;
     char rgch[MAX_PATH];
@@ -324,7 +312,7 @@ LTryAgain:
 
         GetWindowsDirectory((LPSTR)&sz2, MAX_PATH);
         SetCurrentDirectory(sz2);
-        fTriedWindows = fTrue;
+        fTriedWindows = TRUE;
 
         goto LTryAgain;
     }
@@ -346,67 +334,78 @@ LTryAgain:
 		// BEFORE we set v
 		for (int z = 0; z < MAX_VM; z++)
 		{
-			if (v.rgvm[z].fValidVM)
+			if (rgvm[z].fValidVM)
 				DeleteVM(z);
 		}
+		assert(v.cVM == 0);
 
 		v = vTmp;
 		f = TRUE;
+		v.cVM = 0;	// no matter what they say, assume they're bad until we see they're good
+
+		// we're loading our .ini file and they didn't want the last session restored, so don't
+		if (!szIn && !v.fRestoreLastSession)
+			fPropsOnly = TRUE;
 
 		// non-persistable pointers need to be refreshed
 		// and only use VM's that we can handle in this build
-
+		
 		int i;
-		v.cVM = 0;
 		for (i = 0; i < MAX_VM; i++)
 		{
-			v.rgvm[i].pvmi = NULL;
+			// actually, don't go further
+			if (fPropsOnly)
+				break;
+
+			rgvm[i].pvmi = NULL;
+
+			// read the per-instance VM persistable structure
+			l = _read(h, &rgvm[i], sizeof(VM));
+			if (l != sizeof(VM) || rgvm[i].cbSize != sizeof(VM))
+			{
+				rgvm[i].fValidVM = FALSE;	// just in case
+				rgvm[i].cbSize = sizeof(VM);	// better fix it, or it's forever bad!
+				break;
+			}
 
 #ifdef XFORMER
-			// old saved PROPERTIES used out of date VMs
-			if (v.rgvm[i].bfHW == vmAtari48C)
-				v.rgvm[i].bfHW = vmAtari48;
-			if (v.rgvm[i].bfHW == vmAtariXLC)
-				v.rgvm[i].bfHW = vmAtariXL;
-			if (v.rgvm[i].bfHW == vmAtariXEC)
-				v.rgvm[i].bfHW = vmAtariXE;
-
-			if (v.rgvm[i].fValidVM && FIsAtari8bit(v.rgvm[i].bfHW)) {
-				v.rgvm[i].pvmi = (PVMINFO)&vmi800;
+			// !!! hack use of FIs... Install should do this for us
+			if (rgvm[i].fValidVM && FIsAtari8bit(rgvm[i].bfHW)) {
+				rgvm[i].pvmi = (PVMINFO)&vmi800;
 			}
 #endif
 
 #ifdef ATARIST
-			if (FIsAtari68K(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiST;
+			if (FIsAtari68K(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiST;
 #endif
 
 #ifdef SOFTMAC
-			if (FIsMac16(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiMac;
+			if (FIsMac16(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiMac;
 #endif
 
 #ifdef SOFTMAC2
-			if (FIsMac68020(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiMacII;
+			if (FIsMac68020(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiMacII;
 
-			if (FIsMac68030(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+			if (FIsMac68030(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 
-			if (FIsMac68040(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
+			if (FIsMac68040(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
 #ifdef POWERMAC
-			if (FIsMacPPC(v.rgvm[i].bfHW))
-				v.rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
+			if (FIsMacPPC(rgvm[i].bfHW))
+				rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
 #endif // POWERMAC
 #endif // SOFTMAC2
 
-			v.rgvm[i].ivdMac = sizeof(v.rgvm[0].rgvd) / sizeof(VD);
+			rgvm[i].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);
 
-			// we just loaded an instance off disk. Install and Init it.
-			if (f && v.rgvm[i].fValidVM)
+			// we just loaded an instance off disk. Install and Init it (unless we don't want to)
+			if (f && rgvm[i].fValidVM)
 			{
-				f = FInstallVM(i, v.rgvm[i].pvmi, v.rgvm[i].bfHW);
+				f = FInstallVM(i, rgvm[i].pvmi, rgvm[i].bfHW);
 
 				if (f)
 				{
@@ -451,6 +450,8 @@ LTryAgain:
 						if (FInitVM(i))
 							f = ColdStart(i);
 					}
+					if (!f)
+						FUnInitVM(i);
 				}
 
 				// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
@@ -463,23 +464,28 @@ LTryAgain:
 					// create a thread to execute this VM
 					iThreadVM[i] = i;
 					fKillThread[i] = FALSE;
-					HANDLE h = CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL);
+					if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
+						f = FALSE;
 				}
 			}
 			if (!f)
-				v.rgvm[i].fValidVM = FALSE;	// mark every valid VM that really isn't as invalid.
+				rgvm[i].fValidVM = FALSE;	// mark every valid VM that really isn't as invalid.
 		}
 
 		// now select the instance that was current when we saved (or find something good)
 		if (v.cVM > 0)
-			SelectInstance(v.iVM);
+			SelectInstance(v.iVM >= 0 ? v.iVM : 0);
+		else
+			v.iVM = -1;	// make sure everybody knows there is no valid instance
 	}
 	
 	if (h != -1)
 		_close(h);
 
+#if defined (ATARIST) || defined (SOFTMAC)
 	if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
+#endif
 
 	if (!szIn)
 		SetCurrentDirectory(rgch);
@@ -497,25 +503,26 @@ LTryAgain:
             // All other settings default to 0 or fFalse
             // but this flag needs to be set by default
 
-            v.rgvm[i].fCPUAuto = fTrue;
+            rgvm[i].fCPUAuto = fTrue;
             }
 
         v.fPrivate = fTrue;
         }
 #endif
 
-	// if we only partially loaded, free the stuff that did.
+	// if we only partially loaded, but failed, free the stuff that did load
 	if (!f && v.cVM)
 	{
 		for (int z = 0; z < MAX_VM; z++)
 		{
-			if (v.rgvm[z].fValidVM)
+			if (rgvm[z].fValidVM)
 				DeleteVM(z);
 		}
 		return FALSE;
 	}
 
-	return f && v.cVM;
+	// we only need to have loaded VMs to succeed, if we wanted to.
+	return f && (fPropsOnly || v.cVM);
 }
 
 //
@@ -532,7 +539,7 @@ BOOL SaveProperties(char *szIn)
 	{
 		GetCurrentDirectory(sizeof(rgch), rgch);
 		SetCurrentDirectory(vi.szWindowsDir);	// saves to "users\xxxxx\appdata\roaming\emulators", for example
-		h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY, _S_IREAD | _S_IWRITE);
+		h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
 	}
 	else
 	{
@@ -559,27 +566,37 @@ BOOL SaveProperties(char *szIn)
 
 	if (h != -1)
 	{
+		// write our GLOBAL PERSISTABLE - PROPS
 		_lseek(h, 0L, SEEK_SET);
 		int l = _write(h, &v, sizeof(v));
 
-		if (l == sizeof(v))
+		// we want to auto-save our .ini or we're saving to a particular file
+		if ((szIn || v.fRestoreLastSession) && l == sizeof(v))
 		{
 			f = TRUE;
+			
 			for (int i = 0; i < MAX_VM && f; i++)
 			{
-				if (v.rgvm[i].fValidVM)
+				if (rgvm[i].fValidVM)
 				{
 					f = FALSE;
-					DWORD cb;
-					char *pPersist;
-					if (FSaveStateVM(i, &pPersist, (int *)&cb))
+			
+					// save the VM pesistable struct for this instance
+					l = _write(h, &rgvm[i], sizeof(VM));
+					if (l == sizeof(VM))
 					{
-						l = _write(h, &cb, sizeof(DWORD));
-						if (l == sizeof(DWORD))
+						DWORD cb;
+						char *pPersist;
+						if (FSaveStateVM(i, &pPersist, (int *)&cb))
 						{
-							l = _write(h, pPersist, cb);
-							if (l == (int)cb)
-								f = TRUE;	// it all worked! Something was saved
+							// save the state of this VM
+							l = _write(h, &cb, sizeof(DWORD));
+							if (l == sizeof(DWORD))
+							{
+								l = _write(h, pPersist, cb);
+								if (l == (int)cb)
+									f = TRUE;	// it all worked! Something was saved
+							}
 						}
 					}
 				}
@@ -953,7 +970,7 @@ LRESULT CALLBACK Properties(
                     }
 
                 GetDlgItemText(hDlg, IDC_EDITNAME, &vmCur.szModel,
-                    sizeof(v.rgvm[0].szModel));
+                    sizeof(rgvm[0].szModel));
 
                 if (fSaveSettings)
                     SaveProperties(NULL);
@@ -1572,15 +1589,15 @@ int AutoConfigure(BOOL fShowDlg)
                     {
                     // 24-bit Macs only get one CD-ROM drive because ROMs suck
 
-                    if (!FIsMac32(v.rgvm[i].bfHW) && (cDrives > 0))
+                    if (!FIsMac32(rgvm[i].bfHW) && (cDrives > 0))
                         continue;
 
-                    if (FIsMac(v.rgvm[i].bfHW))
+                    if (FIsMac(rgvm[i].bfHW))
                         {
-                        v.rgvm[i].rgvd[8-cDrives].mdWP = 2;
-                        v.rgvm[i].rgvd[8-cDrives].dt = DISK_SCSI;
-                        v.rgvm[i].rgvd[8-cDrives].ctl = ctl;
-                        v.rgvm[i].rgvd[8-cDrives].id = id;
+                        rgvm[i].rgvd[8-cDrives].mdWP = 2;
+                        rgvm[i].rgvd[8-cDrives].dt = DISK_SCSI;
+                        rgvm[i].rgvd[8-cDrives].ctl = ctl;
+                        rgvm[i].rgvd[8-cDrives].id = id;
                         }
                     }
 

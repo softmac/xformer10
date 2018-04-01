@@ -27,7 +27,6 @@
 #define INXF 1
 #include <stdio.h>
 #include "atari800.h"
-#define FAR
 
 #ifdef XFORMER
 

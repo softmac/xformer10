@@ -28,7 +28,7 @@ __inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
 {
     // stub out for now
 
-    pch; pPC;
+	iVM;  pch; pPC;
 
     return TRUE;
 }

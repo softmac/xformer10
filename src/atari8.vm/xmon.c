@@ -28,10 +28,9 @@ char const rgchHex[] = "0123456789ABCDEF";
 
 char const szCR[] = "\n";
 
-
 char rgchIn[256],     /* monitor line input buffer */
      rgchOut[256],
-     ch,              /* character at rgch[ich] */
+     //ch,              /* character at rgch[ich] */
      fHardCopy;       /* if non-zero dumps to printer */
 
 int  cchIn,           /* cch of buffer */
@@ -99,69 +98,44 @@ long const rglMnemonics[256] =
  0X3F3F3F00L, 0X53424308L, 0X494E4308L, 0X3F3F3F00L
  } ;
 
-char *Blit(pchFrom, pchTo)
-char *pchFrom, *pchTo;
+char *Blit(char *pchFrom, char *pchTo)
     {
     while (*pchFrom)
         *pchTo++ = *pchFrom++;
     return pchTo;
     }
 
-char *Blitb(pchFrom, pchTo, cb)
-char *pchFrom, *pchTo;
-unsigned cb;
+char *Blitb(char *pchFrom, char *pchTo, unsigned cb)
     {
     while (cb--)
         *pchTo++ = *pchFrom++;
     return pchTo;
     }
 
-char* Blitcz(ch, pchTo, cch)
-char ch, *pchTo;
-int cch;
+char* Blitcz(char ch, char *pchTo, int cch)
     {
     while (cch--)
             *pchTo++ = ch;
     return pchTo;
     }
 
-
-#ifndef HWIN32
-
-int Bconin(dev)
-int dev;  /* device, unused */
+void Bconout(int dev, int ch)
     {
-    int wKey;
+	dev;
 
-       /* If first wKey is 0, then get second extended. */
-       wKey = getch();
-       if( (wKey == 0) || (wKey == 0xe0) )
-               wKey = getch();
-
-    return wKey;
-    }
-
-#endif
-
-void Bconout(dev, ch)
-int dev;
-int ch;
-    {
     printf("%c",ch);
 #ifndef HWIN32
     fflush(stdout);
 #endif
     }
 
-void Cconws(pch)
-char *pch;
+void Cconws(char *pch)
     {
     while (*pch)
         Bconout(2,*pch++);
     }
 
-void outchar(ch)
-char ch ;
+void outchar(char ch)
     {
 #ifdef LATER
     if (ch & 0x80)
@@ -186,9 +160,7 @@ char ch ;
 #endif
     }
 
-void OutPchCch(pch, cch)
-char *pch;
-int cch;
+void OutPchCch(char *pch, int cch)
     {
     while (cch--)
         outchar(*pch++);
@@ -196,65 +168,15 @@ int cch;
 
 void GetLine()
     {
-    long key;     /* return value of Bconin */
-    int wChar;
-
     cchIn = 0;      /* initialize input line cchIngth to 0 */
     Bconout(2,'>');
 
-#ifdef HWIN32
-    ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), &cchIn, NULL);
+    ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), (LPDWORD)&cchIn, NULL);
 
     if (cchIn && rgchIn[cchIn-1] == 0x0D)
         cchIn--;
-#else
-    while (1)
-        {
-        key = Bconin(2);
-        wChar = (int)key;
 
-#ifdef NEVER
-        /* convert to uppercase */
-        if (wChar>='a' && wChar<='z')
-            wChar -= 32;
-#endif
-        /* if it's printable then print it and store it */
-        if (wChar>=' ' && wChar < '~')
-            {
-            Bconout(2,wChar);
-            rgchIn[cchIn++] = wChar;
-            }
-
-        /* if Backspace, delete last char */
-        else if (wChar == 8 && cchIn>0)
-            {           
-            Cconws("\b \b");
-            cchIn--;
-            }
-
-        /* Esc clears line */
-        else if (wChar == 27)
-            {
-            Cconws("\033l>");
-            cchIn = 0;
-            }
-
-#ifdef LATER
-        /* if special key, get scan code */
-        if (cchIn==0 && ch==0) {                /* if special key */
-      ch = (char) (key>>16) ;             /* get scan code */
-      if (ch==0x47) cls() ;                 /* is it Home? */
-      if (ch==0x62) help() ;              /* is it Help? */
-      break ;                             /* break out of loop */
-      }
-#endif
-        /* stay in loop until rgchInfer full or Return pressed */
-        if ((cchIn==XCOMAX) || (wChar==13 && cchIn))
-            break;
-        }
-#endif // HWIN32
-
-    Cconws(szCR);
+    Cconws((char *)szCR);
     /* terminate input line with a space and null */
     rgchIn[cchIn] = ' ';
     rgchIn[cchIn+1] = 0;
@@ -290,8 +212,7 @@ int NextHexChar()
     }
 
 /* Get 8 bit value at rgchIn[ichIn]. Returns TRUE if valid number */
-unsigned int FGetByte(pu)
-unsigned *pu;
+unsigned int FGetByte(unsigned *pu)
     {
     int x;
     int w=0, digit=0 ;
@@ -309,8 +230,7 @@ unsigned *pu;
 
 
 /* Get 16 bit value at rgchIn[ichIn]. Returns TRUE if valid number */
-unsigned int FGetWord(pu)
-unsigned *pu;
+unsigned int FGetWord(unsigned *pu)
     {
     int x;
     int w=0, digit=0 ;
@@ -326,9 +246,7 @@ unsigned *pu;
     return (x != -1);
     }
 
-void XtoPch(pch, u)
-char *pch;
-unsigned int u;
+void XtoPch(char *pch, unsigned u)
     {
     *pch++ = rgchHex[(u>>12)&0xF];
     *pch++ = rgchHex[(u>>8)&0xF];
@@ -336,9 +254,7 @@ unsigned int u;
     *pch++ = rgchHex[u&0xF];
     }
 
-void BtoPch(pch, b)
-char *pch;
-unsigned int b;
+void BtoPch(char *pch, unsigned b)
     {
     *pch++ = rgchHex[(b>>4)&0xF];
     *pch++ = rgchHex[b&0xF];
@@ -364,11 +280,7 @@ void mon(int iVM)            /* the 6502 monitor */
     Cconws (" T [addr]          - trace instructions\n");
     Cconws (" X                 - exit back to DOS\n");
     Cconws ("\n");
-#ifdef HWIN32
     Cconws (" When in Atari mode press Ctrl+Alt+F11 to get back to the debugger");
-#else
-    Cconws (" When in Atari mode press Shift+F5 to get back to the debugger");
-#endif
     Cconws ("\n");
 
     while(1)
@@ -426,7 +338,7 @@ void mon(int iVM)            /* the 6502 monitor */
                         break;
                     }
                 OutPchCch(rgchOut,74);
-                Cconws(szCR);
+                Cconws((char *)szCR);
                 } while (uMemDump != u2);
             }
         else if (chCom == 'D')
@@ -437,7 +349,7 @@ void mon(int iVM)            /* the 6502 monitor */
             for (cNum=0; cNum<20; cNum++)
                 {
                 CchDisAsm(iVM, &uMemDasm);
-                Cconws(szCR);
+                Cconws((char *)szCR);
                 }
             }
 
@@ -452,7 +364,7 @@ void mon(int iVM)            /* the 6502 monitor */
             {
             /* set hardcopy on/off flag */
             if (FGetByte(&u1))
-                fHardCopy = u1;
+                fHardCopy = (char)u1;
             }
         else if (chCom == 'B')
             {
@@ -466,7 +378,7 @@ void mon(int iVM)            /* the 6502 monitor */
             if (!FGetWord(&u1))
                 Cconws("invalid address");
             else while (FGetByte(&u2))
-                cpuPokeB(iVM, u1++, u2);
+                cpuPokeB(iVM, u1++, (BYTE)u2);
             }
         else if (chCom == 'M')
             {
@@ -520,9 +432,9 @@ void mon(int iVM)            /* the 6502 monitor */
             if (FGetWord(&u1))
                 {
                 if (chCom == 'A')
-                    bp = u1;
+                    bp = (WORD)u1;
                 else
-                    regPC = u1;
+                    regPC = (WORD)u1;
                 }
 
             if (!fTrace)
@@ -575,7 +487,6 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     char *pch = rgch;
     unsigned char bOpcode;
     long lPackedOp;
-    char *pch0 = pch;
     int md;
 
     _fmemset(rgch, ' ', sizeof(rgch)-1);

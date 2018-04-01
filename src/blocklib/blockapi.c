@@ -46,7 +46,7 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             {
             // 'PM' signature, Mac partition map
 
-            if (strncmp(&rgch[48], "Apple_HFS", 10))
+            if (strncmp((const char *)&rgch[48], "Apple_HFS", 10))
                 {
                 pdi->offsec++;
                 continue;
@@ -74,7 +74,8 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
 
             if (!pdi->fNT && pdi->dt == DISK_FLOPPY)
                 {
-                pdi->size = SwapW(*(WORD *)&rgch[1024+18]) *
+                pdi->size = 
+					(*(WORD *)&rgch[1024+18]) *
                      SwapL(*(ULONG *)&rgch[1024+20]) / 1024;
 
                 if (pdi->size <= 400)
@@ -246,7 +247,6 @@ Lfail:
 DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
 {
     DISKINFO *pdi;
-    OSVERSIONINFO oi;
     ULONG lSize;
     
 #if USEHEAP
@@ -289,28 +289,7 @@ DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
     if (pdi->pfd == NULL)
         goto Lerror;
 
-    oi.dwOSVersionInfoSize = sizeof(oi);
-    GetVersionEx(&oi);  // REVIEW: requires Win32s 1.2+
-
-    switch(oi.dwPlatformId)
-        {
-    default:
-    case VER_PLATFORM_WIN32s:
-//    case VER_PLATFORM_WIN32_WINDOWS:
-        pdi->fNT = 0;
-
-#if 0
-        // Windows 95 build 950 sucks at SCSI
-        if ((oi.dwBuildNumber & 0xFFFF) == 950)
-            if (dt == DISK_SCSI)
-                goto Lerror;
-#endif
-        break;
-
-    case VER_PLATFORM_WIN32_NT:
         pdi->fNT = 1;
-           break;
-        }
 
     switch (dt)
         {
@@ -527,7 +506,7 @@ ULONG CSectorsInCache(PDI pdi, BYTE *pb, ULONG sec, ULONG count)
 
         for (i = 0; i < CACHESLOTS; i++)
             {
-            if (pdi->dc[i].pb_dc && (pdi->dc[i].sec_dc == sec + isec))
+            if (pdi->dc[i].pb_dc && ((unsigned)pdi->dc[i].sec_dc == sec + isec))
                 {
                 // sector is cached, one less sector to read
 
@@ -560,7 +539,7 @@ BOOL FAddSectorsToCache(PDI pdi, BYTE *pb, ULONG sec, ULONG count)
 
         for (i = CACHESLOTS-1; i > 0; i--)
             {
-            if (pdi->dc[i].pb_dc && (pdi->dc[i].sec_dc == sec + isec))
+            if (pdi->dc[i].pb_dc && ((unsigned)pdi->dc[i].sec_dc == sec + isec))
                 {
                 // sector was already cached, update cached data
                 // should be the same!!!
