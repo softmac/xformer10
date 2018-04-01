@@ -2556,6 +2556,8 @@ void ShowAbout()
 	// !!! Windows lies and says we're 8 because we are not "manifested" for 10
 	if (IsWindows10OrGreater())
 		strcpy(rgchVer, "Windows 10 or Greater");
+	else if (IsWindows8Point1OrGreater())
+		strcpy(rgchVer, "Windows 8.1");
 	else if (IsWindows8OrGreater())
 		strcpy(rgchVer, "Windows 8");
 	else if (IsWindows7OrGreater())
