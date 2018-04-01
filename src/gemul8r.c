@@ -2371,6 +2371,41 @@ int GetTileFromPos(int xPos, int yPos)
 	return -1;
 }
 
+// Scroll the tiles to the point specified by sWheelOffset
+//
+void ScrollTiles()
+{
+	RECT rect;
+	GetClientRect(vi.hWnd, &rect);
+
+	int iVM = v.iVM;
+	while (iVM <= 0 || rgvm[iVM].fValidVM == FALSE)
+		iVM++;
+
+	int nx = ((rect.right - rect.left) * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+	int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
+	bottom = bottom * vvmhw[iVM].ypix - rect.bottom;	// how many pixels past the bottom of the screen is that?
+
+	if (bottom < 0)
+		bottom = 0;
+	if (sWheelOffset > 0)
+		sWheelOffset = 0;
+	if (sWheelOffset < bottom * -1)
+		sWheelOffset = bottom * -1;
+
+	// now where would our mouse be after this scroll?
+	POINT pt;
+	if (GetCursorPos(&pt))
+		if (ScreenToClient(vi.hWnd, &pt))
+		{
+			int s = GetTileFromPos(pt.x, pt.y);
+			if (s != sVM)
+			{
+				sVM = s;
+				FixAllMenus();
+			}
+		}
+}
 
 // Extract all the DOS files from this disk image and save them to the PC hard drive
 //
@@ -2740,9 +2775,15 @@ LRESULT CALLBACK WndProc(
 
 		for (int ii = 0; ii < MAX_VM; ii++)
 		{
-			CreateNewBitmap(ii);	// fix every instance's bitmap
+			if (rgvm[ii].fValidVM)
+				CreateNewBitmap(ii);	// fix every instance's bitmap
 		}
-
+		//for some reason, in fullscreen, we need this extra push
+		if (v.fFullScreen)
+		{
+			ShowWindow(vi.hWnd, SW_RESTORE);
+			ShowWindow(vi.hWnd, SW_MAXIMIZE);
+		}
         break;
 
 #if !defined(NDEBUG)
@@ -2995,11 +3036,8 @@ break;
         else if (v.iVM >= 0 && FIsAtari8bit(rgvm[v.iVM].bfHW))
         {
 #ifdef XFORMER
-			if (v.iVM >= 0)
-			{
-				ControlKeyUp8(v.iVM);	// if we ALT-F4 to close or ALT-TAB to cycle apps, it will think ALT is still down when we come back up
-				//ForceRedraw(iVM);
-			}
+			ControlKeyUp8(v.iVM);	// if we ALT-F4 to close or ALT-TAB to cycle apps, it will think ALT is still down when we come back up
+			//ForceRedraw(iVM);
 #endif
 		}
 
@@ -3162,7 +3200,6 @@ break;
 			} else {
 				SelectInstance(v.iVM >= 0 ? v.iVM : nFirstTile);	// bring the one with focus up if it exists, else the top one
 			}
-			CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
 			FixAllMenus();
 			break;
 
@@ -3469,7 +3506,7 @@ break;
 
 		// !!! Fix. Retail only?
 		case IDM_DEBUGGER:
-			if (rgvm[v.iVM].pvmi->fUsesMouse)
+			if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 				ShowWindowsMouse();
 			vi.fDebugBreak = TRUE;
 			CreateDebuggerWindow();
@@ -3725,7 +3762,7 @@ break;
 		// !!! Make it work, but not in retail?
         if (uParam == VK_PAUSE)
             {
-			if (rgvm[v.iVM].pvmi->fUsesMouse)
+			if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 				ShowWindowsMouse();
             vi.fDebugBreak = TRUE;
             return 0;
@@ -3760,41 +3797,91 @@ break;
         break;
 
 	case WM_MOUSEWHEEL:
-		short int offset = HIWORD(uParam);
+		short int offset = HIWORD(uParam); // must be short to catch the sign
 	
 		sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
 
-		GetClientRect(vi.hWnd, &rect);
-		
-		int nx = ((rect.right - rect.left) * 10 / vvmhw[v.iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
-		int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
-		bottom = bottom * vvmhw[v.iVM].ypix - rect.bottom;	// how many pixels past the bottom of the screen is that?
-
-		if (bottom < 0)
-			bottom = 0;
-		if (sWheelOffset > 0)
-			sWheelOffset = 0;
-		if (sWheelOffset < bottom * -1)
-			sWheelOffset = bottom * -1;
-
-		// now where would our mouse be after this scroll?
-		POINT pt;
-		if (GetCursorPos(&pt))
-			if (ScreenToClient(vi.hWnd, &pt))
-			{
-				int s = GetTileFromPos(pt.x, pt.y);
-				if (s != sVM)
-				{
-					sVM = s;
-					FixAllMenus();
-				}
-			}
+		ScrollTiles();
 		break;
+
+	case WM_GESTURENOTIFY:
+		// !!! why is pan with intertia broken, as well as the GC_PAN flag?
+		GESTURECONFIG gc;
+		gc.dwID = 0;
+		gc.dwWant = GC_ALLGESTURES;
+		gc.dwBlock = 0;
+
+		BOOL bResult = SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
+		break;	// MUST break
+	
+	case WM_GESTURE:
+		GESTUREINFO gi;
+		ZeroMemory(&gi, sizeof(GESTUREINFO));
+		gi.cbSize = sizeof(GESTUREINFO);
+		
+		static int iPanBegin; // where we first touched the screen
+		static ULONGLONG iZoomBegin;	// how far apart our fingers started out
+
+		bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
+		if (bResult)
+		{
+			if (gi.dwID == GID_PAN)
+			{
+				if (gi.dwFlags & GF_BEGIN)
+					iPanBegin = gi.ptsLocation.y;	// where were we when we stated gesturing?
+				else if (gi.dwFlags & GF_INERTIA)
+					iPanBegin = iPanBegin;	// !!! I'll have to handle this myself, it's broken
+				else
+				{
+					sWheelOffset += (gi.ptsLocation.y - iPanBegin);
+					ScrollTiles();
+					iPanBegin = gi.ptsLocation.y;
+				}
+				return 0;	// makes sure we don't get a mouse click on a tile while panning
+			}
+			else if (gi.dwID == GID_ZOOM)
+			{
+				if (gi.dwFlags & GF_BEGIN)
+				{
+					iZoomBegin = gi.ullArguments; // how far apart our fingers start
+				}
+				else
+				{
+					int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
+					if (iZoom > 100)	// zoom in
+					{
+						POINT pt;
+						pt.x = gi.ptsLocation.x;
+						pt.y = gi.ptsLocation.y;
+						if (v.fTiling && ScreenToClient(vi.hWnd, &pt))
+						{
+							int iVM = GetTileFromPos(pt.x, pt.y);
+							if (iVM >= 0)
+							{
+								v.iVM = iVM;
+								SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+								SelectInstance(iVM);
+							}
+						}
+					}
+					else if (iZoom < -100) // zoom out
+					{
+						if (!v.fTiling)
+						{
+							SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+						}
+					}
+				}
+				return 0;
+			}
+		}
+
+		break;	// must break
 
     case WM_RBUTTONDOWN:
         vi.fHaveFocus = TRUE;  // HACK
 
-        if (rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
+        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
 					(!FIsAtari68K(vmCur.bfHW) || (uParam & MK_LBUTTON) ) )	// !!! hack don't use FIs... macros
         {
             // both buttons are being pressed, left first and now right
@@ -3836,17 +3923,16 @@ break;
 #endif
 		
 		// if this VM type supports joystick
-		if (rgvm[v.iVM].pvmi->fUsesJoystick)
+		if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesJoystick)
 		{
             //printf("LBUTTONDOWN\n");
 
 			// MOUSE LEFT button is joystick FIRE
-			if (v.iVM >= 0)
 				FWinMsgVM(v.iVM, hWnd, MM_JOY1BUTTONDOWN, JOY_BUTTON1, 0);
 			
 			// continue to do Tiling code
         }
-		else if (rgvm[v.iVM].pvmi->fUsesMouse)
+		else if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 		{
 			if (!vi.fVMCapture)
 				if (v.iVM >= 0)
@@ -3870,25 +3956,21 @@ break;
 		{
 			if (sVM != -1)
 			{
-				v.fTiling = FALSE;
-				SelectInstance(sVM);
+				v.iVM = sVM;
+				SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
 			}
 		}
 
 		break;
 
     case WM_LBUTTONUP:		
-		if (rgvm[v.iVM].pvmi->fUsesJoystick)
+		if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesJoystick)
         {
-#if !defined(NDEBUG)
-            printf("LBUTTONUP\n");
-#endif
-
 			// MOUSE button up is JOYSTICK BUTTON UP
 			if (v.iVM >= 0)
 				return FWinMsgVM(v.iVM, hWnd, MM_JOY1BUTTONUP, 0, 0);
         }
-		else if (rgvm[v.iVM].pvmi->fUsesMouse)
+		else if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 		{
 			if (!vi.fVMCapture)
 				if (v.iVM >= 0)
@@ -3898,7 +3980,7 @@ break;
 	case WM_RBUTTONUP:
         vi.fHaveFocus = TRUE;  // HACK
 		
-		if (rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && (vi.fGEMMouse || !vi.fVMCapture))
+		if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && (vi.fGEMMouse || !vi.fVMCapture))
         {
             vi.fGEMMouse = FALSE;
             if (v.iVM >= 0)
