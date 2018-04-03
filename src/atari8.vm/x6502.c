@@ -401,7 +401,7 @@ void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 
 #define HANDLER(opcode) void __fastcall opcode (int iVM) {
 
-// !!! until somebody actually looks at the instruction counter, don't waste time keeping track of it
+// !!! former code - until somebody actually looks at the instruction counter, don't waste time keeping track of it
 //#define HANDLER(opcode) void __fastcall opcode (int iVM) { \
 //  countInstr++;
 

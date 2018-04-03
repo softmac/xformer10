@@ -837,7 +837,7 @@ int CALLBACK WinMain(
 	// assume we're loading the default .ini file
 	char *lpLoad = NULL;
 
-	// !!! won't work if more than one VM type supports the same file extension
+	// what if more than one VM type supports the same file extension?
 	if (lpCmdLine && lpCmdLine[0])
 	{
 		char sFile[MAX_PATH];
@@ -872,7 +872,7 @@ int CALLBACK WinMain(
 					}
 					else
 						DeleteVM(iVM);
-				}	// !!! just move on with our lives if there's an error
+				}	// using drag/drop, just move on with our lives if there's an error
 			}
 			
 			// a cartridge
@@ -895,7 +895,7 @@ int CALLBACK WinMain(
 					}
 					else
 						DeleteVM(iVM);
-				}
+				}	// using drag/drop, just move on with our lives if there's an error
 			}
 
 			// found a .gem file. Ignore everything else and just load this
@@ -1048,7 +1048,7 @@ int CALLBACK WinMain(
 
 	vi.hVideoThread = NULL; // CreateThread(NULL, 4096, (void *)ScreenThread, 0, 0, &l);
 
-							// !!! is this really necessary?
+	// is this really necessary?
 	{
 		FLASHWINFO fi;
 
@@ -1208,8 +1208,6 @@ int CALLBACK WinMain(
 						hV[iV++] = hDoneEvent[iVM];
 					}
 				}
-
-				// !!! no chance for a thread to fail and tell us to stop executing and debug it
 
 				// wait for them all to complete one frame
 				WaitForMultipleObjects(v.cVM, hV, TRUE, INFINITE);
@@ -1957,7 +1955,6 @@ BOOL FToggleMonitor(int iVM)
 
 //
 // Render the DIB section to the current window's device context
-// !!! Make this work on non-current instances too
 //
 void RenderBitmap()
 {
@@ -1987,7 +1984,7 @@ void RenderBitmap()
 		int nx1 = (rect.right - rect.left) / vvmhw[iVM].xpix; // how many fit across entirely?		
 		int nx = ((rect.right - rect.left) * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
 
-																			 // black out the area we'll never draw to
+		// black out the area we'll never draw to
 		if (nx == nx1)
 			BitBlt(vi.hdc, nx * vvmhw[iVM].xpix, 0, rect.right - (vvmhw[iVM].xpix * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
 
@@ -2374,7 +2371,7 @@ BOOL SaveATARIDOS(int inst, int drive)
 	BOOL fB, fh = TRUE;
 
 	// save all the files in binary, then text format
-	// !!! or ask them to rename the files to ".txt" or auto detect?
+	// !!! how to auto detect?
 	for (int ij = 0; ij < pdi->cfd * 2; ij++)
 	{
 
@@ -2418,7 +2415,6 @@ BOOL SaveATARIDOS(int inst, int drive)
 			h = _open(szDir, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
 
 			// 2nd time around, convert the buffer to text (ATASCII -> ASCII)
-			// !!! Check ATARIWRITER format is just plain ATASCII
 			if (h != -1 && ij >= pdi->cfd)
 			{
 				// a buffer for the ASCII (maximum 2 characters per character)
@@ -2620,7 +2616,9 @@ LRESULT CALLBACK WndProc(
 				BOOL fC = CreateNewBitmap(ii);
 				if (!fC)
 				{
-					//!!! what to do now?
+					DeleteVM(ii);
+					assert(v.cVM);
+					// !!! make it so we don't hang/crash if there are no VMs						
 				}
 			}
 		}
@@ -3123,7 +3121,7 @@ break;
 			FixAllMenus();
 			break;
 
-		// toggle TURBO mode // !!! PG-UP still secretly does it too because I'm used to that
+		// toggle TURBO mode
 		case IDM_TURBO:
 			fBrakes = !fBrakes;
 			FixAllMenus();
@@ -3186,6 +3184,7 @@ break;
 
 			// now make the default ones
 			CreateAllVMs();	// !!! what to do on error?
+			assert(v.cVM);
 			break;
 
 		// There are 32 types of VMs (it's a LONG bitfield)
@@ -3246,6 +3245,7 @@ break;
 				SelectInstance(vmNew);
 
 			// !!! what about error?
+			assert(v.cVM);
 
 			break;
 
@@ -3256,7 +3256,7 @@ break;
 
 			if (v.iVM != -1 && OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgcart.szName, FALSE, 1))
 			{
-				ReadCart(v.iVM);	// might as well ignroe error
+				ReadCart(v.iVM);
 				FixAllMenus();
 				ColdStart(v.iVM);	// !!! requires reboot, what about error?
 			}
@@ -3274,7 +3274,7 @@ break;
 
 				// this will require a reboot, I assume for all types of VMs?
 				FUnInitVM(v.iVM);
-				FInitVM(v.iVM);
+				FInitVM(v.iVM); // could error
 
 				FixAllMenus();
 
@@ -3289,7 +3289,7 @@ break;
 			
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[0].sz, FALSE, 0))
 			{
-				rgvm[v.iVM].rgvd[0].dt = DISK_IMAGE; // !!! I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				rgvm[v.iVM].rgvd[0].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
 				FMountDiskVM(v.iVM, 0);	// !!! could error
 				FixAllMenus();
 			}
@@ -3300,7 +3300,7 @@ break;
 			
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[1].sz, FALSE, 0))
 			{
-				rgvm[v.iVM].rgvd[1].dt = DISK_IMAGE; // I don't support DISK_WIN32, DISK_FLOPPY or DISK_SCSI
+				rgvm[v.iVM].rgvd[1].dt = DISK_IMAGE; // support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
 				FMountDiskVM(v.iVM, 1); // !!! could error
 				FixAllMenus();
 			}
@@ -3622,10 +3622,7 @@ break;
     case WM_KEYDOWN:
     case WM_KEYUP:
 
-        // Catch the keystroke for Menu key so that it doesn't
-        // register as an F10 (and reboot Atari BASIC!)
-        // The Menu key still functions as expected.
-		// !!! ???
+        // Do something with the MENU key?
         if (uParam == VK_APPS)
             break;
 
@@ -3642,7 +3639,7 @@ break;
             }
 #endif
 
-        vi.fHaveFocus = TRUE;  // HACK !!! is this still necessary?
+        vi.fHaveFocus = TRUE;  // HACK !!! is this hack that's everywhere still necessary?
         
 		if (vi.fExecuting)
 		{
@@ -3790,7 +3787,7 @@ break;
         // fall through into WM_LBUTTONDOWN case
 
     case WM_LBUTTONDOWN:
-        vi.fHaveFocus = TRUE;  // HACK !!! ???
+        vi.fHaveFocus = TRUE;  // HACK
 
 #ifdef SOFTMAC
         vmachw.fVIA2 = TRUE;
@@ -3871,7 +3868,6 @@ break;
 				FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);	// give mouse move to the VM !!! not listening to whether to eat it
 
 			// in Tile Mode, make note of which tile we are hovering over
-			// !!! In the future, send all joy and key input there
 			//
 			if (v.fTiling)
 			{
@@ -4058,7 +4054,7 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
 	else
 		OpenFileName.lpstrFilter = "Xformer Session\0*.gem\0All Files\0*.*\0\0";
 
-    // !!! TODO - Darek, set the proper VMIINFO field for other VMs
+    // !!! TODO - Darek, set the proper VMINFO fields for other VMs like this:
 	// MAC: VMINFO.szFilter = "Macintosh Disk Images\0*.dsk;*.ima*;*.img;*.hf*;*.hqx;*.cd\0All Files\0*.*\0\0";
 	// ST: VMINFO.szFilter = "Atari ST Disk Images\0*.vhd;*.st;*.dsk;*.msa\0All Files\0*.*\0\0";
 
@@ -5189,7 +5185,7 @@ long IdleThread()
 	return 0;
 }
 
-// !!! do we really need this thread just to call CheckClockSpeed? Don't we know we're on a pentium or higher?
+// do we really need this thread just to call CheckClockSpeed? Don't we know we're on a pentium or higher?
 long ScreenThread()
 {
 	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
@@ -6751,7 +6747,7 @@ BOOL TrayMessage(HWND hDlg, DWORD dwMessage, UINT uID, HICON hIcon, PSTR pszTip)
 	else
 		tnd.szTip[0] = '\0';
 
-	// !!! We leave a bunch of icons in the tray
+	//  We leave a bunch of icons in the tray
 #ifdef WINXP
 	f = Shell_NotifyIcon(dwMessage, &tnd);
 #endif

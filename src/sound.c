@@ -34,7 +34,8 @@ WAVEFORMATEX pcmwf;
 
 
 
-// !!! not per-instance. When switching instances, it will glitch. Who cares?
+// !!! lots of globals, not per-instance. When switching instances, it will glitch, but who cares. Only 1 instance is
+// controlling sound at a time, even tiled.
 typedef struct
 {
 	ULONG frequency;
@@ -44,7 +45,6 @@ typedef struct
 } VOICE;
 
 #ifdef XFORMER
-// !!! one global sound buffer for now, it will glitch when several tiles run at the same time
 
 static int sCurBuf = -1;	// which buffer is the current one we're filling
 static int sOldSample = 0; // how much of the buffer is full already
@@ -153,16 +153,15 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 			return; // whatever you don't don't call waveoutWrite!
 		}
 
+		// !!! we don't always do thge same #instr/scan line (21 or 30) so we will sometimes try to back up in time
 		if (iCurSample < sOldSample)
-			return;	// !!! remove once wLeft can go < 0
-
+			return;
+			
 		//fprintf(fp, "SOUND[0] %d-%d f=%d v=%d d=%d\n", sOldSample, iCurSample, AUDF1, AUDC1 & 0x0f, AUDC1 >> 4);
 
 		// nothing to write (make sure sOldSample is reset to 0 when iCurSample == 800)
 		if (iCurSample == sOldSample) {
-#ifndef NDEBUG
-			//OutputDebugString("Sound changed so fast we dropped a sample!\n"); // !!! un-comment once wLeft can't go < 0
-#endif
+			//ODS("Wow, Sound changed so fast we dropped a sample!\n");
 			goto SaveAud;	// at least remember the new values
 		}
 
@@ -187,14 +186,14 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 			(AUDC4 & 0x0f) == 0 && rgvoice[3].volume > 0)
 		{
 			rgvoice[3].volume = AUDC4 & 0x0f;
-			return;	// !!! hack for MULE, which sends a single sample of noise every frame which needs to be ignored
+			return;	// !!! app hack for MULE, which sends a single sample of noise every frame which needs to be ignored
 		}
 
 		if (iCurSample == SAMPLES_PER_VOICE && sOldSample == SAMPLES_PER_VOICE - 1 && (AUDC4 & 0x0f) > 0 && rgvoice[3].volume > 0
 			// stereo version && *(pb - 4) == 0 && *(pb - 3) == 0)
 			&& *(pb - 2) == 0)	// mono version
 		{
-			rgvoice[3].volume = 0;	// !!! hack for MULE, the single bad sample is at the end of the buffer
+			rgvoice[3].volume = 0;	// !!! app hack for MULE, the single bad sample is at the end of the buffer
 		}
 
 		if (rgvm[iVM].fSound) {
@@ -329,7 +328,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 						{
 							// the next pulse may have a different width than this one if we're alternating 17,16,17,16 to simulate 16.5
 							pulse[voice].pos = 0;
-							pulse[voice].wi = (~pulse[voice].wi) & 1; // simplify math !!! it's init'd to 0
+							pulse[voice].wi = (~pulse[voice].wi) & 1;
 						}
 					}
 				}

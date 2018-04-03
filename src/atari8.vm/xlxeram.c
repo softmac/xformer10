@@ -42,7 +42,6 @@ void DumpBlocks()
 #define iBankFromPortB(b) (/* (((b) & BANK_MASK2) >> 3) | */ (((b) & BANK_MASK1) >> 2))
 #define BANK_MASK   108
 #define BANK_MASK1  12
-//#define BANK_MASK2  96 !!! was this support for some hacked 256K machine or just broken?
 
 #define EXTCPU_IN   0
 #define EXTCPU_OUT  16
@@ -222,8 +221,8 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 		}
     }
 
+// !!! I don't think you're supposed to swap without the mask. Surely the EXT_CPU mask will be set?
 #if 0
-	// !!! I don't think you're supposed to swap without the mask. Surely the EXT_CPU mask will be set?
     else if (mask & BANK_MASK)
     {
         if ((flags & EXTCPU_MASK) == EXTCPU_IN)
@@ -285,7 +284,7 @@ void ReadROMs()
 #ifndef NDEBUG
 			printf("reading ATARIOSB.ROM\n");
 #endif
-			_read(h, rgbAtariOSB, 10240);	// !!! one copy for all instances
+			_read(h, rgbAtariOSB, 10240);	// one copy for all instances
 			_close(h);
 		}
 	}
@@ -293,14 +292,13 @@ void ReadROMs()
 	// XL needs OS XL and built in BASIC (treat it like a special cartridge)
 	if (mdXLXE != md800)
 	{
-		// !!! wrong BASIC!
 		h = _open("ATARIBAS.ROM", _O_BINARY | _O_RDONLY);
 		if (h != NULL)
 		{
 #ifndef NDEBUG
 			printf("reading ATARIBAS.ROM\n");
 #endif
-			_read(h, rgBasicData, 8192);	// !!! one copy for all instances
+			_read(h, rgBasicData, 8192);	// one copy for all instances
 			_close(h);
 		}
 
@@ -313,7 +311,7 @@ void ReadROMs()
 #ifndef NDEBUG
 			printf("reading ATARIXL.ROM\n");
 #endif
-			_read(h, rgbXLXEC000, 16384);	// !!! one copy for all instances
+			_read(h, rgbXLXEC000, 16384);	// one copy for all instances
 			_close(h);
 		}
 	}

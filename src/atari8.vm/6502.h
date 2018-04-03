@@ -66,8 +66,7 @@ __inline BOOL cpuInit(PFNL pvmPokeB)
 {
     extern PFN pfnPokeB;
 
-	// !!! broken if more than Atari 8 bit uses the 6502, this needs to be set every time a machine is Execute()'d
-	// independently of clearing the registers
+	// !!! global - broken if more than Atari 8 bit uses the 6502, unless each VM knows to set this every time a VM is Execute'd
 	pfnPokeB = pvmPokeB;
 
     return TRUE;
