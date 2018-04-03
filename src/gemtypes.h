@@ -114,8 +114,10 @@ static int sWheelOffset;	// for scrolling tiles using the pad or touchscreen
 extern int sVM;				// which tile you're hovering over, -1 means none so this must be signed
 WORD fBrakes;				// run at full speed or emulated speed?
 ULONGLONG cEmulationSpeed;	// each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
+
 extern BOOL fDebug;			// enables DEBUG output
 extern void ODS(char *, ...);	// my printf to send to the output window, since the normal printf just goes to the ether
+extern BYTE rgbRainbow[];	// the possible colour palettes our VMs might use go here
 
 // 
 // We will make one thread per VM 
@@ -165,17 +167,24 @@ typedef struct _vminfo
 {
 	PFNL pfnVm;             // function to handle VM operations
 	ULONG ver;              // version
-	BYTE *pchModel;         // default verbose name for this VM
+	char *pchModel;         // default verbose name for this VM
 	ULONG wfHW;             // bit vector of supported hardware models
 	ULONG wfCPU;            // bit vector of supported CPUs
 	ULONG wfRAM;            // bit vector of supported RAM sizes
 	ULONG wfROM;            // bit vector of supported ROM chips
 	ULONG wfMon;            // bit vector of supported monitors
+	
+	// new things added to capabilities to avoid hacky "if (FIs...)" and #ifdef
 	UINT uScreenX;			// how wide is this machine's screen?
 	UINT uScreenY;			// how tall is this machine's screen?
+	int  planes;			// how many colours we support (this power of 2)
+	BYTE *rgbRainbow;		// the 256 colour palette for planes == 8
 	BOOL fUsesCart;			// can you plug cartridges into this machine? (ATARI 800 only)
 	BOOL fUsesMouse;		// does this VM type support a mouse?
 	BOOL fUsesJoystick;		// does this VM type support joysticks?
+	char szFilter[120];		// string of extensions supported for OpenFile dlg
+	char szCartFilter[120]; // if you support a cartridge, their extensions
+
 	PFNL pfnInstall;        // VM installation (one time init)
 	PFNL pfnInit;           // VM initialization (switch to this VM)
 	PFNL pfnUnInit;         // VM uninit (switch away from VM)
@@ -260,8 +269,8 @@ typedef struct _cart
 } CART, *PCART;
 
 
-// virtual machine descriptor, one for each instance, persistable.
-// the VMINFO about this type of VM, and a VD disk descriptor are found here
+// VM - virtual machine descriptor, one for each instance, persistable.
+// (the VMINFO about this type of VM, and a VD disk descriptor are found here)
 //
 typedef struct
 {
@@ -342,8 +351,8 @@ typedef struct VMINST
 extern VMINST vrgvmi[MAX_VM];
 
 // use these at your own risk, the concept of a "current" one only applies to the main gem app (not thread safe to use these)
-#define vvmi  (*(VMINST *)&vrgvmi[iVM])
-#define vmCur (*vi.pvmCur)
+//#define vvmi  (*(VMINST *)&vrgvmi[iVM])
+//#define vmCur (*vi.pvmCur)
 
 //
 // PROPS - global persistable data for the whole session
@@ -415,7 +424,6 @@ typedef struct
 	BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
-
     BOOL     fDebugMode:8;  // 1 = put CPU into debug mode
     BOOL     fNoSCSI:8;     // 1 = disables SCSI support
     BOOL               :8;  // reserved (deprecated)
@@ -425,8 +433,6 @@ typedef struct
     BOOL     fNoDDraw:8;    // 1 = no preload of DirectX, 2 = disable DirectX
     BOOL     fNoWW:8;       // 1 = disables Windows 98 write watch
     BOOL     fNoJit:8;      // 1 = disable jitter
-
-	BOOL	 fRestoreLastSession;	// auto-load the previous session on startup?
 
 	int		 swWindowState;	// were we restored? maximized? minimized?
     RECT     rectWinPos;    // saved window pos (want top left corner only)
@@ -492,8 +498,9 @@ typedef struct
     BYTE *pbROM[4];     // host pointer to first guest byte of RAM block
     BYTE *pbRAM[4];     // host pointer to first guest byte of RAM block
 
-    PVM  pvmCur;        // pointer to rgvm[v.iVM]
-    PVMINST pvmiCur;    // UNUSED pointer to vrgvmi[v.iVM]
+	// there is no longer a concept of "current" except to the main window
+    //PVM  pvmCur;        // pointer to rgvm[v.iVM]
+    //PVMINST pvmiCur;    // UNUSED pointer to vrgvmi[v.iVM]
 
 #if defined(ATARIST) || defined(SOFTMAC)
     REGS *pregs;        // pointer to registers and large memory block
@@ -736,6 +743,9 @@ extern char const * const rgszROM[];
 
 #define FIsROMAnyMac68K(os)   !!((os) & 0x007F0000)
 
+
+// These are the types of VMs we can emulate
+//
 enum
 {
 	// Atari 8-bit machines without cartridge
@@ -746,9 +756,9 @@ enum
 
 	// Atari 8-bit machines with cartridge - !!! no longer used
 
-	vmAtari48C = 0x00000080,
-	vmAtariXLC = 0x00000100,
-	vmAtariXEC = 0x00000800,
+	//vmAtari48C = 0x00000080,
+	//vmAtariXLC = 0x00000100,
+	//vmAtariXEC = 0x00000800,
 
 	// Tutor 68000 simulators
 
@@ -808,7 +818,7 @@ extern char const * const rgszVM[];
 
 // vmwMask is set to the vm bits that are supported by a given build
 
-#define vmw8bit  (vmAtari48 | vmAtariXL | vmAtariXE | vmAtari48C | vmAtariXLC | vmAtariXEC)
+#define vmw8bit  (vmAtari48 | vmAtariXL | vmAtariXE /*| vmAtari48C | vmAtariXLC | vmAtariXEC */)
 #define vmwST    (vmAtariST | vmAtariSTE)
 #define vmwSTTT  (vmwST     | vmAtariTT)
 #define vmwSTET  (vmAtariSTE | vmAtariTT)
@@ -913,8 +923,8 @@ void RenderBitmap();
 void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();
 //BOOL OpenThePath(HWND hWnd, char *psz);
-BOOL OpenTheFile(HWND hWnd, char *psz, BOOL fCreate, int type);
-BOOL ReadCart();
+BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int type);
+BOOL ReadCart(int iVM);
 void InitCart(int iVM);
 void BankCart(int iVM, int i, int v);
 void FixAllMenus();
@@ -941,12 +951,13 @@ BOOL FlushToPrinter(int);
 BOOL FPrinterReady();
 
 // props.c
+PVMINFO DetermineVMType(int);
 void InitProperties(void);
 //BOOL EditProperties(void);
 BOOL LoadProperties(char *, BOOL);
 BOOL SaveProperties(char *);
 BOOL CreateAllVMs();
-BOOL AddVM(const VMINFO *pvmi, int *pi, int type);
+int AddVM(int type);
 void DeleteVM(int);
 
 // romcard.c

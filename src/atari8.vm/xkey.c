@@ -68,9 +68,6 @@ void CheckKey(int iVM)
         shift &= ~wCapsLock;
         }
 
-    oldshift = shift ^ oldshift;
-    oldshift = shift;
-
     if (dshift || scan || ch)
         {
         fKeyPressed = (scan << 8) | ch;
@@ -80,9 +77,7 @@ void CheckKey(int iVM)
     else
         {
         if (!fKeyPressed)
-            {
             return;
-            }
 
         SKSTAT |= 0x04;
         fKeyPressed = 0;
@@ -133,24 +128,6 @@ void CheckKey(int iVM)
 
 				KBCODE = 0xB4;
 				goto lookit2;
-
-	#if 0 // these char's are never put in our buffer
-			case 0x49:
-				// Page Up (scroll window down) not put in the buffer, this won't execute (GEM special fn key - BRAKES)
-			Lpup:
-				if (wStartScan > 0)
-					wStartScan--;
-				ForceRedraw();
-				return;
-
-			case 0x51:
-				// Page Down (scroll window up) not put in the buffer, this won't execute (GEM special fn key - FIRE)
-			Lpdown:
-				if (wStartScan < 55)
-					wStartScan++;
-				ForceRedraw();
-				return;
-	#endif
 		}
     }
 
@@ -202,26 +179,6 @@ void CheckKey(int iVM)
 			else if ((scan >= 0x5E) && (scan <= 0x67))
 				scan -= 0x23;
 			break;
-
-	#if 0
-		case 0x3F:
-			// F5 - nothing
-			return;
-
-		case 0x58:
-			// Shift+F5 - nothing
-			return;
-	#endif
-
-#if 0 // not in the keyboard buffer, handled by Windows msg
-		case 0x40:
-		case 0x59:
-			// F6 or Shift+F6 - XL Help key
-
-			//KBCODE = 17;
-			rgbMem[0x2dc] = 17;	// HELPFG
-			goto lookit2;
-#endif
 
 		case 0x77: // Control + Home
 			scan = 0x47;
@@ -390,11 +347,11 @@ lookitup:
 
 	KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
 
-    if (KBCODE == 255)
-    {
-        return;
-    }
-
+	if (KBCODE == 255)
+	{
+		return;
+	}
+	
 lookit2:
     SKSTAT &= ~0x04;
 
@@ -464,7 +421,8 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
 				wShiftChanged = (*pbshift & wAnyShift);
 
-				*pbshift &= ~wCtrl; // on German keyboards, right Alt is same as Ctrl+Alt
+				// !!! this would prevent graphics characters from being typed
+				//*pbshift &= ~wCtrl; // on German keyboards, right Alt is same as Ctrl+Alt
 
 				switch (msg.wParam)
 				{
