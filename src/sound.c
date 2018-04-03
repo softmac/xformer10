@@ -1017,25 +1017,36 @@ void InitMIDI(int iVM)
 void InitJoysticks()
 {
 #if !defined(_M_ARM)
-    int i;
-	
+	int i, j = 0, nj;
+	MMRESULT mm;
+	JOYCAPS jc;
+
 	ReleaseJoysticks();
 
-	int nj;
-
-    if ((nj = joyGetNumDevs()) == 0)
+	if ((nj = joyGetNumDevs()) == 0)
         return;
 
-    memset (&vi.rgji, 0, sizeof(vi.rgji));
-	MMRESULT mm;
-    for (i = 0; i < 2; i++)
-        {
-        vi.rgji[i].dwSize = sizeof(JOYINFOEX);
-        vi.rgji[i].dwFlags = JOY_RETURNBUTTONS | JOY_RETURNX | JOY_RETURNY;
+	// 16 seems to be common, and the 2nd and subsequent joysticks might be a sparse matrix so check thenm all
+	nj = min(nj, NUM_JOYDEVS);
 
-        if (joyGetPosEx(JOYSTICKID1+i, &vi.rgji[i]) != JOYERR_UNPLUGGED)
-            mm = joyGetDevCaps(JOYSTICKID1+i, &vi.rgjc[i], sizeof(JOYCAPS));
-        }
+    memset (&vi.rgji, 0, sizeof(vi.rgji));
+	
+	for (i = 0; i < nj; i++)
+	{
+		vi.rgji[i].dwSize = sizeof(JOYINFOEX);
+		vi.rgji[i].dwFlags = JOY_RETURNBUTTONS | JOY_RETURNX | JOY_RETURNY;
+
+		if (joyGetPosEx(JOYSTICKID1 + i, &vi.rgji[i]) != JOYERR_UNPLUGGED)
+		{
+			mm = joyGetDevCaps(JOYSTICKID1 + i, &jc, sizeof(JOYCAPS));
+			if (!mm && jc.wNumButtons > 0)
+			{
+				vi.rgjc[j] = jc;	// joy caps
+				vi.rgjn[j++] = i;	// which joystick ID this is
+			}
+		}
+	}
+	vi.njc = j;	// this is how many actual joysticks are plugged in, and we compacted the array of them
 #endif
 }
 
@@ -1051,7 +1062,7 @@ void CaptureJoysticks()
     if (joyGetNumDevs() == 0)
         return;
 
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < NUM_JOYDEVS; i++)
         {
 		mm = joySetThreshold(JOYSTICKID1 + i, (vi.rgjc[i].wXmax - vi.rgjc[i].wXmin) / 8);
         //mm = joySetCapture(vi.hWnd, JOYSTICKID1+i, 100, TRUE); // doesn't work, so we just poll
@@ -1062,7 +1073,9 @@ void CaptureJoysticks()
 void ReleaseJoysticks()
 {
 #if !defined(_M_ARM)
-    MMRESULT mm = joyReleaseCapture(JOYSTICKID1);
-    mm = joyReleaseCapture(JOYSTICKID2);
+	for (int z = 0; z < NUM_JOYDEVS; z++)
+		//joyReleaseCapture(JOYSTICKID1 + z)
+		;
+
 #endif
 }

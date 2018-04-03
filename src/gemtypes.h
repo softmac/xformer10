@@ -548,8 +548,11 @@ typedef struct
     ULONG iSCSIRead;    // current index into pvSCSIData
     ULONG cbSCSIAlloc;  // current committed size of pvSCSIData
 
-    JOYINFOEX rgji[4];  // joystick state
-    JOYCAPS   rgjc[4];  // joystick info
+#define NUM_JOYDEVS 16
+    JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
+    JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
+	int rgjn[NUM_JOYDEVS];	// which handle we use to use that joystick
+	int njc;			// # of joysticks
 
     PDI  rgpdi[10];     // pointers to DISKINFO structures for disks
 

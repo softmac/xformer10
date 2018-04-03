@@ -263,8 +263,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
     char rgch[MAX_PATH];
 	char *sz;
 	BOOL f = FALSE;
-    BOOL fTriedWindows = FALSE;
-
+    
 	sz = szIn;
 	if (!szIn)
 	{
@@ -275,21 +274,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 
     vTmp.cb = 0;
 
-LTryAgain:
-
 	int h = _open(sz, _O_BINARY | _O_RDONLY);	
-    if (h == -1 && !szIn && !fTriedWindows)
-    {
-        // on failure, try the actual C:\WINDOWS directory (for our ini file)
-
-        char sz2[MAX_PATH];
-
-        GetWindowsDirectory((LPSTR)&sz2, MAX_PATH);
-        SetCurrentDirectory(sz2);
-        fTriedWindows = TRUE;
-
-        goto LTryAgain;
-    }
 
 	// don't hurt the current session if this load fails
 	int l;
@@ -525,7 +510,7 @@ BOOL SaveProperties(char *szIn)
 						char *pPersist;
 						if (FSaveStateVM(i, &pPersist, (int *)&cb))
 						{
-							// save the state of this VM
+							// save the state of this VM - size first to prevent reading garbage and thinking its valid
 							l = _write(h, &cb, sizeof(DWORD));
 							if (l == sizeof(DWORD))
 							{
