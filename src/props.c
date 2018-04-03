@@ -27,6 +27,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST, Atari 8-bit, maybe Mac
 #else
 char const szIniFile[] = "XF2000.INI";      // Atari 8-bit only
 #endif // ATARIST
+
 #else  // !XFORMER
 #ifdef SOFTMAC
 #ifdef ATARIST
@@ -40,57 +41,97 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 #endif // XFORMER
 
 
+// some of the only code that should be allowed to have secret knowledge about the type of VM being used,
+// the code that gives you the VMINFO describing it, based on the VM type # (1, 2, 3 are ATARI 800, etc.)
+// which is all you should need to know from now on
+// Returns a pointer to a global structure - no alloc or free needed
+//
+PVMINFO DetermineVMType(int type)
+{
+	PVMINFO pvmi = NULL;
+
+#ifdef XFORMER
+	if (FIsAtari8bit(type))
+		pvmi = (PVMINFO)&vmi800;
+#endif
+
+#ifdef ATARIST
+	else if (FIsAtari68K(type))
+		pvmi = (PVMINFO)&vmiST;
+#endif
+
+#ifdef SOFTMAC
+	if (FIsMac16(type))
+		pvmi = (PVMINFO)&vmiMac;
+#endif
+
+#ifdef SOFTMAC2
+	if (FIsMac68020(type))
+		pvmi = (PVMINFO)&vmiMacII;
+
+	if (FIsMac68030(type))
+		pvmi = (PVMINFO)&vmiMacQdra;
+
+	if (FIsMac68040(type))
+		pvmi = (PVMINFO)&vmiMacQdra;
+#ifdef POWERMAC
+	if (FIsMacPPC(type))
+		pvmi = (PVMINFO)&vmiMacPowr;
+#endif // POWERMAC
+#endif // SOFTMAC2
+
+	return pvmi;
+}
+
+
 //
 // Add a new virtual machine to rgvm - return which instance it found
 // It will Install only... the caller needs to set a disk or cartridge image after this
 // before calling Init, ColdStart and CreateNewBitmap
 //
 
-BOOL AddVM(const VMINFO *pvmi, int *pi, int type)
+int AddVM(int type)
 {
-    int i;
+    int iVM;
     
     // first try to find an empty slot in the rgvm array
-	for (i = 0; i < MAX_VM; i++)
+	for (iVM = 0; iVM < MAX_VM; iVM++)
     {
-        if (!rgvm[i].fValidVM)
+        if (!rgvm[iVM].fValidVM)
             break;
     }
 
     // did not find an empty slot!
-	if (i == MAX_VM)
+	if (iVM == MAX_VM)
 	{
-		return FALSE;
+		return -1;
 	}
 
-    // i is now an index to an empty VM
+	// get the VMINFO all about this type of VM, incl. our jump table needed to call InstallVM
+	rgvm[iVM].pvmi = DetermineVMType(type);
 
-	if (pi)
-        *pi = i;
-
-	// our jump table for the routines. FInstallVM will crash if we don't do this first
-	rgvm[i].pvmi = (VMINFO *)pvmi;
-
-	BOOL f = FInstallVM(i, (VMINFO *)pvmi, type);
+	BOOL f = FALSE;
+	if (rgvm[iVM].pvmi)
+		f = FInstallVM(iVM, rgvm[iVM].pvmi, type);
 
 	if (f)
 	{
 		v.cVM++;
 
-		// we're so trusting we don't even want the thread ID or handle. Tell it which VM it is
-		iThreadVM[i] = i;
-		fKillThread[i] = FALSE;
-		if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
+		// Make a thread for this VM and tell it which VM it is
+		iThreadVM[iVM] = iVM;
+		fKillThread[iVM] = FALSE;
+		if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[iVM], 0, NULL))
 			f = FALSE;
 	}
 
-	rgvm[i].fValidVM = f;
+	rgvm[iVM].fValidVM = f;
 
-	// decide on an app level?
-	rgvm[i].fSound = TRUE;
-	rgvm[i].fJoystick = TRUE;
+	// always enable these, why not?
+	rgvm[iVM].fSound = TRUE;
+	rgvm[iVM].fJoystick = TRUE;
 
-	return f;
+	return iVM;
 }
  
 // This will Uninit and delete the VM, freeing it's bitmap, etc.
@@ -142,14 +183,14 @@ void InitProperties()
 	memset(&v, 0, sizeof(v));
 
 	//v.fPrivate = fTrue;         // new style settings
+
+	v.cb = sizeof(PROPS);
 	v.wMagic = 0x82201233; // some unique value
 
 	// all fields default to 0 or fFalse except for these...
 
-	v.cb = sizeof(PROPS);
 	v.ioBaseAddr = 0x240;
 	v.cCards = 1;
-
 	v.fNoDDraw = 2;      // on NT 4.0 some users won't be able to load DirectX
 	v.fZoomColor = FALSE; // make the window large
 	v.fNoMono = TRUE;  // in case user is running an ATI video card
@@ -163,101 +204,55 @@ void InitProperties()
 	return;
 }
 
-// make one of everything, it's our kind of default
+// make one of everything. Returns TRUE if it made at least one thing
+// Another function that is allowed special knowledge of VMs
 //
 BOOL CreateAllVMs()
 {
 	int vmNew;
-	BOOL f = FALSE;
+	BOOL f = FALSE, fSelected = FALSE;
 
 	// make one of everything at the same time
+	for (int zz = 0; zz < 32; zz++)
+	{
 #ifdef XFORMER
-
-    // Create and initialize the default Atari 8-bit VMs
-
-	if (!AddVM(&vmi800, &vmNew, vmAtari48))
-		return f;
-
-// !!! if you want to put a default disk in the drive for a new VM, this is the place to do it
-// if one is shipped and its directory location is well known
-#if 0
-	rgvm[iVM].rgvd[0].dt = DISK_IMAGE;	// and 1 and 2 too
-	strcpy(rgvm[iVM].rgvd[0].sz, "DOS25.XFD");	// doesn't work, not in right dir
+		if (FIsAtari8bit(1 << zz))
 #endif
+#if defined (ATARIST) || defined (SOFTMAC)
+			if (FIs....)	// TODO, and if the below code is important it belongs in INSTALL, not here
 
-	f = FALSE;
-	if (FInitVM(vmNew))
-		if (f = ColdStart(vmNew))
-			if (vi.hdc)
-				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
-	if (!f)
-		DeleteVM(vmNew);
-	else
-		SelectInstance(vmNew);	// select the first one we make as current
+			//AddVM(&vmiST, NULL);
+			//strcpy(rgvm[v.cVM - 1].szModel, rgszVM[5]);
 
-	if (!AddVM(&vmi800, &vmNew, vmAtariXL))
-		return f;
+			//AddVM(&vmiST, NULL);
+			//strcpy(rgvm[v.cVM - 1].szModel, rgszVM[5]);
+			//strcat(rgvm[v.cVM - 1].szModel, "/030");
+			//rgvm[v.cVM - 1].fCPUAuto = FALSE;
+			//rgvm[v.cVM - 1].bfCPU = cpu68030;
+#endif
+		{
+			if ((vmNew = AddVM(1 << zz)) == -1)
+				return FALSE;
 
-	f = FALSE;
-	if (FInitVM(vmNew))
-		if (f = ColdStart(vmNew))
-			if (vi.hdc)
-				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
-	if (!f)
-		DeleteVM(vmNew);
-
-	if (!AddVM(&vmi800, &vmNew, vmAtariXE))
-		return f;
-
-	f = FALSE;
-	if (FInitVM(vmNew))
-		if (f = ColdStart(vmNew))
-			if (vi.hdc)
-				CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
-	if (!f)
-		DeleteVM(vmNew);
-
+			f = FALSE;
+			if (FInitVM(vmNew))
+				if (f = ColdStart(vmNew))
+					if (vi.hdc)
+						CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			if (!f)
+				DeleteVM(vmNew);
+			else
+			{
+				if (!fSelected)
+				{
+					SelectInstance(vmNew);	// select the first one we make as current
+					fSelected = TRUE;
+				}
+			}
+		}
+	}
+	
 	FixAllMenus();
-
-#endif
-
-#ifdef ATARIST
-
-    // initialize the default Atari ST VM (68000 mode)
-
-    AddVM(&vmiST, NULL);
-    strcpy(rgvm[v.cVM-1].szModel, rgszVM[5]);
-
-    // initialize the default Atari ST VM (68030 mode)
-
-    AddVM(&vmiST, NULL);
-    strcpy(rgvm[v.cVM-1].szModel, rgszVM[5]);
-    strcat(rgvm[v.cVM-1].szModel, "/030");
-    rgvm[v.cVM-1].fCPUAuto = FALSE;
-    rgvm[v.cVM-1].bfCPU = cpu68030;
-#endif
-
-#ifdef SOFTMAC
-    // initialize the default Mac Plus VM
-
-    AddVM(&vmiMac, NULL);
-#endif
-
-#ifdef SOFTMAC2
-    // initialize the default color Mac VMs
-
-    AddVM(&vmiMacII, NULL);
-
-    AddVM(&vmiMacQdra, NULL);
-
-#ifdef POWERMAC
-    // initialize the default Power Mac VMs
-
-    AddVM(&vmiMacPowr, NULL);
-    AddVM(&vmiMacG3, NULL);
-
-#endif  // POWERMAC
-#endif  // SOFTMAC2
 
     return f;
 }
@@ -288,16 +283,6 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 		SetCurrentDirectory(vi.szWindowsDir);	// first try to load from "\users\xxxx\appdata\roaming\emulators", for example
 		sz = (char *)szIniFile;
 	}
-
-#if 0
-	sz[0] = 0;
-	if (hOwner != NULL)
-        {
-        EnableWindow(hOwner,FALSE);
-        OpenTheINI(hOwner, sz);
-        EnableWindow(hOwner,TRUE);
-        }
-#endif
 
     vTmp.cb = 0;
 
@@ -344,7 +329,7 @@ LTryAgain:
 		v.cVM = 0;	// no matter what they say, assume they're bad until we see they're good
 
 		// we're loading our .ini file and they didn't want the last session restored, so don't
-		if (!szIn && !v.fRestoreLastSession)
+		if (!szIn && !v.fSaveOnExit)
 			fPropsOnly = TRUE;
 
 		// non-persistable pointers need to be refreshed
@@ -357,8 +342,6 @@ LTryAgain:
 			if (fPropsOnly)
 				break;
 
-			rgvm[i].pvmi = NULL;
-
 			// read the per-instance VM persistable structure
 			l = _read(h, &rgvm[i], sizeof(VM));
 			if (l != sizeof(VM) || rgvm[i].cbSize != sizeof(VM))
@@ -368,41 +351,10 @@ LTryAgain:
 				break;
 			}
 
-#ifdef XFORMER
-			// !!! hack use of FIs... Install should do this for us
-			if (rgvm[i].fValidVM && FIsAtari8bit(rgvm[i].bfHW)) {
-				rgvm[i].pvmi = (PVMINFO)&vmi800;
-			}
-#endif
+			// Get the VMINFO that tells us all about this type of VM being loaded
+			rgvm[i].pvmi = DetermineVMType(rgvm[i].bfHW);
 
-#ifdef ATARIST
-			if (FIsAtari68K(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiST;
-#endif
-
-#ifdef SOFTMAC
-			if (FIsMac16(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiMac;
-#endif
-
-#ifdef SOFTMAC2
-			if (FIsMac68020(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiMacII;
-
-			if (FIsMac68030(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
-
-			if (FIsMac68040(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiMacQdra;
-#ifdef POWERMAC
-			if (FIsMacPPC(rgvm[i].bfHW))
-				rgvm[i].pvmi = (PVMINFO)&vmiMacPowr;
-#endif // POWERMAC
-#endif // SOFTMAC2
-
-			rgvm[i].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);
-
-			// we just loaded an instance off disk. Install and Init it (unless we don't want to)
+			// we just loaded a valid instance off disk. Install and Init it
 			if (f && rgvm[i].fValidVM)
 			{
 				f = FInstallVM(i, rgvm[i].pvmi, rgvm[i].bfHW);
@@ -421,11 +373,7 @@ LTryAgain:
 						if (pPersist)
 							l = _read(h, pPersist, cb);
 						if (l == (int)cb) {
-							if (FLoadStateVM(i, pPersist, cb))
-								// !!! silly global
-								// OK to start executing, we've loading something saved (we're not doing a cold start)
-								vi.fExecuting = TRUE;
-							else
+							if (!FLoadStateVM(i, pPersist, cb))
 							{
 								f = FALSE;
 								if (FInitVM(i))
@@ -554,16 +502,6 @@ BOOL SaveProperties(char *szIn)
 		h = _open(szIn, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
 	}
 
-#if 0
-	sz[0] = '\0';
-	if (hOwner != NULL)
-        {
-        EnableWindow(hOwner,FALSE);
-        OpenTheINI(hOwner, sz);
-        EnableWindow(hOwner,TRUE);
-        }
-#endif
-
 	if (h != -1)
 	{
 		// write our GLOBAL PERSISTABLE - PROPS
@@ -571,7 +509,7 @@ BOOL SaveProperties(char *szIn)
 		int l = _write(h, &v, sizeof(v));
 
 		// we want to auto-save our .ini or we're saving to a particular file
-		if ((szIn || v.fRestoreLastSession) && l == sizeof(v))
+		if ((szIn || v.fSaveOnExit) && l == sizeof(v))
 		{
 			f = TRUE;
 			

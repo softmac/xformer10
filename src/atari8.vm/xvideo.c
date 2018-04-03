@@ -956,7 +956,7 @@ BOOL ProcessScanLine(int iVM)
 						int index = 1;
 						
 						// we can't look past the front of the array, we stored that byte in rgbSpecial
-						BYTE rgb = rgbSpecial;
+						BYTE rgb = rgbSpecial = 0;
 						if (i > 0)
 							rgb = sl.rgb[i - index];
 

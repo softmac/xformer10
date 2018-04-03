@@ -25,17 +25,23 @@ VMINFO const vmi800 =
     {
     NULL,
     0,
-    (BYTE *)"Atari 800/800XL/130XE",
+    "Atari 800/800XL/130XE",
     /* vmAtari48C | vmAtariXLC | vmAtariXEC |*/ vmAtari48 | vmAtariXL | vmAtariXE,
     cpu6502,
     ram48K | ram64K | ram128K,
     osAtari48 | osAtariXL | osAtariXE,
     monGreyTV | monColrTV,
+
 	X8,		// screen width
 	Y8,		// screen height
+	8,		// we support 2^8 colours
+	rgbRainbow, // our 256 colour palette
 	TRUE,	// fUsesCart
 	FALSE,	// fUsesMouse
 	TRUE,	// fUsesJoystick
+	"Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0",
+    "Xformer Cartridge\0*.bin;*.rom\0All Files\0*.*\0\0",	// !!! support CAR files someday?
+
     InstallAtari,
     InitAtari,
     UninitAtari,
@@ -128,11 +134,6 @@ BOOL TimeTravelPrepare(unsigned iVM)
 	// time to save a snapshot (every 5 seconds)
 	if (cTest >= s5)
 	{
-		// don't remember that we were holding down shift, control or ALT, or going back in time will act like
-		// they're still pressed because they won't see our letting go.
-		// VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
-		ControlKeyUp8(iVM);
-
 		f = SaveStateAtari(iVM, &pPersist, &cbPersist);
 		
 		if (!f || cbPersist != sizeof(CANDYHW) || Time[iVM][cTimeTravelPos[iVM]] == NULL)
@@ -140,6 +141,10 @@ BOOL TimeTravelPrepare(unsigned iVM)
 
 		_fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, sizeof(CANDYHW));
 		
+		// Do NOT remember that shift, ctrl or alt were held down.
+		// If we cold boot using Ctrl-F10, almost every time travel with think the ctrl key is still down
+		((CANDYHW *)Time[iVM][cTimeTravelPos[iVM]])->m_bshftByte = 0;
+
 		ullTimeTravelTime[iVM] = cCur;
 		
 		cTimeTravelPos[iVM]++;
@@ -917,9 +922,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;	// delay for banner messages
-    QueryTickCtr();
-	//countJiffies = 0;
-
+    
 	fBrakes = TRUE;	// go back to real time
 	wScan = 0;	// start at top of screen again
 
@@ -944,10 +947,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	if (!f)
 		return FALSE;
 
-	cntTick = 255;
-    QueryTickCtr();
-    //countJiffies = 0;
-	
+	cntTick = 255;	// start the banner up again
+    
 	fBrakes = TRUE; // go back to real time
 	clockMult = 1;	// per instance speed-up
 	wScan = 0;	// start at top of screen again
@@ -1144,6 +1145,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
 BOOL __cdecl DumpHWAtari(int iVM)
 {
+	iVM;
 #ifndef NDEBUG
 //    RestoreVideo();
 
@@ -1343,7 +1345,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
     } while (!fTrace && !fStop);
 
-    return FALSE;
+    return TRUE;
 }
 
 //

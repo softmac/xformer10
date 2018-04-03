@@ -199,7 +199,7 @@ typedef struct
     BYTE m_mdEA;
 
 	WORD m_fKeyPressed;	 // xkey.c
-	WORD m_oldshift;	 // xkey.c
+	WORD m_oldshift;	 // xkey.c NOT USED
 	BOOL m_wShiftChanged;// xkey.c
 						
 	// 6502 address space
