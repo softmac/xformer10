@@ -328,7 +328,6 @@ typedef struct
 } VM, *PVM;
 
 // each one is marked fValidVM or not. PROPS.cVM says how many of these are valid. PROPS.iVM is the current active one
-// !!! compact this array someday, and allocate on the fly so the max isn't hardcoded
 extern VM	rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
 
 //
@@ -755,7 +754,7 @@ enum
 	vmAtariXL = 0x00000002,
 	vmAtariXE = 0x00000004,
 
-	// Atari 8-bit machines with cartridge - !!! no longer used
+	// Atari 8-bit machines with cartridge - no longer used
 
 	//vmAtari48C = 0x00000080,
 	//vmAtariXLC = 0x00000100,

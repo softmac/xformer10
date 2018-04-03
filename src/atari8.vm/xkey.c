@@ -663,7 +663,6 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 		else if (mdXLXE != md800)
 			rgbMem[0x02dc] = 0;
 		
-		// !!! verify that nothing is supposed to go into the keyboard buffer
 		return TRUE; // dont' let ATARI see special function key presses
 
 	case 0x41: // F7 - START key

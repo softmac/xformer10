@@ -800,7 +800,7 @@ Lnextdir:
 
 
 // call with pb == NULL to just get size requirement
-// !!! only supported by ATARI for now, others will crash or fail
+// !!! that feature is only supported by ATARI for now, others will crash or fail
 //
 ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
 {

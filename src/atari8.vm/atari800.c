@@ -312,10 +312,10 @@ void DoVBI(int iVM)
 	if (fTrace)
 		ForceRedraw(iVM);	// it might do this anyway
 
-							// every VBI, shadow the hardware registers
-							// to their higher locations
+	// every VBI, shadow the hardware registers
+	// to their higher locations
 
-							// !!! Do this quicker in PeekBAtari() as they are read
+	// !!! Do this quicker in PeekBAtari() as they are read?
 
 	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
 	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
@@ -330,21 +330,6 @@ void DoVBI(int iVM)
 	memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
 	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
 	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
-
-#if 0 // !!! now we try drawing at scan line 262, not at the start of the VBI and hope it didn't break anything
-	if (wScanMin > wScanMac)
-	{
-		assert(0);
-		// screen is not dirty for some reason, so don't render (these variables updated in ProcessScanLine)
-	}
-	else
-	{
-		extern void RenderBitmap();
-		RenderBitmap();	// tell Gemulator to actually draw the window
-	}
-	wScanMin = 9999;	// screen not dirty anymore !!! remove these variables?
-	wScanMac = 0;
-#endif
 
 	// Gem window has a message, stop the loop to process it
 	MSG msg;
@@ -560,7 +545,7 @@ void BankCart(int iVM, int iBank, int value)
 	if (bCartType == CART_OSSA_DIFFERENT)
 	{
 		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
-		//assert(i != -1);	//!!! swapping cartridge out to RAM not supported, why does ACTION do this?
+		//assert(i != -1);
 		if (i != -1)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
@@ -576,7 +561,7 @@ void BankCart(int iVM, int iBank, int value)
 		else if ((iBank & 8) && (iBank & 1))
 			i = 2;
 		else
-			i = -1;
+			i = -1; 	//!!! swapping OSS A & B cartridge out to RAM not supported
 
 		assert(i != -1);
 		if (i != -1)
@@ -796,12 +781,6 @@ BOOL __cdecl InitAtari(int iVM)
 	ramtop = (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
 	wStartScan = STARTSCAN;	// this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
 
-    // save shift key status, why? !!! this only happens at boot time now until shutdown
-    //bshiftSav = *pbshift & (wNumLock | wCapsLock | wScrlLock);
-    //*pbshift &= ~(wNumLock | wCapsLock | wScrlLock);
-	//*pbshift |= wScrlLock;
-	//countInstr = 1;
-
 	switch (rgvm[iVM].bfHW)
 	{
 	default:
@@ -830,7 +809,7 @@ BOOL __cdecl InitAtari(int iVM)
     if (!InitPrinter(rgvm[iVM].iLPT))
 		rgvm[iVM].iLPT = 0;
 
-	// !!! We have at least 3 variables for whether or not to use sound
+	// We have per instance and overall sound on/off, right now everything is always on.
 	fSoundOn = TRUE;
     
 //  vi.pbRAM[0] = &rgbMem[0xC000-1];
@@ -1546,7 +1525,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
 			// we're (wScan / 262) of the way through the scan lines and (wLeftMax - wLeft) of the way through this scan line
 			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
-			if (iCurSample < SAMPLES_PER_VOICE)	// !!! remove once wLeft can't go < 0
+			if (iCurSample < SAMPLES_PER_VOICE)
 				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
 		}
         break;

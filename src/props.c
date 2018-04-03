@@ -1014,9 +1014,8 @@ void ListVirtualDrives(HWND hDlg)
 
             }
         else
-            {
-            // Atari 8-bit has 9 drives
-			// !!! only 8 now, don't execute this and crash
+            {// Atari 8-bit has 9 drives
+			// only 8 now, don't execute this and crash
             sprintf(rgch, "Atari 8-bit disk drive D%c: ", '1' + i);
             }
 

@@ -385,7 +385,7 @@ BOOL ProcessScanLine(int iVM)
 
     int i, j;
 	
-	// !!! used to be static! Not even used
+	// !!! used to be static! Not even used, but I'm scared to remove it
     WORD rgfChanged = 0;
 
 	// don't do anything in the invisible retrace sections
@@ -635,7 +635,7 @@ BOOL ProcessScanLine(int iVM)
     if (pmg.grafm)
         {
         // Missiles that are offsecreen are treated as invisible
-		// !!! 47 and 208 are the limits, make sure it doesn't encroach
+		// 47 and 208 are the limits, make sure it doesn't encroach
         if ((pmg.hposm0 < 8) || (pmg.hposm0 >= 216))
             pmg.grafm &= ~0x03;
         if ((pmg.hposm1 < 8) || (pmg.hposm1 >= 216))
@@ -665,9 +665,9 @@ BOOL ProcessScanLine(int iVM)
             }
         }
 
-// !!! RENDER section used to be called separately
+// RENDER section - used to be called separately
 
-	BYTE rgbSpecial;	// the byte off the left of the screen that needs to be scrolled on
+	BYTE rgbSpecial = 0;	// the byte off the left of the screen that needs to be scrolled on
 	//static BYTE sModeLast;	// last ANTIC mode we saw
 
 	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
@@ -737,16 +737,11 @@ BOOL ProcessScanLine(int iVM)
 #endif
 
 	// !!! we no longer support trying to save time and skip some rendering if things are the same.
-	// It won't save much time, and it's really hard to get right
+	// It won't save much time, and it's really hard to get right (it never was)
 	// This is for variables rgfChanged and fDataChanged
+    rgfChanged |= fAll;
 
-    // HACK! HACK! render everything all the time until the screen
-    // corruption is figured out
-    // !!! Darek says This makes it OK to not check CHBASE all the time in ExecuteAtari()
-	// only do this if CHBASE changed for that scan line, we don't cache CHBASE per scan line
-	// ? but we do, don't we?
-	rgfChanged |= fAll;
-
+	// Old comment:
     // Even if rgfChanged is 0 at this point, we have to check the 10 to 48
     // data bytes associated with this scan line. If it is the first scan line
     // of this mode then we need to blit and compare the memory.
@@ -806,7 +801,7 @@ BOOL ProcessScanLine(int iVM)
 
 #ifndef NDEBUG
         // show current stack
-        // !!! annoying debug pixels near top of screen qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
+        // annoying debug pixels near top of screen: qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
 #endif
 
 		// more unimplemented code to see if we're dirty
@@ -1819,8 +1814,7 @@ BOOL ProcessScanLine(int iVM)
         {
         BYTE *qch = vrgvmi[iVM].pvBits;
 
-		// now set the bits in rgpix corresponding to players and missiles
-		// missiles go underneath the players, at least in Ms. Pacman. !!! RIVERAID breaks if missiles drawn first, no missile collision
+		// now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
 		DrawPlayers(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
 		DrawMissiles(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);	// 5th player?
 
@@ -1897,7 +1891,7 @@ BOOL ProcessScanLine(int iVM)
 			
 			// !!! 5th PLAYER MODE BROKEN
 
-			// !!! can't be right
+			// !!! GTIA special casing can't be right
 			if ((b == 0 || !(b & 0xF)) && sl.modelo > 15)
 				;
 			else
@@ -1919,7 +1913,7 @@ BOOL ProcessScanLine(int iVM)
         ShowCountDownLine(iVM);
         }
 
-#if 0 // !!! rainbow #ifndef NDEBUG
+#if 0 // rainbow, was #ifndef NDEBUG
 
     // display the collision registers on each scan line
     //
