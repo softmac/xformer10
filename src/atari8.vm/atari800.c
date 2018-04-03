@@ -726,7 +726,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
 	// These things change depending on the machine we're emulating
 
-	switch (type)
+	switch (1 << type)
 	{
 	case vmAtari48:
 		rgvm[iVM].bfHW = vmAtari48;

@@ -162,6 +162,7 @@ typedef struct
 
 //
 // VMINFO, each VM TYPE has one of these describing its capabilities and providing its function table
+// READ ONLY (they are shared)
 //
 typedef struct _vminfo
 {
