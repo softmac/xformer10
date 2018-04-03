@@ -1021,7 +1021,9 @@ void InitJoysticks()
 	
 	ReleaseJoysticks();
 
-    if (joyGetNumDevs() == 0)
+	int nj;
+
+    if ((nj = joyGetNumDevs()) == 0)
         return;
 
     memset (&vi.rgji, 0, sizeof(vi.rgji));
