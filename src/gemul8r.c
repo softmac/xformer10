@@ -3060,22 +3060,32 @@ break;
 			if (v.fFullScreen)
 			{
 				// Get rid of the title bar and menu and maximize
+				// remember if we didn't used to be maximized before
+				BOOL fR = (v.swWindowState == SW_SHOWNORMAL);
 				ShowWindow(vi.hWnd, SW_MAXIMIZE); // this has to go first or it might not work!
 				SetMenu(vi.hWnd, NULL);
 				ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
 				SetWindowLong(vi.hWnd, GWL_STYLE, l & ~(WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
+				if (fR)
+					v.swWindowState = SW_SHOWNORMAL; // several WM_SIZE msgs come from the above code
+
 			}
 			else
 			{
-				// Enable title bar and menu
+				// Enable title bar and menu. Remember if we didn't used to be maximized before
+				BOOL fR = (v.swWindowState == SW_SHOWNORMAL);
 				ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
 				SetMenu(vi.hWnd, vi.hMenu);
 				SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
-				ShowWindow(vi.hWnd, SW_RESTORE);	// this has to go last or the next maximize doesn't work!
+				// put it back the way we found it
+				if (fR)
+					ShowWindow(vi.hWnd, SW_SHOWNORMAL);	// this has to go last or the next maximize doesn't work!
+				else
+					ShowWindow(vi.hWnd, SW_SHOWMAXIMIZED);
 			}
 
 			FixAllMenus();
-			break;
+			return 0; // return or windows chimes
 
 		// toggle stretch/letterbox mode
 		case IDM_STRETCH:
