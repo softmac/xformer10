@@ -238,71 +238,52 @@ void DoVBI(int iVM)
 	}
 
 	// process joysticks before the vertical blank, just because.
-	// Very slow if joysticks not installed, so skip the code
 	// When tiling, only the tile in focus gets input
-	if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick && vi.rgjc[0].wNumButtons > 0) {
-		JOYINFO ji;
-		MMRESULT mm = joyGetPos(0, &ji);
-		if (mm == 0) {
-
-			int dir = (ji.wXpos - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-			dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-
-			rPADATA |= 12;                  // assume joystick centered
-
-			if (dir < 0)
-				rPADATA &= ~4;              // left
-			else if (dir > 0)
-				rPADATA &= ~8;              // right
-
-			dir = (ji.wYpos - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-			dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-
-			rPADATA |= 3;                   // assume joystick centered
-
-			if (dir < 0)
-				rPADATA &= ~1;              // up
-			else if (dir > 0)
-				rPADATA &= ~2;              // down
-
-			UpdatePorts(iVM);
-
-			if (ji.wButtons)
-				TRIG0 &= ~1;                // JOY 0 fire button down
-			else
-				TRIG0 |= 1;                 // JOY 0 fire button up
-		}
-		if (vi.rgjc[1].wNumButtons > 0)
+	if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick && vi.njc > 0)
+	{
+		// we can handle 4 joysticks on 800, 2 on XL/XE
+		for (int joy = 0; joy < min(vi.njc, (mdXLXE == md800) ? 4 : 2); joy++)
 		{
-			mm = joyGetPos(1, &ji);
+			JOYINFO ji;
+			MMRESULT mm = joyGetPos(vi.rgjn[joy], &ji);
 			if (mm == 0) {
 
-				int dir = (ji.wXpos - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
-				dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
+				int dir = (ji.wXpos - (vi.rgjc[vi.rgjn[joy]].wXmax - vi.rgjc[vi.rgjn[joy]].wXmin) / 2);
+				dir /= (int)((vi.rgjc[vi.rgjn[joy]].wXmax - vi.rgjc[vi.rgjn[joy]].wXmin) / wJoySens);
 
-				rPADATA |= 192;                  // assume joystick centered
+				BYTE *pB;
+				if (joy < 2)
+					pB = &rPADATA;	// joy 1 & 2
+				else
+					pB = &rPBDATA;	// joy 3 & 4
 
-				if (dir < 0)
-					rPADATA &= ~64;              // left
-				else if (dir > 0)
-					rPADATA &= ~128;              // right
+				// joy 1 & 3 are low nibble, 2 & 4 are high nibble
 
-				dir = (ji.wYpos - (vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / 2);
-				dir /= (int)((vi.rgjc[1].wYmax - vi.rgjc[1].wYmin) / wJoySens);
-
-				rPADATA |= 48;                   // assume joystick centered
+				(*pB) |= (12 << ((joy & 1) << 4));                  // assume joystick X centered
 
 				if (dir < 0)
-					rPADATA &= ~16;              // up
+					(*pB) &= ~(4 << ((joy & 1) << 2));              // left
 				else if (dir > 0)
-					rPADATA &= ~32;              // down
+					(*pB) &= ~(8 << ((joy & 1) << 2));              // right
+
+				dir = (ji.wYpos - (vi.rgjc[vi.rgjn[joy]].wYmax - vi.rgjc[vi.rgjn[joy]].wYmin) / 2);
+				dir /= (int)((vi.rgjc[vi.rgjn[joy]].wYmax - vi.rgjc[vi.rgjn[joy]].wYmin) / wJoySens);
+
+				(*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
+
+				if (dir < 0)
+					(*pB) &= ~(1 << ((joy & 1) << 2));              // up
+				else if (dir > 0)
+					(*pB) &= ~(2 << ((joy & 1) << 2));              // down
 
 				UpdatePorts(iVM);
+				
+				pB = &TRIG0;
 
 				if (ji.wButtons)
-					TRIG1 &= ~1;                // JOY 0 fire button down
+					(*(pB + joy)) &= ~1;                // JOY fire button down
 				else
-					TRIG1 |= 1;                 // JOY 0 fire button up
+					(*(pB + joy)) |= 1;                 // JOY fire button up
 			}
 		}
 	}
@@ -382,6 +363,11 @@ BOOL ReadCart(int iVM)
 	int cb = 0;
 	long l;
 
+	if (!pch || !rgvm[iVM].rgcart.fCartIn)
+	{
+		return TRUE;	// nothing to do, all OK
+	}
+
 	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
 	if (h != -1)
 	{
@@ -425,11 +411,11 @@ BOOL ReadCart(int iVM)
 
 	else if (cb == 16384)
 	{
-		// copies of the INIT and START addresses and the CART PRESENT byte appear in both cartridge areas - not banked
+		// copies of the INIT address and the CART PRESENT byte appear in both cartridge areas - not banked
 		if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0)
 			bCartType = CART_16K;
 
-		// start area is in the lower half which wouldn't exist yet if we were banked
+		// INIT area is in the lower half which wouldn't exist yet if we were banked
 		else if (pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
 			bCartType = CART_16K;
 
@@ -441,9 +427,13 @@ BOOL ReadCart(int iVM)
 		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
 			bCartType = CART_OSSB;
 
-		// assume it's a normal 16K cartridge
-		else
+		// valid INIT address and CART PRESENT byte - assume a 16K cartridge
+		else if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0)
 			bCartType = CART_16K;
+
+		// bad cartridge?
+		else
+			bCartType = 0;
 	}
 
 	// assume >16K is an XEGS cart
@@ -461,7 +451,14 @@ BOOL ReadCart(int iVM)
 		rgvm[iVM].rgcart.fCartIn = FALSE;
 	}
 #endif
-	return TRUE;
+
+	if (!bCartType)
+	{
+		rgvm[v.iVM].rgcart.fCartIn = FALSE;	// unload the cartridge
+		rgvm[v.iVM].rgcart.szName[0] = 0; // erase the name
+	}
+
+	return bCartType;	// say if cart looks good or not
 }
 
 
@@ -470,10 +467,10 @@ BOOL ReadCart(int iVM)
 void InitCart(int iVM)
 {
 	// no cartridge
-	if (!(rgvm[iVM].rgcart.fCartIn))
+	if (!(rgvm[iVM].rgcart.fCartIn) || !bCartType)
 	{
 		// convenience for Atari 800, we can ask for BASIC to be put in
-		if (rgvm[iVM].bfHW == vmAtari48 && ramtop == 0xA000)
+		if (rgvm[iVM].bfHW == vmAtari48 && ramtop <= 0xA000)
 		{
 			_fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
 			ramtop = 0xA000;
@@ -1041,7 +1038,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 	rPADATA = 255;	// the data PORTA will provide if it is in READ mode
 	wPADATA = 0;	// the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
-	rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL bit to indicate if BASIC is swapped in
+	rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 255; // XL bit to indicate if BASIC is swapped in
 	wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL bit to indicate if BASIC is swapped in
 	PACTL  = 60;
     PBCTL  = 60;
@@ -1070,13 +1067,17 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	return TimeTravelReset(iVM); // state is now a valid anchor point
 }
 
-// SAVE: return a pointer to our data, and how big it is
+// SAVE: return a pointer to our data, and how big it is. It will not be harmed, and used before we are Uninit'ed, so don't
+// waste time copying anything, just return the right pointer.
+// The pointer might be NULL if they just want the size
 //
 BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 {
 	// there are some time travel pointers in the structure, we need to be smart enough not to use them
-	*ppPersist = (char *)&vrgcandy[iVM];
-	*pcbPersist = sizeof(vrgcandy[iVM]);
+	if (ppPersist)
+		*ppPersist = (char *)&vrgcandy[iVM];
+	if (pcbPersist)
+		*pcbPersist = sizeof(vrgcandy[iVM]);
 	return TRUE;
 }
 

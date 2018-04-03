@@ -54,7 +54,6 @@ PROPS v;				// global persistable stuff
 INST vi;				// global non-persistable stuff
 VMINST vrgvmi[MAX_VM];	// per instance not persistable stuff
 VM rgvm[MAX_VM];		// per instance persistable stuff
-VMINFO *vpvm;			// the "current" instance's VMINFO (about this VM type), found inside its VM
 
 // and our other globals
 
@@ -509,13 +508,9 @@ void FixAllMenus()
 	// Now fix the FILE menu's list of all valid VM's
 	CreateVMMenu();
 
-	// Now put all the possible different new VM types that can be created into the menu
-
-	int zz = 0;
-
 	// populate the menu with all the relevant choices of VM types they can make
 
-	for (; zz < 32; zz++)
+	for (int zz = 0; zz < 32; zz++)
 	{
 		// is this a type of VM we can handle?
 		if (DetermineVMType(zz))
@@ -927,15 +922,15 @@ int CALLBACK WinMain(
 	else
 		v.fTiling = FALSE;	// don't tile a single VM
 
-	// If we were drag and dropped some files, don't load the old VMs
-    if (!fSkipLoad)
+	// If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
+    if (!fSkipLoad && v.fSaveOnExit)
 		fProps = LoadProperties(lpLoad, FALSE);
 	
 	// If we didn't restore/drag any VM's, we need some, so make some
 	if (v.cVM == 0)
 	{
 		if (!CreateAllVMs())
-			return FALSE;	// uh oh, app dead.
+			return FALSE;	// !!! uh oh, app dead.
 		
 #if defined(ATARIST) || defined(SOFTMAC)
 		// Now go and prompt the user with First Time Setup if necessary
@@ -1193,24 +1188,59 @@ int CALLBACK WinMain(
 			// THIS IS OUR MAIN LOOP
 			// =====================
 
-			HANDLE hV[MAX_VM];	// current executing VM list
+			HANDLE hVG[MAX_VM];	// handles of threads we want to go
+			HANDLE hVD[MAX_VM];
 			int iV = 0;
 
 			// Tell the thread(s) to go.
 			if (v.fTiling)
 			{
-				// tell each thread to go. Build the array of events we need to wait on
-				for (int iVM = 0; iVM < MAX_VM; iVM++)
+				RECT rect;
+				GetClientRect(vi.hWnd, &rect);
+
+				// Don't waste time executing tiles we can't see. Pause them for performance.
+
+				// find the VM at the top of the page
+				int iVM = nFirstTile;
+				while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
+					iVM++;
+
+				int x, y, iDone = iVM;
+				
+				// !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
+				int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+
+				for (y = sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
 				{
-					if (rgvm[iVM].fValidVM)
+					for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
 					{
-						SetEvent(hGoEvent[iVM]);
-						hV[iV++] = hDoneEvent[iVM];
+						// Don't consider tiles completely off screen
+						if (y + vvmhw[iVM].ypix > 0 && y < rect.bottom)
+						{
+							hVG[iV] = hGoEvent[iVM];	// found one
+							hVD[iV++] = hDoneEvent[iVM];
+						}
+
+						// advance to the next valid bitmap
+						do
+						{
+							iVM = (iVM + 1) % MAX_VM;
+						} while (!rgvm[iVM].fValidVM);
+
+						// we've considered them all
+						if (iDone == iVM)
+							break;
 					}
+					if (iDone == iVM)
+						break;
 				}
 
-				// wait for them all to complete one frame
-				WaitForMultipleObjects(v.cVM, hV, TRUE, INFINITE);
+				// tell each thread to go
+				for (iVM = 0; iVM < iV; iVM++)
+					SetEvent(hVG[iVM]);
+				
+				// wait for them to complete one frame
+				WaitForMultipleObjects(v.cVM, hVD, TRUE, INFINITE);
 			}
 			else
 			{
@@ -1981,8 +2011,8 @@ void RenderBitmap()
 		BOOL fBlack = FALSE;
 
 		// !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-		int nx1 = (rect.right - rect.left) / vvmhw[iVM].xpix; // how many fit across entirely?		
-		int nx = ((rect.right - rect.left) * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+		int nx1 = rect.right / vvmhw[iVM].xpix; // how many fit across entirely?		
+		int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
 
 		// black out the area we'll never draw to
 		if (nx == nx1)
@@ -2042,8 +2072,8 @@ void RenderBitmap()
 
 		for (scale = 16; scale > 1; scale--)
 		{
-			x = (rect.right - rect.left) - (vvmhw[iVM].xpix * vi.fXscale * scale);
-			y = (rect.bottom - rect.top) - (vvmhw[iVM].ypix * vi.fYscale * scale);
+			x = rect.right - (vvmhw[iVM].xpix * vi.fXscale * scale);
+			y = rect.bottom - (vvmhw[iVM].ypix * vi.fYscale * scale);
 
 			if ((x >= 0) && (y >= 0))
 				break;
@@ -2051,8 +2081,8 @@ void RenderBitmap()
 
 		// Repeat for the case of scale==1 when rectangle doesn't fit
 
-		x = (rect.right - rect.left) - (vvmhw[iVM].xpix * vi.fXscale * scale);
-		y = (rect.bottom - rect.top) - (vvmhw[iVM].ypix * vi.fYscale * scale);
+		x = rect.right - (vvmhw[iVM].xpix * vi.fXscale * scale);
+		y = rect.bottom - (vvmhw[iVM].ypix * vi.fYscale * scale);
 
 		// Why did we not used to have to do this? Only necessary when coming out of zoom?
 		StretchBlt(vi.hdc, 0, 0, x / 2, rect.bottom, vrgvmi[v.iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
@@ -2282,7 +2312,7 @@ int GetTileFromPos(int xPos, int yPos)
 		iVM++;
 	int fDone = iVM;
 
-	int nx = ((rect.right - rect.left) * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+	int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
 
 	for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix * vi.fYscale)
 	{
@@ -2322,7 +2352,7 @@ void ScrollTiles()
 	while (iVM <= 0 || rgvm[iVM].fValidVM == FALSE)
 		iVM++;
 
-	int nx = ((rect.right - rect.left) * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+	int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
 	int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
 	bottom = bottom * vvmhw[iVM].ypix - rect.bottom;	// how many pixels past the bottom of the screen is that?
 
@@ -2431,7 +2461,7 @@ BOOL SaveATARIDOS(int inst, int drive)
 
 				for (unsigned int ind = 0; ind < cbSize; ind++)
 				{
-					// first one is CR, subsequent ones are LF
+					// RETURN = CR/LF
 					if (szFile[ind] == 0x9b)
 					{
 						*szA++ = 0x0d;
@@ -3256,9 +3286,11 @@ break;
 
 			if (v.iVM != -1 && OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgcart.szName, FALSE, 1))
 			{
-				ReadCart(v.iVM);
+				// this will require a reboot, I assume for all types of VMs?
+				FUnInitVM(v.iVM);
+				FInitVM(v.iVM); // could error
+
 				FixAllMenus();
-				ColdStart(v.iVM);	// !!! requires reboot, what about error?
 			}
 			break;
 
@@ -3277,8 +3309,6 @@ break;
 				FInitVM(v.iVM); // could error
 
 				FixAllMenus();
-
-				ColdStart(v.iVM); // !!! could error
 			}
 
 			break;
@@ -3402,7 +3432,10 @@ break;
 			if (f)
 				f = LoadProperties(chFN, FALSE); // (we do want the VMs loaded too) 
 			
-			//!!! error? - now what?
+			if (!f)
+				f = CreateAllVMs();
+
+			// !!! error, now what?
 
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone

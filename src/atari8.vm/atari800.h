@@ -31,11 +31,11 @@
 #define X8 352		// screen width
 #define Y8 240		// screen height
 
-#define CART_8K      0
-#define CART_16K     1
-#define CART_OSSA    2   // Mac65 etc.
-#define CART_OSSB    3   //
-#define CART_XEGS	 4
+#define CART_8K      1	// 0 for invalid
+#define CART_16K     2
+#define CART_OSSA    3   // Mac65 etc.
+#define CART_OSSB    4   //
+#define CART_XEGS	 5
 
 #define MAX_CART_SIZE 131072
 char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
