@@ -166,6 +166,11 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 			goto SaveAud;	// at least remember the new values
 		}
 
+		if (pwhdr[sCurBuf].lpData == NULL)
+		{
+			return;	// no sound buffer (usually due to no sound card or sound disabled in remote session)
+		}
+
 		// where in the buffer to start writing
 		signed char *pb = pwhdr[sCurBuf].lpData + sOldSample * 2;	// mono
 

@@ -721,9 +721,6 @@ BOOL  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
 #undef  SEEK_SET
 #define SEEK_SET  FILE_BEGIN
 
-#pragma intrinsic(inp)
-#pragma intrinsic(outp)
-
 // for xvideo.c
 
 #define bfBK  0x00
