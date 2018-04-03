@@ -1240,11 +1240,12 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
-			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
+			else if (wScan < STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
 			}
 
-#if 0
+			// !!! Anteater disables VBIs then hangs until a VBI happens anyway,
+			// so we need to periodically set this even if disabled. Figure out how this works! DLI's self-reset
 			else if (wScan == STARTSCAN + Y8) {
 				// start the NMI status early so that programs
 				// that care can see it
@@ -1253,7 +1254,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				wLeftMax = wLeft;
 			}
-#endif
 
 			// do the VBI! We MUST do it one line late (249 vs 248), because otherwise MULE does not work. !!! I don't know why.
 			else if (wScan == STARTSCAN + Y8 + 1)
