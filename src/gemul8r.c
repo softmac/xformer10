@@ -16,7 +16,7 @@
 //
 // THEORY OF OPERATION 
 //
-// The type of VM you want will have a number, 1-3 are ATARI 8-bit types, etc.
+// The type of VM you want will have a number, 0-2 are ATARI 8-bit types, etc.
 //
 // DetermineVMType will provide the VMINFO about its capabilities and the fn table to be able to call all the
 // functions I'm about to describe.
@@ -513,17 +513,12 @@ void FixAllMenus()
 
 	int zz = 0;
 
-	// one of the only pieces of code with specific knowledge about VM types
 	// populate the menu with all the relevant choices of VM types they can make
 
 	for (; zz < 32; zz++)
 	{
-#ifdef XFORMER
-		if (FIsAtari8bit(1 << zz))
-#endif
-#if defined(ATARIST) || defined(SOFTMAC)
-		if (FIs...)) // TODO - Darek, do the appropriate test for each VM type
-#endif
+		// is this a type of VM we can handle?
+		if (DetermineVMType(zz))
 		{
 			mii.cbSize = sizeof(mii);
 			mii.fMask = MIIM_STRING;
@@ -546,7 +541,7 @@ void FixAllMenus()
 // return the position of the first character of the next filename, or NULL
 // If quotes surround the name, remove them.
 // 
-// Also return the type of VM that can support this file and what kind of media it is, disk or cart
+// Also return the type of VM that can support this file (or -1 if none) and what kind of media it is, disk or cart (1 or 2)
 //
 char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
 {
@@ -588,65 +583,63 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
 
 	for (int z = 0; z < 32; z++)
 	{
-		VMINFO vmi;
+		PVMINFO pvmi;
 
-		int t = (1 << z);
-		if (FIsAtari8bit(t))
-			vmi = vmi800;
-		else
-			; // !!! TODO - Darek, put the others here
-
-		char *szF;
-		char extV[_MAX_PATH];
-		char *pextV;
-
-		// look through all the extensions a virtual disk or cart of that VM type can use
-		// this is an OpenFilename string, terminated by double 0, with all the extensions inside the string somewhere
-
-		for (int mt = 1; mt <= 2; mt++)
+		// is this a kind of VM we can handle?
+		if (pvmi = DetermineVMType(z))
 		{
-			// we don't use carts
-			if (mt == 2 && vmi.fUsesCart == FALSE)
-				break;
+			char *szF;
+			char extV[_MAX_PATH];
+			char *pextV;
 
-			// look for disk or cart?
-			if (mt == 1)
-				szF = vmi.szFilter;
-			else
-				szF = vmi.szCartFilter;
+			// look through all the extensions a virtual disk or cart of that VM type can use
+			// this is an OpenFilename string, terminated by double 0, with all the extensions inside the string somewhere
 
-			// terminated by double 0
-			while (*szF || *(szF + 1))
+			for (int mt = 1; mt <= 2; mt++)
 			{
-				pextV = extV;
-				
-				// find the next . (beginning of extension)
-				while (*szF != '.' && !(!*szF && !*(szF + 1)))
-					szF++;
+				// we don't use carts
+				if (mt == 2 && pvmi->fUsesCart == FALSE)
+					break;
 
-				szF++;	// skip the .
-				
-				// get the ext
-				while (*szF && ((*szF >= 'A' && *szF <= 'Z') || (*szF >= 'a' && *szF <= 'z')))
-					*pextV++ = *szF++;
-				*pextV = 0;
+				// look for disk or cart?
+				if (mt == 1)
+					szF = pvmi->szFilter;
+				else
+					szF = pvmi->szCartFilter;
 
-				// that's the one we are! (case ins pls)
-				if (_stricmp(ext, extV) == 0)
+				// terminated by double 0
+				while (*szF || *(szF + 1))
 				{
-					if (VMtype)
-						*VMtype = t;
-					if (MEDIAtype)
-						*MEDIAtype = mt;
+					pextV = extV;
 
-					return lpCmdLine;
+					// find the next . (beginning of extension)
+					while (*szF != '.' && !(!*szF && !*(szF + 1)))
+						szF++;
+
+					szF++;	// skip the .
+
+					// get the ext
+					while (*szF && ((*szF >= 'A' && *szF <= 'Z') || (*szF >= 'a' && *szF <= 'z')))
+						*pextV++ = *szF++;
+					*pextV = 0;
+
+					// that's the one we are! (case ins pls)
+					if (_stricmp(ext, extV) == 0)
+					{
+						if (VMtype)
+							*VMtype = z;
+						if (MEDIAtype)
+							*MEDIAtype = mt;
+
+						return lpCmdLine;
+					}
 				}
 			}
 		}
 	}
 
 	if (VMtype)
-		*VMtype = 0;
+		*VMtype = -1;
 	if (MEDIAtype)
 		*MEDIAtype = 0;
 
@@ -838,7 +831,7 @@ int CALLBACK WinMain(
 	// In case we start up with a parameter on the cmd line
 	BOOL fSkipLoad = FALSE;
 
-	//char test[130] = "\"c:\\danny\\8bit\\atari\\atari\\cart\\XLMule.ATR\"";
+	//char test[130] = "\"c:\\danny\\8bit\\atari\\XLMule.ATR\"";
 	//lpCmdLine = test;
 	
 	// assume we're loading the default .ini file
@@ -860,7 +853,7 @@ int CALLBACK WinMain(
 			len = strlen(sFile);
 			
 			// a disk
-			if (VMtype && MEDIAtype == 1)
+			if (VMtype != -1 && MEDIAtype == 1)
 			{
 				if ((iVM = AddVM(VMtype)) != -1)	// does the FInstalVM for us
 				{
@@ -883,7 +876,7 @@ int CALLBACK WinMain(
 			}
 			
 			// a cartridge
-			else if (VMtype && MEDIAtype == 2)
+			else if (VMtype != -1 && MEDIAtype == 2)
 			{
 				if ((iVM = AddVM(VMtype)) != -1)	// does the FInstalVM for us
 				{

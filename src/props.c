@@ -41,7 +41,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 #endif // XFORMER
 
 
-// some of the only code that should be allowed to have secret knowledge about the type of VM being used,
+// This should be the ONLY CODE allowed to have secret knowledge about the type of VM being used (calling FIs...)
 // the code that gives you the VMINFO describing it, based on the VM type # (1, 2, 3 are ATARI 800, etc.)
 // which is all you should need to know from now on
 // Returns a pointer to a global structure - no alloc or free needed
@@ -51,7 +51,7 @@ PVMINFO DetermineVMType(int type)
 	PVMINFO pvmi = NULL;
 
 #ifdef XFORMER
-	if (FIsAtari8bit(type))
+	if (FIsAtari8bit(1 << type))
 		pvmi = (PVMINFO)&vmi800;
 #endif
 
@@ -215,23 +215,12 @@ BOOL CreateAllVMs()
 	// make one of everything at the same time
 	for (int zz = 0; zz < 32; zz++)
 	{
-#ifdef XFORMER
-		if (FIsAtari8bit(1 << zz))
-#endif
-#if defined (ATARIST) || defined (SOFTMAC)
-			if (FIs....)	// TODO, and if the below code is important it belongs in INSTALL, not here
+		// is this a kind of VM we can handle?
+		PVMINFO pvmi = DetermineVMType(zz);
 
-			//AddVM(&vmiST, NULL);
-			//strcpy(rgvm[v.cVM - 1].szModel, rgszVM[5]);
-
-			//AddVM(&vmiST, NULL);
-			//strcpy(rgvm[v.cVM - 1].szModel, rgszVM[5]);
-			//strcat(rgvm[v.cVM - 1].szModel, "/030");
-			//rgvm[v.cVM - 1].fCPUAuto = FALSE;
-			//rgvm[v.cVM - 1].bfCPU = cpu68030;
-#endif
+		if (pvmi)
 		{
-			if ((vmNew = AddVM(1 << zz)) == -1)
+			if ((vmNew = AddVM(zz)) == -1)
 				return FALSE;
 
 			f = FALSE;
@@ -351,13 +340,22 @@ LTryAgain:
 				break;
 			}
 
+			// what index, 0 based, is this bit?
+			int c = -1, t = rgvm[i].bfHW;
+			assert(t);
+			while (t)
+			{
+				t >>= 1;
+				c++;
+			}
+			
 			// Get the VMINFO that tells us all about this type of VM being loaded
-			rgvm[i].pvmi = DetermineVMType(rgvm[i].bfHW);
+			rgvm[i].pvmi = DetermineVMType(c);
 
 			// we just loaded a valid instance off disk. Install and Init it
 			if (f && rgvm[i].fValidVM)
 			{
-				f = FInstallVM(i, rgvm[i].pvmi, rgvm[i].bfHW);
+				f = FInstallVM(i, rgvm[i].pvmi, c);
 
 				if (f)
 				{
