@@ -3226,7 +3226,7 @@ break;
 				break;
 
 			// which one did they select? Use that bit
-			int vmType = 1 << (wmId - IDM_ADDVM1);
+			int vmType = (wmId - IDM_ADDVM1);
 		
 			int vmNew;
 
