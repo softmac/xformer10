@@ -1555,7 +1555,10 @@ BOOL ProcessScanLine(int iVM)
 			// the artifacting colours
 			BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
 
-            for (i = 0 ; i < cbDisp; i++)
+			// just for fun, don't interlace in B&W
+			BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV);
+            
+			for (i = 0 ; i < cbDisp; i++)
             {				
 				b2 = sl.rgb[i];
 
@@ -1619,7 +1622,7 @@ BOOL ProcessScanLine(int iVM)
 					case 0x01:
 						if (last == col2)
 						{
-							*qch++ = red;
+							*qch++ = fArtifacting ? red : col1;
 							if (last2 == red)
 								*(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
 						}
@@ -1657,7 +1660,7 @@ BOOL ProcessScanLine(int iVM)
 					case 0x01:
 						if (last == col2)
 						{
-							*qch++ = green;
+							*qch++ = fArtifacting ? green : col1;
 							if (last2 == green)
 								*(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
 						}
