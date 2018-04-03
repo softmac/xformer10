@@ -126,7 +126,7 @@ HANDLE hGoEvent[MAX_VM];	// please execute
 HANDLE hDoneEvent[MAX_VM];	// I'm done executing
 BOOL fKillThread[MAX_VM];	// time to die
 int iThreadVM[MAX_VM];		// which VM a thread is
-DWORD VMThread(LPVOID l);	// thread proc
+DWORD WINAPI VMThread(LPVOID l); // thread proc
 
 
 //

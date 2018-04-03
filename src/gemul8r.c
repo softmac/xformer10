@@ -232,7 +232,7 @@ ULONGLONG GetCycles()
 // Each VM waits its turn, does one frame of execution and video and audio, and signals it's done.
 // Rinse and repeat until it is killed
 //
-DWORD VMThread(LPVOID l)
+DWORD WINAPI VMThread(LPVOID l)
 {
 	int iVM = *(int *)l;
 
