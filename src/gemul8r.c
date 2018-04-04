@@ -242,14 +242,15 @@ DWORD WINAPI VMThread(LPVOID l)
 		if (fKillThread[iVM])
 			return 0;
 
-		// stop the whole thing if any VM fails
-		vi.fExecuting = vi.fExecuting && FExecVM(iVM, FALSE, TRUE);
+		vrgvmi[iVM].fWantDebugger = !FExecVM(iVM, FALSE, TRUE);
+		
+		if (vrgvmi[iVM].fWantDebugger)
+			vi.fExecuting = FALSE;	// we only reset, never set it
 
 		SetEvent(hDoneEvent[iVM]);
 	}
 }
 
-// !!! bring focus back here if it exists already
 void CreateDebuggerWindow()
 {
     // check for parent process command prompt
@@ -277,8 +278,11 @@ void DestroyDebuggerWindow()
     if (vi.fParentCon)
         return;
 
-    if (!vi.fInDebugger && !v.fDebugMode)
-        FreeConsole();
+	if (!vi.fInDebugger /* && !v.fDebugMode */)
+	{
+		ShowWindow(GetConsoleWindow(), SW_HIDE);	// why is this necessary?
+		FreeConsole();
+	}
 
     // set focus to vi.hWnd
 
@@ -413,6 +417,10 @@ void FixAllMenus()
 		? MF_ENABLED : MF_GRAYED);
 #else
 	DeleteMenu(vi.hMenu, IDM_TOGGLEBASIC, 0);
+#endif
+
+#ifdef NDEBUG
+	DeleteMenu(vi.hMenu, IDM_DEBUGGER, 0);
 #endif
 
 
@@ -796,16 +804,6 @@ int CALLBACK WinMain(
 	if (!vi.hAccelTable || !vi.hMenu)
 		return FALSE;
 
-#ifndef NDEBUG
-    // Try to make use of the existing command line window if present
-    DWORD ret = AttachConsole((DWORD)-1);
-    if (ret)
-        vi.fParentCon = TRUE;
-
-    if (v.fDebugMode && !vi.fParentCon)
-        CreateDebuggerWindow();
-#endif
-
     vi.fWinNT = TRUE;
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -949,7 +947,7 @@ int CALLBACK WinMain(
 #endif // ATARIST
 	}
 
-	vi.fExecuting = TRUE;	// OK, go! We stop on any failure from an ExecVM
+	vi.fExecuting = TRUE;	// OK, go! This will get reset when a VM hits a breakpoint, or otherwise fails
 
 	// If we're about to come up in Tile mode, we won't be refreshing the menus, and they'll be bad unless we fix them now.
 	if (v.fTiling)
@@ -1002,9 +1000,7 @@ int CALLBACK WinMain(
 		}
 	}
 
-#if !defined(NDEBUG)
-    printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
-#endif
+    //printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 
 	// Create a main window for this application instance.
 	vi.hWnd = CreateWindowEx(0L,
@@ -1105,8 +1101,8 @@ int CALLBACK WinMain(
 
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
-    for (;;)
-    {
+	for (;;)
+	{
 		while (PeekMessage(&msg, // message structure
 			NULL,   // handle of window receiving the message
 			0,      // lowest message to examine
@@ -1152,141 +1148,143 @@ int CALLBACK WinMain(
 				continue;
 			}
 #endif
-	
+
 			if (!TranslateAccelerator(msg.hwnd, vi.hAccelTable, &msg))
 			{
 				// !!! Does ATARI800 need a special fDontTranslate VMINFO cap?
 				// for Xformer, we need special German keys to translate.
 				//if (!FIsAtari8bit(vmCur.bfHW) && (!vi.fExecuting))
-					TranslateMessage(&msg);// Translates virtual key codes
+				TranslateMessage(&msg);// Translates virtual key codes
 				DispatchMessage(&msg); // Dispatches message to window
 			}
 		}
-		
-		// Break into debugger is asked to, or if in debug mode and VM died
-		// !!! Get this working
-        if (v.iVM >= 0 && (vi.fDebugBreak || ((vi.fInDebugger || v.fDebugMode) && !vi.fExecuting)))
-        {
-#ifndef NDEBUG
-			vi.fDebugBreak = FALSE;
 
-			// !!! slows down tracing too much but may be necessary?
-            //CreateDebuggerWindow();
-            //SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+		// =====================
+		// THIS IS OUR MAIN LOOP
+		// =====================
 
-            vi.fInDebugger = TRUE;
-            vi.fExecuting = FALSE;
-            mon(v.iVM);
-            vi.fExecuting = TRUE;
-			DestroyDebuggerWindow();
-#endif
-		}
+		HANDLE hVG[MAX_VM];	// handles of threads we want to go
+		HANDLE hVD[MAX_VM];
+		int iV = 0;
 
-		// if any thread fails, stop executing
-		else if (vi.fExecuting)
+		// Tell the thread(s) to go.
+		if (v.fTiling)
 		{
+			RECT rect;
+			GetClientRect(vi.hWnd, &rect);
 
-			// =====================
-			// THIS IS OUR MAIN LOOP
-			// =====================
+			// Don't waste time executing tiles we can't see. Pause them for performance.
 
-			HANDLE hVG[MAX_VM];	// handles of threads we want to go
-			HANDLE hVD[MAX_VM];
-			int iV = 0;
+			// find the VM at the top of the page
+			int iVM = nFirstTile;
+			while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
+				iVM++;
 
-			// Tell the thread(s) to go.
-			if (v.fTiling)
+			int x, y, iDone = iVM;
+
+			// !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
+			int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+
+			for (y = sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
 			{
-				RECT rect;
-				GetClientRect(vi.hWnd, &rect);
-
-				// Don't waste time executing tiles we can't see. Pause them for performance.
-
-				// find the VM at the top of the page
-				int iVM = nFirstTile;
-				while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-					iVM++;
-
-				int x, y, iDone = iVM;
-				
-				// !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-				int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
-
-				for (y = sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
+				for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
 				{
-					for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+					// Don't consider tiles completely off screen
+					if (y + vvmhw[iVM].ypix > 0 && y < rect.bottom)
 					{
-						// Don't consider tiles completely off screen
-						if (y + vvmhw[iVM].ypix > 0 && y < rect.bottom)
-						{
-							hVG[iV] = hGoEvent[iVM];	// found one
-							hVD[iV++] = hDoneEvent[iVM];
-						}
-
-						// advance to the next valid bitmap
-						do
-						{
-							iVM = (iVM + 1) % MAX_VM;
-						} while (!rgvm[iVM].fValidVM);
-
-						// we've considered them all
-						if (iDone == iVM)
-							break;
+						hVG[iV] = hGoEvent[iVM];	// found one
+						hVD[iV++] = hDoneEvent[iVM];
 					}
+
+					// advance to the next valid bitmap
+					do
+					{
+						iVM = (iVM + 1) % MAX_VM;
+					} while (!rgvm[iVM].fValidVM);
+
+					// we've considered them all
 					if (iDone == iVM)
 						break;
 				}
-
-				// tell each thread to go
-				for (iVM = 0; iVM < iV; iVM++)
-					SetEvent(hVG[iVM]);
-				
-				// wait for them to complete one frame
-				WaitForMultipleObjects(v.cVM, hVD, TRUE, INFINITE);
+				if (iDone == iVM)
+					break;
 			}
-			else
+
+			// tell each thread to go
+			for (iVM = 0; iVM < iV; iVM++)
+				SetEvent(hVG[iVM]);
+
+			// wait for them to complete one frame
+			WaitForMultipleObjects(v.cVM, hVD, TRUE, INFINITE);
+		}
+		else
+		{
+			SetEvent(hGoEvent[v.iVM]);
+			WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
+		}
+
+		static ULONGLONG cCYCLES = 0;
+		static ULONGLONG cErr = 0;
+		static unsigned lastVM = 0;
+
+		RenderBitmap();
+
+		// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+		// don't let errors propogate
+
+		const ULONGLONG cJif = 29830; // 1789790 / 60
+		ULONGLONG cCur = GetCycles() - cCYCLES;
+
+		// report back how long it took
+		cEmulationSpeed = cCur * 1000000 / cJif;
+
+		while (fBrakes && ((cJif - cErr) > cCur)) {
+			Sleep(1);
+			cCur = GetCycles() - cCYCLES;
+		}
+
+		cErr = cCur - (cJif - cErr);
+		if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+		cCYCLES = GetCycles();
+
+
+		// every second, update our clock speed indicator
+		// When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
+		static ULONGLONG sCJ;
+		cCur = GetCycles();
+		if (cCur - sCJ >= 1789790)
+		{
+			int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
+			DisplayStatus(ids);
+			sCJ = cCur;
+		}
+
+#ifndef NDEBUG
+		// Break into debugger is asked to, or if in debug mode and VM died or hit breakpoint
+		if (vi.fDebugBreak || ((vi.fInDebugger /*|| v.fDebugMode */) && !vi.fExecuting))
+		{
+			vi.fInDebugger = TRUE;	// we are currently tracing
+			vi.fExecuting = FALSE;	// error or breakpoint, so the VM is asking for debugger
+
+			SetFocus(GetConsoleWindow());	// !!! doesn't work
+
+			// go into the debugger for every VM that needs it
+			for (int iVM = 0; iVM < MAX_VM; iVM++)
 			{
-				SetEvent(hGoEvent[v.iVM]);
-				WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
+				// user wants the "current" inst broken into, or a VM wants itself broken into
+				// !!! You can probably quickly change "current" VMs before this code executes
+				if ((vi.fDebugBreak && iVM == v.iVM) || rgvm[iVM].fValidVM && vrgvmi[iVM].fWantDebugger)
+					if (!mon(iVM)) // somebody wants to quit
+						break;
 			}
 			
-			static ULONGLONG cCYCLES = 0;
-			static ULONGLONG cErr = 0;
-			static unsigned lastVM = 0;
+			SetFocus(vi.hWnd);				// !!! doesn't work
 
-			RenderBitmap();
-
-			// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-			// don't let errors propogate
-			
-			const ULONGLONG cJif = 29830; // 1789790 / 60
-			ULONGLONG cCur = GetCycles() - cCYCLES;
-
-			// report back how long it took
-			cEmulationSpeed = cCur * 1000000 / cJif;
-
-			while (fBrakes && ((cJif - cErr) > cCur)) {
-				Sleep(1);
-				cCur = GetCycles() - cCYCLES;
-			}
-		
-			cErr = cCur - (cJif - cErr);
-			if (cErr > cJif) cErr = cJif;	// don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-			cCYCLES = GetCycles();
-		
-
-			// every second, update our clock speed indicator
-			// When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
-			static ULONGLONG sCJ;
-			cCur = GetCycles();
-			if (cCur - sCJ >= 1789790)
-			{
-				int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
-				DisplayStatus(ids);
-				sCJ = cCur;
-			}
-
-        }
+			vi.fDebugBreak = FALSE;	// user wants us in the debugger
+			vi.fExecuting = TRUE;
+			DestroyDebuggerWindow();
+		}
+#endif
 
     } // forever
 
@@ -1315,19 +1313,12 @@ int CALLBACK WinMain(
 int PrintScreenStats()
 {
 #if !defined(NDEBUG)
-	printf("Screen: %4d,%4d  Full: %4d,%4d  sx,sy: %4d,%4d  dx,dy: %4d,%4d  xpix,ypix: %4d,%4d  scale: %d,%d\n",
-		GetSystemMetrics(SM_CXSCREEN),
-		GetSystemMetrics(SM_CYSCREEN),
-		GetSystemMetrics(SM_CXFULLSCREEN),
-		GetSystemMetrics(SM_CYFULLSCREEN),
-		vi.sx, vi.sy,
-		vi.dx, vi.dy,
-		vvmhw[v.iVM].xpix, vvmhw[v.iVM].ypix,
-		vi.fXscale, vi.fYscale
-	);
+		//printf("Screen: %4d,%4d  Full: %4d,%4d  sx,sy: %4d,%4d  dx,dy: %4d,%4d  xpix,ypix: %4d,%4d  scale: %d,%d\n",
+		//GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), GetSystemMetrics(SM_CXFULLSCREEN),
+		//GetSystemMetrics(SM_CYFULLSCREEN), vi.sx, vi.sy, vi.dx, vi.dy, vvmhw[v.iVM].xpix, vvmhw[v.iVM].ypix, vi.fXscale, vi.fYscale);
 
-	printf("        windows position x = %d, y = %d, r = %d, b = %d\n",
-		v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
+		//printf("        windows position x = %d, y = %d, r = %d, b = %d\n",
+		//v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 #endif
 
 	return 0;
@@ -1365,7 +1356,7 @@ void ShowGEMMouse()
 		return;
 	}
 
-	if (vi.fExecuting && !vi.fGEMMouse && vi.fHaveFocus)
+	if (/* vi.fExecuting && */ !vi.fGEMMouse && vi.fHaveFocus)
 	{
 		RECT rect;
 
@@ -1546,11 +1537,8 @@ BOOL CreateNewBitmap(int iVM)
 	vvmhw[iVM].xpix = rgvm[iVM].pvmi->uScreenX;
 	vvmhw[iVM].ypix = rgvm[iVM].pvmi->uScreenY;
 
-#if !defined(NDEBUG)
-	PrintScreenStats();
-	printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n",
-			vvmhw[iVM].xpix, vvmhw[iVM].ypix, v.fFullScreen, v.fZoomColor);
-#endif
+	//PrintScreenStats();
+	//printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n", vvmhw[iVM].xpix, vvmhw[iVM].ypix, v.fFullScreen, v.fZoomColor);
 
 #if defined(ATARIST) || defined(SOFTMAC)
     // Interlock to make sure video thread is not touching memory
@@ -1847,10 +1835,8 @@ Ltryagain:
         SWP_NOACTIVATE | SWP_NOSIZE);
 #endif
 
-#if !defined(NDEBUG)
-        printf("CreateNewBitmap setting windows position to x = %d, y = %d, r = %d, b = %d\n",
-             v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
-#endif
+//        printf("CreateNewBitmap setting windows position to x = %d, y = %d, r = %d, b = %d\n",
+//             v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 
     GetClientRect(vi.hWnd, &rect);
 
@@ -1891,9 +1877,7 @@ Ltryagain:
 
     GetClientRect(vi.hWnd, &rect);
 
-#if !defined(NDEBUG)
-    printf("cnbm: client rect = %d, %d, %d, %d\n", rect.top, rect.left, rect.right, rect.bottom);
-#endif
+    //printf("cnbm: client rect = %d, %d, %d, %d\n", rect.top, rect.left, rect.right, rect.bottom);
 
     vi.sx = rect.right;
     vi.sy = rect.bottom;
@@ -2173,6 +2157,8 @@ void SelectInstance(int iVM)
 //
 BOOL ColdStart(int iVM)
 {
+	printf("COLDBOOT (%d)\n", iVM);
+
 	if (rgvm[iVM].pvmi->fUsesMouse)
 	{
 		ShowWindowsMouse();
@@ -2288,14 +2274,14 @@ BOOL ColdStart(int iVM)
 	printf("CPU type = %s\n", PchFromBfRgSz(vi.fFake040 ? cpu68040 : rgvm[iVM].bfCPU, rgszCPU));
 //    printf("CPU real = %s\n", (long)PchFromBfRgSz(rgvm[iVM].bfCPU, rgszCPU));
     fDebug--;
-#endif
 
     if (v.fDebugMode)
     {
         vi.fInDebugger = TRUE;
 		vi.fDebugBreak = TRUE;
 	}
-	
+#endif
+
 	return f;
 }
 
@@ -3448,15 +3434,26 @@ break;
 			break;
 
 
-#ifndef NODEBUG
-		// !!! Fix.
+#ifndef NDEBUG
 		case IDM_DEBUGGER:
+
+			// PAUSE key enters the debugger in DEBUG
 			if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 				ShowWindowsMouse();
+
 			vi.fDebugBreak = TRUE;
-			CreateDebuggerWindow();
+
+			// Try to make use of the existing command line window if present
+			DWORD ret = AttachConsole((DWORD)-1);
+			if (ret)
+				vi.fParentCon = TRUE;
+
+			if (/* v.fDebugMode && */ !vi.fParentCon)
+				CreateDebuggerWindow();
+
+			SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+
 			return 0;
-			break;
 #endif
 
 #if 0
@@ -3659,29 +3656,21 @@ break;
     case WM_KEYDOWN:
     case WM_KEYUP:
 
-        // Do something with the MENU key?
+		//printf("WM_KEY*: u = %08X l = %08X\n", uParam, lParam);
+		
+		// Do something with the MENU key?
         if (uParam == VK_APPS)
             break;
 
-        //printf("WM_KEY*: u = %08X l = %08X\n", uParam, lParam);
-
-		// PAUSE key enters the debugger in DEBUG
-#ifndef NODEBUG
+#ifndef NDEBUG
+		// our accelerator doesn't seem to work
         if (uParam == VK_PAUSE)
-            {
-			if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
-				ShowWindowsMouse();
-            vi.fDebugBreak = TRUE;
-			// !!! do this now instead of in the tight loop
-			CreateDebuggerWindow();
-			SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
-            return 0;
-            }
+			SendMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);
 #endif
 
-        vi.fHaveFocus = TRUE;  // HACK !!! is this hack that's everywhere still necessary?
-        
-		if (vi.fExecuting)
+		vi.fHaveFocus = TRUE;  // HACK !!! is this hack that's everywhere still necessary?
+
+		//if (vi.fExecuting)
 		{
 			if (!v.fTiling)
 			{
@@ -3792,14 +3781,14 @@ break;
     case WM_RBUTTONDOWN:
         vi.fHaveFocus = TRUE;  // HACK again
 
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
+        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
 					(!FIsAtari68K(rgvm[v.iVM].bfHW) || (uParam & MK_LBUTTON) ) )	// !!! hack don't use FIs... macros
         {
             // both buttons are being pressed, left first and now right
             // so bring back the Windows mouse cursor after sending
             // an upclick
 
-            // see also code for F11
+            // see also old code for F11
 
 //            FMouseMsgVM(hWnd, 0, 0, 0, 0);
 			if (rgvm[v.iVM].pvmi->fUsesMouse)
@@ -3849,7 +3838,7 @@ break;
 				if (v.iVM >= 0)
 					return FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);
 
-			if (rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && vi.fVMCapture && !vi.fGEMMouse)
+			if (rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fVMCapture && !vi.fGEMMouse)
 			{
 				// either mouse button was pressed
 				// so give special message to activate mouse
@@ -3891,7 +3880,7 @@ break;
 	case WM_RBUTTONUP:
         vi.fHaveFocus = TRUE;  // HACK
 		
-		if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse && vi.fExecuting && (vi.fGEMMouse || !vi.fVMCapture))
+		if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && (vi.fGEMMouse || !vi.fVMCapture))
         {
             vi.fGEMMouse = FALSE;
             if (v.iVM >= 0)
@@ -3962,7 +3951,7 @@ break;
         UninitDrawing(TRUE);
         vi.fInDirectXMode = FALSE;
 
-        if (vi.fExecuting)
+        //if (vi.fExecuting)
         {
             vi.fExecuting = FALSE;
             KillTimer(hWnd, 0);

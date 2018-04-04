@@ -393,11 +393,17 @@ void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-#define HANDLER_END()	if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#ifndef NDEBUG
+#define HANDLER_END()	wLeft = (regPC == bp) ? 0 : wLeft - 1; if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#else
+#define HANDLER_END() if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#endif
+
 						//--wLeft; (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
-							
-// don't let a scan line end until there's an instruction that affects the PC !!! We may do >>30 instructions!
-#define HANDLER_END_FLOW()  if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
+						// this used to not let a scan line end until there's an instruction that affects the PC
+
+#define HANDLER_END_FLOW() HANDLER_END()
+						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
 
 #define HANDLER(opcode) void __fastcall opcode (int iVM) {
 

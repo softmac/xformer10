@@ -892,7 +892,7 @@ void InitSound()
 
     for (i = 0; i < iMac; i++)
         {
-        DebugStr("querying output device %d\n", i);
+        //DebugStr("querying output device %d\n", i);
 
         if (!waveOutGetDevCaps(i, &woc, sizeof(woc)))
             {
@@ -913,9 +913,7 @@ void InitSound()
 
     if (vi.fWaveOutput)
         {
-#ifndef NDEBUG
-        printf("Selected wave device #%d\n", vi.iWaveOutput);
-#endif
+        //printf("Selected wave device #%d\n", vi.iWaveOutput);
         }
     else
         {
@@ -979,35 +977,35 @@ void InitMIDI(int iVM)
 #if !defined(_M_ARM)
     iMac = midiOutGetNumDevs();
 
-    DebugStr("number of MIDI output devices = %d\n", iMac);
+    //DebugStr("number of MIDI output devices = %d\n", iMac);
 
     if (iMac == 0)
         rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {
-        DebugStr("querying output device %d\n", i);
+        //DebugStr("querying output device %d\n", i);
 
         if (!midiOutGetDevCaps(i, &moc, sizeof(moc)))
             {
-            DebugStr("Device responded!\n");
+            //DebugStr("Device responded!\n");
             }
         }
 
     iMac = midiInGetNumDevs();
 
-    DebugStr("number of MIDI input devices = %d\n", iMac);
+    //DebugStr("number of MIDI input devices = %d\n", iMac);
 
     if (iMac == 0)
         rgvm[iVM].fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {
-        DebugStr("querying input device %d\n", i);
+        //DebugStr("querying input device %d\n", i);
 
         if (!midiInGetDevCaps(i, &mic, sizeof(mic)))
             {
-            DebugStr("Device responded!\n");
+            //DebugStr("Device responded!\n");
 
             }
         }
