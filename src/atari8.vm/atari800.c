@@ -1042,14 +1042,21 @@ BOOL __cdecl ColdbootAtari(int iVM)
     CHACTL = 0;
     DMACTL = 0;
 
-    // PIA reset
+    // PIA reset - this is a lot of stuff for only having 4 registers
 
 	rPADATA = 255;	// the data PORTA will provide if it is in READ mode
+	rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
+	PORTA = rPADATA; // since they default to read mode
+	PORTB = rPBDATA;
+
 	wPADATA = 0;	// the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
-	rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 255; // XL bit to indicate if BASIC is swapped in
-	wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL bit to indicate if BASIC is swapped in
-	PACTL  = 60;
-    PBCTL  = 60;
+	wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL needs to default to OS IN and HELP OUT
+	
+	wPADDIR = 0;	// direction - default to read
+	wPBDDIR = 0;	
+	
+	PACTL  = 0x3c;	// I/O mode, not SET DIR mode
+    PBCTL  = 0x3c;	// I/O mode, not SET DIR mode
 
 	// reset the cycle counter each cold start
 	LARGE_INTEGER qpc;
@@ -1181,9 +1188,7 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
     return TRUE;
 }
 
-// The big loop! Do a single horizontal scan line (or if it's time, the vertical blank as scan line 251)
-// Either continue until there's a message for our window, or cycle through all instances every frame,
-// or if tracing, only do one scan line
+// The big loop! Process an entire frame of execution and build the screen buffer, or, if fTrace, only do a single instruction.
 //
 // !!! fStep and fCont are ignored for now!
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
@@ -1267,39 +1272,37 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
 			}
+		
+			// this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
+			if (!(regP & IBIT))
+			{
+				if (IRQST != 255)
+				{
+					//        printf("IRQ interrupt\n");
+					Interrupt(iVM);
+					regPC = cpuPeekW(iVM, 0xFFFE);
+				}
+			}
+
+			ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
+		  
+			// VCOUNT should increment in the middle of Go6502, but we're not that fancy yet.
+			// Let's use the higher value so that VCOUNT reaches 124 (248 / 2) on line 247 and apps can
+			// see it get that high (breaks MULE)
+		
+			// some programs check "mirrors" instead of $D40B
+			rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
+
+			WSYNC_Seen = FALSE;
+
 		} // if wLeft == 0
 
-		// this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
-		if (!(regP & IBIT))
-		{
-			if (IRQST != 255)
-			{
-				//        printf("IRQ interrupt\n");
-				Interrupt(iVM);
-				regPC = cpuPeekW(iVM, 0xFFFE);
-			}
-		}
-
-		ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
-
-		// VCOUNT should increment in the middle of Go6502, but we're not that fancy yet.
-		// Let's use the higher value so that VCOUNT reaches 124 (248 / 2) on line 247 and apps can
-		// see it get that high (breaks MULE)
-		
-		// some programs check "mirrors" instead of $D40B
-		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
-
-		// Execute about one horizontal scan line's worth of 6502 code
-		WSYNC_Seen = FALSE;
-
+		// Normally, executes about one horizontal scan line's worth of 6502 code
 		Go6502(iVM);
 
 		// hit a breakpoint
 		if (regPC == bp)
 			fStop = TRUE;
-
-		if (!WSYNC_Seen)
-			WSYNC_Waited = FALSE;
 
 		assert(wLeft == 0 || fTrace == 1);
 
@@ -1311,7 +1314,12 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		}
 
 		// next scan line
-		wScan = wScan + 1;
+		if (wLeft == 0)
+		{
+			wScan = wScan + 1;
+			if (!WSYNC_Seen)
+				WSYNC_Waited = FALSE;
+		}
 
 		// we process the audio after the whole frame is done, but the VBLANK starts at 241
 		if (wScan >= NTSCY)
