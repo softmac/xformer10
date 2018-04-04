@@ -188,6 +188,8 @@ BOOL TimeTravelReset(unsigned iVM)
 	// don't remember that we were holding down shift, control or ALT, or going back in time will act like
 	// they're still pressed because they won't see our letting go.
 	// VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
+	// any other key can still stick, but that's less confusing
+	// !!! joystick arrows stick too, and that's annoying. Need FLUSHVMINPUT in fn table
 	ControlKeyUp8(iVM);
 
 	BOOL f = SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
@@ -376,9 +378,7 @@ BOOL ReadCart(int iVM)
 	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
 	if (h != -1)
 	{
-#ifndef NDEBUG
-		printf("reading %s\n", pch);
-#endif
+		//printf("reading %s\n", pch);
 
 		l = _lseek(h, 0L, SEEK_END);
 		cb = min(l, MAX_CART_SIZE);
@@ -1294,6 +1294,10 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		Go6502(iVM);
 
+		// hit a breakpoint
+		if (regPC == bp)
+			fStop = TRUE;
+
 		if (!WSYNC_Seen)
 			WSYNC_Waited = FALSE;
 
@@ -1325,7 +1329,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
     } while (!fTrace && !fStop);
 
-    return TRUE;
+    return (regPC != bp);
 }
 
 //

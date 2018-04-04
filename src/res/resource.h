@@ -21,6 +21,7 @@
 #define IDM_SAVEAS                      40207
 #define IDM_IMPORTDOS1                  40208
 #define IDM_IMPORTDOS2                  40209
+#define IDM_DEBUGGER                    40210
 #define IDM_EXIT                        40220
 
 #define IDM_VM1							41999	// leave lots of room for many more before this one
@@ -166,7 +167,6 @@
 #define IDM_NOQBOOT                     40054
 #define IDM_CTRLF11                     40055
 #define IDM_PROPERTIES                  40056
-#define IDM_DEBUGGER                    40057
 #define IDM_DEBUGINFO                   40058
 #define IDM_SNAPSHOT                    40059
 #define IDM_FIRST                       40060

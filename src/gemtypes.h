@@ -342,7 +342,7 @@ typedef struct VMINST
     HBITMAP hbmOld;         // handle of previous bitmap
     HDC  hdcMem;            // hdc of memory context
 
-    BOOL fInitialReset;		// not used anymore
+    BOOL fWantDebugger;		// EXEC failed, time to debug it
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer
@@ -424,7 +424,7 @@ typedef struct
 	BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
-    BOOL     fDebugMode:8;  // 1 = put CPU into debug mode
+    BOOL     fDebugMode:8;  // NOT USED: 1 = put CPU into debug mode
     BOOL     fNoSCSI:8;     // 1 = disables SCSI support
     BOOL               :8;  // reserved (deprecated)
     BOOL     fNoTwoBut:8;   // 1 = disables use of two mouse buttons (force F11)
@@ -919,6 +919,7 @@ extern char const * const rgszVM[];
 
 
 // gemul8r.c
+void CreateInstanceName(int, LPSTR);
 //void UpdateMenuCheckmarks();
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(int);
@@ -1006,11 +1007,8 @@ void ClearSurface();
 // xatari.c
 void ForceRedraw(int iVM);
 
-// xkey.c
-void ControlKeyUp8(int iVM);
-
 // xmon.c
-void mon();
+BOOL mon(int);
 
 //
 // Debug functions

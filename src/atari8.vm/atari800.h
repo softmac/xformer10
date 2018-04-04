@@ -199,7 +199,7 @@ typedef struct
     BYTE m_mdEA;
 
 	WORD m_fKeyPressed;	 // xkey.c
-	WORD m_oldshift;	 // xkey.c NOT USED
+	WORD m_bp;			 // breakpoint
 	BOOL m_wShiftChanged;// xkey.c
 						
 	// 6502 address space
@@ -314,7 +314,7 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
 #define wLeftMax      CANDY_STATE(wLeftMax)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
-#define oldshift      CANDY_STATE(oldshift)
+#define bp		      CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
 #define fTrace        CANDY_STATE(fTrace)
 #define fSIO          CANDY_STATE(fSIO)
@@ -622,7 +622,6 @@ __inline BYTE *_pbshift(int iVM)
 // Function prototypes
 //
 
-void mon(int);
 void __cdecl Go6502(int);
 void Interrupt(int);
 void CheckKey(int);
@@ -636,6 +635,7 @@ void __cdecl SwapMem(int, BYTE mask, BYTE flags);
 void InitBanks(int);
 void CchDisAsm(int, unsigned int *puMem);
 void CchShowRegs(int);
+void ControlKeyUp8(int);
 
 extern int fXFCable;	// !!! left uninitialized and used
 

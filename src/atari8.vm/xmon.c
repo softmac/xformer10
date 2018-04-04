@@ -12,6 +12,7 @@
 
 ***************************************************************************/
 
+#include "gemtypes.h"
 #include "atari800.h"
 
 #ifdef XFORMER
@@ -37,7 +38,7 @@ int  cchIn,           /* cch of buffer */
      ichIn,           /* index into buffer character */
      cchOut;          /* size of output string */
 
-int fMON;       /* TRUE if we are in 6502 monitor */
+//int fMON;       /* TRUE if we are in 6502 monitor */
 
 
 /*********************************************************************/
@@ -260,15 +261,17 @@ void BtoPch(char *pch, unsigned b)
     *pch++ = rgchHex[b&0xF];
     }
 
-void mon(int iVM)            /* the 6502 monitor */
-    {
+// return FALSE when somebody quits
+//
+BOOL mon(int iVM)            /* the 6502 monitor */
+{
     char chCom;                 /* command character */
     char ch;
     int cNum, cLines;
     unsigned u1, u2;
     char *pch;
 
-    fMON=TRUE;
+    //fMON=TRUE;
 
 	char pInst[MAX_PATH];
 	pInst[0] = 0;
@@ -276,44 +279,61 @@ void mon(int iVM)            /* the 6502 monitor */
 
 	while (1)
 	{
-		printf("\nPC Xformer debugger - VM #%d - %s \n\n", iVM, pInst);
-		Cconws("\nCommands:\n\n");
-		Cconws(" A [addr]          - trace until PC at address\n");
-		Cconws(" B                 - reboot the Atari 800\n");
-		Cconws(" D [addr]          - disassemble at address\n");
-		Cconws(" G [addr]          - run until address\n");
-		Cconws(" M [addr1] [addr2] - memory dump at address\n");
-		Cconws(" S [addr]          - single step one instruction\n");
-		Cconws(" T [addr]          - trace some instructions\n");
+		printf("\nPC Xformer debugger - VM #%d - %s \n", iVM, pInst);
+		Cconws("Commands:\n\n");
+		Cconws(" A [addr]          - trAce until addr (END to brk)\n");
+		Cconws(" B [addr]          - Breakpoint at addr\n");
+		Cconws(" C                 - Cold start the Atari 800\n");
+		Cconws(" D [addr]          - Disassemble at addr\n");
+		Cconws(" G [addr]          - Go from address\n");
+		Cconws(" M [addr1] [addr2] - Memory dump at addr\n");
+		Cconws(" S [addr]          - Single step from addr\n");
+		Cconws(" T [addr]          - Trace one page from addr\n");
+		Cconws(" P [addr] [val]    - Poke\n");
+		Cconws(" .                 - show registers\n");
 		Cconws(" X                 - exit\n");
-		Cconws(" H                 - help (repeat this menu)\n");
+		Cconws(" ?                 - repeat this menu\n");
 		Cconws("\n");
 		Cconws(" When in Atari mode press PAUSE to get back to the debugger");
 		Cconws("\n");
 
+		CchShowRegs(iVM);
+		uMemDasm = regPC;
+		uMemDump = regPC;
+
 		while (1)
 		{
+			FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 			GetLine();
 			if (!FSkipSpace())             /* skip any leading spaces */
 				continue;
 
 			chCom = rgchIn[ichIn++];      /* get command character */
-
+			
 			if ((chCom >= 'a') && (chCom <= 'z'))
 				chCom -= 32;
 
-			if (chCom == 'X' || chCom == 'H')
+			pch = rgchOut;
+
+			// all done debugging (for now)
+			if (chCom == 'X')
+			{
+				// clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
+				for (int i = 0; i < MAX_VM; i++)
+					vrgcandy[i].m_bp = 0;
+
+				fTrace = FALSE;
+				vi.fInDebugger = FALSE;
+				return FALSE;	// all done
+			}
+			
+			else if (chCom == '?')
 			{
 				break;
 			}
 
-			if (chCom == ';')
-				continue;
-
-			pch = rgchOut;
-
 			/* Can't use a switch statement because that calls Binsrch */
-			if (chCom == 'M')
+			else if (chCom == 'M')
 			{
 				if (FGetWord(&u1))
 				{
@@ -349,6 +369,7 @@ void mon(int iVM)            /* the 6502 monitor */
 					Cconws((char *)szCR);
 				} while (uMemDump != u2);
 			}
+			
 			else if (chCom == 'D')
 			{
 				if (FGetWord(&u1))
@@ -361,6 +382,14 @@ void mon(int iVM)            /* the 6502 monitor */
 				}
 			}
 
+			// set breakpoint - no arguments will remind you what it is
+			else if (chCom == 'B')
+			{
+				if (FGetWord(&u1))
+					bp = (WORD)u1;
+				printf("Breakpoint set at %04x\n", bp);
+			}
+			
 			else if (chCom == '.')
 			{
 				/* dump/modify registers */
@@ -368,19 +397,14 @@ void mon(int iVM)            /* the 6502 monitor */
 				CchShowRegs(iVM);
 			}
 
-			else if (chCom == 'H')
+			else if (chCom == 'C')
 			{
-				/* set hardcopy on/off flag */
-				if (FGetByte(&u1))
-					fHardCopy = (char)u1;
-			}
-			else if (chCom == 'B')
-			{
-				FColdbootVM(v.iVM);
-				FExecVM(v.iVM, FALSE, TRUE);
+				ColdStart(v.iVM);
 				CchShowRegs(iVM);
+				uMemDasm = regPC;
+				uMemDump = regPC;
 			}
-			else if (chCom == ':')
+			else if (chCom == 'P')
 			{
 				/* modify memory */
 				if (!FGetWord(&u1))
@@ -388,18 +412,58 @@ void mon(int iVM)            /* the 6502 monitor */
 				else while (FGetByte(&u2))
 					cpuPokeB(iVM, u1++, (BYTE)u2);
 			}
-			else if (chCom == 'M')
+
+			else if ((chCom == 'G') ||
+				(chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
 			{
+				unsigned int u;
+				int bpT;
+
+				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
+				fTrace = (chCom != 'G');
+
+				if (FGetWord(&u1))
+				{
+					if (chCom == 'A')
+						bpT = (WORD)u1;
+					else
+						regPC = (WORD)u1;
+				}
+
+				if (!fTrace)
+				{
+					break;
+				}
+
+				// auto-brk if we jump below page 2
+				do { // do at least 1 thing, don't get stuck at the breakpoint
+					u = regPC;
+					CchDisAsm(iVM, &u);
+					FExecVM(v.iVM, TRUE, FALSE);
+					CchShowRegs(iVM);
+					if (GetKeyState(VK_END) & 0x8000)
+						break;
+				} while ((--cLines) && (regPC >= 0x200) && (regPC != bp));
+			}
+
 #ifdef NEVER
+			else if (chCom == 'H')
+			{
+				/* set hardcopy on/off flag */
+				if (FGetByte(&u1))
+					fHardCopy = (char)u1;
+			}
+
+			else if (chCom == 'M1') // duplicate
+			{
 				pc = addr1;          /* block memory move */
 				addr2 = get_addr();
 				addr3 = get_addr();
 				while (addr1 <= addr2) *(mem + addr3++) = *(mem + addr1++);
-#endif
 			}
-			else if (chCom == 'C')
+
+			else if (chCom == 'C1')
 			{
-#ifdef NEVER
 				pc = addr1;          /* block memory compare */
 				addr2 = get_addr();
 				addr3 = get_addr();
@@ -418,59 +482,29 @@ void mon(int iVM)            /* the 6502 monitor */
 						Cconws(szCR);
 					}
 				}
-#endif
 			}
-			else if (chCom == 'C')
+
+			else if (chCom == 'C2')
 			{
-#ifdef NEVER
 				show_emul();       /* view virtual machine screen */
 				getchar();
 				show_scr();
+			}
 #endif
-			}
-			else if ((chCom == 'G') ||
-				(chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
-			{
-				unsigned int u;
-				WORD bp = 0;
-
-				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 270000 : 1);
-				fTrace = (chCom != 'G');
-
-				if (FGetWord(&u1))
-				{
-					if (chCom == 'A')
-						bp = (WORD)u1;
-					else
-						regPC = (WORD)u1;
-				}
-
-				if (!fTrace)
-				{
-					break;
-				}
-
-				while ((cLines--) && (regPC >= 0x200) && (regPC != bp))
-				{
-					u = regPC;
-					CchDisAsm(iVM, &u);
-					FExecVM(v.iVM, TRUE, FALSE);
-					CchShowRegs(iVM);
-				}
-			}
 			else
 				Cconws("what??\007\n");
 		}
 	
 		// show menu again
-		if (chCom == 'H')
+		if (chCom == '?')
 			continue;
 
 		break;
 
 	}
 
-    fMON=FALSE;
+    //fMON=FALSE;
+	return TRUE;
 }
 
 void CchShowRegs(int iVM)
