@@ -1289,7 +1289,7 @@ HANDLER(op5E)
 
 HANDLER(op60)
 {
-    regPC = PopWord(iVM) + 1;
+	regPC = PopWord(iVM) + 1;
 
     if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
