@@ -1253,20 +1253,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				// business as usual
 			}
 
-#if 0
-			// !!! Anteater disables VBIs then hangs until a VBI happens anyway,
-			// so we need to periodically set this even if disabled. Figure out how this works! DLI's self-reset
-			else if (wScan == STARTSCAN + Y8) {
-				// start the NMI status early so that programs
-				// that care can see it
-				NMIST = (NMIST & 0x20) | 0x5F;
-
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				wLeftMax = wLeft;
-			}
-#endif
-
 			// the CPU will have seen VCOUNT == 124 executing scan line 247, so it should be safe to VBLANK now
+			// VBLANKS are long and the main CPU code won't execute for a while and will never see scan line 248
+			// so that's why we cheat and send Go6502 one scanline higher than ProcessScanLine saw
 			else if (wScan == STARTSCAN + Y8)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
@@ -1293,10 +1282,11 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
 
-		// some programs check "mirrors" instead of $D40B
 		// VCOUNT should increment in the middle of Go6502, but we're not that fancy yet.
-		// Let's use the higher value so that VCOUNT reaches 124 (248 / 2)
-		// before the VBLANK which can be so long as to not let main code ever see VCOUNT = 124 (breaks MULE)
+		// Let's use the higher value so that VCOUNT reaches 124 (248 / 2) on line 247 and apps can
+		// see it get that high (breaks MULE)
+		
+		// some programs check "mirrors" instead of $D40B
 		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
 
 		// Execute about one horizontal scan line's worth of 6502 code
