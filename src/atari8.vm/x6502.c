@@ -730,9 +730,9 @@ void HELPER1(PushByte, BYTE b)
 void HELPER1(PushWord, WORD w)
 {
     WRITE_BYTE(iVM, regSP, w >> 8);
-    regSP = 0x100 | ((regSP - 1) & 0xFF);
+	regSP = 0x100 | ((regSP - 1) & 0xFF);
     WRITE_BYTE(iVM, regSP, w & 0xFF);
-    regSP = 0x100 | ((regSP - 1) & 0xFF);
+	regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
 BYTE HELPER(PopByte)
@@ -1658,6 +1658,8 @@ HANDLER(opA4)
 HANDLER(opA5)
 {
     EA_zp(iVM);
+	if (regPC == 0x6aa || regPC == 0x6a9)
+		regPC = regPC;
     LDA_com(iVM);
     HANDLER_END();
 }

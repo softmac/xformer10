@@ -211,143 +211,13 @@ Lbadfile:
 //            _close(h);
 }
 
-#if 0
-void InitSIOV(int iVM, int argc, char **argv)
-{
-    int i, iArgv = 0;
-
-#ifdef HDOS16ORDOS32
-    _bios_printer(_PRINTER_INIT, 0, 0);
-#endif
-
-    wCOM = -1;
-
-    while ((argv[iArgv][0] == '-') || (argv[iArgv][0] == '/'))
-        {
-        switch (argv[iArgv][1])
-            {
-        case 'A':
-        case 'a':
-            fAutoStart = 1;
-            break;
-
-        case 'D':
-        case 'd':
-            fDebugger = 1;
-            break;
-
-        case 'N':
-        case 'n':
-            ramtop = 0xC000;
-            break;
-
-        case '8':
-            mdXLXE = md800;
-            break;
-
-        case 'S':
-        case 's':
-#ifndef NDEBUG
-            printf("sound activated\n");
-#endif
-            fSoundOn = TRUE;
-#ifndef HWIN32
-            InitSoundBlaster();
-#endif
-            break;
-
-        case 'T':
-        case 't':
-            *pbshift &= ~wScrlLock;
-            break;
-
-        case 'C':
-        case 'c':
-            wCOM = argv[iArgv][2] - '1';
-#ifndef NDEBUG
-            printf("setting modem to COM%d:\n", wCOM+1);
-#endif
-            break;
-
-#ifndef HWIN32
-        case 'X':
-        case 'x':
-            fXFCable = 1;
-            if (argv[iArgv][2] == ':')
-                {
-                _SIO_Init();
-                sscanf(&argv[iArgv][3], "%d", &uBaudClock);
-                }
-            else
-                {
-                _SIO_Calibrate();
-                }
-            if (uBaudClock == 0)
-                {
-                fXFCable = 0;
-                }
-            else
-                {
-                }
-            break;
-#endif // !HWIN32
-
-        case 'K':
-        case 'k':
-            if (argv[iArgv][2] == ':')
-                ReadCart(iVM, &argv[iArgv][3]);
-            break;
-
-#ifndef HWIN32
-        case 'J':
-        case 'j':
-#ifndef NDEBUG
-            printf("joystick activated\n");
-#endif
-            MyReadJoy();
-
-            if ((wJoy0X || wJoy1X))
-                {
-                fJoy = TRUE;
-    
-                wJoy0XCal = wJoy0X;
-                wJoy0YCal = wJoy0Y;
-                wJoy1XCal = wJoy1X;
-                wJoy1YCal = wJoy1Y;
-                }
-    
-#if 0
-            for(;;)
-                {
-                MyReadJoy();
-                printf("0X: %04X  0Y: %04X  1X: %04X  1Y: %04X  BUT: %02X\n",
-                    wJoy0X, wJoy0Y, wJoy1X, wJoy1Y, bJoyBut);
-                }
-#endif
-            
-            break;
-#endif // !HWIN32
-            };
-
-        iArgv++;
-        }
-
-    for (i = 0; i < MAX_DRIVES; i++)
-        {
-        if (i < argc)
-            {
-            AddDrive(iVM, i, argv[i+iArgv]);
-            }
-        else
-            rgDrives[iVM][i].mode = MD_OFF;
-        }
-}
-#endif
-
 #define NO_TRANSLATION    32
 #define LIGHT_TRANSLATION 0
 #define HEAVY_TRANSLATION 16
 
+
+// XL/XE serial I/O handler
+//
 void BUS1(int iVM)
 {
     WORD wRetStat = 1;
@@ -568,10 +438,16 @@ void BUS1(int iVM)
 
     regP |= CBIT; // indicate that command completed successfully
 
-    regPC = cpuPeekW(iVM, regSP+1) + 1;        // do an RTS
-    regSP = (regSP + 2) & 255 | 256;
+	// the stack might wrap! Do what PopWord does in x6502.c
+	regSP = 0x100 | ((regSP + 1) & 0xFF);
+	regPC = rgbMem[regSP];
+	regSP = 0x100 | ((regSP + 1) & 0xFF);
+	regPC |= rgbMem[regSP] << 8;
 }
 
+
+// ATARI 800 serial I/O handler
+//
 void SIOV(int iVM)
 {
     WORD wDev, wDrive, wCom, wStat, wBuff, wSector, bAux1, bAux2;
@@ -585,6 +461,7 @@ void SIOV(int iVM)
     BYTE rgb[256];
     WORD i;
 
+	// we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
     if (regPC != 0xE459)
         {
         BUS1(iVM);
@@ -972,8 +849,11 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
-    regPC = cpuPeekW(iVM, regSP+1) + 1;        // do an RTS
-    regSP = (regSP + 2) & 255 | 256;
+	// the stack might wrap! Do what PopWord does in x6502.c
+	regSP = 0x100 | ((regSP + 1) & 0xFF);
+	regPC = rgbMem[regSP];
+	regSP = 0x100 | ((regSP + 1) & 0xFF);
+	regPC |= rgbMem[regSP] << 8;
 
 #if 0
     printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
@@ -982,3 +862,136 @@ lExit:
 
 #endif // XFORMER
 
+
+#if 0
+void InitSIOV(int iVM, int argc, char **argv)
+{
+	int i, iArgv = 0;
+
+#ifdef HDOS16ORDOS32
+	_bios_printer(_PRINTER_INIT, 0, 0);
+#endif
+
+	wCOM = -1;
+
+	while ((argv[iArgv][0] == '-') || (argv[iArgv][0] == '/'))
+	{
+		switch (argv[iArgv][1])
+		{
+		case 'A':
+		case 'a':
+			fAutoStart = 1;
+			break;
+
+		case 'D':
+		case 'd':
+			fDebugger = 1;
+			break;
+
+		case 'N':
+		case 'n':
+			ramtop = 0xC000;
+			break;
+
+		case '8':
+			mdXLXE = md800;
+			break;
+
+		case 'S':
+		case 's':
+#ifndef NDEBUG
+			printf("sound activated\n");
+#endif
+			fSoundOn = TRUE;
+#ifndef HWIN32
+			InitSoundBlaster();
+#endif
+			break;
+
+		case 'T':
+		case 't':
+			*pbshift &= ~wScrlLock;
+			break;
+
+		case 'C':
+		case 'c':
+			wCOM = argv[iArgv][2] - '1';
+#ifndef NDEBUG
+			printf("setting modem to COM%d:\n", wCOM + 1);
+#endif
+			break;
+
+#ifndef HWIN32
+		case 'X':
+		case 'x':
+			fXFCable = 1;
+			if (argv[iArgv][2] == ':')
+			{
+				_SIO_Init();
+				sscanf(&argv[iArgv][3], "%d", &uBaudClock);
+			}
+			else
+			{
+				_SIO_Calibrate();
+			}
+			if (uBaudClock == 0)
+			{
+				fXFCable = 0;
+			}
+			else
+			{
+			}
+			break;
+#endif // !HWIN32
+
+		case 'K':
+		case 'k':
+			if (argv[iArgv][2] == ':')
+				ReadCart(iVM, &argv[iArgv][3]);
+			break;
+
+#ifndef HWIN32
+		case 'J':
+		case 'j':
+#ifndef NDEBUG
+			printf("joystick activated\n");
+#endif
+			MyReadJoy();
+
+			if ((wJoy0X || wJoy1X))
+			{
+				fJoy = TRUE;
+
+				wJoy0XCal = wJoy0X;
+				wJoy0YCal = wJoy0Y;
+				wJoy1XCal = wJoy1X;
+				wJoy1YCal = wJoy1Y;
+			}
+
+#if 0
+			for (;;)
+			{
+				MyReadJoy();
+				printf("0X: %04X  0Y: %04X  1X: %04X  1Y: %04X  BUT: %02X\n",
+					wJoy0X, wJoy0Y, wJoy1X, wJoy1Y, bJoyBut);
+			}
+#endif
+
+			break;
+#endif // !HWIN32
+		};
+
+		iArgv++;
+	}
+
+	for (i = 0; i < MAX_DRIVES; i++)
+	{
+		if (i < argc)
+		{
+			AddDrive(iVM, i, argv[i + iArgv]);
+		}
+		else
+			rgDrives[iVM][i].mode = MD_OFF;
+	}
+}
+#endif
