@@ -270,192 +270,208 @@ void mon(int iVM)            /* the 6502 monitor */
 
     fMON=TRUE;
 
-    Cconws ("\nPC Xformer debugger commands:\n\n");
-    Cconws (" A [addr]          - run until PC at address\n");
-    Cconws (" B                 - reboot the Atari 800\n");
-    Cconws (" D [addr]          - disassemble at address\n");
-    Cconws (" G [addr]          - run at address\n");
-    Cconws (" M [addr1] [addr2] - memory dump at address\n");
-    Cconws (" S [addr]          - single step one instruction\n");
-    Cconws (" T [addr]          - trace instructions\n");
-    Cconws (" X                 - exit back to DOS\n");
-    Cconws ("\n");
-    Cconws (" When in Atari mode press Ctrl+Alt+F11 to get back to the debugger");
-    Cconws ("\n");
+	char pInst[MAX_PATH];
+	pInst[0] = 0;
+	CreateInstanceName(iVM, pInst);
 
-    while(1)
-        {
-        GetLine();
-        if (!FSkipSpace())             /* skip any leading spaces */
-            continue;
+	while (1)
+	{
+		printf("\nPC Xformer debugger - VM #%d - %s \n\n", iVM, pInst);
+		Cconws("\nCommands:\n\n");
+		Cconws(" A [addr]          - trace until PC at address\n");
+		Cconws(" B                 - reboot the Atari 800\n");
+		Cconws(" D [addr]          - disassemble at address\n");
+		Cconws(" G [addr]          - run until address\n");
+		Cconws(" M [addr1] [addr2] - memory dump at address\n");
+		Cconws(" S [addr]          - single step one instruction\n");
+		Cconws(" T [addr]          - trace some instructions\n");
+		Cconws(" X                 - exit\n");
+		Cconws(" H                 - help (repeat this menu)\n");
+		Cconws("\n");
+		Cconws(" When in Atari mode press PAUSE to get back to the debugger");
+		Cconws("\n");
 
-        chCom = rgchIn[ichIn++] ;      /* get command character */
+		while (1)
+		{
+			GetLine();
+			if (!FSkipSpace())             /* skip any leading spaces */
+				continue;
 
-        if ((chCom >= 'a') && (chCom <= 'z'))
-            chCom -= 32;
+			chCom = rgchIn[ichIn++];      /* get command character */
 
-        if (chCom == 'X')
-            {
-            break;
-            }
+			if ((chCom >= 'a') && (chCom <= 'z'))
+				chCom -= 32;
 
-        if (chCom == ';')
-            continue;
+			if (chCom == 'X' || chCom == 'H')
+			{
+				break;
+			}
 
-        pch = rgchOut;
+			if (chCom == ';')
+				continue;
 
-        /* Can't use a switch statement because that calls Binsrch */
-        if (chCom == 'M')
-            {
-            if (FGetWord(&u1))
-                {
-                uMemDump = u1;
-                if (FGetWord(&u2))
-                    {
-                    u2++;
-                    }
-                else
-                    u2 = u1 + HEXCOLS;
-                }
-            else
-                {
-                u2 = uMemDump + 16*HEXCOLS;
-                }
+			pch = rgchOut;
 
-            do
-                {
-                Blitcz(' ', rgchOut, XCOMAX);
-                rgchOut[0] = ':';
-                rgchOut[57] = '\'';
-                XtoPch((char *)&rgchOut[1], uMemDump);
+			/* Can't use a switch statement because that calls Binsrch */
+			if (chCom == 'M')
+			{
+				if (FGetWord(&u1))
+				{
+					uMemDump = u1;
+					if (FGetWord(&u2))
+					{
+						u2++;
+					}
+					else
+						u2 = u1 + HEXCOLS;
+				}
+				else
+				{
+					u2 = uMemDump + 16 * HEXCOLS;
+				}
 
-                for (cNum=0; cNum<HEXCOLS; cNum++)
-                    {
-                    BtoPch(&rgchOut[7 + 3*cNum + (cNum>=HEXCOLS/2)],
-                          ch = cpuPeekB(iVM, uMemDump++));
-                    rgchOut[cNum+58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
-                    if (uMemDump == u2)
-                        break;
-                    }
-                OutPchCch(rgchOut,74);
-                Cconws((char *)szCR);
-                } while (uMemDump != u2);
-            }
-        else if (chCom == 'D')
-            {
-            if (FGetWord(&u1))
-                uMemDasm = u1;
+				do
+				{
+					Blitcz(' ', rgchOut, XCOMAX);
+					rgchOut[0] = ':';
+					rgchOut[57] = '\'';
+					XtoPch((char *)&rgchOut[1], uMemDump);
 
-            for (cNum=0; cNum<20; cNum++)
-                {
-                CchDisAsm(iVM, &uMemDasm);
-                Cconws((char *)szCR);
-                }
-            }
+					for (cNum = 0; cNum < HEXCOLS; cNum++)
+					{
+						BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)],
+							ch = cpuPeekB(iVM, uMemDump++));
+						rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
+						if (uMemDump == u2)
+							break;
+					}
+					OutPchCch(rgchOut, 74);
+					Cconws((char *)szCR);
+				} while (uMemDump != u2);
+			}
+			else if (chCom == 'D')
+			{
+				if (FGetWord(&u1))
+					uMemDasm = u1;
 
-        else if (chCom == '.')
-            {
-            /* dump/modify registers */
+				for (cNum = 0; cNum < 20; cNum++)
+				{
+					CchDisAsm(iVM, &uMemDasm);
+					Cconws((char *)szCR);
+				}
+			}
 
-            CchShowRegs(iVM);
-            }
+			else if (chCom == '.')
+			{
+				/* dump/modify registers */
 
-        else if (chCom == 'H')
-            {
-            /* set hardcopy on/off flag */
-            if (FGetByte(&u1))
-                fHardCopy = (char)u1;
-            }
-        else if (chCom == 'B')
-            {
-            FColdbootVM(v.iVM);
-            FExecVM(v.iVM, FALSE,TRUE);
-            CchShowRegs(iVM);
-            }
-        else if (chCom == ':')
-            {
-            /* modify memory */
-            if (!FGetWord(&u1))
-                Cconws("invalid address");
-            else while (FGetByte(&u2))
-                cpuPokeB(iVM, u1++, (BYTE)u2);
-            }
-        else if (chCom == 'M')
-            {
+				CchShowRegs(iVM);
+			}
+
+			else if (chCom == 'H')
+			{
+				/* set hardcopy on/off flag */
+				if (FGetByte(&u1))
+					fHardCopy = (char)u1;
+			}
+			else if (chCom == 'B')
+			{
+				FColdbootVM(v.iVM);
+				FExecVM(v.iVM, FALSE, TRUE);
+				CchShowRegs(iVM);
+			}
+			else if (chCom == ':')
+			{
+				/* modify memory */
+				if (!FGetWord(&u1))
+					Cconws("invalid address");
+				else while (FGetByte(&u2))
+					cpuPokeB(iVM, u1++, (BYTE)u2);
+			}
+			else if (chCom == 'M')
+			{
 #ifdef NEVER
-            pc = addr1 ;          /* block memory move */
-            addr2 = get_addr() ;
-            addr3 = get_addr() ;
-            while (addr1<=addr2) *(mem+addr3++) = *(mem+addr1++) ;
+				pc = addr1;          /* block memory move */
+				addr2 = get_addr();
+				addr3 = get_addr();
+				while (addr1 <= addr2) *(mem + addr3++) = *(mem + addr1++);
 #endif
-            }
-        else if (chCom == 'C')
-            {
+			}
+			else if (chCom == 'C')
+			{
 #ifdef NEVER
-            pc = addr1 ;          /* block memory compare */
-            addr2 = get_addr() ;
-            addr3 = get_addr() ;
-            while (addr1<=addr2)
-                {
-                if (*(mem+addr3++) != *(mem+addr1++))
-                    {
-                    print(" (");
-                    showaddr(addr1-1);
-                    print(") ");
-                    showhex(addr1-1);
-                    print("   (");
-                    showaddr(addr3-1);
-                    print(") ");
-                    showhex(addr3-1);
-                    Cconws(szCR);
-                    }
-                }
+				pc = addr1;          /* block memory compare */
+				addr2 = get_addr();
+				addr3 = get_addr();
+				while (addr1 <= addr2)
+				{
+					if (*(mem + addr3++) != *(mem + addr1++))
+					{
+						print(" (");
+						showaddr(addr1 - 1);
+						print(") ");
+						showhex(addr1 - 1);
+						print("   (");
+						showaddr(addr3 - 1);
+						print(") ");
+						showhex(addr3 - 1);
+						Cconws(szCR);
+					}
+				}
 #endif
-            }
-        else if (chCom == 'C')
-            {
+			}
+			else if (chCom == 'C')
+			{
 #ifdef NEVER
-            show_emul() ;       /* view virtual machine screen */
-            getchar() ;
-            show_scr() ;
+				show_emul();       /* view virtual machine screen */
+				getchar();
+				show_scr();
 #endif
-            }
-        else if ((chCom == 'G') ||
-                (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
-            {
-            unsigned int u;
-            WORD bp = 0; 
+			}
+			else if ((chCom == 'G') ||
+				(chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
+			{
+				unsigned int u;
+				WORD bp = 0;
 
-            cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 270000 : 1);
-            fTrace = (chCom != 'G');
+				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 270000 : 1);
+				fTrace = (chCom != 'G');
 
-            if (FGetWord(&u1))
-                {
-                if (chCom == 'A')
-                    bp = (WORD)u1;
-                else
-                    regPC = (WORD)u1;
-                }
+				if (FGetWord(&u1))
+				{
+					if (chCom == 'A')
+						bp = (WORD)u1;
+					else
+						regPC = (WORD)u1;
+				}
 
-            if (!fTrace)
-                {
-                break;
-                }
+				if (!fTrace)
+				{
+					break;
+				}
 
-            while ((cLines--) && (regPC >= 0x200) && (regPC != bp))
-                {
-                u = regPC;
-                CchDisAsm(iVM, &u);
-                FExecVM(v.iVM, TRUE,FALSE);
-                CchShowRegs(iVM);
-                }
-            }
-        else
-            Cconws("what??\007\n");
-        }
+				while ((cLines--) && (regPC >= 0x200) && (regPC != bp))
+				{
+					u = regPC;
+					CchDisAsm(iVM, &u);
+					FExecVM(v.iVM, TRUE, FALSE);
+					CchShowRegs(iVM);
+				}
+			}
+			else
+				Cconws("what??\007\n");
+		}
+	
+		// show menu again
+		if (chCom == 'H')
+			continue;
+
+		break;
+
+	}
 
     fMON=FALSE;
-    }
+}
 
 void CchShowRegs(int iVM)
     {

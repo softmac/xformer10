@@ -37,7 +37,7 @@ void CheckKey(int iVM)
         ch   = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
         vrgvmi[iVM].keytail &= 1023;
 
-		DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
+		//DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
         if ((vrgvmi[iVM].keytail & 1) || (vrgvmi[iVM].keyhead & 1))
             vrgvmi[iVM].keytail = vrgvmi[iVM].keyhead = 0;
@@ -72,7 +72,7 @@ void CheckKey(int iVM)
         {
         fKeyPressed = (scan << 8) | ch;
 
-        DebugStr("ch=%02X scan=%02X shift=%02X\n", ch, scan, shift);
+        //DebugStr("ch=%02X scan=%02X shift=%02X\n", ch, scan, shift);
         }
     else
         {
@@ -81,7 +81,7 @@ void CheckKey(int iVM)
 
         SKSTAT |= 0x04;
         fKeyPressed = 0;
-        DebugStr("upstroke!\n");
+        //DebugStr("upstroke!\n");
         return;
         }
 
@@ -358,7 +358,7 @@ lookit2:
     if (IRQEN & 0x40)
         IRQST &= ~0x40;
 
-    DebugStr("KBCODE = %02X %d\n", KBCODE, KBCODE);
+    //DebugStr("KBCODE = %02X %d\n", KBCODE, KBCODE);
 }
 
 
@@ -396,8 +396,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         return TRUE;
 #endif
 
-    DebugStr("First KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, ch);
-    printf("First KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, ch);
+    //printf("First KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, ch);
 
     ch = 0;
 
@@ -417,7 +416,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 			{
 				// key being pressed down
 
-				DebugStr("2nd   KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, msg.wParam);
+				//DebugStr("2nd   KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, msg.wParam);
 
 				wShiftChanged = (*pbshift & wAnyShift);
 

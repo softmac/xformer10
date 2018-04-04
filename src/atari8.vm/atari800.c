@@ -1475,7 +1475,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
             pmg.fHitclr = 1;
 
-            DebugStr("HITCLR!!\n");
+            //DebugStr("HITCLR!!\n");
             }
         else if (addr == 31)
             {

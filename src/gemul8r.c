@@ -249,6 +249,7 @@ DWORD WINAPI VMThread(LPVOID l)
 	}
 }
 
+// !!! bring focus back here if it exists already
 void CreateDebuggerWindow()
 {
     // check for parent process command prompt
@@ -259,9 +260,12 @@ void CreateDebuggerWindow()
     // create a console window for debugging
 
     AllocConsole();
+	
+	freopen("CONOUT$", "wb", stdout);
+
     SetConsoleTitle("Virtual Machine Debugger");
 
-    printf(""); // flush the log file !!! use special console printf
+    printf(""); // flush the log file
 
 //    EnableWindow(vi.hWnd,FALSE);
 }
@@ -1161,19 +1165,19 @@ int CALLBACK WinMain(
 		
 		// Break into debugger is asked to, or if in debug mode and VM died
 		// !!! Get this working
-        if (vi.fDebugBreak || ((vi.fInDebugger || v.fDebugMode) && !vi.fExecuting))
+        if (v.iVM >= 0 && (vi.fDebugBreak || ((vi.fInDebugger || v.fDebugMode) && !vi.fExecuting)))
         {
 #ifndef NDEBUG
 			vi.fDebugBreak = FALSE;
 
-            CreateDebuggerWindow();
-            SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+			// !!! slows down tracing too much but may be necessary?
+            //CreateDebuggerWindow();
+            //SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
 
             vi.fInDebugger = TRUE;
             vi.fExecuting = FALSE;
             mon(v.iVM);
             vi.fExecuting = TRUE;
-
 			DestroyDebuggerWindow();
 #endif
 		}
@@ -2218,7 +2222,7 @@ BOOL ColdStart(int iVM)
 	// stop executing if any VM fails
     BOOL f = FColdbootVM(iVM);
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && 0
     fDebug++;
     printf("RAM size = %dK\n", vi.cbRAM[0] / 1024);
     printf("ROM size = %dK\n", vi.cbROM[0] / 1024);
@@ -2670,8 +2674,7 @@ LRESULT CALLBACK WndProc(
     case WM_MOVE:
 
 #if !defined(NDEBUG)
-        printf("WM_MOVE before: x = %d, y = %d\n",
-             v.rectWinPos.left, v.rectWinPos.top);
+        //printf("WM_MOVE before: x = %d, y = %d\n", v.rectWinPos.left, v.rectWinPos.top);
 #endif
 
 		// MOVE comes before the SIZE so we don't know we're being maximized, so make sure we are >(0,0)
@@ -2685,8 +2688,7 @@ LRESULT CALLBACK WndProc(
 				GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
 #if !defined(NDEBUG)
-        printf("WM_MOVE after:  x = %d, y = %d\n",
-             v.rectWinPos.left, v.rectWinPos.top);
+        //printf("WM_MOVE after:  x = %d, y = %d\n", v.rectWinPos.left, v.rectWinPos.top);
 #endif
 
         break;
@@ -2694,7 +2696,7 @@ LRESULT CALLBACK WndProc(
     case WM_SIZE:
 
 #if !defined(NDEBUG)
-        printf("WM_SIZE x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
+        //printf("WM_SIZE x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
 #endif
 
 		// This code hasn't been enabled in years
@@ -2812,7 +2814,7 @@ break;
         
 		int scaleX = 1, scaleY = ((vvmhw[iVM].xpix) >= (vvmhw[iVM].ypix * 3)) ? 2 : 1;
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && 0
         printf("WM_GETMINMAXINFO, size(%d,%d) pos(%d,%d) min(%d,%d) max(%d,%d)\n",
             lpmm->ptMaxSize.x,
             lpmm->ptMaxSize.y,
@@ -3670,6 +3672,9 @@ break;
 			if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
 				ShowWindowsMouse();
             vi.fDebugBreak = TRUE;
+			// !!! do this now instead of in the tight loop
+			CreateDebuggerWindow();
+			SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
             return 0;
             }
 #endif
