@@ -986,7 +986,6 @@ int CALLBACK WinMain(
 		int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
 
 		// if we're < 640 x 480, make it double sized
-
 		if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
 		{
 			v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;

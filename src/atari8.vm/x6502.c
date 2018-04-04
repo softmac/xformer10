@@ -1658,8 +1658,6 @@ HANDLER(opA4)
 HANDLER(opA5)
 {
     EA_zp(iVM);
-	if (regPC == 0x6aa || regPC == 0x6a9)
-		regPC = regPC;
     LDA_com(iVM);
     HANDLER_END();
 }

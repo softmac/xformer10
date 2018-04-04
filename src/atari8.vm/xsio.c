@@ -438,11 +438,12 @@ void BUS1(int iVM)
 
     regP |= CBIT; // indicate that command completed successfully
 
-	// the stack might wrap! Do what PopWord does in x6502.c
+	// the stack might wrap!
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC = rgbMem[regSP];
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC |= rgbMem[regSP] << 8;
+	regPC++;
 }
 
 
@@ -849,12 +850,12 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
-	// the stack might wrap! Do what PopWord does in x6502.c
+	// the stack might wrap!
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC = rgbMem[regSP];
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC |= rgbMem[regSP] << 8;
-
+	regPC++;
 #if 0
     printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
 #endif
