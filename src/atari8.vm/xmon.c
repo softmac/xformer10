@@ -337,13 +337,16 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			{
 				if (FGetWord(&u1))
 				{
-					uMemDump = u1;
+					uMemDump = u1 & 0xffff;
 					if (FGetWord(&u2))
 					{
-						u2++;
+						// big values of u1 overflow into u2 as well!
+						u2 = (u2 & 0xffff);
+						if (u2 < u1)
+							u2 = u1 + 1;
 					}
 					else
-						u2 = u1 + HEXCOLS;
+						u2 = u1 + 16 * HEXCOLS;
 				}
 				else
 				{
@@ -359,10 +362,14 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 
 					for (cNum = 0; cNum < HEXCOLS; cNum++)
 					{
-						BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)],
-							ch = cpuPeekB(iVM, uMemDump++));
-						rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
-						if (uMemDump == u2)
+						if (uMemDump <= 0xffff)
+						{
+							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)],
+								ch = cpuPeekB(iVM, uMemDump));
+							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
+						}
+
+						if (uMemDump++ == u2)
 							break;
 					}
 					OutPchCch(rgchOut, 74);
@@ -373,12 +380,15 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			else if (chCom == 'D')
 			{
 				if (FGetWord(&u1))
-					uMemDasm = u1;
+					uMemDasm = u1 & 0xffff;
 
 				for (cNum = 0; cNum < 20; cNum++)
 				{
-					CchDisAsm(iVM, &uMemDasm);
-					Cconws((char *)szCR);
+					if (uMemDasm <= 0xffff)
+					{
+						CchDisAsm(iVM, &uMemDasm);
+						Cconws((char *)szCR);
+					}
 				}
 			}
 
@@ -410,7 +420,7 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 				if (!FGetWord(&u1))
 					Cconws("invalid address");
 				else while (FGetByte(&u2))
-					cpuPokeB(iVM, u1++, (BYTE)u2);
+					PokeBAtari(iVM, u1++, (BYTE)u2);
 			}
 
 			else if ((chCom == 'G') ||
@@ -538,6 +548,9 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     unsigned char bOpcode;
     long lPackedOp;
     int md;
+
+	if ((*puMem) > 0xffff)
+		return;
 
     _fmemset(rgch, ' ', sizeof(rgch)-1);
     rgch[sizeof(rgch)-1] = 0;
