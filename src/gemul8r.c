@@ -913,14 +913,13 @@ int CALLBACK WinMain(
 	}
 
 	// If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
+	// Otherwise, keep the last global settings
 	if (v.cVM > 1)
 	{
 		v.fTiling = TRUE;
 		v.fFullScreen = FALSE;
 		v.swWindowState = SW_SHOWMAXIMIZED;
 	}
-	else
-		v.fTiling = FALSE;	// don't tile a single VM
 
 	// If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
     if (!fSkipLoad && v.fSaveOnExit)

@@ -265,6 +265,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 	BOOL f = FALSE;
     
 	sz = szIn;
+	
+	// load from an INI
 	if (!szIn)
 	{
 		GetCurrentDirectory(sizeof(rgch), rgch);
@@ -298,7 +300,13 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 		}
 		assert(v.cVM == 0);
 
-		v = vTmp;
+		//The important part about a saved .GEM file is the VMs in it, not the global state at the time.
+		// If we're loading a saved .GEM file, do NOT replace our global state, just load in the VMs
+		// It would be rude to jump you into fullscreen or tiled mode all of a sudden when you choose File/Load...
+		// Also, drag/drop a .GEM file and you'll get the last saved INI global state, but the VMs from the GEM file
+		if (!szIn)
+			v = vTmp;
+
 		f = TRUE;
 		v.cVM = 0;	// no matter what they say, assume they're bad until we see they're good
 
