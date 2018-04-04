@@ -1266,14 +1266,14 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			}
 #endif
 
-			// do the VBI! We MUST do it one line late (249 vs 248), because otherwise MULE does not work. !!! I don't know why.
-			else if (wScan == STARTSCAN + Y8 + 1)
+			// the CPU will have seen VCOUNT == 124 executing scan line 247, so it should be safe to VBLANK now
+			else if (wScan == STARTSCAN + Y8)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				DoVBI(iVM);	// it's huge, it bloats this function to inline it.
 			}
 
-			else if (wScan > STARTSCAN + Y8 + 1)
+			else if (wScan > STARTSCAN + Y8)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
@@ -1294,15 +1294,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
 
 		// some programs check "mirrors" instead of $D40B
-		// if we are resuming after a WSYNC, VCOUNT will be one higher
-		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + (WSYNC_Waited ? 1 : 0)) >> 1);
+		// VCOUNT should increment in the middle of Go6502, but we're not that fancy yet.
+		// Let's use the higher value so that VCOUNT reaches 124 (248 / 2)
+		// before the VBLANK which can be so long as to not let main code ever see VCOUNT = 124 (breaks MULE)
+		rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
 
 		// Execute about one horizontal scan line's worth of 6502 code
 		WSYNC_Seen = FALSE;
 
 		Go6502(iVM);
-
-		//if (iVM == 1) ODS("T%d Frame=%d wScan = %d PC=%d\n", iVM, wFrame, wScan, regPC);
 
 		if (!WSYNC_Seen)
 			WSYNC_Waited = FALSE;
@@ -1651,8 +1651,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			}
 			WSYNC_Seen = TRUE;
 
+			// (we already start out with VCOUNT incremented so this is no longer necessary)
 			// if we're not going to wait, we need to make sure VCOUNT is updated like it would have been had we waited
-			rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
+			//rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
             }
         else if (addr == 15)
             {
