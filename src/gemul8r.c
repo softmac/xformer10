@@ -3285,9 +3285,12 @@ break;
 
 			if (v.iVM != -1 && OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgcart.szName, FALSE, 1))
 			{
+				rgvm[v.iVM].rgcart.fCartIn = TRUE;
+
 				// this will require a reboot, I assume for all types of VMs?
 				FUnInitVM(v.iVM);
-				FInitVM(v.iVM); // could error
+				if (FInitVM(v.iVM))
+					ColdStart(v.iVM);	// could error
 
 				FixAllMenus();
 			}
@@ -3305,7 +3308,8 @@ break;
 
 				// this will require a reboot, I assume for all types of VMs?
 				FUnInitVM(v.iVM);
-				FInitVM(v.iVM); // could error
+				if (FInitVM(v.iVM))
+					ColdStart(v.iVM);	// could error
 
 				FixAllMenus();
 			}
