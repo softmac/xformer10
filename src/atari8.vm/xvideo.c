@@ -482,7 +482,7 @@ BOOL ProcessScanLine(int iVM)
     }
 
     // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
-    if ((sl.modehi & 8) && (iscan == scans) && (NMIEN & 0x80))
+    if ((sl.modehi & 8) && (iscan == scans))
     {
 #ifndef NDEBUG
         extern BOOL  fDumpHW;
@@ -490,9 +490,14 @@ BOOL ProcessScanLine(int iVM)
         if (fDumpHW)
             printf("DLI interrupt at scan %d\n", wScan);
 #endif
-        Interrupt(iVM);
-          NMIST = 0x80 | 0x1F;	// want DLI
-        regPC = cpuPeekW(iVM, 0xFFFA);
+
+		// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
+		NMIST = (NMIST & 0x20) | 0x9F;
+		if (NMIEN & 0x80)	// DLI enabled
+		{
+			Interrupt(iVM);
+			regPC = cpuPeekW(iVM, 0xFFFA);
+		}
     }
 
     // Check playfield width and set cbWidth (number of bytes read by Antic)

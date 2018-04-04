@@ -229,11 +229,14 @@ void DoVBI(int iVM)
 #ifndef NDEBUG
 	fDumpHW = 0;
 #endif
+	
+	// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
+	NMIST = (NMIST & 0x20) | 0x5F;
+							
+	// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+	// every scan line now until it's done, then resume
 	if (NMIEN & 0x40) {
-		// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-		// every scan line now until it's done, then resume
 		Interrupt(iVM);
-		NMIST = 0x40 | 0x1F;	// want VBI
 		regPC = cpuPeekW(iVM, 0xFFFA);
 	}
 
@@ -368,6 +371,8 @@ BOOL ReadCart(int iVM)
 		return TRUE;	// nothing to do, all OK
 	}
 
+	bCartType = 0;
+
 	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
 	if (h != -1)
 	{
@@ -381,7 +386,7 @@ BOOL ReadCart(int iVM)
 		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
 		{
 			_close(h);
-			return FALSE;
+			goto exitCart;
 		}
 
 		l = _lseek(h, 0L, SEEK_SET);
@@ -395,7 +400,7 @@ BOOL ReadCart(int iVM)
 		rgvm[iVM].rgcart.fCartIn = TRUE;
 	}
 	else
-		return FALSE;
+		goto exitCart;
 
 	_close(h);
 
@@ -407,7 +412,7 @@ BOOL ReadCart(int iVM)
 		bCartType = CART_8K;
 
 	else if (cb < 8192)
-		return FALSE;
+		goto exitCart;
 
 	else if (cb == 16384)
 	{
@@ -452,6 +457,8 @@ BOOL ReadCart(int iVM)
 		rgvm[iVM].rgcart.fCartIn = FALSE;
 	}
 #endif
+
+exitCart:
 
 	if (!bCartType)
 	{
@@ -1246,16 +1253,18 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				// business as usual
 			}
 
+#if 0
 			// !!! Anteater disables VBIs then hangs until a VBI happens anyway,
 			// so we need to periodically set this even if disabled. Figure out how this works! DLI's self-reset
 			else if (wScan == STARTSCAN + Y8) {
 				// start the NMI status early so that programs
 				// that care can see it
-				NMIST = 0x40 | 0x1F;
+				NMIST = (NMIST & 0x20) | 0x5F;
 
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
 				wLeftMax = wLeft;
 			}
+#endif
 
 			// do the VBI! We MUST do it one line late (249 vs 248), because otherwise MULE does not work. !!! I don't know why.
 			else if (wScan == STARTSCAN + Y8 + 1)
@@ -1621,7 +1630,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		
 		// !!! using shadows like this could break an app that uses a functioning mirror of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
-		
+		if (addr == 0x0e)
+			addr = addr;
+
 		// the display list pointer is the only ANTIC register that is R/W
 		if (addr == 2 || addr == 3)
 			rgbMem[0xd400 + addr] = b;
