@@ -927,7 +927,8 @@ HANDLER(op20)
 
     regPC = regEA;
 	
-    if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
+	// SIOV is $E459, which jumps to $E959 in all OS's. Some code jumps to $E959 directly, so that's our hook
+    if ((regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
     {
         // this is our SIO hook!
 
@@ -1183,7 +1184,7 @@ HANDLER(op4C)
 
     regPC = regEA;
 
-    if ((regPC == 0xE459) && ((mdXLXE == 0) || (wPBDATA & 1)))
+    if ((regPC == 0xE959) && ((mdXLXE == 0) || (wPBDATA & 1)))
     {
         // this is our SIO hook!
 
@@ -1302,7 +1303,7 @@ HANDLER(op60)
         fSIO = 1;
         wLeft = 1;
     }
-	else if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
+	else if ((regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
 	{
 		// this is our SIO hook!
 
@@ -1377,7 +1378,7 @@ HANDLER(op6C)
     EA_abs(iVM);
     regPC = READ_WORD(iVM, regEA);
 
-	if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
+	if ((regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
 	{
 		// this is our SIO hook!
 

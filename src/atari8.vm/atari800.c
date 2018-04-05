@@ -1306,9 +1306,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		assert(wLeft == 0 || fTrace == 1);
 
+		// Code tried to somehow jump to $E959, the SIO routine, which talks to the serial bus, we emulate that separately
+		// and skip running the OS code
 		if (fSIO) {
-			// REVIEW: need to check if PC == $E459 and if so make sure
-			// XL/XE ROMs are swapped in, otherwise ignore
 			fSIO = 0;
 			SIOV(iVM);
 		}
