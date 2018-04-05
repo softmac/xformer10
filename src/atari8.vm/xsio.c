@@ -466,7 +466,7 @@ void SIOV(int iVM)
     WORD i;
 
 	// we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
-    if (regPC != 0xE459)
+    if (regPC != 0xE959)
         {
         BUS1(iVM);
         return;
