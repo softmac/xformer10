@@ -63,7 +63,8 @@ int sVM = -1;	// the tile with focus
 
 #include "shellapi.h"
 
-// My printf that uses OutputDebugString to send to the output window, the normal printf goes to the ether
+// My printf that uses OutputDebugString to send to the VS output tab
+// Normal printf will go to the debug monitor, or nowhere if there is none
 //
 void ODS(char *fmt, ...)
 {
@@ -1227,10 +1228,13 @@ int CALLBACK WinMain(
 		static ULONGLONG cErr = 0;
 		static unsigned lastVM = 0;
 
+		// !!! Speed things up by not doing then when in the console, or at least make it actually update the screen
 		RenderBitmap();
 
 		// we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
 		// don't let errors propogate
+
+		// !!! This number is bogus while tracing
 
 		const ULONGLONG cJif = 29830; // 1789790 / 60
 		ULONGLONG cCur = GetCycles() - cCYCLES;
@@ -3451,7 +3455,7 @@ break;
 			if (/* v.fDebugMode && */ !vi.fParentCon)
 				CreateDebuggerWindow();
 
-			SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+			SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
 
 			return 0;
 #endif

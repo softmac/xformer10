@@ -172,7 +172,7 @@ void GetLine()
     cchIn = 0;      /* initialize input line cchIngth to 0 */
     Bconout(2,'>');
 
-    ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), (LPDWORD)&cchIn, NULL);
+	ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), (LPDWORD)&cchIn, NULL);
 
     if (cchIn && rgchIn[cchIn-1] == 0x0D)
         cchIn--;
@@ -212,7 +212,7 @@ int NextHexChar()
     return ((ch == ' ') ? -2 : -1);
     }
 
-/* Get 8 bit value at rgchIn[ichIn]. Returns TRUE if valid number */
+/* Get 8 bit value at rgchIn[ichIn]. Returns TRUE if a space is next, meaning another number might be there */
 unsigned int FGetByte(unsigned *pu)
     {
     int x;
@@ -230,9 +230,9 @@ unsigned int FGetByte(unsigned *pu)
     }
 
 
-/* Get 16 bit value at rgchIn[ichIn]. Returns TRUE if valid number */
+/* Get 16 bit value at rgchIn[ichIn]. Returns TRUE if a space comes after the number */
 unsigned int FGetWord(unsigned *pu)
-    {
+{
     int x;
     int w=0, digit=0 ;
 
@@ -245,7 +245,7 @@ unsigned int FGetWord(unsigned *pu)
         }
     *pu = w;
     return (x != -1);
-    }
+}
 
 void XtoPch(char *pch, unsigned u)
     {
@@ -335,22 +335,22 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			/* Can't use a switch statement because that calls Binsrch */
 			else if (chCom == 'M')
 			{
-				if (FGetWord(&u1))
+				if (FGetWord(&u1)) // TRUE means there's a space next, so probably another number coming
 				{
 					uMemDump = u1 & 0xffff;
-					if (FGetWord(&u2))
-					{
-						// big values of u1 overflow into u2 as well!
-						u2 = (u2 & 0xffff);
-						if (u2 < u1)
-							u2 = u1 + 1;
-					}
-					else
-						u2 = u1 + 16 * HEXCOLS;
+					FGetWord(&u2);
+					u2 = (u2 & 0xffff);
+					if (u2 < uMemDump)
+						u2 = uMemDump;
 				}
 				else
 				{
+					// continue where we left off, or were we given a new number?
+					if (u1 > 0)
+						uMemDump = u1 & 0xffff;
 					u2 = uMemDump + 16 * HEXCOLS;
+					if (u2 > 0xffff)
+						u2 = 0xffff;
 				}
 
 				do
@@ -360,16 +360,17 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 					rgchOut[57] = '\'';
 					XtoPch((char *)&rgchOut[1], uMemDump);
 
+					// !!! always start a row divisible by $10
 					for (cNum = 0; cNum < HEXCOLS; cNum++)
 					{
 						if (uMemDump <= 0xffff)
 						{
-							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)],
-								ch = cpuPeekB(iVM, uMemDump));
+							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = cpuPeekB(iVM, uMemDump));
 							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
 						}
 
-						if (uMemDump++ == u2)
+						uMemDump++;
+						if (uMemDump >= u2 || (GetKeyState(VK_END) & 0x8000000))
 							break;
 					}
 					OutPchCch(rgchOut, 74);
@@ -379,7 +380,10 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			
 			else if (chCom == 'D')
 			{
-				if (FGetWord(&u1))
+				FGetWord(&u1);
+				
+				// given a new number, or just continue?
+				if (u1 > 0)
 					uMemDasm = u1 & 0xffff;
 
 				for (cNum = 0; cNum < 20; cNum++)
@@ -389,14 +393,16 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 						CchDisAsm(iVM, &uMemDasm);
 						Cconws((char *)szCR);
 					}
+					else
+						break;
 				}
 			}
 
 			// set breakpoint - no arguments will remind you what it is
 			else if (chCom == 'B')
 			{
-				if (FGetWord(&u1))
-					bp = (WORD)u1;
+				FGetWord(&u1);
+				bp = (WORD)u1;
 				printf("Breakpoint set at %04x\n", bp);
 			}
 			
@@ -411,20 +417,17 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			{
 				ColdStart(v.iVM);
 				CchShowRegs(iVM);
-				uMemDasm = regPC;
-				uMemDump = regPC;
+				uMemDasm = regPC; // is this handy or mean?
 			}
 			else if (chCom == 'P')
 			{
 				/* modify memory */
-				if (!FGetWord(&u1))
-					Cconws("invalid address");
-				else while (FGetByte(&u2))
-					PokeBAtari(iVM, u1++, (BYTE)u2);
+				if (FGetWord(&u1))
+					while (FGetByte(&u2) && u2 <= 0xff && u1 < 0x10000)
+						PokeBAtari(iVM, u1++, (BYTE)u2);
 			}
 
-			else if ((chCom == 'G') ||
-				(chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
+			else if ((chCom == 'G') || (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
 			{
 				unsigned int u;
 				int bpT;
@@ -432,12 +435,16 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
 				fTrace = (chCom != 'G');
 
-				if (FGetWord(&u1))
+				FGetWord(&u1);
+				if (u1 > 0)
 				{
 					if (chCom == 'A')
-						bpT = (WORD)u1;
+						bpT = (WORD)u1; // this is a second breakpoint
 					else
+					{
 						regPC = (WORD)u1;
+						bpT = bp; // only 1 active bp
+					}
 				}
 
 				if (!fTrace)
@@ -445,7 +452,7 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 					break;
 				}
 
-				// auto-brk if we jump below page 2
+				// auto-brk if we jump to 0 (MULE actually does legit jmp to z-page)
 				do { // do at least 1 thing, don't get stuck at the breakpoint
 					u = regPC;
 					CchDisAsm(iVM, &u);
@@ -453,7 +460,9 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 					CchShowRegs(iVM);
 					if (GetKeyState(VK_END) & 0x8000)
 						break;
-				} while ((--cLines) && (regPC >= 0x200) && (regPC != bp));
+				} while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
+				
+				uMemDasm = regPC;	// future dasms start from here by default
 			}
 
 #ifdef NEVER
@@ -577,7 +586,12 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x08:
     case 0x09:
     case 0x0C:
-        BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
+		if ((*puMem) >= 0xfffd)
+		{
+			(*puMem) += 3;
+			return;
+		}
+		BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
 
     /* one operand */
     case 0x01:
@@ -587,7 +601,12 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x05:
     case 0x06:
     case 0x0B:
-        BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
+		if ((*puMem) >= 0xfffe)
+		{
+			(*puMem) += 2;
+			return;
+		}
+		BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
 
     /* no operands */
     case 0x00:

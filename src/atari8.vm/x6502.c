@@ -927,7 +927,7 @@ HANDLER(op20)
 
     regPC = regEA;
 	
-    if ((regPC == 0xE459) && ((mdXLXE == 0) || (wPBDATA & 1)))
+    if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
         {
         // this is our SIO hook!
 
@@ -935,7 +935,7 @@ HANDLER(op20)
         wLeft = 1;
         }
 
-    else if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
+    else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
         // this is our XE BUS hook!
 
@@ -1297,13 +1297,20 @@ HANDLER(op60)
 {
 	regPC = PopWord(iVM) + 1;
 
-    if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-        {
+    if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
+    {
         // this is our XE BUS hook!
 
         fSIO = 1;
         wLeft = 1;
-        }
+    }
+	else if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
+	{
+		// this is our SIO hook!
+
+		fSIO = 1;
+		wLeft = 1;
+	}
 
     HANDLER_END_FLOW();
 }
@@ -1371,6 +1378,14 @@ HANDLER(op6C)
 {
     EA_abs(iVM);
     regPC = READ_WORD(iVM, regEA);
+
+	if ((regPC == 0xE459) && ((mdXLXE == md800) || (wPBDATA & 1)))
+	{
+		// this is our SIO hook!
+
+		fSIO = 1;
+		wLeft = 1;
+	}
 
     HANDLER_END_FLOW();
 }
