@@ -162,6 +162,11 @@ BOOL __inline FDumpHWVM(int iVM)
     return rgvm[iVM].pvmi->pfnDumpHW(iVM);
 }
 
+BOOL __inline FMonVM(int iVM)
+{
+	return rgvm[iVM].pvmi->pfnMon(iVM);
+}
+
 //
 // REVIEW: Deprecate vmPeek*
 //
