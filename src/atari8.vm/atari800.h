@@ -689,7 +689,7 @@ BOOL __cdecl TraceAtari(int, BOOL, BOOL);
 BOOL __cdecl ExecuteAtari(int, BOOL, BOOL);
 BOOL __cdecl KeyAtari(int, HWND, UINT, WPARAM, LPARAM);
 BOOL __cdecl DumpRegsAtari(int);
-BOOL __cdecl DisasmAtari(int, char *pch, ADDR *pPC);
+BOOL __cdecl MonAtari(int);
 BYTE __cdecl PeekBAtari(int, ADDR addr);
 WORD __cdecl PeekWAtari(int, ADDR addr);
 ULONG __cdecl PeekLAtari(int, ADDR addr);

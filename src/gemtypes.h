@@ -200,7 +200,7 @@ typedef struct _vminfo
 	PFNL pfnWinMsg;         // handles Windows messages
 	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
 	PFNL pfnDumpHW;         // dumps hardware state
-	PFNL pfnDisasm;         // Disassemble code in VM as ASCII
+	PFNL pfnMon;			// A debuggin monitor - someday maybe it can only be the Disassemble code part
 	PFNL pfnReadHWByte;     // reads a byte from the VM
 	PFNL pfnReadHWWord;     // reads a word from the VM
 	PFNL pfnReadHWLong;     // reads a long from the VM
@@ -1006,9 +1006,6 @@ void ClearSurface();
 
 // xatari.c
 void ForceRedraw(int iVM);
-
-// xmon.c
-BOOL mon(int);
 
 //
 // Debug functions

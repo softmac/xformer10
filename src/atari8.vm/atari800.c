@@ -56,7 +56,7 @@ VMINFO const vmi800 =
     KeyAtari,
     DumpRegsAtari,
     DumpHWAtari,
-    DisasmAtari,
+    MonAtari,
     PeekBAtari,
     PeekWAtari,
     PeekLAtari,
@@ -1632,8 +1632,6 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		
 		// !!! using shadows like this could break an app that uses a functioning mirror of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
-		if (addr == 0x0e)
-			addr = addr;
 
 		// the display list pointer is the only ANTIC register that is R/W
 		if (addr == 2 || addr == 3)

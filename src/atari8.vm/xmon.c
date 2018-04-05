@@ -263,7 +263,7 @@ void BtoPch(char *pch, unsigned b)
 
 // return FALSE when somebody quits
 //
-BOOL mon(int iVM)            /* the 6502 monitor */
+BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 {
     char chCom;                 /* command character */
     char ch;
@@ -423,14 +423,18 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 			{
 				/* modify memory */
 				if (FGetWord(&u1))
+				{
+					// TRUE if space was next, meaning another number is likely
 					while (FGetByte(&u2) && u2 <= 0xff && u1 < 0x10000)
 						PokeBAtari(iVM, u1++, (BYTE)u2);
+					PokeBAtari(iVM, u1, (BYTE)u2);
+				}
 			}
 
 			else if ((chCom == 'G') || (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
 			{
 				unsigned int u;
-				int bpT;
+				int bpT = bp;	
 
 				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
 				fTrace = (chCom != 'G');
@@ -441,10 +445,7 @@ BOOL mon(int iVM)            /* the 6502 monitor */
 					if (chCom == 'A')
 						bpT = (WORD)u1; // this is a second breakpoint
 					else
-					{
 						regPC = (WORD)u1;
-						bpT = bp; // only 1 active bp
-					}
 				}
 
 				if (!fTrace)
