@@ -100,44 +100,41 @@ long const rglMnemonics[256] =
  } ;
 
 char *Blit(char *pchFrom, char *pchTo)
-    {
+{
     while (*pchFrom)
         *pchTo++ = *pchFrom++;
     return pchTo;
-    }
+}
 
 char *Blitb(char *pchFrom, char *pchTo, unsigned cb)
-    {
+{
     while (cb--)
         *pchTo++ = *pchFrom++;
     return pchTo;
-    }
+}
 
 char* Blitcz(char ch, char *pchTo, int cch)
-    {
+{
     while (cch--)
             *pchTo++ = ch;
     return pchTo;
-    }
+}
 
 void Bconout(int dev, int ch)
-    {
+{
 	dev;
 
     printf("%c",ch);
-#ifndef HWIN32
-    fflush(stdout);
-#endif
-    }
+}
 
 void Cconws(char *pch)
-    {
+{
     while (*pch)
         Bconout(2,*pch++);
-    }
+}
 
 void outchar(char ch)
-    {
+{
 #ifdef LATER
     if (ch & 0x80)
         {
@@ -147,7 +144,7 @@ void outchar(char ch)
         }
     else
 #endif
-        Bconout (5,ch);
+	    Bconout (5,ch);
 
 #ifdef LATER
 
@@ -159,16 +156,16 @@ void outchar(char ch)
         Bconin(2);
 
 #endif
-    }
+}
 
 void OutPchCch(char *pch, int cch)
-    {
+{
     while (cch--)
         outchar(*pch++);
-    }
+}
 
 void GetLine()
-    {
+{
     cchIn = 0;      /* initialize input line cchIngth to 0 */
     Bconout(2,'>');
 
@@ -182,22 +179,27 @@ void GetLine()
     rgchIn[cchIn] = ' ';
     rgchIn[cchIn+1] = 0;
     ichIn = 0;
-    }
+}
 
-/* advance ichIn to point to non-space */
+/* advance ichIn to point to non-space, return -1 if it runs out of characters, or FALSE if no skipping necessary */
 int FSkipSpace()
-    {
-    char ch;
-    while ((ch = rgchIn[ichIn]) == ' ' && ichIn<cchIn)
-        ichIn++ ;
-    return (ichIn < cchIn);
-    }
+{
+	char ch;
+	BOOL f = FALSE;
+
+	while ((ichIn < cchIn) && (ch = rgchIn[ichIn]) == ' ')
+	{
+		ichIn++;
+		f = TRUE;
+	}
+	return (ichIn < cchIn) ? f : -1;
+}
 
 
-/* returns 0-15 if a valid hex character is at rgchIn[ichIn], else -1 */
-/* returns -2 if character was a space */
+/* returns 0-15 if a valid hex character is at rgchIn[ichIn], else -1 if bad */
+/* returns -2 if character was a space or CR/LF */
 int NextHexChar()
-    {
+{
     char ch;
 
     ch = rgchIn[ichIn++];
@@ -209,34 +211,39 @@ int NextHexChar()
     if (ch>='a' && ch<='f')
         return ch-'a'+10;
 
-    return ((ch == ' ') ? -2 : -1);
-    }
+	// un-eat the non-hex char
+	ichIn--;
 
-/* Get 8 bit value at rgchIn[ichIn]. Returns TRUE if a space is next, meaning another number might be there */
+    return ((ch == ' ' || ch == 0x0d || ch == 0x0a) ? -2 : -1);
+}
+
+// Get 1 or 2 digit 8 bit value at rgchIn[ichIn].
+// Returns FALSE if a bad char was encountered
+//
 unsigned int FGetByte(unsigned *pu)
-    {
+{
     int x;
     int w=0, digit=0 ;
 
-    if (!FSkipSpace())
+    if (FSkipSpace() == -1)
         return FALSE;
     while (((x = NextHexChar()) >= 0) && digit++ < 2)
-        {
+    {
         w <<= 4 ;
         w += x;
-        }
-    *pu = w;
-    return (x != -1);
     }
+    *pu = w;
+	return (x != -1 && digit > 0);
+}
 
 
-/* Get 16 bit value at rgchIn[ichIn]. Returns TRUE if a space comes after the number */
+/* Get 16 bit value at rgchIn[ichIn]. Returns FALSE if a bad char was encountered */
 unsigned int FGetWord(unsigned *pu)
 {
     int x;
     int w=0, digit=0 ;
 
-    if (!FSkipSpace())
+    if (FSkipSpace() == -1)
         return FALSE;
     while (((x = NextHexChar()) >= 0) && digit++ < 4)
         {
@@ -244,7 +251,7 @@ unsigned int FGetWord(unsigned *pu)
         w += x;
         }
     *pu = w;
-    return (x != -1);
+    return (x != -1 && digit > 0);
 }
 
 void XtoPch(char *pch, unsigned u)
@@ -305,7 +312,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 		{
 			FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 			GetLine();
-			if (!FSkipSpace())             /* skip any leading spaces */
+			if (FSkipSpace() == -1)             /* skip any leading spaces */
 				continue;
 
 			chCom = rgchIn[ichIn++];      /* get command character */
@@ -335,19 +342,26 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 			/* Can't use a switch statement because that calls Binsrch */
 			else if (chCom == 'M')
 			{
-				if (FGetWord(&u1)) // TRUE means there's a space next, so probably another number coming
+				if (FGetWord(&u1))
 				{
 					uMemDump = u1 & 0xffff;
-					FGetWord(&u2);
-					u2 = (u2 & 0xffff);
-					if (u2 < uMemDump)
-						u2 = uMemDump;
+					// there was space in between then a valid 2nd number
+					if (FSkipSpace() == TRUE && FGetWord(&u2))
+					{
+						u2 = (u2 & 0xffff);
+						if (u2 < uMemDump)
+							u2 = uMemDump;
+					}
+					else
+					{
+						u2 = uMemDump + 16 * HEXCOLS;
+						if (u2 > 0xffff)
+							u2 = 0xffff;
+					}
 				}
 				else
 				{
-					// continue where we left off, or were we given a new number?
-					if (u1 > 0)
-						uMemDump = u1 & 0xffff;
+					// continue where we left off last time
 					u2 = uMemDump + 16 * HEXCOLS;
 					if (u2 > 0xffff)
 						u2 = 0xffff;
@@ -369,21 +383,20 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
 						}
 
-						uMemDump++;
 						if (uMemDump >= u2 || (GetKeyState(VK_END) & 0x8000000))
 							break;
+						uMemDump++;
 					}
+					if (GetKeyState(VK_END) & 0x8000000)
+						break;
 					OutPchCch(rgchOut, 74);
 					Cconws((char *)szCR);
-				} while (uMemDump != u2);
+				} while (uMemDump < u2);
 			}
 			
 			else if (chCom == 'D')
 			{
-				FGetWord(&u1);
-				
-				// given a new number, or just continue?
-				if (u1 > 0)
+				if (FGetWord(&u1))
 					uMemDasm = u1 & 0xffff;
 
 				for (cNum = 0; cNum < 20; cNum++)
@@ -401,8 +414,8 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 			// set breakpoint - no arguments will remind you what it is
 			else if (chCom == 'B')
 			{
-				FGetWord(&u1);
-				bp = (WORD)u1;
+				if (FGetWord(&u1))
+					bp = (WORD)u1;
 				printf("Breakpoint set at %04x\n", bp);
 			}
 			
@@ -424,10 +437,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 				/* modify memory */
 				if (FGetWord(&u1))
 				{
-					// TRUE if space was next, meaning another number is likely
-					while (FGetByte(&u2) && u2 <= 0xff && u1 < 0x10000)
+					// if space was next, then another good number
+					while (FSkipSpace() == TRUE && FGetByte(&u2) && u1 < 0x10000)
 						PokeBAtari(iVM, u1++, (BYTE)u2);
-					PokeBAtari(iVM, u1, (BYTE)u2);
 				}
 			}
 
@@ -439,8 +451,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
 				fTrace = (chCom != 'G');
 
-				FGetWord(&u1);
-				if (u1 > 0)
+				if (FGetWord(&u1))
 				{
 					if (chCom == 'A')
 						bpT = (WORD)u1; // this is a second breakpoint
@@ -459,7 +470,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 					CchDisAsm(iVM, &u);
 					FExecVM(v.iVM, TRUE, FALSE);
 					CchShowRegs(iVM);
-					if (GetKeyState(VK_END) & 0x8000)
+					if (GetKeyState(VK_END) & 0x8000000)
 						break;
 				} while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
 				
@@ -512,7 +523,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 			}
 #endif
 			else
-				Cconws("what??\007\n");
+				Cconws("what??\007\n"); // chime
 		}
 	
 		// show menu again
@@ -587,7 +598,7 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x08:
     case 0x09:
     case 0x0C:
-		if ((*puMem) >= 0xfffd)
+		if ((*puMem) > 0xfffd)
 		{
 			(*puMem) += 3;
 			return;
@@ -602,7 +613,7 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x05:
     case 0x06:
     case 0x0B:
-		if ((*puMem) >= 0xfffe)
+		if ((*puMem) > 0xfffe)
 		{
 			(*puMem) += 2;
 			return;

@@ -438,11 +438,14 @@ void BUS1(int iVM)
 
     regP |= CBIT; // indicate that command completed successfully
 
+	//regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+	//regSP = (regSP + 2) & 255 | 256;
+
 	// the stack might wrap!
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC = rgbMem[regSP];
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC |= rgbMem[regSP] << 8;
+	regPC |= (WORD)rgbMem[regSP] << 8;
 	regPC++;
 }
 
@@ -850,15 +853,17 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
+	//regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+	//regSP = (regSP + 2) & 255 | 256;
+
 	// the stack might wrap!
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
 	regPC = rgbMem[regSP];
 	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC |= rgbMem[regSP] << 8;
+	regPC |= (WORD)rgbMem[regSP] << 8;
 	regPC++;
-#if 0
-    printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
-#endif
+
+	//printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
 }
 
 #endif // XFORMER
