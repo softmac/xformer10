@@ -1278,9 +1278,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			{
 				if (IRQST != 255)
 				{
-					//        printf("IRQ interrupt\n");
 					Interrupt(iVM);
 					regPC = cpuPeekW(iVM, 0xFFFE);
+					//ODS("IRQ TIME!\n");
 				}
 			}
 
@@ -1317,8 +1317,35 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		if (wLeft == 0)
 		{
 			wScan = wScan + 1;
+
 			if (!WSYNC_Seen)
 				WSYNC_Waited = FALSE;
+
+			// !!! I'm worried about perf if I do this every instruction, so cheat!
+			// if the counters reach 0, trigger an IRQ. Apparently, they repeat
+
+			for (int irq = 0; irq < 4; irq = ((irq + 1) << 1) - 1)	// 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported)
+			{
+				if (irqPokey[irq] && irqPokey[irq] <= wLeftMax)
+				{
+					//ODS("TIMER %d FIRING\n", irq + 1);
+
+					if (IRQEN & (irq + 1))
+						IRQST &= ~(irq + 1);					// fire away, I assume they keep cycling forever?
+
+					UINT isav = irqPokey[irq];				// remember
+
+					PokeBAtari(iVM, 0xD209, 0);				// poke STIMER to start it up again !!! don't resample AUDFx?
+
+					if (irqPokey[irq] > wLeftMax - isav)
+						irqPokey[irq] -= (wLeftMax - isav);	// don't let errors propagate
+					else
+						irqPokey[irq] = 1;					// uh oh, already time for the next one
+				}
+				else
+					irqPokey[irq] -= wLeftMax;
+			}
+
 		}
 
 		// we process the audio after the whole frame is done, but the VBLANK starts at 241
@@ -1515,7 +1542,32 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		
 		rgbMem[writePOKEY+addr] = b;
 
-        if (addr == 10)
+		if (addr == 9)
+		{
+			// STIMER - start the POKEY timers, even if they're disabled. They might be enabled by time 0
+			
+			// Look at the frequency to see how many cycles do we have to count down? (Might be joined to another channel)
+
+			ULONG f1 = (AUDCTL & 0x10) ? ((AUDF2 << 8) | AUDF1) : AUDF1;
+			ULONG f2 = (AUDCTL & 0x10) ? AUDF1 : AUDF2;
+			ULONG f4 = (AUDCTL & 0x08) ? ((AUDF4 << 8) | AUDF3) : AUDF4;
+
+			// What are the clock frequencies? I assume is 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
+
+			ULONG c1 = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
+			ULONG c2 = (AUDCTL & 0x10) ? c1 : ((AUDCTL & 0x01) ? 15700 : 63921);
+			ULONG c3 = (AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
+			ULONG c4 = (AUDCTL & 0x08) ? c3 : ((AUDCTL & 0x01) ? 15700 : 63921);
+
+			// now how many instructions have to execute before they count down? (447447 instr/s @ 4 cycles/instr)
+
+			irqPokey[0] = (ULONG)((ULONGLONG)f1 * 447447 / c1);
+			irqPokey[1] = (ULONG)((ULONGLONG)f2 * 447447 / c2);
+			irqPokey[3] = (ULONG)((ULONGLONG)f4 * 447447 / c4);
+
+			//ODS("TIMER 1 f=%d c=%d WAIT=%d instr\n", f1, c1, irqPokey1);
+		}
+		if (addr == 10)
         {
             // SKRES
 
@@ -1523,15 +1575,15 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            // SEROUT
+            // SEROUT - !!! unsupported SIO IRQ's hopefully unnecessary because of our SIO hack
 
-            IRQST &= ~(IRQEN & 0x18);
+            //IRQST &= ~(IRQEN & 0x18); //that was backwards, on response to IRQ you poke or read here
         }
         else if (addr == 14)
         {
-            // IRQEN
+            // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
-            IRQST |= ~b;
+            IRQST |= ~b; // when disabling an interrupt, make sure to set it's corresponding bit here
         }
 		else if (addr <= 8)
 		{
