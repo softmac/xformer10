@@ -122,8 +122,8 @@ void CALLBACK MyWaveOutProc(
 //
 void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 {
-
-	// only do sound for the tiled VM in focus
+	// Only do sound for the tiled VM in focus, this code is not thread safe
+	// We only switch VMs when all threads are asleep
 	if (v.fTiling && sVM != (int)iVM)
 		return;
 
