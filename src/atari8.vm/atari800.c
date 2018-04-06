@@ -1441,7 +1441,7 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
-    // reads always read directly
+    // reads always read directly - and we can't change that, as the 6502 emulator assumes so
 
     return cpuPeekB(iVM, addr);
 }
