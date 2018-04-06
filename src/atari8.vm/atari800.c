@@ -584,6 +584,49 @@ void BankCart(int iVM, int iBank, int value)
 	}
 }
 
+// set the freq of a POKEY timer
+void ResetPokeyTimer(int iVM, int irq)
+{
+	ULONG f[4], c[4];
+
+	if (irq == 2 || irq < 0 || irq >= 4)
+		return;
+
+	// f = how many cycles do we have to count down from? (Might be joined to another channel)
+	// c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
+	// Then set now how many instructions have to execute before reaching 0 (447447 instr/s @ 4 cycles/instr)
+
+	// STIMER will call us for all 4 voices in order, so the math will work out.
+
+	if (irq == 0)
+	{
+		f[0] = AUDF1;
+		c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
+		irqPokey[0] = (ULONG)((ULONGLONG)f[0] * 447447 / c[0]);
+	}
+	else if (irq == 1)
+	{
+		f[1] = (AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2; // when joined, these count down much slower
+		c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
+		c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? 15700 : 63921);
+		irqPokey[1] = (ULONG)((ULONGLONG)f[1] * 447447 / c[1]);
+	}
+	else if (irq == 3)
+	{
+		f[3] = (AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4;
+		c[2] = (AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);	// irq 3 needs to know what this is
+		c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? 15700 : 63921);
+		irqPokey[3] = (ULONG)((ULONGLONG)f[3] * 447447 / c[3]);
+	}
+
+	// 0 means not being used, so the minimum value for wanting an interrupt is 1
+	// !!! will anything besides an IRQ ever run if we want >1 per scan line?
+	if (f[irq] > 0 && irqPokey[irq] == 0)
+			irqPokey[irq] = 1;
+
+	//if (irqPokey[irq]) ODS("TIMER %d f=%d c=%d WAIT=%d instr\n", irq + 1, f[irq], c[irq], irqPokey[irq]);
+}
+
 #ifndef NDEBUG
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
@@ -1321,34 +1364,39 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			if (!WSYNC_Seen)
 				WSYNC_Waited = FALSE;
 
-			// !!! I'm worried about perf if I do this every instruction, so cheat!
-			// if the counters reach 0, trigger an IRQ. Apparently, they repeat
+			// I'm worried about perf if I do this every instruction, so cheat for now and check only every scan line
+			// if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
+			// 0 means timer not being used
 
 			for (int irq = 0; irq < 4; irq = ((irq + 1) << 1) - 1)	// 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported)
 			{
 				if (irqPokey[irq] && irqPokey[irq] <= wLeftMax)
 				{
-					//ODS("TIMER %d FIRING\n", irq + 1);
-
 					if (IRQEN & (irq + 1))
-						IRQST &= ~(irq + 1);					// fire away, I assume they keep cycling forever?
+					{
+						//ODS("TIMER %d FIRING\n", irq + 1);
+						IRQST &= ~(irq + 1);				// fire away
+					}
 
 					UINT isav = irqPokey[irq];				// remember
 
-					PokeBAtari(iVM, 0xD209, 0);				// poke STIMER to start it up again !!! don't resample AUDFx?
+					ResetPokeyTimer(iVM, irq);			// start it up again, they keep cycling forever
 
 					if (irqPokey[irq] > wLeftMax - isav)
+					{
 						irqPokey[irq] -= (wLeftMax - isav);	// don't let errors propagate
+					}
 					else
 						irqPokey[irq] = 1;					// uh oh, already time for the next one
+					//ODS("TIMER %d ADJUSTED to %d\n", irq + 1, irqPokey[irq]);
 				}
-				else
+				else if (irqPokey[irq] > wLeftMax)
 					irqPokey[irq] -= wLeftMax;
 			}
 
 		}
 
-		// we process the audio after the whole frame is done, but the VBLANK starts at 241
+		// we process the audio after the whole frame is done
 		if (wScan >= NTSCY)
 		{
 			TimeTravelPrepare(iVM);
@@ -1544,28 +1592,10 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
 		if (addr == 9)
 		{
-			// STIMER - start the POKEY timers, even if they're disabled. They might be enabled by time 0
-			
-			// Look at the frequency to see how many cycles do we have to count down? (Might be joined to another channel)
-
-			ULONG f1 = (AUDCTL & 0x10) ? ((AUDF2 << 8) | AUDF1) : AUDF1;
-			ULONG f2 = (AUDCTL & 0x10) ? AUDF1 : AUDF2;
-			ULONG f4 = (AUDCTL & 0x08) ? ((AUDF4 << 8) | AUDF3) : AUDF4;
-
-			// What are the clock frequencies? I assume is 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
-
-			ULONG c1 = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
-			ULONG c2 = (AUDCTL & 0x10) ? c1 : ((AUDCTL & 0x01) ? 15700 : 63921);
-			ULONG c3 = (AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
-			ULONG c4 = (AUDCTL & 0x08) ? c3 : ((AUDCTL & 0x01) ? 15700 : 63921);
-
-			// now how many instructions have to execute before they count down? (447447 instr/s @ 4 cycles/instr)
-
-			irqPokey[0] = (ULONG)((ULONGLONG)f1 * 447447 / c1);
-			irqPokey[1] = (ULONG)((ULONGLONG)f2 * 447447 / c2);
-			irqPokey[3] = (ULONG)((ULONGLONG)f4 * 447447 / c4);
-
-			//ODS("TIMER 1 f=%d c=%d WAIT=%d instr\n", f1, c1, irqPokey1);
+			// STIMER - grab the new frequency of all the POKEY timers, even if they're disabled. They might be enabled by time 0
+			// maybe not necessary, but I believe, technically, poking here should reset any timer that is partly counted down.
+			for (int irq = 0; irq < 4; irq++)
+				ResetPokeyTimer(iVM, irq);
 		}
 		if (addr == 10)
         {
@@ -1592,6 +1622,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)
 				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
+
+			// reset a timer that had its frequency changed
+			for (int irq = 0; irq < 4; irq++)
+			{
+				if (addr == 8 || addr == (ADDR)(irq << 1))
+					ResetPokeyTimer(iVM, irq);
+			}
 		}
         break;
 
