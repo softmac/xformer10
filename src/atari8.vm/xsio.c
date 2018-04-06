@@ -49,7 +49,8 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_OFF  0
 #define MD_SD   1
 #define MD_ED   2
-#define MD_DD   3
+#define MD_DD   3			// normally, the first 3 sectors are 128 bytes long, then 768 bytes of blank, and then sector 4
+#define MD_DD_OLD_ATR 10	// early .ATR files have the first half of the first three 256 byte sectors filled
 #define MD_QD   4
 #define MD_HD   5
 #define MD_RD   6
@@ -61,6 +62,16 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 int wCOM;		// !!! doesn't seem to be used
 int fXFCable;	// !!! left unitialized
 
+// is this 128 byte buffer empty?
+BOOL IsEmpty(char *cc)
+{
+	for (int i = 0; i < 128; i++)
+	{
+		if (cc[i])
+			return FALSE;
+	}
+	return TRUE;
+}
 
 void DeleteDrive(int iVM, int i)
 {
@@ -116,7 +127,7 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
         _lseek(h,2,SEEK_SET);
 
         if (sc == 0x296)
-            {
+        {
             // it's an SIO2PC created image
 
             rgDrives[iVM][i].ofs = 16;
@@ -127,11 +138,26 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
             l = l << 4;
             rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
 
-            if (sc == 256)
-                rgDrives[iVM][i].mode = MD_DD;
-            }
+			// !!! support 512 byte sector .ATR files
+
+			if (sc == 256)
+			{
+				char cc[128];
+				rgDrives[iVM][i].mode = MD_DD;
+
+				// Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
+				// 128-256 will be empty and 512-640 will not be (after the header)
+				if (_lseek(h, 128 + 16, SEEK_SET) == 128 + 16)
+					if (_read(h, cc, 128) == 128)
+						if (IsEmpty(cc))
+							if (_lseek(h, 512 + 16, SEEK_SET) == 512 + 16)
+								if (_read(h, cc, 128) == 128)
+									if (!IsEmpty(cc))
+										rgDrives[iVM][i].mode = MD_DD_OLD_ATR;
+			}
+        }
         else
-            {
+        {
             // assume it's a Xformer Cable created image
             // so just check for density
 
@@ -467,10 +493,10 @@ void SIOV(int iVM)
 
 	// we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
     if (regPC != 0xE459 && regPC != 0xE959)
-        {
+    {
         BUS1(iVM);
         return;
-        }
+    }
 
 #if 0
     printf("Device ID = %2x\n", cpuPeekB(0x300));
@@ -521,7 +547,7 @@ lNAK:
             goto lExit;
             }
 
-        fDD = (md==MD_QD) || (md==MD_DD) || (md==MD_HD) || (md==MD_RD);
+        fDD = (md==MD_QD) || (md==MD_DD) || (md==MD_DD_OLD_ATR) || (md==MD_HD) || (md==MD_RD);
 
         if (pdrive->h == -1)
             goto lNAK;
@@ -652,9 +678,14 @@ lNAK:
 
             if ((md == MD_FILE) || (md == MD_SD) || (md == MD_ED))
                 lcbSector = 128L;
-            else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
-                lcbSector = 128L;
-            else if (pdrive->ofs)
+			else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
+			{
+				lcbSector = 128L;
+				// the data is in the first half of a 256 byte sector
+				if (md == MD_DD_OLD_ATR)
+					lcbSector = 256;
+			}
+			else if (pdrive->ofs)
                 {
                 lcbSector = 256L;
                 if (pdrive->cb == 184720)	// !!! 400 byte header instead of 16
