@@ -213,8 +213,8 @@ typedef struct
     BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, m_fDebugger;
 
     WORD m_wFrame, m_wScan;
-    signed short m_wLeft;
-	signed short m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
+    WORD m_wLeft;
+	WORD m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
 	BYTE m_WSYNC_Seen;
 	BYTE m_WSYNC_Waited;
 
@@ -275,6 +275,8 @@ typedef struct
 	unsigned char    m_srC;
 	unsigned char    m_pad;
 
+	ULONG m_irqPokey[4];	// POKEY h/w timers, how many instructions to go
+
 	char m_rgbSwapSelf[2048];	// extended XL memory
 	char m_rgbSwapC000[4096];
 	char m_rgbSwapD800[10240];
@@ -310,6 +312,7 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
 #define pad           CANDY_STATE(pad)
+#define irqPokey      CANDY_STATE(irqPokey)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
 #define wLeftMax      CANDY_STATE(wLeftMax)

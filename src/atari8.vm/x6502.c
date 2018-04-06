@@ -781,6 +781,14 @@ HANDLER(op01)
     HANDLER_END();
 }
 
+// NOP zp
+
+HANDLER(op04)
+{
+	regPC++;
+	HANDLER_END();
+}
+
 // ORA zp
 
 HANDLER(op05)
@@ -827,6 +835,15 @@ HANDLER(op0A)
     update_NZ(iVM, regA);
     srC = newC;
     HANDLER_END();
+}
+
+// NOP abs
+
+HANDLER(op0C)
+{
+	regPC++;
+	regPC++;
+	HANDLER_END();
 }
 
 // ORA abs
@@ -897,6 +914,13 @@ HANDLER(op19)
     EA_absY(iVM);
     ORA_com(iVM);
     HANDLER_END();
+}
+
+// NOP
+
+HANDLER(op1a)
+{
+	HANDLER_END();
 }
 
 // ORA abs,X
@@ -1037,6 +1061,16 @@ HANDLER(op2E)
     EA_abs(iVM);
     ROL_mem(iVM);
     HANDLER_END();
+}
+
+// RLA abs
+
+HANDLER(op2F)
+{
+	EA_abs(iVM);
+	ROL_mem(iVM);
+	AND_com(iVM);
+	HANDLER_END();
 }
 
 // BMI rel8
@@ -1290,6 +1324,16 @@ HANDLER(op5E)
     HANDLER_END();
 }
 
+// SRE abs,X
+
+HANDLER(op5F)
+{
+	EA_absX(iVM);
+	LSR_mem(iVM);
+	EOR_com(iVM);
+	HANDLER_END();
+}
+
 // RTS
 
 HANDLER(op60)
@@ -1484,6 +1528,14 @@ HANDLER(op7E)
     HANDLER_END();
 }
 
+// NOP #imm
+
+HANDLER(op80)
+{
+	regPC++;
+	HANDLER_END();
+}
+
 // STA (zp,X)
 
 HANDLER(op81)
@@ -1529,6 +1581,14 @@ HANDLER(op88)
     HANDLER_END();
 }
 
+// NOP imm
+
+HANDLER(op89)
+{
+	regPC++;
+	HANDLER_END();
+}
+
 // TXA
 
 HANDLER(op8A)
@@ -1536,6 +1596,14 @@ HANDLER(op8A)
     regA = regX;
     update_NZ(iVM, regX);
     HANDLER_END();
+}
+
+// ANE imm
+
+HANDLER(op8B)
+{
+	regPC++;	// !!! NYI
+	HANDLER_END()
 }
 
 // STY abs
@@ -1644,6 +1712,15 @@ HANDLER(op9D)
     HANDLER_END();
 }
 
+// SHA abs,Y
+
+HANDLER(op9F)
+{
+	regPC++;	// !!! NYI
+	regPC++;
+	HANDLER_END();
+}
+
 // LDY #
 
 HANDLER(opA0)
@@ -1725,6 +1802,16 @@ HANDLER(opAA)
     HANDLER_END();
 }
 
+// LXA imm
+
+HANDLER(opAB)
+{
+	EA_imm(iVM);
+	LDX_com(iVM);
+	LDA_com(iVM);
+	HANDLER_END();
+}
+
 // LDY abs
 
 HANDLER(opAC)
@@ -1751,6 +1838,16 @@ HANDLER(opAE)
     EA_abs(iVM);
     LDX_com(iVM);
     HANDLER_END();
+}
+
+// LAX abs
+
+HANDLER(opAF)
+{
+	EA_abs(iVM);
+	LDA_com(iVM);
+	LDX_com(iVM);
+	HANDLER_END();
 }
 
 // BCS rel8
@@ -1962,6 +2059,24 @@ HANDLER(opD1)
     EA_zpYind(iVM);
     CMP_com(iVM, regA);
     HANDLER_END();
+}
+
+// DCP (zp),y (decrement and compare)
+
+HANDLER(opD3)
+{
+	EA_zpYind(iVM);
+	DEC_mem(iVM);
+	CMP_com(iVM, regA);
+	HANDLER_END();
+}
+
+// NOP zp,x
+
+HANDLER(opD4)
+{
+	regPC++;
+	HANDLER_END();
 }
 
 // CMP zp,X
@@ -2200,6 +2315,9 @@ HANDLER(opFE)
 
 HANDLER(unused)
 {
+	regPC--;
+	ODS("UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", READ_BYTE(iVM, regPC), regPC);
+	regPC++;
     HANDLER_END();
 }
 
@@ -2209,7 +2327,7 @@ PFNOP jump_tab_RO[256] =
     op01,
     unused,
     unused,
-    unused,
+    op04,
     op05,
     op06,
     unused,
@@ -2217,7 +2335,7 @@ PFNOP jump_tab_RO[256] =
     op09,
     op0A,
     unused,
-    unused,
+    op0C,
     op0D,
     op0E,
     unused,
@@ -2231,7 +2349,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op18,
     op19,
-    unused,
+    op1a,
     unused,
     unused,
     op1D,
@@ -2252,7 +2370,7 @@ PFNOP jump_tab_RO[256] =
     op2C,
     op2D,
     op2E,
-    unused,
+    op2F,
     op30,
     op31,
     unused,
@@ -2300,7 +2418,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op5D,
     op5E,
-    unused,
+    op5F,
     op60,
     op61,
     unused,
@@ -2333,7 +2451,7 @@ PFNOP jump_tab_RO[256] =
     op7D,
     op7E,
     unused,
-    unused,
+    op80,
     op81,
     unused,
     unused,
@@ -2342,9 +2460,9 @@ PFNOP jump_tab_RO[256] =
     op86,
     unused,
     op88,
-    unused,
+    op89,
     op8A,
-    unused,
+    op8B,
     op8C,
     op8D,
     op8E,
@@ -2364,7 +2482,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op9D,
     unused,
-    unused,
+    op9F,
     opA0,
     opA1,
     opA2,
@@ -2376,11 +2494,11 @@ PFNOP jump_tab_RO[256] =
     opA8,
     opA9,
     opAA,
-    unused,
+    opAB,
     opAC,
     opAD,
     opAE,
-    unused,
+    opAF,
     opB0,
     opB1,
     unused,
@@ -2416,8 +2534,8 @@ PFNOP jump_tab_RO[256] =
     opD0,
     opD1,
     unused,
-    unused,
-    unused,
+    opD3,
+    opD4,
     opD5,
     opD6,
     unused,
