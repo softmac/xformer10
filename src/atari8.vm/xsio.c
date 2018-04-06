@@ -657,8 +657,8 @@ lNAK:
             else if (pdrive->ofs)
                 {
                 lcbSector = 256L;
-                if (pdrive->cb != 184720)
-                    cbSIO2PCFudge -= 384;
+                if (pdrive->cb == 184720)	// !!! 400 byte header instead of 16
+                    cbSIO2PCFudge += 384;
                 }
             else
                 lcbSector = 256L;
