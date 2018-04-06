@@ -202,6 +202,7 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 			if (iXESwap != iBank)
 			{
 				// swap the current one back to where it belongs
+				// we are called such that code won't execute, this case is caught be the next if
 				if (iXESwap != -1)
 				{
 					char tmp[16384];
@@ -221,22 +222,39 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 		}
     }
 
-// !!! I don't think you're supposed to swap without the mask. Surely the EXT_CPU mask will be set?
-#if 0
-    else if (mask & BANK_MASK)
-    {
-        if ((flags & EXTCPU_MASK) == EXTCPU_IN)
-        {
-            // XE's extended RAM changed banks
+	else if (mask & BANK_MASK)
+	{
+		if ((flags & EXTCPU_MASK) == EXTCPU_IN)
+		{
+			// XE's extended RAM changed banks
 
-            int iBankNew = iBankFromPortB(flags);
-            int iBankOld = iBankFromPortB(oldflags);
+			//int oldflags = mask ^ flags;
+			//int iBankOld = iBankFromPortB(oldflags);
 
-            _fmemcpy(rgbXEMem[iBankOld], &rgbMem[0x4000], 16384);
-            _fmemcpy(&rgbMem[0x4000], rgbXEMem[iBankNew], 16384);
-        }
-    }
-#endif
+			int iBank = iBankFromPortB(flags);
+
+			// if it's not already there
+			if (iXESwap != iBank)
+			{
+				// swap the current one back to where it belongs
+				if (iXESwap != -1)
+				{
+					char tmp[16384];
+					_fmemcpy(tmp, &rgbMem[0x4000], 16384);
+					_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
+					_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+					iXESwap = -1;
+				}
+
+				// now do the swap we want
+				char tmp[16384];
+				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
+				_fmemcpy(rgbXEMem[iBank], tmp, 16384);
+				iXESwap = iBank;
+			}
+		}
+	}
 #endif // XE
 
 #if 0
