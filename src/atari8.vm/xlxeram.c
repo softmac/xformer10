@@ -108,11 +108,18 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
     //printf("SwapMem entr: ");
     //DumpBlocks();
 
+	// We are only called if something changes. We will not, for instance, be told to swap in HELP twice in a row.
+	// If we were, for instance, we would erase the saved RAM contents there and overwrite it with the HELP ROM contents
+
 	// SELF-TEST gets swapped out if the OS is being swapped out
 	if ((mask & OS_MASK) && (flags & OS_MASK) == OS_OUT)
 	{
-		mask |= SELF_MASK;
-		flags |= SELF_OUT;
+		// it's only safe to do so if HELP is there right now
+		if (!(PORTB & 0x80))
+		{
+			mask |= SELF_MASK;
+			flags |= SELF_OUT;
+		}
 	}
 
     if (mask & OS_MASK)

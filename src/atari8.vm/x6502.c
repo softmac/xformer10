@@ -344,31 +344,20 @@ int __cdecl xprintf(const char *format, ...)
     return retval;
 }
 
-uint8_t READ_BYTE(int iVM, uint32_t ea)
+__inline uint8_t READ_BYTE(int iVM, uint32_t ea)
 {
-//printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
+	//printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
-	if (ea == 0xD20A) {
-		// we've been asked for a random number. How many times would the poly counter have advanced?
-		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
-		// !!! this assumes 30 instructions per scanline always (not true)
-		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
-		int delta = (int)(cur - random17last);
-		random17last = cur;
-		random17pos = (random17pos + delta) % 0x1ffff;
-		RANDOM = poly17[random17pos];
-	}
-
-    return rgbMem[ea];
+	return cpuPeekB(iVM, ea);	// possible special case of RANDOM
 }
 
-uint16_t READ_WORD(int iVM, uint32_t ea)
+__inline uint16_t READ_WORD(int iVM, uint32_t ea)
 {
-    return rgbMem[ea] | (rgbMem[ea+1] << 8);
+    return cpuPeekB(iVM, ea) | (cpuPeekB(iVM, ea + 1) << 8);
 }
 
-
-void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
+// we only call this if we know it's < ramtop, to avoid an extra IF
+__inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 {
 //if (ea > 65535) printf("ea too large! %08X\n", ea);
 //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
@@ -378,7 +367,8 @@ void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
     return; // 0;
 }
 
-void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
+// we only call this if we know it's < ramtop, to avoid an extra IF
+__inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 {
     rgbMem[ea + 0] = ((val >> 0) & 255);
     rgbMem[ea + 1] = ((val >> 8) & 255);
@@ -805,6 +795,17 @@ HANDLER(op06)
     EA_zp(iVM);
     ASL_mem(iVM);
     HANDLER_END();
+}
+
+// SLO zp (ASL + ORA)
+
+HANDLER(op07)
+{
+	EA_zp(iVM);
+	ASL_mem(iVM);
+	ORA_com(iVM);
+
+	HANDLER_END();
 }
 
 // PHP
@@ -1491,6 +1492,16 @@ HANDLER(op76)
     EA_zpX(iVM);
     ROR_mem(iVM);
     HANDLER_END();
+}
+
+// RRA zp,x - (ROR + ADC)
+
+HANDLER(op77)
+{
+	EA_zpX(iVM);
+	ROR_mem(iVM);
+	ADC_com(iVM);
+	HANDLER_END();
 }
 
 // SEI
@@ -2330,7 +2341,7 @@ PFNOP jump_tab_RO[256] =
     op04,
     op05,
     op06,
-    unused,
+    op07,
     op08,
     op09,
     op0A,
@@ -2442,7 +2453,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op75,
     op76,
-    unused,
+    op77,
     op78,
     op79,
     unused,

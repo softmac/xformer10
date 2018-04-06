@@ -379,7 +379,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 					{
 						if (uMemDump <= 0xffff)
 						{
-							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = cpuPeekB(iVM, uMemDump));
+							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtari(iVM, uMemDump));
 							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
 						}
 
