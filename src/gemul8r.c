@@ -923,6 +923,9 @@ int CALLBACK WinMain(
 		v.fFullScreen = FALSE;
 		v.swWindowState = SW_SHOWMAXIMIZED;
 	}
+	// drag and drop a single file shouldn't be tiled, but re-loading your preference that way should
+	else if (fSkipLoad)
+		v.fTiling = FALSE;
 
 	// If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
     if (!fSkipLoad && v.fSaveOnExit)

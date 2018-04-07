@@ -248,14 +248,16 @@ BOOL CreateAllVMs()
 
 
 //
-// Read properties from INI file and/or registry
+// Read properties from INI file and/or save .GEM file
 //
-// Returns TRUE if valid data loaded
+// Returns TRUE if at least some valid data was loaded, but maybe not all
 //
 // NULL = save to INI file that becomes the auto-start up file
 //
 // fPropsOnly means we are not auto-loading the previous session, so get the global props, like window size, but no VM data
 // All existing VM data is always erased
+// 
+// !fPropsOnly means get just the VM data, but DON'T get the global properties, we'll use what we already have
 //
 BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 {
@@ -465,8 +467,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 }
 
 //
-// NULL = save to INI file that becomes the auto-start up file
-// NON-NULL = save to a specific file
+// NULL = save global props to INI file, look to flag to see whether or not to also save session data
+// NON-NULL = save to a specific .GEM file, in which case always save the session data
 //
 BOOL SaveProperties(char *szIn)
 {
