@@ -383,11 +383,11 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
 						}
 
-						if (uMemDump >= u2 || (GetKeyState(VK_END) & 0x8000))
+						if (uMemDump >= u2 || (GetAsyncKeyState(VK_END) & 0x8000))
 							break;
 						uMemDump++;
 					}
-					if (GetKeyState(VK_END) & 0x8000)
+					if (GetAsyncKeyState(VK_END) & 0x8000)
 						break;
 					OutPchCch(rgchOut, 74);
 					Cconws((char *)szCR);
@@ -470,7 +470,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 					CchDisAsm(iVM, &u);
 					FExecVM(v.iVM, TRUE, FALSE);
 					CchShowRegs(iVM);
-					if (GetKeyState(VK_END) & 0x8000)
+					if (GetAsyncKeyState(VK_END) & 0x8000)
 						break;
 				} while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
 				
