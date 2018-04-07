@@ -241,6 +241,9 @@ DWORD WINAPI VMThread(LPVOID l)
 	{
 		WaitForSingleObject(hGoEvent[iVM], INFINITE);
 
+		if (iVM == 2)
+			ODS("THREAD 2 GOING!\n");
+
 		if (fKillThread[iVM])
 			return 0;
 
@@ -248,6 +251,9 @@ DWORD WINAPI VMThread(LPVOID l)
 		
 		if (vrgvmi[iVM].fWantDebugger)
 			vi.fExecuting = FALSE;	// we only reset, never set it
+
+		if (iVM == 2)
+			ODS("THREAD 2 DONE!\n");
 
 		SetEvent(hDoneEvent[iVM]);
 	}
@@ -1215,12 +1221,14 @@ int CALLBACK WinMain(
 					break;
 			}
 
+			ODS("THREADS GO!\n");
 			// tell each thread to go
 			for (iVM = 0; iVM < iV; iVM++)
 				SetEvent(hVG[iVM]);
 
 			// wait for them to complete one frame
-			WaitForMultipleObjects(v.cVM, hVD, TRUE, INFINITE);
+			WaitForMultipleObjects(iV, hVD, TRUE, INFINITE);
+			ODS("THREADS ARE ALL DONE!\n");
 		}
 		else
 		{
@@ -3969,6 +3977,8 @@ break;
         break;
 
     case WM_DESTROY:  // message: window being destroyed
+
+		ODS("DESTROY!\n");
 
         vi.fQuitting = TRUE;
 		

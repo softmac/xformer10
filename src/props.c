@@ -141,6 +141,10 @@ void DeleteVM(int iVM)
 	if (!rgvm[iVM].fValidVM)
 		return;
 
+	// kill the thread executing this event before deleting any of its objects
+	fKillThread[iVM] = TRUE;
+	SetEvent(hGoEvent[iVM]);
+
 	if (vrgvmi[iVM].hdcMem)
 	{
 		SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
@@ -154,10 +158,6 @@ void DeleteVM(int iVM)
 		vrgvmi[iVM].hbm = NULL;
 	}
 	
-	// kill the thread executing this event
-	fKillThread[iVM] = TRUE;
-	SetEvent(hGoEvent[iVM]);
-
 	FUnInitVM(iVM);
 	rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
 	memset(&rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
