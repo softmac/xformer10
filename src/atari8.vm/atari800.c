@@ -40,7 +40,7 @@ VMINFO const vmi800 =
 	FALSE,	// fUsesMouse
 	TRUE,	// fUsesJoystick
 	"Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0",
-    "Xformer Cartridge\0*.bin;*.rom\0All Files\0*.*\0\0",	// !!! support CAR files someday?
+    "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",	// !!! support CAR files someday?
 
     InstallAtari,
     InitAtari,
@@ -365,8 +365,9 @@ BOOL ReadCart(int iVM)
 	unsigned char *pch = (unsigned char *)rgvm[iVM].rgcart.szName;
 
 	int h;
-	int cb = 0;
+	int cb = 0, cb2;
 	long l;
+	BYTE type = 0, *pb;
 
 	if (!pch || !rgvm[iVM].rgcart.fCartIn)
 	{
@@ -382,19 +383,37 @@ BOOL ReadCart(int iVM)
 
 		l = _lseek(h, 0L, SEEK_END);
 		cb = min(l, MAX_CART_SIZE);
-
-		if (l != 4096 && l != 8192 && l != 16384 && l != 32768 && l != 65536 && l != 131072)
+		
+		// valid sizes are 8K - 1024K with or without a 16 byte header
+		if (l & ~0x1fe010)
 		{
 			_close(h);
 			goto exitCart;
 		}
 
-		l = _lseek(h, 0L, SEEK_SET);
+		// must be unsigned to compare the byte values inside
+		pb = (BYTE *)rgbSwapCart[iVM];
+		type = 0;
+
+		_lseek(h, 0L, SEEK_SET);
+
+		// read the header
+		if (l & 0x10)
+		{
+			cb2 = _read(h, pb, 16);
+			if (cb2 != 16)
+			{
+				_close(h);
+				goto exitCart;
+			}
+			cb -= 16;
+			type = pb[7];	// the type of cartridge
+		}
 
 		//      printf("size of %s is %d bytes\n", pch, cb);
 		//      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 
-		cb = _read(h, rgbSwapCart[iVM], cb);
+		cb = _read(h, pb, cb);
 
 		rgvm[iVM].rgcart.cbData = cb;
 		rgvm[iVM].rgcart.fCartIn = TRUE;
@@ -404,32 +423,82 @@ BOOL ReadCart(int iVM)
 
 	_close(h);
 
-	// what kind of cartridge is it?
-	// must be unsigned to look compare the byte values inside
-	unsigned char *pb = (unsigned char *)rgbSwapCart[iVM];
+	// what kind of cartridge is it? Here are the possibilites
+	//
+	//{name: 'Standard 8k cartridge', id : 1 },
+	//{name: 'Standard 16k cartridge', id : 2 },
+	//{ name: 'OSS two chip 16 KB cartridge (034M)', id : 3 },
+	//{ name: 'OSS two chip 16 KB cartridge (043M)', id : 45 },
+	//{ name: 'OSS one chip 16 KB cartridge', id : 15 },
+	//{name: 'XEGS 32 KB cartridge', id : 12 },
+	//{name: 'XEGS 64 KB cartridge', id : 13 },
+	//{name: 'XEGS 128 KB cartridge', id : 14 },
+	//{name: 'XEGS 256 KB cartridge', id : 23 },
+	//{name: 'XEGS 512 KB cartridge', id : 24 },
+	//{ name: 'XEGS 1024 KB cartridge', id : 25 },
 
-	if (cb == 8192 || cb == 4096)	// is there such a thing as a 4K cartridge?
+	// !!! I support these, but not the part where they can switch out to RAM yet
+
+	//{ name: 'Switchable XEGS 32 KB cartridge', id : 33 },
+	//{ name: 'Switchable XEGS 64 KB cartridge', id : 34 },
+	//{ name: 'Switchable XEGS 128 KB cartridge', id : 35 },
+	//{ name: 'Switchable XEGS 256 KB cartridge', id : 36 },
+	//{ name: 'Switchable XEGS 512 KB cartridge', id : 37 },
+	//{ name: 'Switchable XEGS 1024 KB cartridge', id : 38 },
+	// types I don't support yet, or at least not deliberately
+
+	//{ name: 'OSS 8 KB cartridge', id : 44 },
+	//{ name: 'MegaCart 16 KB cartridge', id : 26 },
+	//{ name: 'Blizzard 16 KB cartridge', id : 40 },
+	//{ name: '32 KB Williams cartridge', id : 22 },
+	//{ name: 'MegaCart 32 KB cartridge', id : 27 },
+	//{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
+	//{ name: '64 KB Williams cartridge', id : 8 },
+	//{ name: 'Express 64 KB cartridge ', id : 9 },
+	//{ name: 'Diamond 64 KB cartridge', id : 10 },
+	//{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
+	//{ name: 'MegaCart 64 KB cartridge', id : 28 },
+	//{ name: 'Atarimax 128 KB cartridge', id : 41 },
+	//{ name: 'MegaCart 128 KB cartridge', id : 29 },
+	//{ name: 'SpartaDOS X 128 KB cartridge', id : 43 },
+	//{ name: 'SIC! 128 KB cartridge', id : 54 },
+	//{ name: 'MegaCart 256 KB cartridge', id : 30 },
+	//{ name: 'SIC! 256 KB cartridge', id : 55 },
+	//{ name: 'MegaCart 512 KB cartridge', id : 31 },
+	//{ name: 'SIC! 512 KB cartridge', id : 56 },
+	//{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
+	//{ name: 'MegaCart 1024 KB cartridge', id : 32 },
+
+	if (cb < 8192)
+		goto exitCart;
+	
+	else if (type == 1 || (!type && cb == 8192))
 		bCartType = CART_8K;
 
-	else if (cb < 8192)
-		goto exitCart;
-
+	
 	else if (cb == 16384)
 	{
 		// copies of the INIT address and the CART PRESENT byte appear in both cartridge areas - not banked
-		if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0)
+		if (type == 2 || (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0))
 			bCartType = CART_16K;
 
 		// INIT area is in the lower half which wouldn't exist yet if we were banked
-		else if (pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
+		else if (type == 0 && pb[16383] >= 0x80 && pb[16383] < 0xA0 && pb[16380] == 0)
 			bCartType = CART_16K;
 
 		// last bank is the main bank, other banks are 0, 3, 4.
-		else if (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 3 && pb[12287] == 4)
+		else if (type == 3 ||
+				(type == 0 && pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 3 && pb[12287] == 4))
+			bCartType = CART_OSSA;
+
+		// last bank is the main bank, other banks are 0, 4, 3.
+		else if (type == 45 ||
+			(type == 0 && pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 4 && pb[12287] == 3))
 			bCartType = CART_OSSA;
 
 		// first bank is the main bank, other banks are 0, 9 1.
-		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
+		else if (type == 15 ||
+				(type == 0 && pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1))
 			bCartType = CART_OSSB;
 
 		// valid L slot INIT address OR RUN address, and CART PRESENT byte - assume a 16K cartridge
@@ -446,11 +515,14 @@ BOOL ReadCart(int iVM)
 			bCartType = 0;
 	}
 
-	// assume >16K is an XEGS cart
-	else
+	// make sure the last bank is a valid ATARI 8-bit cartridge
+	else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 && 
+		(((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
 	{
 		bCartType = CART_XEGS;
 	}
+	else
+		bCartType = 0;
 
 
 #if 0

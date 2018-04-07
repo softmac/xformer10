@@ -97,7 +97,7 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 1584
+#define MAX_VM 396	// !!! more than 500 seems to be broken!
 
 #define wJoySens  3			// set higher for smaller dead zone, no lower than 3
 

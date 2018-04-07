@@ -37,8 +37,8 @@
 #define CART_OSSB    4   //
 #define CART_XEGS	 5
 
-#define MAX_CART_SIZE 131072
-char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// contents of the cartridges, no need to persist
+#define MAX_CART_SIZE 1048576 + 16					// 1MB cart with 16 byte header
+char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// !!! dynamic memory footprint please. Contents of the cartridges, no need to persist
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
