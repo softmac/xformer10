@@ -1609,15 +1609,35 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            // SEROUT - !!! unsupported SIO IRQ's hopefully unnecessary because of our SIO hack
+            // SEROUT - !!! unsupported
 
-            //IRQST &= ~(IRQEN & 0x18); //that was backwards, on response to IRQ you poke or read here
+			// doesn't seem to help - if they want serial ouptut data needed or data ready interrupts, then
+			// pretend we're done with their data right away and need more, even though we don't actually do anything with it
+			//IRQST &= ~(IRQEN & 0x18);
         }
         else if (addr == 14)
         {
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
-            IRQST |= ~b; // when disabling an interrupt, make sure to set it's corresponding bit here
+            IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
+
+			// !!! UNSUPPORTED. If I fire the interrupts they want, an no main code ever gets a chance to run again,
+			// or they hang waiting for the interrupt if I don't fire it, or they hang because I can't give them valid data.
+
+			// !!! If they enable interrupts for when serial input data is ready, just fire it and tell them it's ready.
+			// The data will be garbage, so say the data is bad, so they don't keep reading forever
+			if (IRQEN & 0x20)
+			{
+				//SKSTAT &= 0x3f;	// both serial input frame overrun and frame error. Bad luck!
+				//IRQST &= ~0x20;	// fire the INT that data is ready
+			}
+
+			// !!! If they want to be told when serial output needs more data, just tell them it needs it now!
+			//if (IRQEN & 0x10)
+			//	IRQST &= ~10;
+
+			// as soon as they give us data (addr == 13) we'll tell them we're done with it right away and need more
+
         }
 		else if (addr <= 8)
 		{
