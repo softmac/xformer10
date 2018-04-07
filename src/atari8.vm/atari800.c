@@ -432,9 +432,13 @@ BOOL ReadCart(int iVM)
 		else if (pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1)
 			bCartType = CART_OSSB;
 
-		// valid INIT address OR RUN address, and CART PRESENT byte - assume a 16K cartridge
+		// valid L slot INIT address OR RUN address, and CART PRESENT byte - assume a 16K cartridge
 		// Computer War has its INIT procedure inside the OS! Others don't have a run address.
 		else if (((pb[16383] >= 0x80 && pb[16383] < 0xC0) || (pb[16379] >= 0x80 && pb[16379] < 0xC0)) && pb[16380] == 0)
+			bCartType = CART_16K;
+
+		// valid R slot INIT address OR RUN address, and CART PRESENT byte - assume a 16K cartridge
+		else if (((pb[8191] >= 0x80 && pb[8191] < 0xC0) || (pb[8187] >= 0x80 && pb[8187] < 0xC0)) && pb[8188] == 0)
 			bCartType = CART_16K;
 
 		// bad cartridge?
