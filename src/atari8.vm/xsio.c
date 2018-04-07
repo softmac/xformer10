@@ -50,7 +50,8 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_SD   1
 #define MD_ED   2
 #define MD_DD   3			// normally, the first 3 sectors are 128 bytes long, then 768 bytes of blank, and then sector 4
-#define MD_DD_OLD_ATR 10	// early .ATR files have the first half of the first three 256 byte sectors filled
+#define MD_DD_OLD_ATR1 10	// early .ATR files have the first half of the first three 256 byte sectors filled
+#define MD_DD_OLD_ATR2 11	// other early .ATR files sector 4 start at offset 384 w/o blank space
 #define MD_QD   4
 #define MD_HD   5
 #define MD_RD   6
@@ -146,14 +147,18 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
 				rgDrives[iVM][i].mode = MD_DD;
 
 				// Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
-				// 128-256 will be empty and 512-640 will not be (after the header)
+				// 128-256 will be empty only in this version
 				if (_lseek(h, 128 + 16, SEEK_SET) == 128 + 16)
 					if (_read(h, cc, 128) == 128)
 						if (IsEmpty(cc))
-							if (_lseek(h, 512 + 16, SEEK_SET) == 512 + 16)
-								if (_read(h, cc, 128) == 128)
-									if (!IsEmpty(cc))
-										rgDrives[iVM][i].mode = MD_DD_OLD_ATR;
+							rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
+
+				// Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
+				// 384-512 will not be blank only in this version
+				if (_lseek(h, 384 + 16, SEEK_SET) == 384 + 16)
+					if (_read(h, cc, 128) == 128)
+						if (!IsEmpty(cc))
+							rgDrives[iVM][i].mode = MD_DD_OLD_ATR2;
 			}
         }
         else
@@ -547,7 +552,7 @@ lNAK:
             goto lExit;
             }
 
-        fDD = (md==MD_QD) || (md==MD_DD) || (md==MD_DD_OLD_ATR) || (md==MD_HD) || (md==MD_RD);
+        fDD = (md==MD_QD) || (md==MD_DD) || (md==MD_DD_OLD_ATR1) || (md==MD_DD_OLD_ATR2) || (md==MD_HD) || (md==MD_RD);
 
         if (pdrive->h == -1)
             goto lNAK;
@@ -682,15 +687,21 @@ lNAK:
 			{
 				lcbSector = 128L;
 				// the data is in the first half of a 256 byte sector
-				if (md == MD_DD_OLD_ATR)
+				if (md == MD_DD_OLD_ATR1)
 					lcbSector = 256;
 			}
 			else if (pdrive->ofs)
                 {
                 lcbSector = 256L;
-                if (pdrive->cb == 184720)	// !!! 400 byte header instead of 16
-                    cbSIO2PCFudge += 384;
-                }
+				if (pdrive->cb == 184720)	// !!! 400 byte header instead of 16
+					cbSIO2PCFudge += 384;
+				// the first 3 sectors were compacted
+				else if (md == MD_DD_OLD_ATR2)
+				{
+					wSector -= 1;
+					cbSIO2PCFudge -= 128;
+				}
+			}
             else
                 lcbSector = 256L;
 
