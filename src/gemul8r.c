@@ -47,6 +47,7 @@
 #include <sys/stat.h>
 #include "gemtypes.h" // main include file
 #include <VersionHelpers.h>
+#include <windowsx.h>
 
 // you remember our main data structures from gemtypes.h, right?
 
@@ -3703,11 +3704,38 @@ break;
 		break;
 
 	case WM_MOUSEWHEEL:
-		short int offset = HIWORD(uParam); // must be short to catch the sign
-	
-		sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
+		short int offset = GET_WHEEL_DELTA_WPARAM(uParam); // must be short to catch the sign
+		BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
-		ScrollTiles();
+		if (fZoom)
+		{
+			if (offset < 0)	// zoom in
+			{
+				POINT pt;
+				pt.x = GET_X_LPARAM(lParam);
+				pt.y = GET_Y_LPARAM(lParam);
+				if (v.fTiling && ScreenToClient(vi.hWnd, &pt))
+				{
+					int iVM = GetTileFromPos(pt.x, pt.y);
+					if (iVM >= 0)
+					{
+						v.iVM = iVM;
+						SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+						SelectInstance(iVM);
+					}
+				}
+			}
+			else if (offset > 0) // zoom out
+			{
+				if (!v.fTiling)
+					SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+			}
+		}
+		else
+		{
+			sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
+			ScrollTiles();
+		}
 		break;
 
 	case WM_GESTURENOTIFY:
@@ -3774,13 +3802,11 @@ break;
 					else if (iZoom < -100) // zoom out
 					{
 						if (!v.fTiling)
-						{
 							SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
-						}
 					}
 				}
 				return 0;
-			}
+			}	// GID_ZOOM
 		}
 
 		break;	// must break
