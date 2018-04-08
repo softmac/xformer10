@@ -48,6 +48,12 @@ __inline BYTE cpuPeekB(int iVM, ADDR addr)
 		rgbMem[addr] = poly17[random17pos];
 	}
 
+	// This is how Bounty Bob bank selects !!! I hate slowing the system for this
+	if (bCartType == CART_BOB && addr >= 0x8ff6 && addr <= 0x8ff9)
+		BankCart(iVM, 0, addr - 0x8ff6);
+	if (bCartType == CART_BOB && addr >= 0x9ff6 && addr <= 0x9ff9)
+		BankCart(iVM, 1, addr - 0x9ff6);
+
     return rgbMem[addr];
 }
 

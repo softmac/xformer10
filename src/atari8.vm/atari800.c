@@ -369,12 +369,12 @@ BOOL ReadCart(int iVM)
 	long l;
 	BYTE type = 0, *pb;
 
+	bCartType = 0;
+	
 	if (!pch || !rgvm[iVM].rgcart.fCartIn)
 	{
 		return TRUE;	// nothing to do, all OK
 	}
-
-	bCartType = 0;
 
 	h = _open((LPCSTR)pch, _O_BINARY | _O_RDONLY);
 	if (h != -1)
@@ -436,6 +436,7 @@ BOOL ReadCart(int iVM)
 	//{name: 'XEGS 256 KB cartridge', id : 23 },
 	//{name: 'XEGS 512 KB cartridge', id : 24 },
 	//{ name: 'XEGS 1024 KB cartridge', id : 25 },
+	//{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
 
 	// !!! I support these, but not the part where they can switch out to RAM yet
 
@@ -453,7 +454,6 @@ BOOL ReadCart(int iVM)
 	//{ name: 'Blizzard 16 KB cartridge', id : 40 },
 	//{ name: '32 KB Williams cartridge', id : 22 },
 	//{ name: 'MegaCart 32 KB cartridge', id : 27 },
-	//{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
 	//{ name: '64 KB Williams cartridge', id : 8 },
 	//{ name: 'Express 64 KB cartridge ', id : 9 },
 	//{ name: 'Diamond 64 KB cartridge', id : 10 },
@@ -514,6 +514,11 @@ BOOL ReadCart(int iVM)
 		// bad cartridge?
 		else
 			bCartType = 0;
+	}
+
+	else if (type == 18 || (type == 0 && cb == 40960))
+	{
+		bCartType = CART_BOB;	// unique Bounty Bob cart
 	}
 
 	// make sure the last bank is a valid ATARI 8-bit cartridge
@@ -590,6 +595,13 @@ void InitCart(int iVM)
 		ramtop = 0xA000;
 	}
 	// 8K main bank is the last one
+	else if (bCartType == CART_BOB)
+	{
+		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
+		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
+		ramtop = 0x8000;
+	}
+	// 8K main bank is the last one
 	else if (bCartType == CART_XEGS)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
@@ -650,14 +662,30 @@ void BankCart(int iVM, int iBank, int value)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
 
+	// Bounty Bob - bank 0 is $8000-$9000, 4 choices starting at beginning of file
+	// bank 1 is $9000-$a000, 4 choices starting 16K into file
+	// value 0-3 selects a 4K ban
+	// Also, it is selected by poking $8ff6 + value or $9ff6 + value, NOT the usual way
+	// we will get additional calls thinking we're XEGS, so make sure to ignore those
+	else if (bCartType == CART_BOB)
+	{
+		if ((regEA >= 0x8ff6 && regEA <= 0x8ff9) || (regEA >= 0x9ff6 && regEA <= 0x9ff9))
+		{
+			if (iBank == 0 && value >= 0 && value <= 3)
+				_fmemcpy(&rgbMem[0x8000], pb + value * 4096, 4096);
+			if (iBank == 1 && value >= 0 && value <= 3)
+				_fmemcpy(&rgbMem[0x9000], pb + 16384 + value * 4096, 4096);
+		}
+	}
+
 	// 8k banks, given as contents, not the address
 	else if (bCartType == CART_XEGS)
 	{
 		while ((unsigned int)value >= cb >> 13)
 			value -= (cb >> 13);
-		//assert(FALSE);	// bad bank #
-
-		_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
+		
+		if (value < (int)(cb << 13))
+			_fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
 	}
 }
 
@@ -1574,6 +1602,12 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         cpuPokeB(iVM, addr, b);
         return TRUE;
     }
+
+	// This is how Bounty Bob bank selects
+	if (addr >= 0x8ff6 && addr <= 0x8ff9 && bCartType == CART_BOB)
+		BankCart(iVM, 0, addr - 0x8ff6);
+	if (addr >= 0x9ff6 && addr <= 0x9ff9 && bCartType == CART_BOB)
+		BankCart(iVM, 1, addr - 0x9ff6);
 
 	switch ((addr >> 8) & 255)
 	{

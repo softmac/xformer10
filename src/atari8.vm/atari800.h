@@ -36,6 +36,7 @@
 #define CART_OSSA    3   // Mac65 etc.
 #define CART_OSSB    4   //
 #define CART_XEGS	 5
+#define CART_BOB	 6
 
 #define MAX_CART_SIZE 1048576 + 16					// 1MB cart with 16 byte header
 char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// !!! dynamic memory footprint please. Contents of the cartridges, no need to persist
