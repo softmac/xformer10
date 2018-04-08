@@ -90,6 +90,11 @@ BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
     return rgvm[iVM].pvmi->pfnInstall(iVM, pvmi, type);
 }
 
+BOOL __inline FUnInstallVM(int iVM)
+{
+	return rgvm[iVM].pvmi->pfnUnInstall(iVM);
+}
+
 BOOL __inline FInitVM(int iVM)
 {
     return rgvm[iVM].pvmi->pfnInit(iVM);
