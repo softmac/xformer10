@@ -42,7 +42,7 @@ char const szIniFile[] = "GEM2000.INI";     // Atari ST only
 
 
 // This should be the ONLY CODE allowed to have secret knowledge about the type of VM being used (calling FIs...)
-// the code that gives you the VMINFO describing it, based on the VM type # (1, 2, 3 are ATARI 800, etc.)
+// the code that gives you the VMINFO describing it, based on the VM type # (0, 1, 2 are ATARI 800, etc.)
 // which is all you should need to know from now on
 // Returns a pointer to a global structure - no alloc or free needed
 //

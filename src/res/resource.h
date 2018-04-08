@@ -10,6 +10,7 @@
 #define IDM_ADDVM1                      40150 // and leave room for all the different possible VM types
 
 #define IDM_DELVM                       40202
+#define IDM_CHANGEVM					40225
 #define IDM_NEW							40203
 #define IDM_COLDSTART                   40204
 #define IDM_WARMSTART					40221
