@@ -587,6 +587,8 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
 	char ext[4];
 	strcpy (ext, &lpF[strlen(lpF) - 3]);
 
+	// !!! open the file and see if it's actually an ATR by another name and pretend it's an ATR? Hacky and slow
+
 	// look at all the possible VM types to find one that can handle this file
 	// use the first that comes along (eg. ATARI 800 will be found before 800XL)
 
@@ -632,7 +634,7 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
 						*pextV++ = *szF++;
 					*pextV = 0;
 
-					// that's the one we are! (case ins pls)
+					// that's the one we are! (case insensitive)
 					if (_stricmp(ext, extV) == 0)
 					{
 						if (VMtype)
@@ -3391,6 +3393,7 @@ break;
 							if (FInitVM(v.iVM))
 								if (ColdStart(v.iVM))
 									fOK = TRUE;
+						FixAllMenus();
 						break;
 
 						// !!! error?
