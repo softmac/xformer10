@@ -775,7 +775,7 @@ HANDLER(op01)
 
 HANDLER(op04)
 {
-	regPC++;
+	EA_zp(iVM);
 	HANDLER_END();
 }
 
@@ -842,8 +842,7 @@ HANDLER(op0A)
 
 HANDLER(op0C)
 {
-	regPC++;
-	regPC++;
+	EA_abs(iVM);
 	HANDLER_END();
 }
 
@@ -1272,6 +1271,14 @@ HANDLER(op51)
     HANDLER_END();
 }
 
+// NOP (zp),X
+
+HANDLER(op54)
+{
+	EA_zpXind(iVM);
+	HANDLER_END();
+}
+
 // EOR zp,X
 
 HANDLER(op55)
@@ -1459,6 +1466,16 @@ HANDLER(op6E)
     HANDLER_END();
 }
 
+// RRA abs
+
+HANDLER(op6F)
+{
+	EA_abs(iVM);
+	ROR_mem(iVM);
+	ADC_com(iVM);
+	HANDLER_END();
+}
+
 // BVS rel8
 
 HANDLER(op70)
@@ -1543,7 +1560,7 @@ HANDLER(op7E)
 
 HANDLER(op80)
 {
-	regPC++;
+	EA_imm(iVM);
 	HANDLER_END();
 }
 
@@ -1596,7 +1613,7 @@ HANDLER(op88)
 
 HANDLER(op89)
 {
-	regPC++;
+	EA_imm(iVM);
 	HANDLER_END();
 }
 
@@ -1642,6 +1659,15 @@ HANDLER(op8E)
     EA_abs(iVM);
     ST_com(iVM, regX);
     HANDLER_END();
+}
+
+// SAX abs
+
+HANDLER(op8F)
+{
+	EA_abs(iVM);
+	ST_com(iVM, regA & regX);
+	HANDLER_END();
 }
 
 // BCC rel8
@@ -2086,7 +2112,7 @@ HANDLER(opD3)
 
 HANDLER(opD4)
 {
-	regPC++;
+	EA_zpXind(iVM);
 	HANDLER_END();
 }
 
@@ -2203,6 +2229,16 @@ HANDLER(opE6)
     HANDLER_END();
 }
 
+// ISB zp - INC + SBC
+
+HANDLER(opE7)
+{
+	EA_zp(iVM);
+	INC_mem(iVM);
+	SBC_com(iVM);
+	HANDLER_END();
+}
+
 // INX
 
 HANDLER(opE8)
@@ -2225,6 +2261,15 @@ HANDLER(opE9)
 HANDLER(opEA)
 {
     HANDLER_END();
+}
+
+// SBC # (again)
+
+HANDLER(opEB)
+{
+	EA_imm(iVM);
+	SBC_com(iVM);
+	HANDLER_END();
 }
 
 // CPX abs
@@ -2269,6 +2314,16 @@ HANDLER(opF1)
     EA_zpYind(iVM);
     SBC_com(iVM);
     HANDLER_END();
+}
+
+// ISB (zp),Y
+
+HANDLER(opF3)
+{
+	EA_zpYind(iVM);
+	INC_mem(iVM);
+	SBC_com(iVM);
+	HANDLER_END();
 }
 
 // SBC zp,X
@@ -2327,7 +2382,7 @@ HANDLER(opFE)
 HANDLER(unused)
 {
 	regPC--;
-	ODS("UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", READ_BYTE(iVM, regPC), regPC);
+	ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, READ_BYTE(iVM, regPC), regPC);
 	regPC++;
     HANDLER_END();
 }
@@ -2418,7 +2473,7 @@ PFNOP jump_tab_RO[256] =
     op51,
     unused,
     unused,
-    unused,
+    op54,
     op55,
     op56,
     unused,
@@ -2445,7 +2500,7 @@ PFNOP jump_tab_RO[256] =
     op6C,
     op6D,
     op6E,
-    unused,
+    op6F,
     op70,
     op71,
     unused,
@@ -2477,7 +2532,7 @@ PFNOP jump_tab_RO[256] =
     op8C,
     op8D,
     op8E,
-    unused,
+    op8F,
     op90,
     op91,
     unused,
@@ -2565,7 +2620,7 @@ PFNOP jump_tab_RO[256] =
     opE4,
     opE5,
     opE6,
-    unused,
+    opE7,
     opE8,
     opE9,
     opEA,
@@ -2577,7 +2632,7 @@ PFNOP jump_tab_RO[256] =
     opF0,
     opF1,
     unused,
-    unused,
+    opF3,
     unused,
     opF5,
     opF6,

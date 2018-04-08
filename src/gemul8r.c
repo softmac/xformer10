@@ -3361,6 +3361,46 @@ break;
 			}
 			break;
 
+		// cycle through the types of machines this VM can handle.. eg. 800, XL, XE
+		// keep the same disk and cartridge
+		case IDM_CHANGEVM:
+			
+			if (v.iVM >= 0)
+			{
+				int type = rgvm[v.iVM].bfHW;
+				int otype = 0;
+				while (type >>= 1)
+					otype++;						// convert bitfield to index
+				type = ((otype + 1) & 0x1f);	// go to the next type
+				PVMINFO pvmi;
+
+				// find another type that this VM supports
+				for (int zz = 0; zz < 32; zz++)
+				{
+					// there are no alternatives
+					if (type == otype)
+						break;
+
+					// found one!
+					pvmi = DetermineVMType(type);
+					if (pvmi)
+					{
+						BOOL fOK = FALSE;
+						FUnInitVM(v.iVM);
+						if (FInstallVM(v.iVM, pvmi, type))
+							if (FInitVM(v.iVM))
+								if (ColdStart(v.iVM))
+									fOK = TRUE;
+						break;
+
+						// !!! error?
+					}
+					type = ((type + 1) & 0x1f);
+				}
+			}
+
+			break;
+
 #ifdef XFORMER // !!! really hacky support for toggle basic
 		case IDM_TOGGLEBASIC:
 			assert(v.iVM != -1);
@@ -3969,8 +4009,6 @@ break;
         break;
 
     case WM_DESTROY:  // message: window being destroyed
-
-		ODS("DESTROY!\n");
 
         vi.fQuitting = TRUE;
 		

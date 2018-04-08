@@ -444,7 +444,8 @@ BOOL ReadCart(int iVM)
 	//{ name: 'Switchable XEGS 128 KB cartridge', id : 35 },
 	//{ name: 'Switchable XEGS 256 KB cartridge', id : 36 },
 	//{ name: 'Switchable XEGS 512 KB cartridge', id : 37 },
-	//{ name: 'Switchable XEGS 1024 KB cartridge', id : 38 },
+	//{ name: 'Switchable XEGS 1024 KB cartridge', id : 38 },
+
 	// types I don't support yet, or at least not deliberately
 
 	//{ name: 'OSS 8 KB cartridge', id : 44 },
