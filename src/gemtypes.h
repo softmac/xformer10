@@ -97,7 +97,7 @@ typedef void *         (__fastcall *PHNDLR)(void *, long);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 396	// !!! more than 500 seems to be broken!
+#define MAX_VM 1584 // 99 or 396
 
 #define wJoySens  3			// set higher for smaller dead zone, no lower than 3
 
@@ -186,9 +186,10 @@ typedef struct _vminfo
 	char szFilter[120];		// string of extensions supported for OpenFile dlg
 	char szCartFilter[120]; // if you support a cartridge, their extensions
 
-	PFNL pfnInstall;        // VM installation (one time init)
-	PFNL pfnInit;           // VM initialization (switch to this VM)
-	PFNL pfnUnInit;         // VM uninit (switch away from VM)
+	PFNL pfnInstall;        // VM installation (init to say what VM type it is going to be)
+	PFNL pfnUnInstall;      // VM de-installation
+	PFNL pfnInit;           // VM initialization (load any cartridge data, etc.)
+	PFNL pfnUnInit;         // VM uninit
 	PFNL pfnInitDisks;      // VM disk initialization
 	PFNL pfnMountDisk;      // VM disk initialization
 	PFNL pfnUnInitDisks;    // VM disk uninitialization

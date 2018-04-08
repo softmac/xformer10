@@ -327,7 +327,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 			{
 				// clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
 				for (int i = 0; i < MAX_VM; i++)
-					vrgcandy[i].m_bp = 0;
+					vrgcandy[i]->m_bp = 0;
 
 				fTrace = FALSE;
 				vi.fInDebugger = FALSE;

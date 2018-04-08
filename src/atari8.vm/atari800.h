@@ -38,8 +38,9 @@
 #define CART_XEGS	 5
 #define CART_BOB	 6
 
-#define MAX_CART_SIZE 1048576 + 16					// 1MB cart with 16 byte header
-char FAR rgbSwapCart[MAX_VM][MAX_CART_SIZE];	// !!! dynamic memory footprint please. Contents of the cartridges, no need to persist
+#define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
+BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
+int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
@@ -278,23 +279,27 @@ typedef struct
 
 	ULONG m_irqPokey[4];	// POKEY h/w timers, how many instructions to go
 
-	char m_rgbSwapSelf[2048];	// extended XL memory
-	char m_rgbSwapC000[4096];
-	char m_rgbSwapD800[10240];
+	int m_iXESwap;			// which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
-#if XE
-	int m_iXESwap;					// which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
-	char HUGE m_rgbXEMem[4][16384];	// !!! doesn't need to be HUGE anymore?
-#endif // XE
+	char m_rgbXLExtMem;		// beginning of XL extended memory
+	
+	// which, if present, will look like this:
+	//
+	//char m_rgbSwapSelf[2048];	// extended XL memory
+	//char m_rgbSwapC000[4096];
+	//char m_rgbSwapD800[10240];
+	//
+	//char HUGE m_rgbXEMem[4][16384];	// !!! doesn't need to be HUGE anymore?
+	//
 
 } CANDYHW;
 
 #pragma pack()
 
-extern CANDYHW vrgcandy[MAX_VM];
+extern CANDYHW *vrgcandy[MAX_VM];
 
 // make sure your local variable iVM is set to the instance you are before using
-#define CANDY_STATE(name) vrgcandy[iVM].m_##name
+#define CANDY_STATE(name) vrgcandy[iVM]->m_##name
 
 #define rgbMem        CANDY_STATE(rgbMem)
 #define regPC         CANDY_STATE(regPC)
@@ -313,7 +318,6 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
 #define pad           CANDY_STATE(pad)
-#define irqPokey      CANDY_STATE(irqPokey)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
 #define wLeftMax      CANDY_STATE(wLeftMax)
@@ -365,14 +369,21 @@ extern CANDYHW vrgcandy[MAX_VM];
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define cVBI          CANDY_STATE(cVBI)
-#define rgbSwapSelf   CANDY_STATE(rgbSwapSelf)
-#define rgbSwapC000   CANDY_STATE(rgbSwapC000)
-#define rgbSwapD800   CANDY_STATE(rgbSwapD800)
-
-#if XE
+#define irqPokey      CANDY_STATE(irqPokey)
 #define iXESwap		  CANDY_STATE(iXESwap)
-#define rgbXEMem	  CANDY_STATE(rgbXEMem)
-#endif
+#define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
+
+// if present, here is where these would be
+#define SELF_SIZE 2048
+#define C000_SIZE 4096
+#define D800_SIZE 10240
+#define XE_SIZE 16384
+
+#define rgbSwapSelf   &CANDY_STATE(rgbXLExtMem)
+#define rgbSwapC000   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE)
+#define rgbSwapD800   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE)
+
+#define rgbXEMem	  (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
 
 #include "6502.h"
 
@@ -635,7 +646,7 @@ void DeleteDrive(int, int);
 void AddDrive(int, int, BYTE *);
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);
-void __cdecl SwapMem(int, BYTE mask, BYTE flags);
+BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);
 void InitBanks(int);
 void CchDisAsm(int, unsigned int *puMem);
 void CchShowRegs(int);
@@ -678,6 +689,7 @@ extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 //
 
 BOOL __cdecl InstallAtari(int, PVMINFO, int);
+BOOL __cdecl UnInstallAtari(int);
 BOOL __cdecl InitAtari(int);
 BOOL __cdecl UninitAtari(int);
 BOOL __cdecl InitAtariDisks(int);

@@ -60,26 +60,28 @@ void DumpBlocks()
 
 void InitBanks(int iVM)
 {
-    _fmemset(rgbSwapSelf, 0, sizeof(rgbSwapSelf));
-    _fmemset(rgbSwapC000, 0, sizeof(rgbSwapC000));
-    _fmemset(rgbSwapD800, 0, sizeof(rgbSwapD800));
+	if (mdXLXE != md800)
+	{
+		_fmemset(rgbSwapSelf, 0, SELF_SIZE);
+		_fmemset(rgbSwapC000, 0, C000_SIZE);
+		_fmemset(rgbSwapD800, 0, D800_SIZE);
+	}
+
+#if XE
 
     if (mdXLXE == mdXE)
 	{
-#if XE
 		iXESwap = -1;	// never swapped yet
-
-        for (int i = 0; i < 4; i++)
-            _fmemset(&rgbXEMem[i], 0, 16384);
-#endif
+        _fmemset(rgbXEMem, 0, XE_SIZE * 4);
     }
+#endif
 
     // enable OS ROMs
 
     if (mdXLXE != md800)
         {
-        _fmemcpy(&rgbMem[0xC000], rgbXLXEC000, 4096);
-        _fmemcpy(&rgbMem[0xD800], rgbXLXED800, 10240);
+        _fmemcpy(&rgbMem[0xC000], rgbXLXEC000, C000_SIZE);
+        _fmemcpy(&rgbMem[0xD800], rgbXLXED800, D800_SIZE);
         }
     else
         {
@@ -97,10 +99,10 @@ void InitBanks(int iVM)
 // Routine to swap the Atari ROMs in and out of address space.
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
-void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
+BOOL __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 {
 	if (mdXLXE == md800)
-		return;
+		return TRUE;
 
     BYTE mask = xmask;
 
@@ -127,16 +129,16 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
         if ((flags & OS_MASK) == OS_IN)
             {
 			// enable OS ROMs
-            _fmemcpy(rgbSwapC000, &rgbMem[0xC000], 4096);
-			_fmemcpy(rgbSwapD800, &rgbMem[0xD800], 10240);
-			_fmemcpy(&rgbMem[0xC000], rgbXLXEC000, 4096);
-            _fmemcpy(&rgbMem[0xD800], rgbXLXED800, 10240);
+            _fmemcpy(rgbSwapC000, &rgbMem[0xC000], C000_SIZE);
+			_fmemcpy(rgbSwapD800, &rgbMem[0xD800], D800_SIZE);
+			_fmemcpy(&rgbMem[0xC000], rgbXLXEC000, C000_SIZE);
+            _fmemcpy(&rgbMem[0xD800], rgbXLXED800, D800_SIZE);
             }
         else
             {
             // disable OS ROMs
-            _fmemcpy(&rgbMem[0xC000], rgbSwapC000, 4096);
-            _fmemcpy(&rgbMem[0xD800], rgbSwapD800, 10240);
+            _fmemcpy(&rgbMem[0xC000], rgbSwapC000, C000_SIZE);
+            _fmemcpy(&rgbMem[0xD800], rgbSwapD800, D800_SIZE);
             }
         }
 
@@ -145,11 +147,17 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
         {
         int cb = 8192;
 
+		// make space for BASIC. If a real cartridge goes in, UnInit will free and alloc a larger space for a real cartridge
+		if (!rgbSwapCart[iVM])
+			rgbSwapCart[iVM] = malloc(cb);
+		if (!rgbSwapCart)
+			return FALSE;
+
         if ((flags & BASIC_MASK) == BASIC_IN)
             {
             // enable BASIC ROMs
             ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(rgbSwapCart, &rgbMem[ramtop], cb);
+            _fmemcpy(rgbSwapCart[iVM], &rgbMem[ramtop], cb);
             _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
             }
         else
@@ -158,7 +166,7 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 
             // make sure rgbSwapCart is initialized with the cartridge image!
 			ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(&rgbMem[ramtop], rgbSwapCart, cb);
+            _fmemcpy(&rgbMem[ramtop], rgbSwapCart[iVM], cb);
             ramtop = 0xC000;
             }
         }
@@ -168,13 +176,13 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 		if ((flags & SELF_MASK) == SELF_IN)
 		{
 			// enable Self Test ROMs
-			_fmemcpy(rgbSwapSelf, &rgbMem[0x5000], 2048);
-			_fmemcpy(&rgbMem[0x5000], rgbXLXE5000, 2048);
+			_fmemcpy(rgbSwapSelf, &rgbMem[0x5000], SELF_SIZE);
+			_fmemcpy(&rgbMem[0x5000], rgbXLXE5000, SELF_SIZE);
 		}
 		else
 		{
 			// disable Self Test ROMs
-			_fmemcpy(&rgbMem[0x5000], rgbSwapSelf, 2048);
+			_fmemcpy(&rgbMem[0x5000], rgbSwapSelf, SELF_SIZE);
 		}
 	}
 
@@ -192,10 +200,10 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 			// we have swapped it out, so put it back. Otherwise, don't overwrite it with garbage
 			if (iXESwap >= 0)
 			{
-				char tmp[16384];
-				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
-				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
-				_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+				char tmp[XE_SIZE];
+				_fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
+				_fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
 				iXESwap = -1;
 			}
         }
@@ -212,18 +220,18 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 				// we are called such that code won't execute, this case is caught be the next if
 				if (iXESwap != -1)
 				{
-					char tmp[16384];
-					_fmemcpy(tmp, &rgbMem[0x4000], 16384);
-					_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
-					_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+					char tmp[XE_SIZE];
+					_fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
+					_fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
+					_fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
 					iXESwap = -1;
 				}
 
 				// now do the swap we want
-				char tmp[16384];
-				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
-				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
-				_fmemcpy(rgbXEMem[iBank], tmp, 16384);
+				char tmp[XE_SIZE];
+				_fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
+				_fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);
 				iXESwap = iBank;
 			}
 		}
@@ -246,18 +254,18 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 				// swap the current one back to where it belongs
 				if (iXESwap != -1)
 				{
-					char tmp[16384];
-					_fmemcpy(tmp, &rgbMem[0x4000], 16384);
-					_fmemcpy(&rgbMem[0x4000], rgbXEMem[iXESwap], 16384);
-					_fmemcpy(rgbXEMem[iXESwap], tmp, 16384);
+					char tmp[XE_SIZE];
+					_fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
+					_fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
+					_fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
 					iXESwap = -1;
 				}
 
 				// now do the swap we want
-				char tmp[16384];
-				_fmemcpy(tmp, &rgbMem[0x4000], 16384);
-				_fmemcpy(&rgbMem[0x4000], rgbXEMem[iBank], 16384);
-				_fmemcpy(rgbXEMem[iBank], tmp, 16384);
+				char tmp[XE_SIZE];
+				_fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
+				_fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
+				_fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);
 				iXESwap = iBank;
 			}
 		}
@@ -269,6 +277,7 @@ void __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
 	printf("SwapMem exit: ");
     DumpBlocks();
 #endif
+	return TRUE;
 }
 
 

@@ -107,6 +107,9 @@ int AddVM(int type)
 		return -1;
 	}
 
+	memset(&rgvm[iVM], 0, sizeof(VM));	// clear it out fresh
+	rgvm[iVM].cbSize = sizeof(VM);	// init the size for validity
+
 	// get the VMINFO all about this type of VM, incl. our jump table needed to call InstallVM
 	rgvm[iVM].pvmi = DetermineVMType(type);
 
@@ -116,14 +119,16 @@ int AddVM(int type)
 
 	if (f)
 	{
-		v.cVM++;
-
 		// Make a thread for this VM and tell it which VM it is
 		iThreadVM[iVM] = iVM;
 		fKillThread[iVM] = FALSE;
-		if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[iVM], 0, NULL))
+		// default stack size of 1M is unnecessary
+		if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[iVM], 0, NULL))
 			f = FALSE;
 	}
+
+	if (f)
+		v.cVM++;
 
 	rgvm[iVM].fValidVM = f;
 
@@ -151,27 +156,30 @@ void DeleteVM(int iVM)
 		DeleteDC(vrgvmi[iVM].hdcMem);
 		vrgvmi[iVM].hdcMem = NULL;
 	}
-	
+
 	if (vrgvmi[iVM].hbm)
 	{
 		DeleteObject(vrgvmi[iVM].hbm);
 		vrgvmi[iVM].hbm = NULL;
 	}
-	
+
 	FUnInitVM(iVM);
+	FUnInstallVM(iVM);
 	rgvm[iVM].fValidVM = FALSE;	// the next line will do this anyway, but let's be clear
-	memset(&rgvm[iVM], 0, sizeof(VM));	// erase the persistable data AFTER UnInit please
-	rgvm[iVM].cbSize = sizeof(VM);	// init the size for validity
 	
 	v.cVM--;	// one fewer valid instance now
-	
+
 	sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 	sVM = -1;	// the one in focus may be gone
 
-	SelectInstance(v.iVM);	// better find a new valid current instance or we'll crash
-	
 	if (v.cVM)
-		FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
+	{
+		SelectInstance(v.iVM);	// better find a new valid current instance
+	}
+	else
+		v.iVM = -1;
+
+	FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }
 
 //
@@ -330,8 +338,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 			l = _read(h, &rgvm[i], sizeof(VM));
 			if (l != sizeof(VM) || rgvm[i].cbSize != sizeof(VM))
 			{
-				rgvm[i].fValidVM = FALSE;	// just in case
-				rgvm[i].cbSize = sizeof(VM);	// better fix it, or it's forever bad!
+				memset(&rgvm[i], 0, sizeof(VM));	// clean it
+				rgvm[i].cbSize = sizeof(VM);	// init the size for validity
 				break;
 			}
 
@@ -359,6 +367,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 					l = _read(h, &cb, sizeof(DWORD));
 
 					// either restore from the persisted data, or just Init a blank VM if something goes wrong
+					f = FALSE;
 					if (l)	// that's a L, not a 1.
 					{
 						char *pPersist = malloc(cb);
@@ -366,33 +375,18 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 						if (pPersist)
 							l = _read(h, pPersist, cb);
 						if (l == (int)cb) {
-							if (!FLoadStateVM(i, pPersist, cb))
-							{
-								f = FALSE;
-								if (FInitVM(i))
-									f = ColdStart(i);
-							}
+							if (FLoadStateVM(i, pPersist, cb))
+								f = TRUE;
 						}
-						else
-						{
-							// can't restore state? we need a reboot or we'll hang. It seems hacky
-							// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
-							f = FALSE;
-							if (FInitVM(i))
-								f = ColdStart(i);
-						}
-						free(pPersist);
+						if (pPersist)
+							free(pPersist);
 					}
-					else
-					{
-						// can't restore state? we need a reboot or we'll hang. It seems hacky
-						// to need to do it here, but it's even hackier make each VM Init fn have to know to do it
-						f = FALSE;
-						if (FInitVM(i))
-							f = ColdStart(i);
-					}
+
 					if (!f)
+					{
 						FUnInitVM(i);
+						FUnInstallVM(i);
+					}
 				}
 
 				// make the screen buffer. If it's too soon (initial start up instead of Load through menu)
@@ -401,16 +395,21 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 					f = CreateNewBitmap(i);
 				if (f)
 				{
-					v.cVM++;
 					// create a thread to execute this VM
 					iThreadVM[i] = i;
 					fKillThread[i] = FALSE;
-					if (!CreateThread(NULL, 0, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
+					// default stack size of 1M is unnecessary
+					if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
 						f = FALSE;
 				}
 			}
-			if (!f)
-				rgvm[i].fValidVM = FALSE;	// mark every valid VM that really isn't as invalid.
+			if (f)
+				v.cVM++;
+			else
+			{
+				memset(&rgvm[i], 0, sizeof(VM));	// clean it
+				rgvm[i].cbSize = sizeof(VM);	// init the size for validity
+			}
 		}
 
 		// now select the instance that was current when we saved (or find something good)
@@ -452,6 +451,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 #endif
 
 	// if we only partially loaded, but failed, free the stuff that did load
+	// !!! We could keep some loaded, but then re-saving it will lose some info and they might not realize.
 	if (!f && v.cVM)
 	{
 		for (int z = 0; z < MAX_VM; z++)

@@ -43,6 +43,7 @@ VMINFO const vmi800 =
     "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",	// !!! support CAR files someday?
 
     InstallAtari,
+	UnInstallAtari,
     InitAtari,
     UninitAtari,
     InitAtariDisks,
@@ -78,7 +79,7 @@ VMINFO const vmi800 =
 
 // our machine specific data for each instance (ATARI specific stuff)
 //
-CANDYHW vrgcandy[MAX_VM];
+CANDYHW *vrgcandy[MAX_VM];
 
 BOOL fDumpHW;
 
@@ -91,10 +92,10 @@ BOOL TimeTravelInit(unsigned iVM)
 	for (unsigned i = 0; i < 3; i++)
 	{
 		if (!Time[iVM][i])
-			Time[iVM][i] = malloc(sizeof(CANDYHW));
+			Time[iVM][i] = malloc(candysize[iVM]);
 		if (!Time[iVM][i])
 			fI = FALSE;
-		_fmemset(Time[iVM][i], 0, sizeof(CANDYHW));
+		_fmemset(Time[iVM][i], 0, candysize[iVM]);
 	}
 
 	if (!fI)
@@ -136,10 +137,10 @@ BOOL TimeTravelPrepare(unsigned iVM)
 	{
 		f = SaveStateAtari(iVM, &pPersist, &cbPersist);
 		
-		if (!f || cbPersist != sizeof(CANDYHW) || Time[iVM][cTimeTravelPos[iVM]] == NULL)
+		if (!f || cbPersist != candysize[iVM] || Time[iVM][cTimeTravelPos[iVM]] == NULL)
 			return FALSE;
 
-		_fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, sizeof(CANDYHW));
+		_fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, candysize[iVM]);
 		
 		// Do NOT remember that shift, ctrl or alt were held down.
 		// If we cold boot using Ctrl-F10, almost every time travel with think the ctrl key is still down
@@ -165,7 +166,7 @@ BOOL TimeTravel(unsigned iVM)
 		return FALSE;
 
 	// Two 5-second snapshots ago will be from 10-15 seconds back in time
-	if (LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], sizeof(CANDYHW)))	// restore our snapshot
+	if (LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]))	// restore our snapshot
 	{
 		// set up for going back to this same point until more time passes
 		f = TimeTravelReset(iVM);
@@ -194,7 +195,7 @@ BOOL TimeTravelReset(unsigned iVM)
 
 	BOOL f = SaveStateAtari(iVM, &pPersist, &cbPersist);	// get our current state
 
-	if (!f || cbPersist != sizeof(CANDYHW))
+	if (!f || cbPersist != candysize[iVM])
 		return FALSE;
 
 	// initialize all our saved states to now, so that going back in time takes us back here.
@@ -203,7 +204,7 @@ BOOL TimeTravelReset(unsigned iVM)
 		if (Time[iVM][i] == NULL)
 			return FALSE;
 
-		_fmemcpy(Time[iVM][i], pPersist, sizeof(CANDYHW));
+		_fmemcpy(Time[iVM][i], pPersist, candysize[iVM]);
 		
 		ullTimeTravelTime[iVM] = GetCycles();	// time stamp it 
 	}
@@ -366,7 +367,6 @@ BOOL ReadCart(int iVM)
 
 	int h;
 	int cb = 0, cb2;
-	long l;
 	BYTE type = 0, *pb;
 
 	bCartType = 0;
@@ -381,24 +381,24 @@ BOOL ReadCart(int iVM)
 	{
 		//printf("reading %s\n", pch);
 
-		l = _lseek(h, 0L, SEEK_END);
-		cb = min(l, MAX_CART_SIZE);
+		cb = _lseek(h, 0L, SEEK_END);
 		
 		// valid sizes are 8K - 1024K with or without a 16 byte header
-		if (l & ~0x1fe010)
+		if (cb > MAX_CART_SIZE || (cb & ~0x1fe010))
 		{
 			_close(h);
 			goto exitCart;
 		}
 
 		// must be unsigned to compare the byte values inside
-		pb = (BYTE *)rgbSwapCart[iVM];
+		rgbSwapCart[iVM] = malloc(cb);
+		pb = rgbSwapCart[iVM];
 		type = 0;
 
 		_lseek(h, 0L, SEEK_SET);
 
 		// read the header
-		if (l & 0x10)
+		if (pb && (cb & 0x10))
 		{
 			cb2 = _read(h, pb, 16);
 			if (cb2 != 16)
@@ -570,7 +570,7 @@ void InitCart(int iVM)
 
 	PCART pcart = &(rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
-	char *pb = rgbSwapCart[iVM];
+	BYTE *pb = rgbSwapCart[iVM];
 
 	if (bCartType == CART_8K)
 	{
@@ -619,7 +619,7 @@ void BankCart(int iVM, int iBank, int value)
 	PCART pcart = &(rgvm[iVM].rgcart);
 	unsigned int cb = pcart->cbData;
 	int i;
-	char *pb = rgbSwapCart[iVM];
+	BYTE *pb = rgbSwapCart[iVM];
 
 	// we are not a banking cartridge
 	if (ramtop == 0xC000 || !(rgvm[iVM].rgcart.fCartIn) || cb <= 8192 || bCartType <= CART_16K)
@@ -846,19 +846,12 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		fInited = TRUE;
 	}
 
-	// reset the cycle counter now and each cold start (we may not get a cold start)
-	// !!! globals, could glitch the other VMs when one VM cold starts
-	LARGE_INTEGER qpc;
-	LARGE_INTEGER qpf;
-	QueryPerformanceFrequency(&qpf);
-	vi.qpfCold = qpf.QuadPart;
-
 	// seed the random number generator again. The real ATARI is probably seeded by the orientation
 	// of sector 1 on the floppy. I wonder how cartridges are unpredictable?
 	// don't allow the seed that gets stuck
 	do {
+		LARGE_INTEGER qpc;
 		QueryPerformanceCounter(&qpc);
-		vi.qpcCold = qpc.QuadPart;	// reset real time
 		random17pos = qpc.QuadPart & 0x1ffff;
 	} while (random17pos == 0x1ffff);
 
@@ -904,24 +897,45 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
 	// DumpROMS();
 
-	// Initialize everything, or we'll think time travel pointers are valid
-	_fmemset(&vrgcandy[iVM], 0, sizeof(CANDYHW));
+	// Initialize everything
+
+	// how big is our persistable structure?
+
+	candysize[iVM] = sizeof(CANDYHW);
+	if (rgvm[iVM].bfHW != vmAtari48)
+		candysize[iVM] += (2048 + 4096 + 10240);	// extended XL/XE RAM
+	if (rgvm[iVM].bfHW == vmAtariXE)
+		candysize[iVM] += (16384 * 4);			// extended XE RAM
+
+	vrgcandy[iVM] = malloc(candysize[iVM]);
+
+	if (vrgcandy[iVM])
+		_fmemset(vrgcandy[iVM], 0, candysize[iVM]); // don't think the time travel pointers are valid
+	else
+		return FALSE;
+
+	// candy must be set up first (above)
+	TimeTravelInit(iVM);
 
 	return TRUE;
 }
 
+// all done
+//
+BOOL __cdecl UnInstallAtari(int iVM)
+{
+	TimeTravelFree(iVM);
+
+	free(vrgcandy[iVM]);
+
+	return TRUE;
+}
 
 // Initialize a VM. Either call this to create a default new instance and then ColdBoot it,
 //or call LoadState to restore a previous one, not both.
 //
 BOOL __cdecl InitAtari(int iVM)
 {
-//	BYTE bshiftSav; // already a global with that name!
-
-	// Initialize the time travel pointers (freed in Uninit, and Load will free and alloc new ones that it will need)
-	if (!TimeTravelInit(iVM))
-		return FALSE;
-
 	// These things are the same for each machine type
 
 	rgvm[iVM].fCPUAuto = TRUE;
@@ -975,23 +989,26 @@ BOOL __cdecl InitAtari(int iVM)
     return TRUE;
 }
 
-// Call when you destroy the instance. There is no UnInstall
+// Call when you are done with the VM, or need to change cartridges
 //
 BOOL __cdecl UninitAtari(int iVM)
 {
-    //*pbshift = bshiftSav;
-
 	// if there's no cartridge in, make sure the RAM footprint doesn't look like there is
 	// (This is faster than clearing all memory). If it's replaced by a built-in BASIC cartridge,
 	// ramtop won't change and it won't clear automatically on cold boot.
-	rgbMem[0x9ffc] = 1;	// no R cart
-	rgbMem[0xbffc] = 1;	// no L cart
-	rgbMem[0xbffd] = 0;	// no special R cartridge
+	if (vrgcandy[iVM])
+	{
+		rgbMem[0x9ffc] = 1;	// no R cart
+		rgbMem[0xbffc] = 1;	// no L cart
+		rgbMem[0xbffd] = 0;	// no special R cartridge
+	}
+
+	// free the cartridge
+	if (rgbSwapCart[iVM])
+		free(rgbSwapCart[iVM]);
+	rgbSwapCart[iVM] = NULL;
 
     UninitAtariDisks(iVM);
-
-	// !!! If there was an UninstallVM function, I could do that there, and not have to possibly re-init in LoadStateVM!
-	TimeTravelFree(iVM);
 
     return TRUE;
 }
@@ -1206,18 +1223,12 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	PACTL  = 0x3c;	// I/O mode, not SET DIR mode
     PBCTL  = 0x3c;	// I/O mode, not SET DIR mode
 
-	// reset the cycle counter each cold start
-	LARGE_INTEGER qpc;
-	LARGE_INTEGER qpf;
-	QueryPerformanceFrequency(&qpf);
-	vi.qpfCold = qpf.QuadPart;
-	
 	// seed the random number generator again. The real ATARI is probably seeded by the orientation
 	// of sector 1 on the floppy. I wonder how cartridges are unpredictable?
 	// don't allow the seed that gets stuck
 	do {
+		LARGE_INTEGER qpc;
 		QueryPerformanceCounter(&qpc);
-		vi.qpcCold = qpc.QuadPart;	// reset real time
 		random17pos = qpc.QuadPart & 0x1ffff;
 	} while (random17pos == 0x1ffff);
 
@@ -1238,9 +1249,9 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 {
 	// there are some time travel pointers in the structure, we need to be smart enough not to use them
 	if (ppPersist)
-		*ppPersist = (char *)&vrgcandy[iVM];
+		*ppPersist = (char *)vrgcandy[iVM];
 	if (pcbPersist)
-		*pcbPersist = sizeof(vrgcandy[iVM]);
+		*pcbPersist = candysize[iVM];
 	return TRUE;
 }
 
@@ -1250,11 +1261,11 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 //
 BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 {
-	if (cbPersist != sizeof(vrgcandy[iVM]) || pPersist == NULL)
+	if (cbPersist != candysize[iVM] || pPersist == NULL)
 		return FALSE;
 
 	// load our state
-	_fmemcpy(&vrgcandy[iVM], pPersist, cbPersist);
+	_fmemcpy(vrgcandy[iVM], pPersist, cbPersist);
 
 	if (!FInitSerialPort(rgvm[iVM].iCOM))
 		rgvm[iVM].iCOM = 0;
@@ -1276,11 +1287,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	// Since we don't have an UninstallVM fn, I have to alloc/free in InitVM/UninitVM
-	// but sometimes LoadStateVM is called instead of Init
-	f = FALSE;
-	if (TimeTravelInit(iVM))	// alloc space for our saved states
-		f = TimeTravelReset(iVM); // state is now a valid anchor point
+	f = TimeTravelReset(iVM); // state is now a valid anchor point
 
 	return f;
 }

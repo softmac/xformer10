@@ -32,13 +32,15 @@
 //
 // SelectInstance() makes an instance the current one, only a concept for which tile is showing when not in tiled mode
 //
+// To change out a cartridge, UnInit, then Init again. To change the VM type (eg. 800 to XL), UnInstall and Install again
+//
 // While all the VMs are running, the main loop will tell each thread to GO, then wait for them all to be DONE.
 // If 1/60s hasn't passed yet and we're not in turbo mode, wait until it has. Repeat.
 //
 // Each thread simply waits for the GO event, sees if it is to GO or DIE, call EXECVM, signal DONE and repeat.
 //
 // When you're done with an instance, kill its thread and then UNINIT it, even if you called LoadState to initialize it.
-// There is no Uninstall yet.
+// Finally, UNINSTALL
 //
 
 //#define _NO_CRT_STDIO_INLINE
@@ -223,6 +225,8 @@ ULONGLONG GetCycles()
 	LARGE_INTEGER qpc;
 	QueryPerformanceCounter(&qpc);
 	qpc.QuadPart -= vi.qpcCold;
+	if (qpc.QuadPart == 0)	// wow, you JUST called us!
+		return 0;
 	ULONGLONG a = (qpc.QuadPart * 178979ULL);
 	ULONGLONG b = (vi.qpfCold / 10ULL);
 	ULONGLONG c = a / b;
@@ -400,6 +404,15 @@ void CreateVMMenu()
 	// never delete our anchor!
 	if (v.cVM > 0)
 		DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);
+	else
+	{
+		mii.fMask = MIIM_STRING;
+		mii.dwTypeData = mNew;
+		mii.cch = sizeof(mNew);
+		strcpy(mNew, "<NO VMs loaded>");
+		SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
+		CheckMenuItem(vi.hMenu, IDM_VM1, MF_UNCHECKED);
+	}
 }
 
 // Something changed that affects the menus. Set all the menus up right.
@@ -415,16 +428,16 @@ void FixAllMenus()
 	// toggle basic is never a thing outside of XFORMER. If mixed VMs, it's only relevant for an 8bit VM
 #ifdef XFORMER
 	// toggle BASIC also has to be relevant, only valid for VM type that supports a cartridge
-	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, ((!v.fTiling || sVM >= 0) && inst >= 0 && rgvm[inst].pvmi->fUsesCart)
-		? MF_ENABLED : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, (inst >= 0 && rgvm[inst].pvmi->fUsesCart)	? MF_ENABLED : MF_GRAYED);
 #else
 	DeleteMenu(vi.hMenu, IDM_TOGGLEBASIC, 0);
 #endif
 
 #ifdef NDEBUG
 	DeleteMenu(vi.hMenu, IDM_DEBUGGER, 0);
+#else
+	EnableMenuItem(vi.hMenu, IDM_DEBUGGER, (inst >= 0) ? 0 : MF_GRAYED);
 #endif
-
 
 	// Checkmark if these modes are active
 	CheckMenuItem(vi.hMenu, IDM_FULLSCREEN, v.fFullScreen ? MF_CHECKED : MF_UNCHECKED);
@@ -433,23 +446,17 @@ void FixAllMenus()
 	CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
 	CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
 
-	// some menu items not appropriate if tiling, but there's no current tile to do anything to
-	// it could do it on 
-	EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_COLORMONO, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_WARMSTART, (!v.fTiling || sVM >= 0) ? 0 : MF_GRAYED);
-
-	// also, don't let them delete the last VM
-	EnableMenuItem(vi.hMenu, IDM_DELVM, ((!v.fTiling || sVM >= 0) && v.cVM > 1) ? 0 : MF_GRAYED);
-
 	EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
 
-#if 0 // delete all VMs not supported
-	// grey out some things if there are no VMs at all
-	//EnableMenuItem(vi.hMenu, IDM_DELALL, (v.cVM) ? 0 : MF_GRAYED);
-	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (v.cVM) ? 0 : MF_GRAYED);
-#endif
+	// some menu items not appropriate if tiling, but there's no current tile to do anything to
+	// it could do it on 
+	EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_COLORMONO, (inst >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_COLDSTART, (inst >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_WARMSTART, (inst >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_DELVM, (inst >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_CHANGEVM, (inst >= 0) ? 0 : MF_GRAYED);
+	EnableMenuItem(vi.hMenu, IDM_SAVEAS, (inst >= 0) ? 0 : MF_GRAYED);
 
 	// Initialize the virtual disk menu items to show the associated file path with each drive.
 	// Grey the unload option for a disk that isn't loaded
@@ -694,7 +701,13 @@ int CALLBACK WinMain(
 	for (int ii = 0; ii < MAX_VM; ii++)
 		rgvm[ii].cbSize = sizeof(VM);
 
-    PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+	// initialize our clock
+	LARGE_INTEGER qpc;
+	LARGE_INTEGER qpf;
+	QueryPerformanceFrequency(&qpf);
+	vi.qpfCold = qpf.QuadPart;
+	QueryPerformanceCounter(&qpc);
+	vi.qpcCold = qpc.QuadPart;
 
     // Get paths
 
@@ -937,8 +950,9 @@ int CALLBACK WinMain(
 	// If we didn't restore/drag any VM's, we need some, so make some
 	if (v.cVM == 0)
 	{
-		if (!CreateAllVMs())
-			return FALSE;	// !!! uh oh, app dead.
+		v.iVM = -1;
+		// !!! TEMP TEST
+		//CreateAllVMs();
 		
 #if defined(ATARIST) || defined(SOFTMAC)
 		// Now go and prompt the user with First Time Setup if necessary
@@ -956,9 +970,7 @@ int CALLBACK WinMain(
 
 	vi.fExecuting = TRUE;	// OK, go! This will get reset when a VM hits a breakpoint, or otherwise fails
 
-	// If we're about to come up in Tile mode, we won't be refreshing the menus, and they'll be bad unless we fix them now.
-	if (v.fTiling)
-		FixAllMenus();
+	FixAllMenus();
 
     // DirectX can fragment address space, so only preload if user wants to
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
@@ -985,25 +997,36 @@ int CALLBACK WinMain(
     // if we didn't restore a saved position, make a default location for our window
 	if (!fProps)
 	{
-		v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
-		v.rectWinPos.right = v.rectWinPos.left;
-		v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
-		v.rectWinPos.bottom = v.rectWinPos.top;
-
-		// add our probable non-client area. !!! I can't get this right so I have to add 20 and 30 at least!
-		int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2 + 40;
-		int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
-
-		// if we're < 640 x 480, make it double sized
-		if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+		if (v.iVM >= 0)
 		{
-			v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;
-			v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY * 2 + thickY;
+			v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
+			v.rectWinPos.right = v.rectWinPos.left;
+			v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
+			v.rectWinPos.bottom = v.rectWinPos.top;
+
+			// add our probable non-client area. !!! I can't get this right so I have to add 20 and 30 at least!
+			int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2 + 40;
+			int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
+
+			// if we're < 640 x 480, make it double sized
+			if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+			{
+				v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;
+				v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY * 2 + thickY;
+			}
+			else
+			{
+				v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX + thickX;
+				v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY + thickY;
+			}
 		}
 		else
 		{
-			v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX + thickX;
-			v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY + thickY;
+			// default to 640x480 if we're VM-less and stateless
+			v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
+			v.rectWinPos.right = v.rectWinPos.left + 640;
+			v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
+			v.rectWinPos.bottom = v.rectWinPos.top + 480;
 		}
 	}
 
@@ -1175,7 +1198,7 @@ int CALLBACK WinMain(
 		int iV = 0;
 
 		// Tell the thread(s) to go.
-		if (v.fTiling)
+		if (v.cVM && v.fTiling)
 		{
 			RECT rect;
 			GetClientRect(vi.hWnd, &rect);
@@ -1224,8 +1247,9 @@ int CALLBACK WinMain(
 			// wait for them to complete one frame
 			WaitForMultipleObjects(iV, hVD, TRUE, INFINITE);
 		}
-		else
+		else if (v.iVM >= 0)
 		{
+			assert(v.cVM);
 			SetEvent(hGoEvent[v.iVM]);
 			WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
 		}
@@ -1989,6 +2013,12 @@ void RenderBitmap()
 
 	GetClientRect(vi.hWnd, &rect);
 
+	if (v.cVM == 0)
+	{
+		BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
+		return;
+	}
+
 #if !defined(NDEBUG)
 	//  printf("rnb: rect = %d %d %d %d\n", rect.left, rect.top, rect.right, rect.bottom);
 	//  PrintScreenStats();
@@ -2215,7 +2245,6 @@ BOOL ColdStart(int iVM)
     MarkAllPagesClean();
 #endif
 
-	// stop executing if any VM fails
     BOOL f = FColdbootVM(iVM);
 
 #if !defined(NDEBUG) && 0
@@ -2301,13 +2330,17 @@ BOOL ColdStart(int iVM)
 int GetTileFromPos(int xPos, int yPos)
 {
 	RECT rect;
+	
+	if (v.cVM == 0)
+		return -1;
+
 	GetClientRect(vi.hWnd, &rect);
 
 	int x, y;
 	
 	int iVM = nFirstTile;
 	while (iVM < 0 || !rgvm[iVM].fValidVM)
-		iVM++;
+		iVM = ((iVM + 1) % MAX_VM);
 	int fDone = iVM;
 
 	int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
@@ -2643,11 +2676,7 @@ LRESULT CALLBACK WndProc(
 			{
 				BOOL fC = CreateNewBitmap(ii);
 				if (!fC)
-				{
 					DeleteVM(ii);
-					assert(v.cVM);
-					// !!! make it so we don't hang/crash if there are no VMs						
-				}
 			}
 		}
 
@@ -2794,44 +2823,50 @@ break;
         {
         LPMINMAXINFO lpmm = (LPMINMAXINFO)lParam;
 
-		// !!! shouldn't apply to tiled mode? Switching VMs needs to trigger this code again
-		int iVM = v.iVM;
-		if (iVM < 0)
-			while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-				iVM++;
+		// !!! shouldn't apply to tiled mode?
+		// !!! Switching to a completely different VM needs to trigger this code again
 
-		RECT rc1, rc2;
-		GetWindowRect(hWnd, &rc1);
-		GetClientRect(hWnd, &rc2);
+		if (v.iVM >= 0)
+		{
+			RECT rc1, rc2;
+			GetWindowRect(hWnd, &rc1);
+			GetClientRect(hWnd, &rc2);
 
-		// calculate the non-client dimensions this window needs
-		int thickX = rc1.right - rc1.left - (rc2.right - rc2.left); // (SM_CXSIZEFRAME) * 2; is wrong
-		int thickY = rc1.bottom - rc1.top - (rc2.bottom - rc2.top); // (SM_CYSIZEFRAME) * 2 + (SM_CYCAPTION); also wrong
-        
-		int scaleX = 1, scaleY = ((vvmhw[iVM].xpix) >= (vvmhw[iVM].ypix * 3)) ? 2 : 1;
+			// calculate the non-client dimensions this window needs
+			int thickX = rc1.right - rc1.left - (rc2.right - rc2.left); // (SM_CXSIZEFRAME) * 2; is wrong
+			int thickY = rc1.bottom - rc1.top - (rc2.bottom - rc2.top); // (SM_CYSIZEFRAME) * 2 + (SM_CYCAPTION); also wrong
+
+			int scaleX = 1, scaleY = ((vvmhw[v.iVM].xpix) >= (vvmhw[v.iVM].ypix * 3)) ? 2 : 1;
 
 #if !defined(NDEBUG) && 0
-        printf("WM_GETMINMAXINFO, size(%d,%d) pos(%d,%d) min(%d,%d) max(%d,%d)\n",
-            lpmm->ptMaxSize.x,
-            lpmm->ptMaxSize.y,
-            lpmm->ptMaxPosition.x,
-            lpmm->ptMaxPosition.y,
-            lpmm->ptMinTrackSize.x,
-            lpmm->ptMinTrackSize.y,
-            lpmm->ptMaxTrackSize.x,
-            lpmm->ptMaxTrackSize.y);
+			printf("WM_GETMINMAXINFO, size(%d,%d) pos(%d,%d) min(%d,%d) max(%d,%d)\n",
+				lpmm->ptMaxSize.x,
+				lpmm->ptMaxSize.y,
+				lpmm->ptMaxPosition.x,
+				lpmm->ptMaxPosition.y,
+				lpmm->ptMinTrackSize.x,
+				lpmm->ptMinTrackSize.y,
+				lpmm->ptMaxTrackSize.x,
+				lpmm->ptMaxTrackSize.y);
 #endif
 
-		// Show a double sized screen of anything < 640x480
-		if (rgvm[iVM].pvmi->uScreenX < 640 || rgvm[iVM].pvmi->uScreenY < 480)
-		{
-			lpmm->ptMinTrackSize.x = max(vvmhw[iVM].xpix * scaleX, (int)rgvm[iVM].pvmi->uScreenX * 2) + thickX;
-			lpmm->ptMinTrackSize.y = max(vvmhw[iVM].ypix * scaleY, (int)rgvm[iVM].pvmi->uScreenY * 2) + thickY;
+			// Show a double sized screen of anything < 640x480
+			if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+			{
+				lpmm->ptMinTrackSize.x = max(vvmhw[v.iVM].xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX * 2) + thickX;
+				lpmm->ptMinTrackSize.y = max(vvmhw[v.iVM].ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY * 2) + thickY;
+			}
+			else
+			{
+				lpmm->ptMinTrackSize.x = max(vvmhw[v.iVM].xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX) + thickX;
+				lpmm->ptMinTrackSize.y = max(vvmhw[v.iVM].ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY) + thickY;
+			}
 		}
+		// default to 640x480 minimum if state-less
 		else
 		{
-			lpmm->ptMinTrackSize.x = max(vvmhw[iVM].xpix * scaleX, (int)rgvm[iVM].pvmi->uScreenX) + thickX;
-			lpmm->ptMinTrackSize.y = max(vvmhw[iVM].ypix * scaleY, (int)rgvm[iVM].pvmi->uScreenY) + thickY;
+			lpmm->ptMinTrackSize.x = 640;
+			lpmm->ptMinTrackSize.y = 480;
 		}
 		break;
 
@@ -3123,7 +3158,7 @@ break;
 			// which tile appears in the top left? There are often more tiles than fit, so to give everybody a chance,
 			// we'll start with the current instance, not always the first one.
 			v.fTiling = !v.fTiling;
-			if (v.fTiling)
+			if (v.cVM && v.fTiling)
 			{
 				//nFirstTile = v.iVM;	// show the current VM as the top left one - that's annoying
 				//sWheelOffset = 0;	// start at the top - also annoying
@@ -3141,8 +3176,11 @@ break;
 							FixAllMenus();	// new active VM changes things
 						}
 					}
-			} else {
+			} else if (v.cVM) {
 				SelectInstance(v.iVM >= 0 ? v.iVM : nFirstTile);	// bring the one with focus up if it exists, else the top one
+				// Enforce minimum window size for this type of VM
+				SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
+					v.rectWinPos.bottom - v.rectWinPos.top, 0);
 			}
 			FixAllMenus();
 			break;
@@ -3208,9 +3246,8 @@ break;
 					DeleteVM(z);
 			}
 
-			// now make the default ones
-			CreateAllVMs();	// !!! what to do on error?
-			assert(v.cVM);
+			// now try to make the default ones
+			CreateAllVMs();
 			break;
 
 		// There are 32 types of VMs (it's a LONG bitfield)
@@ -3260,7 +3297,7 @@ break;
 			vmNew = AddVM(vmType);
 
 			BOOL fA = FALSE;
-			if (FInitVM(vmNew))
+			if (vmNew != -1 && FInitVM(vmNew))
 				if (fA = ColdStart(vmNew))
 					if (vi.hdc)
 						CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
@@ -3272,7 +3309,7 @@ break;
 
 			// !!! what about error?
 			assert(v.cVM);
-
+			FixAllMenus();
 			break;
 
 		// choose a cartridge to use
@@ -3284,10 +3321,15 @@ break;
 			{
 				rgvm[v.iVM].rgcart.fCartIn = TRUE;
 
-				// this will require a reboot, I assume for all types of VMs?
+				// notice the change of cartridge state
 				FUnInitVM(v.iVM);
+				BOOL f = FALSE;
 				if (FInitVM(v.iVM))
-					ColdStart(v.iVM);	// could error
+					if (ColdStart(v.iVM))
+						f = TRUE;
+
+				if (!f)
+					DeleteVM(v.iVM);
 
 				FixAllMenus();
 			}
@@ -3305,8 +3347,13 @@ break;
 
 				// this will require a reboot, I assume for all types of VMs?
 				FUnInitVM(v.iVM);
+				BOOL f = FALSE;
 				if (FInitVM(v.iVM))
-					ColdStart(v.iVM);	// could error
+					if (ColdStart(v.iVM))
+						f = TRUE;
+
+				if (!f)
+					DeleteVM(v.iVM);
 
 				FixAllMenus();
 			}
@@ -3320,7 +3367,8 @@ break;
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[0].sz, FALSE, 0))
 			{
 				rgvm[v.iVM].rgvd[0].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
-				FMountDiskVM(v.iVM, 0);	// !!! could error
+				if (!FMountDiskVM(v.iVM, 0))
+					DeleteVM(v.iVM);
 				FixAllMenus();
 			}
 			break;
@@ -3331,7 +3379,8 @@ break;
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[1].sz, FALSE, 0))
 			{
 				rgvm[v.iVM].rgvd[1].dt = DISK_IMAGE; // support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
-				FMountDiskVM(v.iVM, 1); // !!! could error
+				if (!FMountDiskVM(v.iVM, 1))
+					DeleteVM(v.iVM);
 				FixAllMenus();
 			}
 			break;
@@ -3389,14 +3438,18 @@ break;
 					{
 						BOOL fOK = FALSE;
 						FUnInitVM(v.iVM);
+						FUnInstallVM(v.iVM);
 						if (FInstallVM(v.iVM, pvmi, type))
 							if (FInitVM(v.iVM))
 								if (ColdStart(v.iVM))
 									fOK = TRUE;
+						if (!fOK)
+						{
+							DeleteVM(v.iVM);
+						}
 						FixAllMenus();
 						break;
 
-						// !!! error?
 					}
 					type = ((type + 1) & 0x1f);
 				}
@@ -3424,7 +3477,8 @@ break;
 				}
 			}
 
-			ColdStart(v.iVM); // !!! could error
+			if (!ColdStart(v.iVM))
+				DeleteVM(v.iVM);
 			// does not affect menus
 			break;
 #endif
@@ -3432,19 +3486,17 @@ break;
 		// Ctrl-F10, must come after IDM_TOGGLEBASIC
         case IDM_COLDSTART:
             
-			// !!! no error checking
-
 			if (v.iVM >= 0)
-				ColdStart(v.iVM);
+				if (!ColdStart(v.iVM))
+					DeleteVM(v.iVM);
             break;
 
 		// F10
 		case IDM_WARMSTART:
 
-			// !!! no error checking
-
 			if (v.iVM >= 0)
-				FWarmbootVM(v.iVM);
+				if (!FWarmbootVM(v.iVM))
+					DeleteVM(v.iVM);
 			break;
 
 		// cycle through all the instances - isn't allowed during tiling
@@ -3464,7 +3516,7 @@ break;
 			chFN[0] = 0;	// necessary!
 			f = OpenTheFile(v.iVM, vi.hWnd, chFN, TRUE, 2);
 			if (f)
-				f = SaveProperties(chFN); // !!! error - now what?
+				f = SaveProperties(chFN); // !!! Dlg on failure?
 			break;
 
 		case IDM_LOAD:
@@ -3475,8 +3527,6 @@ break;
 			
 			if (!f)
 				f = CreateAllVMs();
-
-			// !!! error, now what?
 
 			sWheelOffset = 0;	// we may be scrolled further than is possible given we have fewer of them now
 			sVM = -1;	// the one in focus may be gone
