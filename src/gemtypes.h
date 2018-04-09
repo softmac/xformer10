@@ -210,9 +210,9 @@ typedef struct _vminfo
 	PFNB pfnReadHWByte;     // reads a byte from the VM
 	PFNW pfnReadHWWord;     // reads a word from the VM
 	PFNLL pfnReadHWLong;     // reads a long from the VM
-	PFN  pfnWriteHWByte;    // writes a byte to the VM
-	PFN  pfnWriteHWWord;    // writes a word to the VM
-	PFN  pfnWriteHWLong;    // writes a long to the VM
+	PFNL pfnWriteHWByte;    // writes a byte to the VM
+	PFNL pfnWriteHWWord;    // writes a word to the VM
+	PFNL pfnWriteHWLong;    // writes a long to the VM
 	PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
 	PFNL pfnUnlockBlock;    // release memory block in VM
 	PFNP pfnMapAddress;     // convert virtual machine address to flat address

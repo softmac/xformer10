@@ -84,8 +84,7 @@ void DeleteDrive(int iVM, int i)
 }
 
 
-// !!! needs error checking
-void AddDrive(int iVM, int i, BYTE *pchPath)
+BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 {
     int h, sc=0;
 
@@ -94,7 +93,7 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
         if (fXFCable && pchPath[2] == ':')
             {
             rgDrives[iVM][i].mode = MD_EXT;
-            return;
+            return TRUE;
             }
         }
 
@@ -165,6 +164,7 @@ void AddDrive(int iVM, int i, BYTE *pchPath)
         {
             // assume it's a Xformer Cable created image
             // so just check for density
+			// !!! Error if it's not extension .XFD or always try it out?
 
             rgDrives[iVM][i].ofs = 0;
 
@@ -240,6 +240,7 @@ Lbadfile:
         rgDrives[iVM][i].ofs = 0;
 
 //            _close(h);
+	return TRUE;
 }
 
 #define NO_TRANSLATION    32

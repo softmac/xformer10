@@ -21,7 +21,7 @@
 #include "stdint.h"
 
 PFNB pfnPeekB;
-PFN  pfnPokeB;
+PFNL pfnPokeB;
 
 // jump tables (when used)
 typedef void (__fastcall * PFNOP)(int iVM);
@@ -345,6 +345,8 @@ int __cdecl xprintf(const char *format, ...)
     return retval;
 }
 
+// these private macros decide which needs to be called - special peek/poke above ramtop, or not
+
 __inline uint8_t READ_BYTE(int iVM, uint32_t ea)
 {
 	//printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
@@ -388,7 +390,6 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 		cpuPokeB(iVM, ea + 1, ((val >> 8) & 255));
 	}
 }
-
 
 //////////////////////////////////////////////////////////////////
 //
@@ -553,9 +554,12 @@ void HELPER(LDY_com)
     regY = (mdEA == EAimm) ? (BYTE)regEA : READ_BYTE(iVM, regEA); update_NZ(iVM, regY);
 } }
 
+// If I know this can't possibly be >= ramtop, save an "if" by choosing the direct CPU read
+// !!! Do the same for READ, which always does the "if" right now
+
 void HELPER1(ST_zp, BYTE x)
 {
-    WRITE_BYTE(iVM, regEA, x);
+    cpuPokeB(iVM, regEA, x);
 } }
 
 // above ramtop, use PokeBAtari fn
@@ -733,15 +737,15 @@ void HELPER(SBC_com)
 
 void HELPER1(PushByte, BYTE b)
 {
-    WRITE_BYTE(iVM, regSP, b);
+    cpuPokeB(iVM, regSP, b);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
 void HELPER1(PushWord, WORD w)
 {
-    WRITE_BYTE(iVM, regSP, w >> 8);
+    cpuPokeB(iVM, regSP, w >> 8);
 	regSP = 0x100 | ((regSP - 1) & 0xFF);
-    WRITE_BYTE(iVM, regSP, w & 0xFF);
+    cpuPokeB(iVM, regSP, w & 0xFF);
 	regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
@@ -1593,7 +1597,7 @@ HANDLER(op84)
 {
  
    EA_zp(iVM);
-    WRITE_BYTE(iVM, regEA, regY);
+    cpuPokeB(iVM, regEA, regY);
     HANDLER_END();
 }
 
@@ -1602,7 +1606,7 @@ HANDLER(op84)
 HANDLER(op85)
 {
     EA_zp(iVM);
-    WRITE_BYTE(iVM, regEA, regA);
+    cpuPokeB(iVM, regEA, regA);
     HANDLER_END();
 }
 
@@ -1611,7 +1615,7 @@ HANDLER(op85)
 HANDLER(op86)
 {
     EA_zp(iVM);
-    WRITE_BYTE(iVM, regEA, regX);
+    cpuPokeB(iVM, regEA, regX);
     HANDLER_END();
 }
 

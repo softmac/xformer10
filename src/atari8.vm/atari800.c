@@ -408,9 +408,6 @@ BOOL ReadCart(int iVM)
 	//
 	//{name: 'Standard 8k cartridge', id : 1 },
 	//{name: 'Standard 16k cartridge', id : 2 },
-	//{ name: 'OSS two chip 16 KB cartridge (034M)', id : 3 },
-	//{ name: 'OSS two chip 16 KB cartridge (043M)', id : 45 },
-	//{ name: 'OSS one chip 16 KB cartridge', id : 15 },
 	//{name: 'XEGS 32 KB cartridge', id : 12 },
 	//{name: 'XEGS 64 KB cartridge', id : 13 },
 	//{name: 'XEGS 128 KB cartridge', id : 14 },
@@ -418,9 +415,14 @@ BOOL ReadCart(int iVM)
 	//{name: 'XEGS 512 KB cartridge', id : 24 },
 	//{ name: 'XEGS 1024 KB cartridge', id : 25 },
 	//{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
+	//{ name: 'Atarimax 128 KB cartridge', id : 41 },
+	//{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
 
 	// !!! I support these, but not the part where they can switch out to RAM yet
 
+	//{ name: 'OSS two chip 16 KB cartridge (034M)', id : 3 },
+	//{ name: 'OSS two chip 16 KB cartridge (043M)', id : 45 },
+	//{ name: 'OSS one chip 16 KB cartridge', id : 15 },
 	//{ name: 'Switchable XEGS 32 KB cartridge', id : 33 },
 	//{ name: 'Switchable XEGS 64 KB cartridge', id : 34 },
 	//{ name: 'Switchable XEGS 128 KB cartridge', id : 35 },
@@ -440,7 +442,6 @@ BOOL ReadCart(int iVM)
 	//{ name: 'Diamond 64 KB cartridge', id : 10 },
 	//{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
 	//{ name: 'MegaCart 64 KB cartridge', id : 28 },
-	//{ name: 'Atarimax 128 KB cartridge', id : 41 },
 	//{ name: 'MegaCart 128 KB cartridge', id : 29 },
 	//{ name: 'SpartaDOS X 128 KB cartridge', id : 43 },
 	//{ name: 'SIC! 128 KB cartridge', id : 54 },
@@ -448,7 +449,6 @@ BOOL ReadCart(int iVM)
 	//{ name: 'SIC! 256 KB cartridge', id : 55 },
 	//{ name: 'MegaCart 512 KB cartridge', id : 31 },
 	//{ name: 'SIC! 512 KB cartridge', id : 56 },
-	//{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
 	//{ name: 'MegaCart 1024 KB cartridge', id : 32 },
 
 	if (cb < 8192)
@@ -497,9 +497,24 @@ BOOL ReadCart(int iVM)
 			bCartType = 0;
 	}
 
+	// unique 40K Bounty Bob cartridge - check for last bank being valid?
 	else if (type == 18 || (type == 0 && cb == 40960))
 	{
 		bCartType = CART_BOB;	// unique Bounty Bob cart
+	}
+
+	// 128K and 1st bank is the main one - ATARIMAX
+	else if (type == 41 || (type == 0 && cb == 131072 && *(pb + cb - 4) == 0 && 
+		((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
+	{
+		bCartType = CART_ATARIMAX1;
+	}
+	
+	// 1M and last bank is the main one (1st bank might be too) - ATARIMAX127
+	else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + cb - 4) == 0 &&
+		((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 5) < 0xC0))))
+	{
+		bCartType = CART_ATARIMAX8;
 	}
 
 	// make sure the last bank is a valid ATARI 8-bit cartridge
@@ -579,14 +594,21 @@ void InitCart(int iVM)
 	else if (bCartType == CART_BOB)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
+		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM and not part of this bank
 		ramtop = 0x8000;
+	}
+	// 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
+	else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
+	{
+		_fmemcpy(&rgbMem[0xA000], pb, 8192);
+		ramtop = 0xA000;
+		iSwapCart[iVM] = 0;	// this bank starts in
 	}
 	// 8K main bank is the last one
 	else if (bCartType == CART_XEGS)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM
+		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM and not part of this bank
 		ramtop = 0x8000;
 	}
 
@@ -601,9 +623,10 @@ void BankCart(int iVM, int iBank, int value)
 	unsigned int cb = pcart->cbData;
 	int i;
 	BYTE *pb = rgbSwapCart[iVM];
+	BYTE swap[8192];
 
 	// we are not a banking cartridge
-	if (ramtop == 0xC000 || !(rgvm[iVM].rgcart.fCartIn) || cb <= 8192 || bCartType <= CART_16K)
+	if (!(rgvm[iVM].rgcart.fCartIn) || bCartType <= CART_16K)
 		return;
 
 	// banks are 0, 3, 4, main
@@ -615,16 +638,14 @@ void BankCart(int iVM, int iBank, int value)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
 
-#if 0
 	// banks are 0, 4, 3, main
-	if (bCartType == CART_OSSA_DIFFERENT)
+	if (bCartType == CART_OSSAX)
 	{
 		i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
-		//assert(i != -1);
+		assert(i != -1);
 		if (i != -1)
 			_fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
 	}
-#endif
 
 	// banks are main, 0, 9, 1
 	else if (bCartType == CART_OSSB)
@@ -656,6 +677,46 @@ void BankCart(int iVM, int iBank, int value)
 				_fmemcpy(&rgbMem[0x8000], pb + value * 4096, 4096);
 			if (iBank == 1 && value >= 0 && value <= 3)
 				_fmemcpy(&rgbMem[0x9000], pb + 16384 + value * 4096, 4096);
+		}
+	}
+
+	// Address is bank #, 8K that goes into $A000. Bank 16 is RAM
+	else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
+	{
+		int mask;
+
+		if (bCartType == CART_ATARIMAX1)
+			mask = 0x0f;
+		else
+			mask = 0x7f;
+
+		if (iBank == (mask + 1))
+		{
+			// want RAM - currently ROM - exchange with last bank used
+			if (ramtop == 0xa000)
+			{
+				_fmemcpy(swap, &rgbMem[0xa000], 8192);
+				_fmemcpy(&rgbMem[0xA000], pb + iSwapCart[iVM] * 8192, 8192);
+				_fmemcpy(pb + iSwapCart[iVM] * 8192, swap, 8192);
+			}
+			ramtop = 0xc000;
+		}
+		else if (iBank <= mask)
+		{
+			// want ROM, currently different ROM? First exchange with last bank used
+			if (ramtop == 0xa000 && iBank != iSwapCart[iVM])
+			{
+				_fmemcpy(swap, &rgbMem[0xa000], 8192);
+				_fmemcpy(&rgbMem[0xA000], pb + iSwapCart[iVM] * 8192, 8192);
+				_fmemcpy(pb + iSwapCart[iVM] * 8192, swap, 8192);
+			}
+			// now exchange with current bank
+			_fmemcpy(swap, &rgbMem[0xa000], 8192);
+			_fmemcpy(&rgbMem[0xA000], pb + iBank * 8192, 8192);
+			_fmemcpy(pb + iBank * 8192, swap, 8192);
+
+			iSwapCart[iVM] = iBank;	// what bank is in there now
+			ramtop = 0xa000;
 		}
 	}
 
@@ -948,10 +1009,6 @@ BOOL __cdecl InitAtari(int iVM)
 
 	rgvm[iVM].bfRAM = BfFromWfI(rgvm[iVM].pvmi->wfRAM, mdXLXE);
 
-	// If our saved state had a cartridge, load it back in
-    // !!! I don't report an error, just run the VM without the cart
-	ReadCart(iVM);
-
     if (!FInitSerialPort(rgvm[iVM].iCOM))
 		rgvm[iVM].iCOM = 0;
     if (!InitPrinter(rgvm[iVM].iLPT))
@@ -967,7 +1024,8 @@ BOOL __cdecl InitAtari(int iVM)
 //  vi.cbRAM[1] = 0xC000;
 //  vi.pregs = &rgbMem[0];
 
-    return TRUE;
+	// If our saved state had a cartridge, load it back in.
+	return ReadCart(iVM);
 }
 
 // Call when you are done with the VM, or need to change cartridges
@@ -1001,10 +1059,12 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
     PVD pvd = &rgvm[iVM].rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
-		// !!! needs to return a value
-        AddDrive(iVM, i, (BYTE *)pvd->sz);
+        return AddDrive(iVM, i, (BYTE *)pvd->sz);
+	if (pvd->dt == DISK_NONE)
+		return TRUE;
 
-    return TRUE;
+	// I don't recognize this kind of disk... yet
+    return FALSE;
 }
 
 BOOL __cdecl InitAtariDisks(int iVM)
@@ -1123,6 +1183,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	}
 #endif
 
+	// !!! why?
     // initialize hardware
     // NOTE: at $D5FE is ramtop and then the jump table
 
@@ -1390,20 +1451,19 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
-			else if (wScan < STARTSCAN + Y8) {	// after all the valid lines have been drawn
+			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
 				// business as usual
 			}
 
-			// the CPU will have seen VCOUNT == 124 executing scan line 247, so it should be safe to VBLANK now
-			// VBLANKS are long and the main CPU code won't execute for a while and will never see scan line 248
-			// so that's why we cheat and send Go6502 one scanline higher than ProcessScanLine saw
-			else if (wScan == STARTSCAN + Y8)
+			// !!! the app may need to see VCOUNT reach 124 (MULE) which won't happen if we trigger the VBI at the start of 248,
+			// se we do it at 249 and hope for the best
+			else if (wScan == STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-				DoVBI(iVM);	// it's huge, it bloats this function to inline it.
+				DoVBI(iVM);
 			}
 
-			else if (wScan > STARTSCAN + Y8)
+			else if (wScan > STARTSCAN + Y8 + 1)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
@@ -1422,11 +1482,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 			ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
 		  
-			// VCOUNT should increment in the middle of Go6502, but we're not that fancy yet.
-			// Let's use the higher value so that VCOUNT reaches 124 (248 / 2) on line 247 and apps can
-			// see it get that high (breaks MULE)
-		
-			VCOUNT = (BYTE)((wScan + 1) >> 1);
+			// VCOUNT is 1/2 the scanline we are on. A DLI needs to see that number (Desert Storm) when it is first triggered.
+			// If they do a WSYNC, then we advance VCOUNT to make it look like we waited, but we let them continue.
+			// If we get a 2nd WSYNC, we actually wait, and since we waited, we start the next set of instructions with
+			// VCOUNT already advanced.
+			// This doesn't let regular code that hasn't been writing to WSYNC see VCOUNT reach 124 before the VBI
+			// is immediately triggered at the start of 248, so we delay the VBI until 249.
+			VCOUNT = (BYTE)((wScan + (WSYNC_Waited ? 1 : 0)) >> 1);
 
 			WSYNC_Seen = FALSE;
 
@@ -1534,8 +1596,6 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 //
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
-	assert(addr >= ramtop);
-
 	// RANDOM
 	// we've been asked for a random number. How many times would the poly counter have advanced?
 	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
@@ -1572,8 +1632,10 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 		addr &= 0xff03;	// PIA has 4 registers
 		break;
 	case 0xd4:
+		addr &= 0xfe0f;	// ANTIC has 16 registers also shadowed to $D5xx
+		break;
 	case 0xd5:
-		addr &= 0xfe0f;	// ANTIC has 16 registers also showed to $D5xx
+		BankCart(iVM, addr & 0xff, 0);	// reads too, right?
 		break;
 	}
 	
@@ -1598,15 +1660,15 @@ ULONG __cdecl PeekLAtari(int iVM, ADDR addr)
 }
 
 // not used
-void __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
+BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 {
 	iVM; addr; w;
-	return;
+	return TRUE;
 }
 
 // currently not used
 //
-void __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
+BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 {
 	assert(addr >= ramtop);
 	assert(FALSE);	// I'm curious if this ever happens
@@ -1614,7 +1676,7 @@ void __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 	PokeBAtari(iVM, addr, w & 255);
     PokeBAtari(iVM, addr+1, w >> 8);
 
-	return;
+	return TRUE;
 }
 
 // Be efficient! This is one of the most executed functions!
@@ -1622,7 +1684,7 @@ void __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 // regPC is probably one too high at this moment
 // !!! Too big to __inline?
 //
-void __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
+BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
 	assert(addr < 65536);
@@ -1898,7 +1960,7 @@ void __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 				WSYNC_Waited = TRUE;
 			}
 			WSYNC_Seen = TRUE;
-
+			VCOUNT = (BYTE)((wScan + 1) >> 1);
         }
         else if (addr == 15)
         {
@@ -1910,11 +1972,11 @@ void __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
     case 0xD5:      // Cartridge bank select
 //        printf("addr = %04X, b = %02X\n", addr, b);
-        BankCart(iVM, addr & 255, b);
+        BankCart(iVM, addr & 0xff, b);
         break;
     }
 
-    return;
+    return TRUE;
 }
 
 #endif // XFORMER

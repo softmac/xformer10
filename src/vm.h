@@ -206,25 +206,22 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
     return l;
 }
 
-void __inline vmPokeB(int iVM, ULONG ea, BYTE b)
+BOOL __inline vmPokeB(int iVM, ULONG ea, BYTE b)
 {
 	ZapRange(ea, sizeof(BYTE));
-	rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
-	return;
+	return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
 }
 
-void __inline vmPokeW(int iVM, ULONG ea, WORD w)
+BOOL __inline vmPokeW(int iVM, ULONG ea, WORD w)
 {
 	ZapRange(ea, sizeof(WORD));
-	rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
-	return;
+	return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
 }
 
-void __inline vmPokeL(int iVM, ULONG ea, ULONG l)
+BOOL __inline vmPokeL(int iVM, ULONG ea, ULONG l)
 {
 	ZapRange(ea, sizeof(LONG));
-	rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
-	return;
+	return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
 }
 
 HRESULT __inline ReadPhysicalByte(int iVM, ULONG ea, BYTE *pb)
@@ -242,25 +239,22 @@ HRESULT __inline ReadPhysicalLong(int iVM, ULONG ea, ULONG *pl)
     return rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
 }
 
-void __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
+HRESULT __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
     ZapRange(ea, sizeof(BYTE));
-    rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
-	return;
+    return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
 }
 
-void __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
+HRESULT __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
     ZapRange(ea, sizeof(WORD));
-    rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
-	return;
+    return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
 }
 
-void __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
+HRESULT __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
     ZapRange(ea, sizeof(LONG));
-    rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
-	return;
+    return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
 }
 
 ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
