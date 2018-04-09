@@ -20,7 +20,8 @@
 
 #include "stdint.h"
 
-PFN pfnPokeB;
+PFNB pfnPeekB;
+PFN  pfnPokeB;
 
 // jump tables (when used)
 typedef void (__fastcall * PFNOP)(int iVM);
@@ -348,32 +349,44 @@ __inline uint8_t READ_BYTE(int iVM, uint32_t ea)
 {
 	//printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
-	return cpuPeekB(iVM, ea);	// possible special case of RANDOM
+	if (ea >= ramtop)
+		return (*pfnPeekB)(iVM, ea);
+	else
+		return cpuPeekB(iVM, ea);
 }
 
 __inline uint16_t READ_WORD(int iVM, uint32_t ea)
 {
-    return cpuPeekB(iVM, ea) | (cpuPeekB(iVM, ea + 1) << 8);
+	if (ea >= ramtop)
+		return (*pfnPeekB)(iVM, ea) | ((*pfnPeekB)(iVM, ea + 1) << 8);
+	else
+		return cpuPeekB(iVM, ea) | (cpuPeekB(iVM, ea + 1) << 8);
 }
 
-// we only call this if we know it's < ramtop, to avoid an extra IF
+// we only call this if we know it's < ramtop
 __inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 {
-//if (ea > 65535) printf("ea too large! %08X\n", ea);
-//printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
+	//printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
-    rgbMem[ea] = val;
-
-    return; // 0;
+	if (ea >= ramtop)
+		(*pfnPokeB)(iVM, ea, val);
+	else
+		cpuPokeB(iVM, ea, val);
 }
 
-// we only call this if we know it's < ramtop, to avoid an extra IF
+// we only call this if we know it's < ramtop
 __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 {
-    rgbMem[ea + 0] = ((val >> 0) & 255);
-    rgbMem[ea + 1] = ((val >> 8) & 255);
-
-    return; // 0;
+	if (ea >= ramtop)
+	{
+		(*pfnPokeB)(iVM, ea, val & 255);
+		(*pfnPokeB)(iVM, ea + 1, ((val >> 8) & 255));
+	}
+	else
+	{
+		cpuPokeB(iVM, ea, val & 255);
+		cpuPokeB(iVM, ea + 1, ((val >> 8) & 255));
+	}
 }
 
 
@@ -545,9 +558,10 @@ void HELPER1(ST_zp, BYTE x)
     WRITE_BYTE(iVM, regEA, x);
 } }
 
+// above ramtop, use PokeBAtari fn
 void HELPER1(ST_com, BYTE x)
 {
-    if (regEA >= ramtop) { regPC--; (*pfnPokeB)(iVM, regEA,x); regPC++; } else WRITE_BYTE(iVM, regEA, x);
+    if (regEA >= ramtop) { (*pfnPokeB)(iVM, regEA,x); } else WRITE_BYTE(iVM, regEA, x);
 } }
 
 void HELPER1(Jcc_com, int f)

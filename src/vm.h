@@ -27,6 +27,7 @@
 extern "C" {
 #endif
 
+// !!! unused?
 enum
 {
     VM_GET_VERSION,         // version of this VM
@@ -173,11 +174,12 @@ BOOL __inline FMonVM(int iVM)
 }
 
 //
-// REVIEW: Deprecate vmPeek*
+// !!! These are probably unnecessary - it's between the VM and its CPU, not the VM Manager to know anything about
 //
 
 void __fastcall ZapRange(ULONG addr, ULONG cb);
-ULONG __inline vmPeekB(int iVM, ULONG ea)
+
+BYTE __inline vmPeekB(int iVM, ULONG ea)
 {
     BYTE b = 0;
 
@@ -186,7 +188,7 @@ ULONG __inline vmPeekB(int iVM, ULONG ea)
     return b;
 }
 
-ULONG __inline vmPeekW(int iVM, ULONG ea)
+WORD __inline vmPeekW(int iVM, ULONG ea)
 {
     WORD w = 0;
 
@@ -204,22 +206,25 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
     return l;
 }
 
-HRESULT __inline vmPokeB(int iVM, ULONG ea, BYTE b)
+void __inline vmPokeB(int iVM, ULONG ea, BYTE b)
 {
 	ZapRange(ea, sizeof(BYTE));
-	return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
+	rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
+	return;
 }
 
-HRESULT __inline vmPokeW(int iVM, ULONG ea, WORD w)
+void __inline vmPokeW(int iVM, ULONG ea, WORD w)
 {
 	ZapRange(ea, sizeof(WORD));
-	return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
+	rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
+	return;
 }
 
-HRESULT __inline vmPokeL(int iVM, ULONG ea, ULONG l)
+void __inline vmPokeL(int iVM, ULONG ea, ULONG l)
 {
 	ZapRange(ea, sizeof(LONG));
-	return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
+	rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
+	return;
 }
 
 HRESULT __inline ReadPhysicalByte(int iVM, ULONG ea, BYTE *pb)
@@ -237,22 +242,25 @@ HRESULT __inline ReadPhysicalLong(int iVM, ULONG ea, ULONG *pl)
     return rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
 }
 
-HRESULT __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
+void __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
     ZapRange(ea, sizeof(BYTE));
-    return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
+    rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
+	return;
 }
 
-HRESULT __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
+void __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
     ZapRange(ea, sizeof(WORD));
-    return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
+    rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
+	return;
 }
 
-HRESULT __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
+void __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
     ZapRange(ea, sizeof(LONG));
-    return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
+    rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
+	return;
 }
 
 ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
@@ -287,6 +295,7 @@ __inline BYTE * MapWritableAddressVM(int iVM, ULONG ea)
     return rgvm[iVM].pvmi->pfnMapAddressRW(iVM, ea);
 }
 
+// END of UNNECESSARY BLOCK
 
 #ifdef __cplusplus
 }

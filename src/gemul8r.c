@@ -604,7 +604,8 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
 		PVMINFO pvmi;
 
 		// is this a kind of VM we can handle?
-		if (pvmi = DetermineVMType(z))
+		pvmi = DetermineVMType(z);
+		if (pvmi)
 		{
 			char *szF;
 			char extV[_MAX_PATH];
@@ -875,9 +876,11 @@ int CALLBACK WinMain(
 					rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
 					f = FALSE;
 					if (FInitVM(iVM))
-						if (f = ColdStart(iVM))
-							if (vi.hdc)
-								CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					{
+						f = ColdStart(iVM);
+						if (f && vi.hdc)
+							CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					}
 					if (f)
 					{
 						if (!fSkipLoad)
@@ -898,9 +901,11 @@ int CALLBACK WinMain(
 					rgvm[iVM].rgcart.fCartIn = TRUE;
 					f = FALSE;
 					if (FInitVM(iVM))
-						if (f = ColdStart(iVM))
-							if (vi.hdc)
-								CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					{
+						f = ColdStart(iVM);
+						if (f && vi.hdc)
+							CreateNewBitmap(iVM);	// we might not have a window yet, we'll do it when we do
+					}
 					if (f)
 					{
 						if (!fSkipLoad)
@@ -2186,7 +2191,9 @@ void SelectInstance(int iVM)
 	if (!v.fTiling)
 		FixAllMenus();
 
-	// !!! also trigger looking at our new minimum window size, this VM may need a bigger window
+	// Enforce minimum window size for this type of VM
+	SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
+		v.rectWinPos.bottom - v.rectWinPos.top, 0);
 
     return;
 }
@@ -3178,9 +3185,6 @@ break;
 					}
 			} else if (v.cVM) {
 				SelectInstance(v.iVM >= 0 ? v.iVM : nFirstTile);	// bring the one with focus up if it exists, else the top one
-				// Enforce minimum window size for this type of VM
-				SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
-					v.rectWinPos.bottom - v.rectWinPos.top, 0);
 			}
 			FixAllMenus();
 			break;
@@ -3298,9 +3302,11 @@ break;
 
 			BOOL fA = FALSE;
 			if (vmNew != -1 && FInitVM(vmNew))
-				if (fA = ColdStart(vmNew))
-					if (vi.hdc)
-						CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			{
+				fA = ColdStart(vmNew);
+				if (fA && vi.hdc)
+					CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			}
 			if (!fA)
 				DeleteVM(vmNew);
 			else

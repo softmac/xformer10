@@ -298,26 +298,7 @@ void DoVBI(int iVM)
 
 	if (fTrace)
 		ForceRedraw(iVM);	// it might do this anyway
-
-	// every VBI, shadow the hardware registers
-	// to their higher locations
-
-	// !!! Do this quicker in PeekBAtari() as they are read?
-
-	memcpy(&rgbMem[0xD410], &rgbMem[0xD400], 16);
-	memcpy(&rgbMem[0xD420], &rgbMem[0xD400], 32);
-	memcpy(&rgbMem[0xD440], &rgbMem[0xD400], 64);
-	memcpy(&rgbMem[0xD480], &rgbMem[0xD400], 128);
-
-	memcpy(&rgbMem[0xD210], &rgbMem[0xD200], 16);
-	memcpy(&rgbMem[0xD220], &rgbMem[0xD200], 32);
-	memcpy(&rgbMem[0xD240], &rgbMem[0xD200], 64);
-	memcpy(&rgbMem[0xD280], &rgbMem[0xD200], 128);
-
-	memcpy(&rgbMem[0xD020], &rgbMem[0xD000], 32);
-	memcpy(&rgbMem[0xD040], &rgbMem[0xD000], 64);
-	memcpy(&rgbMem[0xD080], &rgbMem[0xD000], 128);
-
+	
 	// Gem window has a message, stop the loop to process it
 	MSG msg;
 	if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
@@ -1065,7 +1046,7 @@ BOOL __cdecl UninitAtariDisks(int iVM)
 BOOL __cdecl WarmbootAtari(int iVM)
 {
 	// tell the CPU which 
-	cpuInit(PokeBAtari);
+	cpuInit(PeekBAtari, PokeBAtari);
 
 	//OutputDebugString("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
@@ -1126,7 +1107,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // reset the registers, and say which HW it is running
     cpuReset(iVM);
-	cpuInit(PokeBAtari);
+	cpuInit(PeekBAtari, PokeBAtari);
 
 	// XL's need hardware to cold start, and can only warm start through emulation.
 	// We have to invalidate this checksum to force a cold start
@@ -1300,7 +1281,7 @@ BOOL __cdecl DumpHWAtari(int iVM)
 //    RestoreVideo();
 
 	// tell CPU which HW is running
-	cpuInit(PokeBAtari);
+	cpuInit(PeekBAtari, PokeBAtari);
 
     printf("NMIEN  %02X IRQEN  %02X SKCTLS %02X SEROUT %02X\n",
         NMIEN, IRQEN, SKCTLS, SEROUT);
@@ -1347,11 +1328,11 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 //
 // !!! fStep and fCont are ignored for now!
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
-{
+ {
 	fCont; fStep;
 
 	// tell the 6502 which HW it is running this time
-	cpuInit(PokeBAtari);
+	cpuInit(PeekBAtari, PokeBAtari);
 
 	fStop = 0;
 
@@ -1445,8 +1426,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// Let's use the higher value so that VCOUNT reaches 124 (248 / 2) on line 247 and apps can
 			// see it get that high (breaks MULE)
 		
-			// some programs check "mirrors" instead of $D40B
-			rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
+			VCOUNT = (BYTE)((wScan + 1) >> 1);
 
 			WSYNC_Seen = FALSE;
 
@@ -1550,84 +1530,125 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
-
+// only called for addr >= ramtop
+//
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
-    // reads always read directly - and we can't change that, as the 6502 emulator assumes so
+	assert(addr >= ramtop);
 
+	// RANDOM
+	// we've been asked for a random number. How many times would the poly counter have advanced?
+	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
+	// !!! this assumes 30 instructions per scanline always (not true)
+	if (addr == 0xD20A) {
+		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
+		int delta = (int)(cur - random17last);
+		random17last = cur;
+		random17pos = (random17pos + delta) % 0x1ffff;
+		rgbMem[addr] = poly17[random17pos];
+	}
+
+	// This is how Bounty Bob bank selects
+	if (bCartType == CART_BOB)
+	{
+		if (addr >= 0x8ff6 && addr <= 0x8ff9)
+			BankCart(iVM, 0, addr - 0x8ff6);
+		if (addr >= 0x9ff6 && addr <= 0x9ff9)
+			BankCart(iVM, 1, addr - 0x9ff6);
+	}
+
+	// implement SHADOW or MIRROR registers instantly yet quickly without any memcpy!
+
+	switch ((addr >> 8) & 255)
+	{
+
+	case 0xd0:
+		addr &= 0xff1f;	// GTIA has 32 registers
+		break;
+	case 0xd2:
+		addr &= 0xff0f;	// POKEY has 16 registers
+		break;
+	case 0xd3:
+		addr &= 0xff03;	// PIA has 4 registers
+		break;
+	case 0xd4:
+	case 0xd5:
+		addr &= 0xfe0f;	// ANTIC has 16 registers also showed to $D5xx
+		break;
+	}
+	
     return cpuPeekB(iVM, addr);
 }
 
-
+// currently not used
+//
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
 {
-    // reads always read directly
+	assert(addr >= ramtop);
+	assert(FALSE); // I'm curious when this happens
 
-    return cpuPeekW(iVM, addr);
+	return PeekBAtari(iVM, addr) | (PeekBAtari(iVM, addr + 1) << 8);
 }
-
 
 ULONG __cdecl PeekLAtari(int iVM, ADDR addr)
 {
-    // reads always read directly
+    // not used
 
     return cpuPeekW(iVM, addr);
 }
 
-
-BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
-{
-    PokeBAtari(iVM, addr, w & 255);
-    PokeBAtari(iVM, addr+1, w >> 8);
-    return TRUE;
-}
-
-
-BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
+// not used
+void __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 {
 	iVM; addr; w;
-    return TRUE;
+	return;
 }
 
-BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
+// currently not used
+//
+void __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
+{
+	assert(addr >= ramtop);
+	assert(FALSE);	// I'm curious if this ever happens
+
+	PokeBAtari(iVM, addr, w & 255);
+    PokeBAtari(iVM, addr+1, w >> 8);
+
+	return;
+}
+
+// Be efficient! This is one of the most executed functions!
+// Only call this is addr >= ramtop
+// regPC is probably one too high at this moment
+// !!! Too big to __inline?
+//
+void __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
-    addr &= 65535;
-    b &= 255; // just to be sure
+	assert(addr < 65536);
 
 #if 0
-    printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC);
+    printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
 #endif
-
-    if (addr < ramtop)
-    {
-#if 0
-        printf("poking into RAM, addr = %04X, ramtop = %04X\n", addr, ramtop);
-        flushall();
-#endif
-
-        cpuPokeB(iVM, addr, b);
-        return TRUE;
-    }
 
 	// This is how Bounty Bob bank selects
-	if (addr >= 0x8ff6 && addr <= 0x8ff9 && bCartType == CART_BOB)
-		BankCart(iVM, 0, addr - 0x8ff6);
-	if (addr >= 0x9ff6 && addr <= 0x9ff9 && bCartType == CART_BOB)
-		BankCart(iVM, 1, addr - 0x9ff6);
+	if (bCartType == CART_BOB)
+	{
+		if (addr >= 0x8ff6 && addr <= 0x8ff9)
+			BankCart(iVM, 0, addr - 0x8ff6);
+		if (addr >= 0x9ff6 && addr <= 0x9ff9)
+			BankCart(iVM, 1, addr - 0x9ff6);
+	}
 
 	switch ((addr >> 8) & 255)
 	{
 	default:
 
-		// don't allow writing to cartridge memory, but do allow writing to special extended XL/XE RAM
-		if (mdXLXE == md800 ||
-			(rgvm[iVM].rgcart.fCartIn && addr < 0xC000u && addr >= 0xc000u - rgvm[iVM].rgcart.cbData))
-		{
+		// above RAMTOP (but not into a special register) does nothing on an 800
+		if (mdXLXE == md800)
 			break;
-		}
 
-        // writing to XL/XE memory
+        // writing to XL/XE memory !!! what is this?
 
         if (addr == 0xD1FF)
             {
@@ -1662,6 +1683,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
             break;
             }
+
         break;
 
     case 0xD0:      // GTIA
@@ -1857,7 +1879,6 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xD4:      // ANTIC
         addr &= 15;
 		
-		// !!! using shadows like this could break an app that uses a functioning mirror of the registers! Does anybody?
         rgbMem[writeANTIC+addr] = b;
 
 		// the display list pointer is the only ANTIC register that is R/W
@@ -1865,7 +1886,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			rgbMem[0xd400 + addr] = b;
 
         if (addr == 10)
-            {
+        {
             // WSYNC - our code executes after the scan line is drawn, so ignore the first one, it's already safe to draw
 			// if we see a second one on this same scan line, or we saw one last time that we actually waited on,
 			// we're in a kernel, and we can't ignore it
@@ -1878,16 +1899,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			}
 			WSYNC_Seen = TRUE;
 
-			// (we already start out with VCOUNT incremented so this is no longer necessary)
-			// if we're not going to wait, we need to make sure VCOUNT is updated like it would have been had we waited
-			//rgbMem[0xD47B] = rgbMem[0xD41B] = VCOUNT = (BYTE)((wScan + 1) >> 1);
-            }
+        }
         else if (addr == 15)
-            {
+        {
             // NMIRES - reset NMI status
 
             NMIST = 0x1F;
-            }
+        }
         break;
 
     case 0xD5:      // Cartridge bank select
@@ -1896,7 +1914,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         break;
     }
 
-    return TRUE;
+    return;
 }
 
 #endif // XFORMER
