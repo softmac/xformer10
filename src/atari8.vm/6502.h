@@ -40,12 +40,12 @@ __inline BYTE cpuPeekB(int iVM, ADDR addr)
     return rgbMem[addr];
 }
 
-__inline void cpuPokeB(int iVM, ADDR addr, BYTE b)
+__inline BOOL cpuPokeB(int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     rgbMem[addr] = (BYTE) b;
-    return;
+    return TRUE;
 }
 
 __inline WORD cpuPeekW(int iVM, ADDR addr)
@@ -55,19 +55,19 @@ __inline WORD cpuPeekW(int iVM, ADDR addr)
 	return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
 }
 
-__inline void cpuPokeW(int iVM, ADDR addr, WORD w)
+__inline BOOL cpuPokeW(int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
 	rgbMem[addr + 0] = (w & 255);
 	rgbMem[addr + 1] = ((w >> 8) & 255);
-	return;
+	return TRUE;
 }
 
-__inline BOOL cpuInit(PFNB pvmPeekB, PFN pvmPokeB)
+__inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
 {
     extern PFNB pfnPeekB;
-	extern PFN pfnPokeB;
+	extern PFNL pfnPokeB;
 
 	// !!! global - each VM needs to set this every time a VM is Execute'd
 	pfnPeekB = pvmPeekB;

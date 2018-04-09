@@ -33,13 +33,17 @@
 
 #define CART_8K      1	// 0 for invalid
 #define CART_16K     2
-#define CART_OSSA    3   // Mac65 etc.
-#define CART_OSSB    4   //
-#define CART_XEGS	 5
-#define CART_BOB	 6
+#define CART_OSSA    3   // Action
+#define CART_OSSAX   4   // 0 4 3 version
+#define CART_OSSB    5  // Mac65
+#define CART_XEGS	 6
+#define CART_BOB	 7
+#define CART_ATARIMAX1	8
+#define CART_ATARIMAX8 9
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
+int iSwapCart[MAX_VM];		// which bank is currently swapped in
 int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
@@ -643,7 +647,7 @@ void CheckKey(int);
 void UpdatePorts(int);
 void SIOV(int);
 void DeleteDrive(int, int);
-void AddDrive(int, int, BYTE *);
+BOOL AddDrive(int, int, BYTE *);
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);
 BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);
@@ -709,9 +713,9 @@ BOOL __cdecl MonAtari(int);
 BYTE __cdecl PeekBAtari(int, ADDR addr);
 WORD __cdecl PeekWAtari(int, ADDR addr);
 ULONG __cdecl PeekLAtari(int, ADDR addr);
-void  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
-void  __cdecl PokeWAtari(int, ADDR addr, WORD w);
-void  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
+BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
+BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
+BOOL  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
 
 
 //

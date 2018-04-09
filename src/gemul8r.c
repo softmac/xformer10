@@ -889,6 +889,7 @@ int CALLBACK WinMain(
 					}
 					else
 						DeleteVM(iVM);
+
 				}	// using drag/drop, just move on with our lives if there's an error
 			}
 			
@@ -913,7 +914,8 @@ int CALLBACK WinMain(
 						fSkipLoad = TRUE;
 					}
 					else
-						DeleteVM(iVM);
+						DeleteVM(iVM);	// bad cartridge? Don't show an empty VM, just kill it
+
 				}	// using drag/drop, just move on with our lives if there's an error
 			}
 
@@ -2193,7 +2195,7 @@ void SelectInstance(int iVM)
 
 	// Enforce minimum window size for this type of VM
 	SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
-		v.rectWinPos.bottom - v.rectWinPos.top, 0);
+		v.rectWinPos.bottom - v.rectWinPos.top, v.swWindowState);
 
     return;
 }
@@ -3329,15 +3331,20 @@ break;
 
 				// notice the change of cartridge state
 				FUnInitVM(v.iVM);
-				BOOL f = FALSE;
-				if (FInitVM(v.iVM))
-					if (ColdStart(v.iVM))
-						f = TRUE;
 
+				// If the cartridge is bad, don't kill the current VM, just go back to not using the cartridge
+				BOOL f = FInitVM(v.iVM);
 				if (!f)
-					DeleteVM(v.iVM);
+				{
+					rgvm[v.iVM].rgcart.fCartIn = FALSE;
+					rgvm[v.iVM].rgcart.szName[0] = 0;
+					f = FInitVM(v.iVM);
+				}
 
-				FixAllMenus();
+				if (f && ColdStart(v.iVM))
+					FixAllMenus();
+				else
+					DeleteVM(v.iVM);
 			}
 			break;
 
@@ -3373,8 +3380,11 @@ break;
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[0].sz, FALSE, 0))
 			{
 				rgvm[v.iVM].rgvd[0].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
+
+				// something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
 				if (!FMountDiskVM(v.iVM, 0))
-					DeleteVM(v.iVM);
+					SendMessage(vi.hWnd, WM_COMMAND, IDM_D1U, 0);
+				
 				FixAllMenus();
 			}
 			break;
@@ -3385,8 +3395,11 @@ break;
 			if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[1].sz, FALSE, 0))
 			{
 				rgvm[v.iVM].rgvd[1].dt = DISK_IMAGE; // support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
+				 
+				// something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
 				if (!FMountDiskVM(v.iVM, 1))
-					DeleteVM(v.iVM);
+					SendMessage(vi.hWnd, WM_COMMAND, IDM_D2U, 0);
+				
 				FixAllMenus();
 			}
 			break;
