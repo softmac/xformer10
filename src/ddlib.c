@@ -267,18 +267,18 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
     // All 256 grays
     
     hdc = GetDC(NULL);
-    if (1 || GetDeviceCaps(hdc, RASTERCAPS) & RC_PALETTE)
+    //if (GetDeviceCaps(hdc, RASTERCAPS) & RC_PALETTE)
     {
         int i;
-    // make a red, grn, and blu wash for our cube.
-    for (i=0; i<256; i++)
-    {
-        ape[i].peRed = abRainbow[0][i]*4;
-        ape[i].peGreen = abRainbow[1][i]*4;
-        ape[i].peBlue = abRainbow[2][i]*4;
-    }
-    if (!FAILED(dd->lpVtbl->CreatePalette(dd, DDPCAPS_8BIT, ape, &Palette, NULL)))
-        FrontBuffer->lpVtbl->SetPalette(FrontBuffer, Palette);
+		// make a red, grn, and blu wash for our cube.
+		for (i=0; i<256; i++)
+		{
+			ape[i].peRed = abRainbow[0][i]*4;
+			ape[i].peGreen = abRainbow[1][i]*4;
+			ape[i].peBlue = abRainbow[2][i]*4;
+		}
+		if (!FAILED(dd->lpVtbl->CreatePalette(dd, DDPCAPS_8BIT, ape, &Palette, NULL)))
+			FrontBuffer->lpVtbl->SetPalette(FrontBuffer, Palette);
     }
     SetCursor(NULL);                // Hide the mouse
     ReleaseDC(NULL, hdc);

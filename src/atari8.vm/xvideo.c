@@ -126,8 +126,9 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
         WORD NEAR *qw;
         
 		// no PM data in this pixel
-        if (!(b2 = pmg.grafp[i]))
-            continue;
+		b2 = pmg.grafp[i];
+		if (!b2)
+			continue;
 
         qw = pw;
         qw += (pmg.hposp[i] - ((NTSCx-X8)>>2));
@@ -166,7 +167,8 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
         {
         WORD NEAR *qw;
         
-        if (!(b2 = pmg.grafp[i]))
+		b2 = pmg.grafp[i];
+		if (!b2)
             continue;
 
         qw = pw;
@@ -227,10 +229,11 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
     // First do missile-to-player and missile-to-playfield collisions
 
     for (i = 0; i < 4; i++)
-        {
+    {
         WORD NEAR *qw;
         
-        if (!(b2 = ((pmg.grafm >> (i+i)) & 3)))
+		b2 = (pmg.grafm >> (i + i)) & 3;
+		if (!b2)
             continue;
 
         qw = (WORD NEAR *)pw;
@@ -279,7 +282,7 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
                     }
                 }
             }
-        }
+    }
 
     // mask out upper 4 bits of each collision register
 
@@ -291,7 +294,8 @@ Ldm:
     {
         WORD NEAR *qw;
         
-        if (!(b2 = ((pmg.grafm >> (i+i)) & 3)))
+		b2 = (pmg.grafm >> (i + i)) & 3;
+		if (!b2)
             continue;
 
         qw = (WORD NEAR *)pw;

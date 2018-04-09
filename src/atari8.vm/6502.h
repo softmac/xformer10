@@ -35,61 +35,46 @@ __inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
 
 __inline BYTE cpuPeekB(int iVM, ADDR addr)
 {
-    Assert((addr & 0xFFFF0000) == 0);
-
-	if (addr == 0xD20A) {	// RANDOM
-		// we've been asked for a random number. How many times would the poly counter have advanced?
-		// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
-		// !!! this assumes 30 instructions per scanline always (not true)
-		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
-		int delta = (int)(cur - random17last);
-		random17last = cur;
-		random17pos = (random17pos + delta) % 0x1ffff;
-		rgbMem[addr] = poly17[random17pos];
-	}
-
-	// This is how Bounty Bob bank selects !!! I hate slowing the system for this
-	if (bCartType == CART_BOB && addr >= 0x8ff6 && addr <= 0x8ff9)
-		BankCart(iVM, 0, addr - 0x8ff6);
-	if (bCartType == CART_BOB && addr >= 0x9ff6 && addr <= 0x9ff9)
-		BankCart(iVM, 1, addr - 0x9ff6);
+	Assert((addr & 0xFFFF0000) == 0);
 
     return rgbMem[addr];
 }
 
-__inline BOOL cpuPokeB(int iVM, ADDR addr, BYTE b)
+__inline void cpuPokeB(int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     rgbMem[addr] = (BYTE) b;
-    return TRUE;
+    return;
 }
 
 __inline WORD cpuPeekW(int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-    return *(WORD FAR *)&rgbMem[addr];
+	return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
 }
 
-__inline BOOL cpuPokeW(int iVM, ADDR addr, WORD w)
+__inline void cpuPokeW(int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-    *(WORD FAR *)&rgbMem[addr] = (WORD)w;
-    return TRUE;
+	rgbMem[addr + 0] = (w & 255);
+	rgbMem[addr + 1] = ((w >> 8) & 255);
+	return;
 }
 
-__inline BOOL cpuInit(PFNL pvmPokeB)
+__inline BOOL cpuInit(PFNB pvmPeekB, PFN pvmPokeB)
 {
-    extern PFN pfnPokeB;
+    extern PFNB pfnPeekB;
+	extern PFN pfnPokeB;
 
-	// !!! global - broken if more than Atari 8 bit uses the 6502, unless each VM knows to set this every time a VM is Execute'd
+	// !!! global - each VM needs to set this every time a VM is Execute'd
+	pfnPeekB = pvmPeekB;
 	pfnPokeB = pvmPokeB;
 
     return TRUE;
 }
-
 
 __inline BOOL cpuReset(int iVM)
 {

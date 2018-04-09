@@ -76,8 +76,11 @@
 
 typedef void(__cdecl *PFN) (int x, ...);
 typedef BOOL(__cdecl *PFNL)(int x, ...);
-typedef BYTE *         (__cdecl *PFNP)(int x, ...);
-typedef void *         (__fastcall *PHNDLR)(void *, long);
+typedef ULONG(__cdecl *PFNLL)(int x, ...);
+typedef WORD(__cdecl *PFNW)(int x, ...);
+typedef BYTE(__cdecl *PFNB)(int x, ...);
+typedef BYTE *(__cdecl *PFNP)(int x, ...);
+typedef void *(__fastcall *PHNDLR)(void *, long);
 
 #include "gemul8r.h"    // build flags
 #include "blocklib\blockdev.h"
@@ -202,16 +205,20 @@ typedef struct _vminfo
 	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
 	PFNL pfnDumpHW;         // dumps hardware state
 	PFNL pfnMon;			// A debuggin monitor - someday maybe it can only be the Disassemble code part
-	PFNL pfnReadHWByte;     // reads a byte from the VM
-	PFNL pfnReadHWWord;     // reads a word from the VM
-	PFNL pfnReadHWLong;     // reads a long from the VM
-	PFNL pfnWriteHWByte;    // writes a byte to the VM
-	PFNL pfnWriteHWWord;    // writes a word to the VM
-	PFNL pfnWriteHWLong;    // writes a long to the VM
+	
+	// these are probably unnecessary - it's between you and your CPU, not the VM manager
+	PFNB pfnReadHWByte;     // reads a byte from the VM
+	PFNW pfnReadHWWord;     // reads a word from the VM
+	PFNLL pfnReadHWLong;     // reads a long from the VM
+	PFN  pfnWriteHWByte;    // writes a byte to the VM
+	PFN  pfnWriteHWWord;    // writes a word to the VM
+	PFN  pfnWriteHWLong;    // writes a long to the VM
 	PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
 	PFNL pfnUnlockBlock;    // release memory block in VM
 	PFNP pfnMapAddress;     // convert virtual machine address to flat address
 	PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
+
+	// back to being necessary
 	PFNL pfnSaveState;      // save snapshot to disk
 	PFNL pfnLoadState;      // load snapshot from disk and resume
 } VMINFO, *PVMINFO;

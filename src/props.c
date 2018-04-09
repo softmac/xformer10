@@ -233,9 +233,11 @@ BOOL CreateAllVMs()
 
 			f = FALSE;
 			if (FInitVM(vmNew))
-				if (f = ColdStart(vmNew))
-					if (vi.hdc)
-						CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			{
+				f = ColdStart(vmNew);
+				if (f && vi.hdc)
+					CreateNewBitmap(vmNew);	// we might not have a window yet, we'll do it when we do
+			}
 			if (!f)
 				DeleteVM(vmNew);
 			else
