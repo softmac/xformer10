@@ -590,11 +590,12 @@ void InitCart(int iVM)
 		_fmemcpy(&rgbMem[0xB000], pb, 4096);
 		ramtop = 0xA000;
 	}
-	// 8K main bank is the last one
+	// 8K main bank is the last one, and init the $8000 and $9000 banks to their bank 0's
 	else if (bCartType == CART_BOB)
 	{
 		_fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-		rgbMem[0x9ffc] = 0xff;	// right cartridge present bit must float high if it is not RAM and not part of this bank
+		_fmemcpy(&rgbMem[0x8000], pb, 4096);
+		_fmemcpy(&rgbMem[0x9000], pb + 16384, 4096);
 		ramtop = 0x8000;
 	}
 	// 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
@@ -1596,18 +1597,6 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 //
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
-	// RANDOM
-	// we've been asked for a random number. How many times would the poly counter have advanced?
-	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
-	// !!! this assumes 30 instructions per scanline always (not true)
-	if (addr == 0xD20A) {
-		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
-		int delta = (int)(cur - random17last);
-		random17last = cur;
-		random17pos = (random17pos + delta) % 0x1ffff;
-		rgbMem[addr] = poly17[random17pos];
-	}
-
 	// This is how Bounty Bob bank selects
 	if (bCartType == CART_BOB)
 	{
@@ -1621,7 +1610,6 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 
 	switch ((addr >> 8) & 255)
 	{
-
 	case 0xd0:
 		addr &= 0xff1f;	// GTIA has 32 registers
 		break;
@@ -1632,13 +1620,25 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 		addr &= 0xff03;	// PIA has 4 registers
 		break;
 	case 0xd4:
-		addr &= 0xfe0f;	// ANTIC has 16 registers also shadowed to $D5xx
+		addr &= 0xff0f;	// ANTIC has 16 registers also shadowed to $D5xx
 		break;
 	case 0xd5:
 		BankCart(iVM, addr & 0xff, 0);	// reads too, right?
 		break;
 	}
-	
+
+	// RANDOM and its shadows
+	// we've been asked for a random number. How many times would the poly counter have advanced?
+	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
+	// !!! this assumes 30 instructions per scanline always (not true)
+	if (addr == 0xD20A) {
+		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
+		int delta = (int)(cur - random17last);
+		random17last = cur;
+		random17pos = (random17pos + delta) % 0x1ffff;
+		rgbMem[addr] = poly17[random17pos];
+	}
+
     return cpuPeekB(iVM, addr);
 }
 
