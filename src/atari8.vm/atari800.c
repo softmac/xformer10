@@ -212,13 +212,20 @@ BOOL TimeTravelReset(unsigned iVM)
 	return TRUE;
 }
 
-// push PC and P on the stack
-void Interrupt(int iVM)
+// push PC and P on the stack. Is this a BRK interrupt?
+//
+void Interrupt(int iVM, BOOL b)
 {
+	// the only time regB is used is to say if an IRQ was a BRK or not
+	if (!b)
+		regP &= ~0x10;
+	
 	cpuPokeB(iVM, regSP, regPC >> 8);  regSP = (regSP - 1) & 255 | 256;
 	cpuPokeB(iVM, regSP, regPC & 255); regSP = (regSP - 1) & 255 | 256;
 	cpuPokeB(iVM, regSP, regP);          regSP = (regSP - 1) & 255 | 256;
 
+	// it always reads on by the processor
+	regP |= 0x10;	// regB
 	regP |= IBIT;
 }
 
@@ -239,7 +246,7 @@ void DoVBI(int iVM)
 	// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
 	// every scan line now until it's done, then resume
 	if (NMIEN & 0x40) {
-		Interrupt(iVM);
+		Interrupt(iVM, FALSE);
 		regPC = cpuPeekW(iVM, 0xFFFA);
 	}
 
@@ -510,14 +517,14 @@ BOOL ReadCart(int iVM)
 		bCartType = CART_ATARIMAX1;
 	}
 	
-	// 1M and last bank is the main one (1st bank might be too) - ATARIMAX127
+	// 1M and first bank is the main one - ATARIMAX127
 	else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + cb - 4) == 0 &&
-		((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 5) < 0xC0))))
+		((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
 	{
 		bCartType = CART_ATARIMAX8;
 	}
 
-	// make sure the last bank is a valid ATARI 8-bit cartridge
+	// make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
 	else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 && 
 		(((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
 	{
@@ -1439,6 +1446,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// Allowing 30 instructions on ANTIC blank lines really helped app compat
 			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
 			// Using 21 and 30, Gem took 120 (on) and 96 (off).
+			// !!! BD - Beef Drop needs 28 in mode 4 in order not to have re-entrant DLIs
 			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
 			wLeftMax = wLeft;	// remember what it started at
 			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
@@ -1475,7 +1483,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			{
 				if (IRQST != 255)
 				{
-					Interrupt(iVM);
+					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFE);
 					//ODS("IRQ TIME!\n");
 				}
@@ -1692,6 +1700,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 #if 0
     printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
 #endif
+
+	// only the monitor uses this, but it seems a safe idea to spend the time to test this
+	if (addr < ramtop)
+	{
+		rgbMem[addr] = b;
+		return TRUE;
+	}
 
 	// This is how Bounty Bob bank selects
 	if (bCartType == CART_BOB)

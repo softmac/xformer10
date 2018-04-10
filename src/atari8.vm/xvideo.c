@@ -499,8 +499,18 @@ BOOL ProcessScanLine(int iVM)
 		NMIST = (NMIST & 0x20) | 0x9F;
 		if (NMIEN & 0x80)	// DLI enabled
 		{
-			Interrupt(iVM);
-			regPC = cpuPeekW(iVM, 0xFFFA);
+			// don't allow re-entrancy. the RTI will trigger the next one (BD - Beef Drop)
+			// !!! Things that can go wrong:
+			// 1. an IRQ interrupts this DLI
+			// 2. the DLI enable bit is cleared before the 2nd one runs
+			if (!fInsideDLI[iVM])
+			{
+				Interrupt(iVM, FALSE);
+				regPC = cpuPeekW(iVM, 0xFFFA);
+				fInsideDLI[iVM] = TRUE;
+			}
+			else
+				fNeedDLI[iVM] = TRUE;
 		}
     }
 
