@@ -46,9 +46,6 @@ BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
 int iSwapCart[MAX_VM];		// which bank is currently swapped in
 int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
 
-BOOL fInsideDLI[MAX_VM];	// don't allow re-entrancy
-BOOL fNeedDLI[MAX_VM];
-
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
 // RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)
@@ -224,8 +221,8 @@ typedef struct
     WORD m_wFrame, m_wScan;
     WORD m_wLeft;
 	WORD m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
-	BYTE m_WSYNC_Seen;
-	BYTE m_WSYNC_Waited;
+	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only 6 opcodes?
+	BYTE m_padw2;
 
     WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
     WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;

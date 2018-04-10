@@ -1460,19 +1460,18 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
-			else if (wScan <= STARTSCAN + Y8) {	// after all the valid lines have been drawn
+			else if (wScan < STARTSCAN + Y8) {	// the visible part of the screen
 				// business as usual
 			}
 
-			// !!! the app may need to see VCOUNT reach 124 (MULE) which won't happen if we trigger the VBI at the start of 248,
-			// se we do it at 249 and hope for the best
-			else if (wScan == STARTSCAN + Y8 + 1)
+			// VBI happens at scan line 248
+			else if (wScan == STARTSCAN + Y8)
 			{
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
+				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA will be off during the VBI
 				DoVBI(iVM);
 			}
 
-			else if (wScan > STARTSCAN + Y8 + 1)
+			else if (wScan > STARTSCAN + Y8)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
@@ -1489,21 +1488,19 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				}
 			}
 
-			ProcessScanLine(iVM);	// do the DLI, and fill the bitmap
-		  
-			// VCOUNT is 1/2 the scanline we are on. A DLI needs to see that number (Desert Storm) when it is first triggered.
-			// If they do a WSYNC, then we advance VCOUNT to make it look like we waited, but we let them continue.
-			// If we get a 2nd WSYNC, we actually wait, and since we waited, we start the next set of instructions with
-			// VCOUNT already advanced.
-			// This doesn't let regular code that hasn't been writing to WSYNC see VCOUNT reach 124 before the VBI
-			// is immediately triggered at the start of 248, so we delay the VBI until 249.
-			VCOUNT = (BYTE)((wScan + (WSYNC_Waited ? 1 : 0)) >> 1);
+			ProcessScanLine(iVM);	// do the DLI, and fill the bitmap for this scan line
 
-			WSYNC_Seen = FALSE;
+			// this scan line is only going to be from after the WSYNC to the end, see WSYNC - THEORY OF OPERATION
+			if (WSYNC_Waited)
+			{
+				wLeft = 6;
+				WSYNC_Waited = FALSE;
+			}
 
 		} // if wLeft == 0
 
-		// Normally, executes about one horizontal scan line's worth of 6502 code
+		// Normally, executes about one horizontal scan line's worth of 6502 code, after the scan line is drawn
+		// because apps are not supposed to try and affect their own scan line in a DLI.
 		Go6502(iVM);
 
 		// hit a breakpoint
@@ -1523,9 +1520,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		if (wLeft == 0)
 		{
 			wScan = wScan + 1;
-
-			if (!WSYNC_Seen)
-				WSYNC_Waited = FALSE;
 
 			// I'm worried about perf if I do this every instruction, so cheat for now and check only every scan line
 			// if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
@@ -1647,7 +1641,16 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 		rgbMem[addr] = poly17[random17pos];
 	}
 
-    return cpuPeekB(iVM, addr);
+	// VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 110 VCOUNT increments
+	else if (addr == 0xD40B)
+	{
+		if (wLeft < 7)
+			return (BYTE)((wScan + 1) >> 1);
+		else
+			return (BYTE)(wScan >> 1);
+	}
+    
+	return cpuPeekB(iVM, addr);
 }
 
 // currently not used
@@ -1962,21 +1965,37 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		if (addr == 2 || addr == 3)
 			rgbMem[0xd400 + addr] = b;
 
-        if (addr == 10)
-        {
-            // WSYNC - our code executes after the scan line is drawn, so ignore the first one, it's already safe to draw
-			// if we see a second one on this same scan line, or we saw one last time that we actually waited on,
-			// we're in a kernel, and we can't ignore it
-			
-			// !!! Demos2/Swan needs to wait the first time, which makes no sense
-			if (WSYNC_Seen || WSYNC_Waited)
+		if (addr == 10)
+		{
+			// WSYNC - THEORY OF OPERATION - see also code to read VCOUNT
+			//
+			// We run a scan line's worth of 6502 code at once.. I consider it to be from horiz clock 10 to
+			// the next scan line's clock 10. That is where ANTIC triggers a DLI, so it makes sense to exit and let
+			// ANTIC draw the next scan line and trigger a DLI at that point.
+			//
+			// A DLI is not supposed to attempt to change its own scan line, since it's current partly drawn.
+			// Hopefully they won't because I don't support it... ProcessScanLine() has already drawn this scan line.
+			//
+			// A call to WSYNC halts until about clock 105, where only 20 cycles (~6 instructions) will have time to run before
+			// the next line's clock 10. At an average of 4 cyc/instr, that would be 5 opcodes, but partial opcodes are allowed
+			// to complete and short opcodes are usually used (PHA, TXA, etc) so in practice, 6 get to execute.
+			// A call to WSYNC with fewer (not less) than 6 instructions has already missed that scan lines' WSYNC,
+			// so we need to stop executing, and start up the next scan line with only 6 instructions allowed.
+			// 
+			// VCOUNT is updated just after WSYNC is released. !!! I assume nobody will read it so quickly that it won't have updated!
+			// The code to read VCOUNT reports one higher if the read comes with < 6 instructions left.
+			//
+			// Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
+			// its last 6 opcodes, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
+
+			if (wLeft >= 7) // we're about to decrement, so this means 6 or more instructions remain
+				wLeft = 7;
+			else
 			{
-				wLeft = 1;
-				WSYNC_Waited = TRUE;
+				wLeft = 1;				// stop right now and wait till next line's WSYNC
+				WSYNC_Waited = TRUE;	// next scan line only gets 6 opcodes
 			}
-			WSYNC_Seen = TRUE;
-			VCOUNT = (BYTE)((wScan + 1) >> 1);
-        }
+		}
         else if (addr == 15)
         {
             // NMIRES - reset NMI status
