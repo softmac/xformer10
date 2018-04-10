@@ -503,14 +503,16 @@ BOOL ProcessScanLine(int iVM)
 			// !!! Things that can go wrong:
 			// 1. an IRQ interrupts this DLI
 			// 2. the DLI enable bit is cleared before the 2nd one runs
-			if (!fInsideDLI[iVM])
+			// Although this fixes Beef Drop, it breaks Ball Blaster, Bounty Bob, Decathalon and Pitfall 2.
+			// I'm thinking of another way to fix Beef Drop
+			if (1 || !fInsideDLI[iVM])
 			{
 				Interrupt(iVM, FALSE);
 				regPC = cpuPeekW(iVM, 0xFFFA);
 				fInsideDLI[iVM] = TRUE;
 			}
 			else
-				fNeedDLI[iVM] = TRUE;
+				fNeedDLI[iVM]++;
 		}
     }
 
