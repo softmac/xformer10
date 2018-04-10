@@ -46,6 +46,9 @@ BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
 int iSwapCart[MAX_VM];		// which bank is currently swapped in
 int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
 
+BOOL fInsideDLI[MAX_VM];	// don't allow re-entrancy
+BOOL fNeedDLI[MAX_VM];
+
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
 // RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)
@@ -642,7 +645,7 @@ __inline BYTE *_pbshift(int iVM)
 //
 
 void __cdecl Go6502(int);
-void Interrupt(int);
+void Interrupt(int, BOOL);
 void CheckKey(int);
 void UpdatePorts(int);
 void SIOV(int);

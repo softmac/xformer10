@@ -544,10 +544,10 @@ void CchShowRegs(int iVM)
     printf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X P:%02X ", 
         regPC, regA, regX, regY, regSP, regP);
 
-    printf("%c%c_%c%c%c%c%c  ",
+    printf("%c%c__%c%c%c%c  ",
         (regP & NBIT) ? 'N' : '.',
         (regP & VBIT) ? 'V' : '.',
-        (regP & BBIT) ? 'B' : '.',
+        //(regP & BBIT) ? 'B' : '.',
         (regP & DBIT) ? 'D' : '.',
         (regP & IBIT) ? 'I' : '.',
         (regP & ZBIT) ? 'Z' : '.',

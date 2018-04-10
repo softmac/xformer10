@@ -776,6 +776,12 @@ WORD HELPER(PopWord)
 
 HANDLER(op00)
 {
+	if (!(regP & IBIT))
+	{
+		PackP(iVM);	// we'll be pushing it
+		Interrupt(iVM, TRUE);	// yes, this is a BRK IRQ
+		regPC = cpuPeekW(iVM, 0xFFFE);
+	}
     HANDLER_END_FLOW();
 }
 
@@ -1029,6 +1035,7 @@ HANDLER(op26)
 HANDLER(op28)
 {
     regP = PopByte(iVM);
+	regP |= 0x10;	// force srB
     UnpackP(iVM);
     HANDLER_END();
 }
@@ -1166,9 +1173,20 @@ HANDLER(op3E)
 HANDLER(op40)
 {
     regP = PopByte(iVM);
-    UnpackP(iVM);
-    srB = 0;
+	regP |= 0x10;	// force srB
+	UnpackP(iVM);
     regPC = PopWord(iVM);
+
+	// we have a pending DLI that we prevented from re-entering
+	if (fNeedDLI[iVM])
+	{
+		Interrupt(iVM, FALSE);
+		regPC = cpuPeekW(iVM, 0xFFFA);
+		fNeedDLI[iVM] = FALSE;
+	}
+	else
+		fInsideDLI[iVM] = FALSE;
+
     HANDLER_END_FLOW();
 }
 
