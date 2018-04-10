@@ -1175,14 +1175,15 @@ HANDLER(op40)
     regP = PopByte(iVM);
 	regP |= 0x10;	// force srB
 	UnpackP(iVM);
-    regPC = PopWord(iVM);
+	//srB = 0;
+	regPC = PopWord(iVM);
 
 	// we have a pending DLI that we prevented from re-entering
 	if (fNeedDLI[iVM])
 	{
 		Interrupt(iVM, FALSE);
 		regPC = cpuPeekW(iVM, 0xFFFA);
-		fNeedDLI[iVM] = FALSE;
+		fNeedDLI[iVM]--;
 	}
 	else
 		fInsideDLI[iVM] = FALSE;
