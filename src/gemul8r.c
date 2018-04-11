@@ -1874,7 +1874,6 @@ Ltryagain:
 
     SetWindowPos(vi.hWnd, HWND_NOTOPMOST, v.rectWinPos.left, v.rectWinPos.top, 0, 0,
         SWP_NOACTIVATE | SWP_NOSIZE);
-#endif
 
 //        printf("CreateNewBitmap setting windows position to x = %d, y = %d, r = %d, b = %d\n",
 //             v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
@@ -1897,6 +1896,7 @@ Ltryagain:
                 SWP_NOACTIVATE | SWP_NOSIZE);
 #endif
         }
+#endif
 
     if (vi.fInDirectXMode)
     {
@@ -2194,10 +2194,10 @@ void SelectInstance(int iVM)
 		FixAllMenus();
 
 	// Enforce minimum window size for this type of VM
-	SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
-		v.rectWinPos.bottom - v.rectWinPos.top, v.swWindowState);
-
-    return;
+	if (v.swWindowState == SW_SHOWNORMAL)
+		SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
+				v.rectWinPos.bottom - v.rectWinPos.top, 0);
+	return;
 }
 
 //
@@ -3792,7 +3792,7 @@ break;
 
 		//if (vi.fExecuting)
 		{
-			if (!v.fTiling)
+			if (!v.fTiling && v.iVM >= 0)
 			{
 				// tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
 				if (FWinMsgVM(v.iVM, hWnd, message, uParam, lParam))

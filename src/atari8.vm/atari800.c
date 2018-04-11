@@ -1489,7 +1489,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// this scan line is only going to be from after the WSYNC to the end, see WSYNC - THEORY OF OPERATION
 			if (WSYNC_Waited)
 			{
-				wLeft = 6;
+				wLeft = WSYNC_Left;
 				WSYNC_Waited = FALSE;
 			}
 
@@ -1621,7 +1621,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 		addr &= 0xff0f;	// ANTIC has 16 registers also shadowed to $D5xx
 		break;
 	case 0xd5:
-		BankCart(iVM, addr & 0xff, 0);	// reads too, right?
+		BankCart(iVM, addr & 0xff, 0);	// cartridge banking
 		break;
 	}
 
@@ -1640,7 +1640,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 110 VCOUNT increments
 	else if (addr == 0xD40B)
 	{
-		if (wLeft < 7)
+		if (wLeft < WSYNC_Left + 1)		// it's about to decrement
 			return (BYTE)((wScan + 1) >> 1);
 		else
 			return (BYTE)(wScan >> 1);
@@ -1975,6 +1975,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// A call to WSYNC halts until about clock 105, where only 20 cycles (~6 instructions) will have time to run before
 			// the next line's clock 10. At an average of 4 cyc/instr, that would be 5 opcodes, but partial opcodes are allowed
 			// to complete and short opcodes are usually used (PHA, TXA, etc) so in practice, 6 get to execute.
+			// Always 6 - it doesn't matter if DMA is on or off, it's done fetching that line and DMA won't be used anymore.
 			// A call to WSYNC with fewer (not less) than 6 instructions has already missed that scan lines' WSYNC,
 			// so we need to stop executing, and start up the next scan line with only 6 instructions allowed.
 			// 
@@ -1984,8 +1985,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
 			// its last 6 opcodes, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
-			if (wLeft >= 7) // we're about to decrement, so this means 6 or more instructions remain
-				wLeft = 7;
+			if (wLeft >= WSYNC_Left + 1) // we're about to decrement, so this means only WSYNC_Wait instructions remain
+				wLeft = WSYNC_Left + 1;
 			else
 			{
 				wLeft = 1;				// stop right now and wait till next line's WSYNC

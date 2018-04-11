@@ -24,6 +24,7 @@
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
 #define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
+#define WSYNC_Left 6				// how many instructions can execute after WSYNC before next DLI/VBI
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
