@@ -173,6 +173,9 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
 		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
 		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
+		// no collisions to playfield in GTIA
+		BOOL fGTIA = sl.modelo > 15;
+
         WORD NEAR *qw;
         
 		b2 = pmg.grafp[i];
@@ -191,21 +194,21 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
             if (b2 & 0x80)
                 {
                 PXPL[i] |= (*qw >> 12);
-				PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+				PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
 				// double sized player, check the next bit too
                 if (cw > 1)
                     {
                     PXPL[i] |= (*qw >> 12);
-                    PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+                    PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
 					// quad sized player, check the next 2 bits too
                     if (cw > 2)
                         {
                         PXPL[i] |= (*qw >> 12);
-						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : *qw++;
+						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : (fGTIA ? 0 : *qw++);
 						PXPL[i] |= (*qw >> 12);
-						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : *qw++;
+						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : (fGTIA ? 0 : *qw++);
 					}
                     }
                 }
@@ -245,6 +248,10 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
 		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
 		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 		
+		// no collisions to playfield in GTIA
+		// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
+		BOOL fGTIA = sl.modelo > 15;
+
 		WORD NEAR *qw;
         
 		b2 = (pmg.grafm >> (i + i)) & 3;
@@ -257,46 +264,46 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
         cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
 
         if (b2 & 2)
-            {
+        {
             MXPL[i] |= (*qw >> 12);
-			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
             if (cw > 1)
-                {
+            {
                 MXPL[i] |= (*qw >> 12);
-				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
                 if (cw > 2)
-                    {
+                {
                     MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 					MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 				}
-                }
             }
+        }
         else
             qw += cw;
 
         if (b2 & 1)
-            {
+        {
             MXPL[i] |= (*qw >> 12);
-			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
             if (cw > 1)
-                {
+            {
                 MXPL[i] |= (*qw >> 12);
-				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 
                 if (cw > 2)
-                    {
+                {
                     MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 					MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
 				}
-                }
             }
+        }
     }
 
     // mask out upper 4 bits of each collision register
@@ -2047,7 +2054,7 @@ BOOL ProcessScanLine(int iVM)
 			BYTE SF3 = PF3 & ~(P23 & PRI03) & ~(P01 & ~PRI2);
 			BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
 			
-			// !!! 5th PLAYER MODE BROKEN - it does not automatically go overtop all GR. 9-11 playfield (and probably other bugs)
+			// !!! 5th PLAYER MODE PRIORITY and OVERLAP COLOUR is not correct, even in GTIA
 
 			// GR. 9 - low nibble is the important LUM value. Now add back to chroma value
 			if (sl.modelo == 16)
@@ -2057,6 +2064,7 @@ BOOL ProcessScanLine(int iVM)
 					b = (b & 0x0f) | sl.colbk;
 
 			// GR. 10 - low nibble is an index into the colour to use
+			// !!! GR.10 does not necessarily have players overtop of playfields like I am doing
 			else if (sl.modelo == 17)
 				if (P01 || P23)
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
