@@ -115,56 +115,61 @@ void ShowCountDownLine(int iVM)
 
 void DrawPlayers(int iVM, WORD NEAR *pw)
 {
-    int i;
-    int j;
-    int cw;
-    BYTE b2;
-    WORD w;
+	int i;
+	int j;
+	int cw;
+	BYTE b2;
+	WORD w;
 
-    for (i = 0; i < 4; i++)
-    {
-        WORD NEAR *qw;
-        
+	// first, fill the bit array with all the players located at each spot
+	for (i = 0; i < 4; i++)
+	{
+		WORD NEAR *qw;
+
 		// no PM data in this pixel
 		b2 = pmg.grafp[i];
 		if (!b2)
 			continue;
 
-        qw = pw;
-        qw += (pmg.hposp[i] - ((NTSCx-X8)>>2));
+		qw = pw;
+		qw += (pmg.hposp[i] - ((NTSCx - X8) >> 2));
 
-        cw = mpsizecw[ pmg.sizep[i] & 3];
+		cw = mpsizecw[pmg.sizep[i] & 3];
 
-        w  = mppmbw[i];
+		w = mppmbw[i];
 
-        for (j = 0; j < 8; j++)
-            {
-            if (b2 & 0x80)
-                {
-                qw[0] |= w;
-                if (cw > 1)
-                    {
-                    qw[1] |= w;
-                    if (cw > 2)
-                        {
-                        qw[2] |= w;
-                        qw[3] |= w;
-                        }
-                    }
-                }
+		for (j = 0; j < 8; j++)
+		{
+			if (b2 & 0x80)
+			{
+				qw[0] |= w;
+				if (cw > 1)
+				{
+					qw[1] |= w;
+					if (cw > 2)
+					{
+						qw[2] |= w;
+						qw[3] |= w;
+					}
+				}
+			}
 
-            qw += cw;
-            b2 <<= 1;
-            }
-    }
+			qw += cw;
+			b2 <<= 1;
+		}
+	}
 
-    // now do player-to-player and player-to-playfield collisions
+	// now do player-to-player and player-to-playfield collisions
 
-    if (pmg.fHitclr)
-        return;
+	if (pmg.fHitclr)
+		return;
 
-    for (i = 0; i < 4; i++)
-        {
+	// loop through all players
+	for (i = 0; i < 4; i++)
+	{
+		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
+
         WORD NEAR *qw;
         
 		b2 = pmg.grafp[i];
@@ -176,25 +181,29 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
 
         cw = mpsizecw[ pmg.sizep[i] & 3];
 
+		// loop through all bits of a player, which take up 2 high res playfield bits
         for (j = 0; j < 8; j++)
         {
+			// Bit 8-j has this player present... is another player or a PF colour present too?
             if (b2 & 0x80)
                 {
                 PXPL[i] |= (*qw >> 12);
-                PXPF[i] |= *qw++;
+				PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
+				// double sized player, check the next bit too
                 if (cw > 1)
                     {
                     PXPL[i] |= (*qw >> 12);
-                    PXPF[i] |= *qw++;
+                    PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
+					// quad sized player, check the next 2 bits too
                     if (cw > 2)
                         {
                         PXPL[i] |= (*qw >> 12);
-                        PXPF[i] |= *qw++;
-                        PXPL[i] |= (*qw >> 12);
-                        PXPF[i] |= *qw++;
-                        }
+						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : *qw++;
+						PXPL[i] |= (*qw >> 12);
+						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : *qw++;
+					}
                     }
                 }
             else
@@ -230,7 +239,10 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
 
     for (i = 0; i < 4; i++)
     {
-        WORD NEAR *qw;
+		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
+		
+		WORD NEAR *qw;
         
 		b2 = (pmg.grafm >> (i + i)) & 3;
 		if (!b2)
@@ -244,20 +256,20 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
         if (b2 & 2)
             {
             MXPL[i] |= (*qw >> 12);
-            MXPF[i] |= *qw++;
+			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
             if (cw > 1)
                 {
                 MXPL[i] |= (*qw >> 12);
-                MXPF[i] |= *qw++;
+				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
                 if (cw > 2)
                     {
                     MXPL[i] |= (*qw >> 12);
-                    MXPF[i] |= *qw++;
-                    MXPL[i] |= (*qw >> 12);
-                    MXPF[i] |= *qw++;
-                    }
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPL[i] |= (*qw >> 12);
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+				}
                 }
             }
         else
@@ -266,20 +278,20 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
         if (b2 & 1)
             {
             MXPL[i] |= (*qw >> 12);
-            MXPF[i] |= *qw++;
+			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
             if (cw > 1)
                 {
                 MXPL[i] |= (*qw >> 12);
-                MXPF[i] |= *qw++;
+				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
 
                 if (cw > 2)
                     {
                     MXPL[i] |= (*qw >> 12);
-                    MXPF[i] |= *qw++;
-                    MXPL[i] |= (*qw >> 12);
-                    MXPF[i] |= *qw;
-                    }
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+					MXPL[i] |= (*qw >> 12);
+					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : *qw++;
+				}
                 }
             }
     }
@@ -392,7 +404,7 @@ BOOL ProcessScanLine(int iVM)
 	// !!! used to be static! Not even used, but I'm scared to remove it
     WORD rgfChanged = 0;
 
-	// don't do anything in the invisible retrace sections
+	// don't do anything in the invisible top and bottom sections
 	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
 		return 0;
 
@@ -448,6 +460,9 @@ BOOL ProcessScanLine(int iVM)
 
             scans = 0;
             fWait = (sl.modehi & 4);	// JVB or JMP?
+			
+			if (fWait)
+				fWait |= (sl.modehi & 8);	// a DLI on a JVB keeps firing every line
 
             {
             WORD w;
@@ -486,7 +501,8 @@ BOOL ProcessScanLine(int iVM)
     }
 
     // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
-    if ((sl.modehi & 8) && (iscan == scans))
+	// a JVB instruction with DLI set keeps firing them all the way to the VBI
+    if ((sl.modehi & 8) && (iscan == scans) || ((fWait & 0x08) && wScan ))
     {
 #ifndef NDEBUG
         extern BOOL  fDumpHW;
@@ -891,8 +907,12 @@ BOOL ProcessScanLine(int iVM)
 			
 			vpix = vpixO;
 			
-			if (iscan == 8)
-				vpix = vpix;
+			// the artifacting colours
+			BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+			BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
+
+			// just for fun, don't interlace in B&W
+			BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV);
 
             col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
             col2 = sl.colpf2;
@@ -900,10 +920,8 @@ BOOL ProcessScanLine(int iVM)
 			if ((sl.chactl & 4) && sl.modelo == 2)	// vertical reflect bit
 				vpix = 7 - (vpix & 7);
 			
-            for (i = 0 ; i < cbDisp; i++, qch += 8)
-                {
-                BYTE rgch[8];
-
+            for (i = 0 ; i < cbDisp; i++)
+            {
                 if (((b1 = sl.rgb[i]) == psl->rgb[i]) && !rgfChanged)
                     continue;
 
@@ -1032,48 +1050,83 @@ BOOL ProcessScanLine(int iVM)
 
 //    col2 ^= cpuPeekB(20);
 
-				// I think this next page of code that could be a single line was Darek's attempt to be fast in the common GR.0 case
+                // See mode 15 for artifacting theory of operation
 
-                if (b2 == 0)
-                    {
-                    memset(qch,col2,8);
-                    continue;
-                    }
+				// do a pair of pixels, even then odd
+				for (j = 0; j < 4; j++)
+				{
+					// EVEN
 
-                if (b2 == 255)
-                    {
-                    memset(qch,col1,8);
-                    continue;
-                    }
+					switch (b2 & 0x80)
+					{
+					case 0x00:
+						*qch++ = col2;
+						break;
 
-                memset(rgch,col2,8);
+					case 0x80:
+						// don't walk off the beginning of the array
+						BYTE last = col2, last2 = col2;
 
-                if (b2 & 0x80)
-                    rgch[0] = col1;
+						if (i != 0 || j != 0)
+						{
+							last = *(qch - 1);
+							last2 = *(qch - 2);
+						}
 
-                if (b2 & 0x40)
-                    rgch[1] = col1;
+						if (last == col2)
+						{
+							*qch++ = fArtifacting ? red : col1;
+							if (last2 == red)
+								*(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
+						}
+						else
+						{
+							*qch++ = col1;
+							if (last == green)
+							{
+								*(qch - 2) = col1; // yellow doesn't seem to work
+								//*(qch - 1) = yellow;
+							}
+						}
+					}
+					
+					// ODD
 
-                if (b2 & 0x20)
-                    rgch[2] = col1;
+					switch (b2 & 0x40)
+					{
+					case 0x00:
+						*qch++ = col2;
+						break;
 
-                if (b2 & 0x10)
-                    rgch[3] = col1;
+					case 0x40:
+						// don't walk off the beginning of the array later on
+						BYTE last, last2 = col2;
 
-                if (b2 & 0x08)
-                    rgch[4] = col1;
+						last = *(qch - 1);
+						if (i == 0 && j == 0)
+							last2 = col2;
+						else
+							last2 = *(qch - 2);
 
-                if (b2 & 0x04)
-                    rgch[5] = col1;
+						if (last == col2)
+						{
+							*qch++ = fArtifacting ? green : col1;
+							if (last2 == green)
+								*(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
+						}
+						else
+						{
+							*qch++ = col1;
+							if (last == red)
+								*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
+						}
+					}
 
-                if (b2 & 0x02)
-                    rgch[6] = col1;
+					b2 <<= 2;
+				}
 
-                if (b2 & 0x01)
-                    rgch[7] = col1;
-
-                _fmemcpy(qch,rgch,8);
-                }
+//                _fmemcpy(qch,rgch,8);
+            }
             break;
 
         case 5:
@@ -1557,10 +1610,11 @@ BOOL ProcessScanLine(int iVM)
             col2 = sl.colpf2;
 
 			// the artifacting colours
-			BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+			red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+			yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
 			// just for fun, don't interlace in B&W
-			BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV);
+			fArtifacting = (rgvm[iVM].bfMon == monColrTV);
             
 			for (i = 0 ; i < cbDisp; i++)
             {				
@@ -1588,7 +1642,7 @@ BOOL ProcessScanLine(int iVM)
 
 				// THEORY OF OPERATION - INTERLACING
 				// - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
-				// - 3 pixels in a row all show white
+				// - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
 				// - a background pixel between white and (red/green) seems to stay background colour
 
 				// copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
@@ -1634,11 +1688,14 @@ BOOL ProcessScanLine(int iVM)
 						{
 							*qch++ = col1;
 							if (last == green)
-								*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
+							{
+								*(qch - 2) = col1; // yellow doesn't seem to work
+								//*(qch - 1) = yellow;
+							}
 						}
 						break;
 					}
-					
+
 					// ODD
 					
 					// don't walk off the beginning of the array later on
