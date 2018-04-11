@@ -688,7 +688,7 @@ void BankCart(int iVM, int iBank, int value)
 		}
 	}
 
-	// Address is bank #, 8K that goes into $A000. Bank 16 is RAM
+	// Address is bank #, 8K that goes into $A000. Bank top+1 is RAM
 	else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
 	{
 		int mask;
@@ -715,16 +715,19 @@ void BankCart(int iVM, int iBank, int value)
 			if (ramtop == 0xa000 && iBank != iSwapCart[iVM])
 			{
 				_fmemcpy(swap, &rgbMem[0xa000], 8192);
-				_fmemcpy(&rgbMem[0xA000], pb + iSwapCart[iVM] * 8192, 8192);
+				_fmemcpy(&rgbMem[0xa000], pb + iSwapCart[iVM] * 8192, 8192);
 				_fmemcpy(pb + iSwapCart[iVM] * 8192, swap, 8192);
 			}
 			// now exchange with current bank
-			_fmemcpy(swap, &rgbMem[0xa000], 8192);
-			_fmemcpy(&rgbMem[0xA000], pb + iBank * 8192, 8192);
-			_fmemcpy(pb + iBank * 8192, swap, 8192);
+			if (ramtop == 0xc000 || iBank != iSwapCart[iVM])
+			{
+				_fmemcpy(swap, &rgbMem[0xa000], 8192);
+				_fmemcpy(&rgbMem[0xa000], pb + iBank * 8192, 8192);
+				_fmemcpy(pb + iBank * 8192, swap, 8192);
 
-			iSwapCart[iVM] = iBank;	// what bank is in there now
-			ramtop = 0xa000;
+				iSwapCart[iVM] = iBank;	// what bank is in there now
+				ramtop = 0xa000;
+			}
 		}
 	}
 
