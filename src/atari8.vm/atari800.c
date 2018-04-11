@@ -977,6 +977,7 @@ BOOL __cdecl UnInstallAtari(int iVM)
 	TimeTravelFree(iVM);
 
 	free(vrgcandy[iVM]);
+	vrgcandy[iVM] = NULL;
 
 	return TRUE;
 }
