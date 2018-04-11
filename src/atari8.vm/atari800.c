@@ -1437,22 +1437,24 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
 				CONSOL |= 4;
 
-			// Reinitialize clock cycle counter - number of instructions to run per call to Go6502 (one scanline or so)
-			// 21 should be right for Gr.0 but for some reason 18 is?
-			// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-			// !!! DMA cycle stealing is more complex than this! ANTIC could report how many cycles it stole, since it goes first,
-			// and then Go6502 could cycle count how many are left for it to do (it would not be precise, it would have to end
-			// its current instruction).
-			// Allowing 30 instructions on ANTIC blank lines really helped app compat
-			// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off).
-			// Using 21 and 30, Gem took 120 (on) and 96 (off).
-			// !!! BD - Beef Drop needs 28 in mode 4 in order not to have re-entrant DLIs
-			wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
-			wLeftMax = wLeft;	// remember what it started at
-			//wLeft *= clockMult;	// any speed up will happen after a frame by sleeping less
+			// IRQ's, like key presses or POKEY timers. VBI and DLIST interrupts are NMI's.
+			// !!! Only scan line granularity.
+			if (!(regP & IBIT))
+			{
+				if (IRQST != 255)
+				{
+					Interrupt(iVM, FALSE);
+					regPC = cpuPeekW(iVM, 0xFFFE);
+					//ODS("IRQ TIME!\n");
+				}
+			}
+
+			// Fill the bitmap for this scan line. Possibly trigger a DLI, which will come before the IRQ, above.
+			// Also determines which graphics mode this current line is
+			ProcessScanLine(iVM);
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
-			// Scan lines 8-247 are 240 visible lines
+			// Scan lines 8-247 are 240 visible lines, amount of DMA depends on the line
 			// Scan line 248 is the VBLANK, without DMA
 			// Scan lines 249-261 are the rest of the scan lines, without DMA
 
@@ -1461,7 +1463,14 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeftMax = wLeft;
 			}
 			else if (wScan < STARTSCAN + Y8) {	// the visible part of the screen
-				// business as usual
+				// ProcessScanLine, above, will set the graphics mode we are on. We can execute 30 instr/line on a blank line.
+				// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
+				// But with a character mode, ANTIC steals so many cycles it could be as few as 21.
+				// !!! DMA cycle stealing is more complex than this! Should we actually work it out for real?
+				// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off) on a real 800.
+				// Using 21 and 30, Gem took 120 (on) and 96 (off).
+				wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
+				wLeftMax = wLeft;	// remember what it started at
 			}
 
 			// VBI happens at scan line 248
@@ -1477,19 +1486,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				wLeftMax = wLeft;
 			}
 		
-			// this is, for instance, the key pressed interrupt. VBI and DLIST interrupts are NMI's.
-			if (!(regP & IBIT))
-			{
-				if (IRQST != 255)
-				{
-					Interrupt(iVM, FALSE);
-					regPC = cpuPeekW(iVM, 0xFFFE);
-					//ODS("IRQ TIME!\n");
-				}
-			}
-
-			ProcessScanLine(iVM);	// do the DLI, and fill the bitmap for this scan line
-
 			// this scan line is only going to be from after the WSYNC to the end, see WSYNC - THEORY OF OPERATION
 			if (WSYNC_Waited)
 			{
