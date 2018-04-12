@@ -482,6 +482,66 @@ void BUS1(int iVM)
 }
 
 
+// SIO Bare bones read a sector, return checksum for those rolling their own and not using SIOV
+//
+BYTE SIOReadSector(int iVM)
+{
+	WORD wDev, wDrive, wCom, wStat, wSector;
+	WORD  wBytes;
+	WORD wTimeout;
+	WORD md;
+	DRIVE *pdrive;
+	ULONG lcbSector;
+
+	wDev = 0x31;
+	wDrive = 0;
+	wCom = 0x52;
+	wStat = 0x40;
+	wTimeout = 0x1f;
+	wBytes = 128;
+	wSector = rgSIO[iVM][2] | (WORD)rgSIO[iVM][3] << 8;
+	
+	pdrive = &rgDrives[iVM][wDrive];
+
+	md = pdrive->mode;
+
+	if (md != MD_SD)
+		return 0;
+
+	if (pdrive->h == -1)
+		return 0;
+
+	int cbSIO2PCFudge = pdrive->ofs;
+
+	if (wSector < 1)            /* invalid sector # */
+		return 0;
+
+	if (wSector > pdrive->wSectorMac)   /* invalid sector # */
+		return 0;
+
+	lcbSector = 128L;
+
+	_lseek(pdrive->h, (ULONG)((wSector - 1) * lcbSector) + cbSIO2PCFudge, SEEK_SET);
+
+	if (_read(pdrive->h, sectorSIO[iVM], wBytes) < wBytes)
+		return 0;
+
+	// now do the checksum
+	WORD ck = 0;
+	for (int i = 0; i < 128; i++)
+	{
+		ck += sectorSIO[iVM][i];
+		if (ck > 0xff)
+		{
+			ck = ck & 0xff;
+			ck++;	// add carry back in after every addition
+		}
+	}
+	ck = ck & 0xff;
+	return (BYTE)ck;
+}
+
+
 // ATARI 800 serial I/O handler
 //
 void SIOV(int iVM)

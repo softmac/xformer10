@@ -1188,6 +1188,15 @@ HANDLER(op41)
     HANDLER_END();
 }
 
+// EOR (zp,X)
+
+HANDLER(op42)
+{
+	EA_zpXind(iVM);
+	EOR_com(iVM);
+	HANDLER_END();
+}
+
 // EOR zp
 
 HANDLER(op45)
@@ -1596,6 +1605,16 @@ HANDLER(op81)
     EA_zpXind(iVM);
     ST_com(iVM, regA);
     HANDLER_END();
+}
+
+// SAX (zp,x)
+
+HANDLER(op83)
+{
+
+	EA_zpXind(iVM);
+	ST_com(iVM, regA & regX);
+	HANDLER_END();
 }
 
 // STY zp
@@ -2480,7 +2499,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op40,
     op41,
-    unused,
+    op42,
     unused,
     unused,
     op45,
@@ -2545,7 +2564,7 @@ PFNOP jump_tab_RO[256] =
     op80,
     op81,
     unused,
-    unused,
+    op83,
     op84,
     op85,
     op86,
