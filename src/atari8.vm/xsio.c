@@ -768,7 +768,7 @@ lNAK:
 
             _lseek(pdrive->h,(ULONG)((wSector-1) * lcbSector) + cbSIO2PCFudge,SEEK_SET);
 
-            if ((wCom == 'R') && (wStat == 0x40))
+            if ((wCom == 'R'))	// wStat is only checked for cassette I/O not disk I/O, breaks apps // && (wStat == 0x40))
                 {
 #if 0
                 printf("Read: sector = %d  wBuff = $%4x  wBytes = %d  lcbSector = %ld  md = %d\n",
@@ -842,8 +842,8 @@ lNAK:
                 }
             else if ((wCom == 'W') || (wCom == 'P'))
                 {
-                if (wStat != 0x80)
-                    goto lNAK;
+                //if (wStat != 0x80)	// only the cassette handler checks this, not disk I/O, this would break apps
+                //    goto lNAK;
                 if (pdrive->fWP)
                     {
                     wRetStat = SIO_DEVDONE;
