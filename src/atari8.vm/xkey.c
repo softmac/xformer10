@@ -711,7 +711,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 	// MAME uses Left control for joystick fire, but that generates keystrokes with the arrows and some games (archon) pause.
 	// We can't use ALT because that works the menus, we can't use shift as that activates sticky keys.
 	// If your game pauses, use the RIGHT control key, we won't pass that to ATARI (you won't be able to move the arrows with it)
-	// (Altirra makes you toggle a menu item to enable joystick or not, but that's annoying to)
+	// (Altirra makes you toggle a menu item to enable joystick or not, but that's annoying too)
 	case 0x1D: // left control
 	case 0x11D: // right control
 		if (fDown)

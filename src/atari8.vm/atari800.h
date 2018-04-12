@@ -47,6 +47,17 @@ BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
 int iSwapCart[MAX_VM];		// which bank is currently swapped in
 int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
 
+// bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
+
+BYTE rgSIO[MAX_VM][5];		// holds the SIO command frame
+int cSEROUT[MAX_VM];		// how many bytes we've gotten so far of the 5
+BOOL fSERIN[MAX_VM];		// we're executing a disk read command
+BYTE bSERIN[MAX_VM];		// byte to return in SERIN
+BYTE sectorSIO[MAX_VM][128];// disk sector
+BYTE isectorPos[MAX_VM];	// where in the buffer are we?
+BYTE checksum[MAX_VM];		// buffer checksum
+BOOL fWant8[MAX_VM];		// we'd like to fire an IRQ8 but it's not enabled yet
+
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
 // RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)
@@ -223,7 +234,7 @@ typedef struct
     WORD m_wLeft;
 	WORD m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
 	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only 6 opcodes?
-	BYTE m_padw2;
+	BYTE m_padW;
 
     WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
     WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;
@@ -647,6 +658,7 @@ void Interrupt(int, BOOL);
 void CheckKey(int);
 void UpdatePorts(int);
 void SIOV(int);
+BYTE SIOReadSector(int);
 void DeleteDrive(int, int);
 BOOL AddDrive(int, int, BYTE *);
 BOOL ProcessScanLine(int);

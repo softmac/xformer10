@@ -1155,6 +1155,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	clockMult = 1;	// per instance speed-up
 	wScan = 0;	// start at top of screen again
 	wFrame = 0;
+	
+	// SIO init
+	cSEROUT[iVM] = 0;
+	fSERIN[iVM] = FALSE;
+	isectorPos[iVM] = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -1441,15 +1446,39 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
 				CONSOL |= 4;
 
-			// IRQ's, like key presses or POKEY timers. VBI and DLIST interrupts are NMI's.
+			// IRQ's, like key presses, SIO or POKEY timers. VBI and DLIST interrupts are NMI's.
 			// !!! Only scan line granularity.
+			// !!! Serialize when multiple are triggered at once?
 			if (!(regP & IBIT))
 			{
 				if (IRQST != 255)
 				{
 					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFE);
-					//ODS("IRQ TIME!\n");
+					//ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+
+					// after $8 (SEROUT FINISHED) for an entire frame comes SERIN, unless we're already transmitting
+					if (!(IRQST & 0x08) && !fSERIN[iVM])
+					{
+						if (cSEROUT[iVM] == 5)
+						{
+							cSEROUT[iVM] = 0;
+							if (rgSIO[iVM][0] == 0x31 && rgSIO[iVM][1] == 0x52)
+							{
+								//ODS("DISK READ REQUEST\n");
+								bSERIN[iVM] = 0x41;	// start with ack
+								fSERIN[iVM] = wScan + 6;	// wait 6 scan lines to transmit the next byte (yes, 5 hangs (hardb))
+								if (fSERIN[iVM] >= NTSCY)
+									fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
+								// hopefully this means it's OK to start now
+								if (IRQEN & 0x20)
+								{
+									IRQST &= ~0x20;
+									//ODS("TRIGGER SERIN\n");
+								}
+							}
+						}
+					}
 				}
 			}
 
@@ -1520,6 +1549,16 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		if (wLeft == 0)
 		{
 			wScan = wScan + 1;
+
+			// SIO - periodically send the next data byte, too fast breaks them
+			if (fSERIN[iVM] == wScan && (IRQEN & 0x20))
+			{
+				fSERIN[iVM] = wScan + 6;	// wait 6 scan lines to transmit the next byte (yes, 5 hangs (hardb))
+				if (fSERIN[iVM] >= NTSCY)
+					fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
+				//ODS("TRIGGER SERIN\n");
+				IRQST &= ~0x20;
+			}
 
 			// I'm worried about perf if I do this every instruction, so cheat for now and check only every scan line
 			// if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
@@ -1595,6 +1634,7 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
+
 // only called for addr >= ramtop
 //
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
@@ -1650,6 +1690,53 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 			return (BYTE)(wScan >> 1);
 	}
     
+	else if (addr == 0xd20d)
+	{
+		if (!fSERIN)
+		{
+			//ODS("UNEXPECTED SERIN\n");
+			return 0;
+		}
+
+		IRQST |= 0x20;	// don't do another IRQ yet, we have to emulate a slow BAUD rate (VBI will turn back on)
+		
+		BYTE rv = bSERIN[iVM];
+
+		// remember, the data in the sector can be the same as the ack, complete or checksum
+
+		if (isectorPos[iVM] > 0 && isectorPos[iVM] < 128)
+		{
+			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
+			bSERIN[iVM] = sectorSIO[iVM][isectorPos[iVM]];
+			isectorPos[iVM]++;
+		}
+		else if (isectorPos[iVM] == 128)
+		{
+			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
+			bSERIN[iVM] = checksum[iVM];
+			isectorPos[iVM]++;
+		}
+		else if (isectorPos[iVM] == 129)
+		{
+			//ODS("CHECKSUM = 0x%02x\n", bSERIN[iVM]);
+			fSERIN[iVM] = FALSE;	// all done
+			isectorPos[iVM] = 0;
+		}
+		else if (bSERIN[iVM] == 0x41)	// ack
+		{
+			bSERIN[iVM] = 0x43;	// complete
+			//ODS("ACK\n");
+		}
+		else if (bSERIN[iVM] == 0x43)
+		{
+			//ODS("COMPLETE\n");
+			checksum[iVM] = SIOReadSector(iVM);
+			bSERIN[iVM] = sectorSIO[iVM][0];
+			isectorPos[iVM] = 1;	// next byte will be this one
+		}
+		return rv;
+	}
+
 	return cpuPeekB(iVM, addr);
 }
 
@@ -1825,35 +1912,45 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            // SEROUT - !!! unsupported
+			if (PBCTL == 0x34)
+			{
+				assert(cSEROUT[iVM] < 5);
+				//ODS("SEROUT #%d = 0x%02x %d %d\n", cSEROUT[iVM], b, wFrame, wScan);
+				rgSIO[iVM][cSEROUT[iVM]] = b;
+				cSEROUT[iVM]++;
+				// immediately tell them we're ready for more - next VBI we'll see if we got all 5
+				IRQST &= ~(IRQEN & 0x10);
 
-			// doesn't seem to help - if they want serial ouptut data needed or data ready interrupts, then
-			// pretend we're done with their data right away and need more, even though we don't actually do anything with it
-			//IRQST &= ~(IRQEN & 0x18);
+				//if (cSEROUT[iVM] == 5)
+				{
+					// if 8 isn't enabled yet, we have to wait until it is to fire it
+					if (!(IRQEN & 0x08))
+						fWant8[iVM] = TRUE;
+					else
+					{
+						IRQST &= ~0x08;
+						//ODS("TRIGGER - OUT COMPLETE\n");
+						fSERIN[iVM] = 0;	// abandon any pending transfer from before
+					}
+				}
+			}
         }
         else if (addr == 14)
         {
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
+			//ODS("IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
 
-			// !!! UNSUPPORTED. If I fire the interrupts they want, an no main code ever gets a chance to run again,
-			// or they hang waiting for the interrupt if I don't fire it, or they hang because I can't give them valid data.
-
-			// !!! If they enable interrupts for when serial input data is ready, just fire it and tell them it's ready.
-			// The data will be garbage, so say the data is bad, so they don't keep reading forever
-			if (IRQEN & 0x20)
+			// the $8 IRQ was waiting for it to be enabled
+			// !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
+			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8[iVM])
 			{
-				//SKSTAT &= 0x3f;	// both serial input frame overrun and frame error. Bad luck!
-				//IRQST &= ~0x20;	// fire the INT that data is ready
+				//ODS("TRIGGER - OUT COMPLETE\n");
+				IRQST &= ~0x08;	// it might not be enabled yet
+				fWant8[iVM] = FALSE;
+				fSERIN[iVM] = 0;	// abandon any pending transfer from before
 			}
-
-			// !!! If they want to be told when serial output needs more data, just tell them it needs it now!
-			//if (IRQEN & 0x10)
-			//	IRQST &= ~10;
-
-			// as soon as they give us data (addr == 13) we'll tell them we're done with it right away and need more
-
         }
 		else if (addr <= 8)
 		{
