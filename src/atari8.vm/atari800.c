@@ -219,10 +219,15 @@ void Interrupt(int iVM, BOOL b)
 	// the only time regB is used is to say if an IRQ was a BRK or not
 	if (!b)
 		regP &= ~0x10;
-	
+	else
+		regPC++;	// did you know that BRK is a 2 byte instruction?
+
 	cpuPokeB(iVM, regSP, regPC >> 8);  regSP = (regSP - 1) & 255 | 256;
 	cpuPokeB(iVM, regSP, regPC & 255); regSP = (regSP - 1) & 255 | 256;
 	cpuPokeB(iVM, regSP, regP);          regSP = (regSP - 1) & 255 | 256;
+
+	if (b)
+		regPC--;
 
 	// it always reads on by the processor
 	regP |= 0x10;	// regB
@@ -233,23 +238,6 @@ void Interrupt(int iVM, BOOL b)
 //
 void DoVBI(int iVM)
 {
-	wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off
-	wLeftMax = wLeft;
-
-#ifndef NDEBUG
-	fDumpHW = 0;
-#endif
-	
-	// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
-	NMIST = (NMIST & 0x20) | 0x5F;
-							
-	// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-	// every scan line now until it's done, then resume
-	if (NMIEN & 0x40) {
-		Interrupt(iVM, FALSE);
-		regPC = cpuPeekW(iVM, 0xFFFA);
-	}
-
 	// process joysticks before the vertical blank, just because.
 	// When tiling, only the tile in focus gets input
 	if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick && vi.njc > 0)
@@ -1412,7 +1400,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 	// tell the 6502 which HW it is running this time
 	cpuInit(PeekBAtari, PokeBAtari);
 
-	fStop = 0;
+	fStop = 0;	// do not break out of big loop
 
 	do {
 
@@ -1455,7 +1443,10 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				{
 					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFE);
-					//ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+					//ODS"IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+
+					if (regPC == bp)
+						fHitBP[iVM] = TRUE;
 
 					// after $8 (SEROUT FINISHED) for an entire frame comes SERIN, unless we're already transmitting
 					if (!(IRQST & 0x08) && !fSERIN[iVM])
@@ -1465,16 +1456,16 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 							cSEROUT[iVM] = 0;
 							if (rgSIO[iVM][0] == 0x31 && rgSIO[iVM][1] == 0x52)
 							{
-								//ODS("DISK READ REQUEST\n");
+								//ODS"DISK READ REQUEST\n");
 								bSERIN[iVM] = 0x41;	// start with ack
-								fSERIN[iVM] = wScan + 6;	// wait 6 scan lines to transmit the next byte (yes, 5 hangs (hardb))
+								fSERIN[iVM] = wScan + SIO_DELAY;	// waiting less than this hangs apps who aren't ready for the data
 								if (fSERIN[iVM] >= NTSCY)
 									fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
 								// hopefully this means it's OK to start now
 								if (IRQEN & 0x20)
 								{
 									IRQST &= ~0x20;
-									//ODS("TRIGGER SERIN\n");
+									//ODS"TRIGGER SERIN\n");
 								}
 							}
 						}
@@ -1510,6 +1501,23 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			else if (wScan == STARTSCAN + Y8)
 			{
 				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA will be off during the VBI
+				wLeftMax = wLeft;
+
+				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
+				NMIST = (NMIST & 0x20) | 0x5F;
+
+				// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
+				// every scan line now until it's done, then resume
+				if (NMIEN & 0x40) {
+					
+					Interrupt(iVM, FALSE);
+					regPC = cpuPeekW(iVM, 0xFFFA);
+					
+					if (regPC == bp)
+						fHitBP[iVM] = TRUE;
+				}
+
+				// Joysticks and Keys are looked at hear the VBI too
 				DoVBI(iVM);
 			}
 
@@ -1530,19 +1538,22 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		// Normally, executes about one horizontal scan line's worth of 6502 code, after the scan line is drawn
 		// because apps are not supposed to try and affect their own scan line in a DLI.
-		Go6502(iVM);
+		if (!fHitBP[iVM])	// if the beginning of the VBI is our breakpoint
+			Go6502(iVM);
 
-		// hit a breakpoint
+		// hit a breakpoint during execution
 		if (regPC == bp)
 			fStop = TRUE;
 
-		assert(wLeft == 0 || fTrace == 1);
+		assert(wLeft == 0 || fTrace == 1 || regPC == bp);
 
 		// Code tried to somehow jump to the SIO routine, which talks to the serial bus - we emulate that separately
 		// and skip running the OS code
 		if (fSIO) {
 			fSIO = 0;
 			SIOV(iVM);
+			if (regPC == bp)	// it will be like stopping after after the routine executed
+				fStop = TRUE;
 		}
 
 		// next scan line
@@ -1550,13 +1561,29 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		{
 			wScan = wScan + 1;
 
+			// we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
+			if ((IRQEN & 0x10) && fWant10[iVM] && (--fWant10[iVM] == 0))
+			{
+				//ODS"TRIGGER - SEROUT NEEDED\n");
+				IRQST &= ~0x10;	// it might not be enabled yet
+			}
+
+			// the $8 IRQ is needed. 
+			// !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
+			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8[iVM] && (--fWant8[iVM] == 0))
+			{
+				//ODS"TRIGGER - SEROUT COMPLETE\n");
+				IRQST &= ~0x08;	// it might not be enabled yet
+				fSERIN[iVM] = 0;	// abandon any pending transfer from before
+			}
+
 			// SIO - periodically send the next data byte, too fast breaks them
 			if (fSERIN[iVM] == wScan && (IRQEN & 0x20))
 			{
-				fSERIN[iVM] = wScan + 6;	// wait 6 scan lines to transmit the next byte (yes, 5 hangs (hardb))
+				fSERIN[iVM] = wScan + SIO_DELAY;	// waiting less than this hangs apps who aren't ready for the data
 				if (fSERIN[iVM] >= NTSCY)
 					fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
-				//ODS("TRIGGER SERIN\n");
+				//ODS"TRIGGER SERIN\n");
 				IRQST &= ~0x20;
 			}
 
@@ -1570,7 +1597,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				{
 					if (IRQEN & (irq + 1))
 					{
-						//ODS("TIMER %d FIRING\n", irq + 1);
+						//ODS"TIMER %d FIRING\n", irq + 1);
 						IRQST &= ~(irq + 1);				// fire away
 					}
 
@@ -1608,6 +1635,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
     } while (!fTrace && !fStop);
 
+	fHitBP[iVM] = FALSE;
     return (regPC != bp);
 }
 
@@ -1694,7 +1722,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	{
 		if (!fSERIN)
 		{
-			//ODS("UNEXPECTED SERIN\n");
+			//ODS"UNEXPECTED SERIN\n");
 			return 0;
 		}
 
@@ -1706,30 +1734,30 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 
 		if (isectorPos[iVM] > 0 && isectorPos[iVM] < 128)
 		{
-			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
+			//ODS"DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
 			bSERIN[iVM] = sectorSIO[iVM][isectorPos[iVM]];
 			isectorPos[iVM]++;
 		}
 		else if (isectorPos[iVM] == 128)
 		{
-			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
+			//ODS"DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
 			bSERIN[iVM] = checksum[iVM];
 			isectorPos[iVM]++;
 		}
 		else if (isectorPos[iVM] == 129)
 		{
-			//ODS("CHECKSUM = 0x%02x\n", bSERIN[iVM]);
+			//ODS"CHECKSUM = 0x%02x\n", bSERIN[iVM]);
 			fSERIN[iVM] = FALSE;	// all done
 			isectorPos[iVM] = 0;
 		}
 		else if (bSERIN[iVM] == 0x41)	// ack
 		{
 			bSERIN[iVM] = 0x43;	// complete
-			//ODS("ACK\n");
+			//ODS"ACK\n");
 		}
 		else if (bSERIN[iVM] == 0x43)
 		{
-			//ODS("COMPLETE\n");
+			//ODS"COMPLETE\n");
 			checksum[iVM] = SIOReadSector(iVM);
 			bSERIN[iVM] = sectorSIO[iVM][0];
 			isectorPos[iVM] = 1;	// next byte will be this one
@@ -1915,24 +1943,15 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			if (PBCTL == 0x34)
 			{
 				assert(cSEROUT[iVM] < 5);
-				//ODS("SEROUT #%d = 0x%02x %d %d\n", cSEROUT[iVM], b, wFrame, wScan);
+				//ODS"SEROUT #%d = 0x%02x %d %d %d\n", cSEROUT[iVM], b, wFrame, wScan, wLeft);
 				rgSIO[iVM][cSEROUT[iVM]] = b;
 				cSEROUT[iVM]++;
-				// immediately tell them we're ready for more - next VBI we'll see if we got all 5
-				IRQST &= ~(IRQEN & 0x10);
 
-				//if (cSEROUT[iVM] == 5)
-				{
-					// if 8 isn't enabled yet, we have to wait until it is to fire it
-					if (!(IRQEN & 0x08))
-						fWant8[iVM] = TRUE;
-					else
-					{
-						IRQST &= ~0x08;
-						//ODS("TRIGGER - OUT COMPLETE\n");
-						fSERIN[iVM] = 0;	// abandon any pending transfer from before
-					}
-				}
+				// they'll need a scan line at least to prepare for the interrupt
+				fWant10[iVM] = 2;
+
+				// and one extra scan line to prepare for this interrupt
+				fWant8[iVM] = 3;
 			}
         }
         else if (addr == 14)
@@ -1940,17 +1959,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
-			//ODS("IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
+			//ODS"IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
 
-			// the $8 IRQ was waiting for it to be enabled
-			// !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
-			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8[iVM])
-			{
-				//ODS("TRIGGER - OUT COMPLETE\n");
-				IRQST &= ~0x08;	// it might not be enabled yet
-				fWant8[iVM] = FALSE;
-				fSERIN[iVM] = 0;	// abandon any pending transfer from before
-			}
         }
 		else if (addr <= 8)
 		{

@@ -49,6 +49,7 @@ int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE tha
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
+#define SIO_DELAY			6 // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
 BYTE rgSIO[MAX_VM][5];		// holds the SIO command frame
 int cSEROUT[MAX_VM];		// how many bytes we've gotten so far of the 5
 BOOL fSERIN[MAX_VM];		// we're executing a disk read command
@@ -56,7 +57,9 @@ BYTE bSERIN[MAX_VM];		// byte to return in SERIN
 BYTE sectorSIO[MAX_VM][128];// disk sector
 BYTE isectorPos[MAX_VM];	// where in the buffer are we?
 BYTE checksum[MAX_VM];		// buffer checksum
-BOOL fWant8[MAX_VM];		// we'd like to fire an IRQ8 but it's not enabled yet
+BOOL fWant8[MAX_VM];		// we'd like the SEROUT DONE IRQ8
+BOOL fWant10[MAX_VM];		// we'd like the SEROUT NEEDED IRQ10
+BOOL fHitBP[MAX_VM];		// anybody changing the PC outside of Go6502 needs to check and set this
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time

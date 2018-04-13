@@ -23,6 +23,8 @@
 PFNB pfnPeekB;
 PFNL pfnPokeB;
 
+WORD bias[MAX_VM];	// keep track of wLeft when debugging
+
 // jump tables (when used)
 typedef void (__fastcall * PFNOP)(int iVM);
 PFNOP jump_tab_RO[256];
@@ -397,8 +399,9 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
+// if this is a breakpoint, set wLeft to 0 so we stop, but restore wLeft when we come back or debugging the code will alter the timing of it
 #ifndef NDEBUG
-#define HANDLER_END()	wLeft = (regPC == bp) ? 0 : wLeft - 1; if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (regPC == bp) { wLeft = 1; bias[iVM] = wLeft - 1;} wLeft--; if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #else
 #define HANDLER_END() if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #endif
@@ -2693,9 +2696,11 @@ PFNOP jump_tab_RO[256] =
 
 void __cdecl Go6502(int iVM)
 {
-    WORD bias = fTrace ? wLeft - 1 : 0;
+    bias[iVM] = fTrace ? wLeft - 1 : 0;
 
-    wLeft = fTrace ? 1 : wLeft;
+	// do not check your breakpoint here, you'll keep hitting it every time you try and execute and never get anywhere
+
+	wLeft = fTrace ? 1 : wLeft;
 
     UnpackP(iVM);
 
@@ -2718,6 +2723,6 @@ void __cdecl Go6502(int iVM)
 
     //if (wLeft < 0) wLeft = 0;
 
-    wLeft += bias;
+    wLeft += bias[iVM];
 }
 

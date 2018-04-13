@@ -527,6 +527,9 @@ BOOL ProcessScanLine(int iVM)
 		{
 			Interrupt(iVM, FALSE);
 			regPC = cpuPeekW(iVM, 0xFFFA);
+
+			if (regPC == bp)
+				fHitBP[iVM] = TRUE;
 		}
     }
 

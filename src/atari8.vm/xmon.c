@@ -24,6 +24,8 @@
 #define YCOMAX  22
 #define HEXCOLS 16
 
+// globals are not thread safe, but only one is up at a time
+
 unsigned int uMemDump, uMemDasm;
 char const rgchHex[] = "0123456789ABCDEF";
 
@@ -37,6 +39,8 @@ char rgchIn[256],     /* monitor line input buffer */
 int  cchIn,           /* cch of buffer */
      ichIn,           /* index into buffer character */
      cchOut;          /* size of output string */
+
+char chLast;			// the last command
 
 //int fMON;       /* TRUE if we are in 6502 monitor */
 
@@ -305,8 +309,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 		Cconws("\n");
 
 		CchShowRegs(iVM);
-		uMemDasm = regPC;
+		uMemDasm = regPC;	// 'd' and 'm' dumps will start here
 		uMemDump = regPC;
+		chLast = 0;			// forget whatever the last cmd was
 
 		while (1)
 		{
@@ -317,6 +322,11 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
 			chCom = rgchIn[ichIn++];      /* get command character */
 			
+			// blank means repeat the last command letter
+			if (chCom == 0x0d && chLast && chLast != 0x0d)
+				chCom = chLast;
+			chLast = chCom;
+				
 			if ((chCom >= 'a') && (chCom <= 'z'))
 				chCom -= 32;
 
