@@ -499,7 +499,7 @@ BYTE SIOReadSector(int iVM)
 	wStat = 0x40;
 	wTimeout = 0x1f;
 	wBytes = 128;
-	wSector = rgSIO[iVM][2] | (WORD)rgSIO[iVM][3] << 8;
+	wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
 	
 	pdrive = &rgDrives[iVM][wDrive];
 

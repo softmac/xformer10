@@ -49,17 +49,9 @@ int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE tha
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
-#define SIO_DELAY			6 // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
-BYTE rgSIO[MAX_VM][5];		// holds the SIO command frame
-int cSEROUT[MAX_VM];		// how many bytes we've gotten so far of the 5
-BOOL fSERIN[MAX_VM];		// we're executing a disk read command
-BYTE bSERIN[MAX_VM];		// byte to return in SERIN
-BYTE sectorSIO[MAX_VM][128];// disk sector
-BYTE isectorPos[MAX_VM];	// where in the buffer are we?
-BYTE checksum[MAX_VM];		// buffer checksum
-BOOL fWant8[MAX_VM];		// we'd like the SEROUT DONE IRQ8
-BOOL fWant10[MAX_VM];		// we'd like the SEROUT NEEDED IRQ10
-BOOL fHitBP[MAX_VM];		// anybody changing the PC outside of Go6502 needs to check and set this
+#define SIO_DELAY 6				// wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
+// Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
+BYTE sectorSIO[MAX_VM][128];	// disk sector
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
@@ -231,17 +223,28 @@ typedef struct
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
     // cntTick: mode display countdown timer (18 Hz ticks)
 
-    BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, m_fDebugger;
+    BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, pad1B;
 
     WORD m_wFrame, m_wScan;
     WORD m_wLeft;
-	WORD m_wLeftMax;	// keeps track of how many 6502 instructions we're executing this scan line
+	WORD m_wLeftMax;	 // keeps track of how many 6502 instructions we're executing this scan line
 	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only 6 opcodes?
-	BYTE m_padW;
+	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_WAITED after a DLI
 
-    WORD m_wJoy0X, m_wJoy0Y, m_wJoy1X, m_wJoy1Y;
-    WORD m_wJoy0XCal, m_wJoy1XCal, m_wJoy0YCal, m_wJoy1YCal;
-    BYTE m_bJoyBut;
+	WORD pad8W;
+    
+	WORD m_bias;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted
+	
+	BYTE m_rgSIO[5];	// holds the SIO command frame
+	BYTE m_cSEROUT;		// how many bytes we've gotten so far of the 5
+	WORD m_fSERIN;		// we're executing a disk read command
+	BYTE m_bSERIN;		// byte to return in SERIN
+	BYTE m_isectorPos;	// where in the buffer are we?
+	BYTE m_checksum;	// buffer checksum
+	BYTE m_fWant8;		// we'd like the SEROUT DONE IRQ8
+	BYTE m_fWant10;		// we'd like the SEROUT NEEDED IRQ10
+	
+	BYTE m_fHitBP;		// anybody changing the PC outside of Go6502 needs to check and set this
 
     // size of RAM ($A000 or $C000)
 
@@ -252,20 +255,13 @@ typedef struct
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
-    // virtual guest vertical blanks ("jiffies")
-
-    ULONG m_countJiffies;
-
-    // virtual guest instructions
-
-    ULONG m_countInstr;
+    ULONG padUL11;
+	ULONG padUL12;
 
     // clock multiplier 
-
     ULONG m_clockMult;
     
 	PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
-
     SL m_sl;            // current scan line display info
     WORD m_cbWidth, m_cbDisp;
     WORD m_hshift;
@@ -278,16 +274,17 @@ typedef struct
     BYTE m_fFetch;      // fetch next DL instruction
     BYTE m_fDataChanged;
 
-    WORD m_fNMIPending;
-    WORD m_fIRQPending;
+	WORD padW13;
+	WORD padW14;
 
     BYTE m_bCartType;   // type of cartridge
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
-    BYTE m_cVBI;        // count of VBIs since last tick
+    
+	BYTE padB15;
 
 	// the 8 status bits must be together and in the same order as in the 6502
-	unsigned char m_srN;
+	unsigned char	 m_srN;
 	unsigned char    m_srV;
 	unsigned char    m_srB;
 	unsigned char    m_srD;
@@ -336,9 +333,19 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define srI           CANDY_STATE(srI)
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
-#define pad           CANDY_STATE(pad)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
+#define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
+#define rgSIO		  CANDY_STATE(rgSIO)
+#define cSEROUT		  CANDY_STATE(cSEROUT)
+#define fSERIN		  CANDY_STATE(fSERIN)
+#define bSERIN		  CANDY_STATE(bSERIN)
+#define isectorPos	  CANDY_STATE(isectorPos)
+#define checksum	  CANDY_STATE(checksum)
+#define fWant8		  CANDY_STATE(fWant8)
+#define fWant10		  CANDY_STATE(fWant10)
+#define fHitBP		  CANDY_STATE(fHitBP)
+#define bias		  CANDY_STATE(bias)
 #define wLeftMax      CANDY_STATE(wLeftMax)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp		      CANDY_STATE(bp)
@@ -347,19 +354,9 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
-#define fDebugger     CANDY_STATE(fDebugger)
 #define wFrame        CANDY_STATE(wFrame)
 #define wScan         CANDY_STATE(wScan)
 #define wLeft         CANDY_STATE(wLeft)
-#define wJoy0X        CANDY_STATE(wJoy0X)
-#define wJoy0Y        CANDY_STATE(wJoy0Y)
-#define wJoy1X        CANDY_STATE(wJoy1X)
-#define wJoy1Y        CANDY_STATE(wJoy1Y)
-#define wJoy0XCal     CANDY_STATE(wJoy0XCal)
-#define wJoy0YCal     CANDY_STATE(wJoy0YCal)
-#define wJoy1XCal     CANDY_STATE(wJoy1XCal)
-#define wJoy1YCal     CANDY_STATE(wJoy1YCal)
-#define bJoyBut       CANDY_STATE(bJoyBut)
 #define ramtop        CANDY_STATE(ramtop)
 #define fStop         CANDY_STATE(fStop)
 #define wStartScan    CANDY_STATE(wStartScan)
@@ -368,8 +365,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)
-#define countJiffies  CANDY_STATE(countJiffies)
-#define countInstr    CANDY_STATE(countInstr)
 #define clockMult     CANDY_STATE(clockMult)
 #define pmg           CANDY_STATE(pmg)
 #define sl            CANDY_STATE(sl)
@@ -382,12 +377,9 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fWait         CANDY_STATE(fWait)
 #define fFetch        CANDY_STATE(fFetch)
 #define fDataChanged  CANDY_STATE(fDataChanged)
-#define fNMIPendingd  CANDY_STATE(fNMIPending)
-#define fIRQPending   CANDY_STATE(fIRQPending)
 #define bCartType     CANDY_STATE(bCartType)
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
-#define cVBI          CANDY_STATE(cVBI)
 #define irqPokey      CANDY_STATE(irqPokey)
 #define iXESwap		  CANDY_STATE(iXESwap)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
