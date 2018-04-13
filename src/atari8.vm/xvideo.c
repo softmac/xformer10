@@ -124,6 +124,7 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
 	WORD w;
 
 	// first, fill the bit array with all the players located at each spot
+
 	for (i = 0; i < 4; i++)
 	{
 		WORD NEAR *qw;
@@ -241,13 +242,14 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
     if (pmg.fHitclr)
         goto Ldm;
 
-    // First do missile-to-player and missile-to-playfield collisions
+	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+	// Also, PF1 (the text) is always visible on top of a player by affecting its colour
+	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
+
+    // First do missile-to-player and missile-to-playfield collisions, fifth player doesn't affect collisions, but Hi-res does
 
     for (i = 0; i < 4; i++)
     {
-		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
-		
 		// no collisions to playfield in GTIA
 		// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
 		BOOL fGTIA = sl.modelo > 15;
@@ -312,6 +314,9 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
     *(ULONG *)MXPF &= 0x0F0F0F0F;
 
 Ldm:
+	
+	// Now go through and set the bit saying a missile is present wherever it is present. Fifth player is like PF3
+	
     for (i = 0; i < 4; i++)
     {
         WORD NEAR *qw;
@@ -325,24 +330,25 @@ Ldm:
 
         cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
 
-        if (fFifth)
+		// treat fifth player like PF3 being present instead of its corresponding player. This is the only case
+		// where more than one playfield colour could be present at one time. That's how we can tell a fifth player
+		// is in use, and do the right thing later
+
+		if (fFifth)
             w  = mppmbw[4];
         else
             w  = mppmbw[i];
 
         if (b2 & 2)
-        {
-            if (1 || fFifth)	// !!! 5th player broken
+        {            
+            qw[0] |= w;
+            if (cw > 1)	// double size
             {
-                qw[0] |= w;
-                if (cw > 1)
+                qw[1] |= w;
+                if (cw > 2)	// quad size
                 {
-                    qw[1] |= w;
-                    if (cw > 2)
-                    {
-                        qw[2] |= w;
-                        qw[3] |= w;
-                    }
+                    qw[2] |= w;
+                    qw[3] |= w;
                 }
             }
         }
@@ -350,17 +356,14 @@ Ldm:
 
         if (b2 & 1)
         {
-            if (1 || fFifth)	// !!! 5th player probably broken!
+            qw[0] |= w;
+            if (cw > 1)
             {
-                qw[0] |= w;
-                if (cw > 1)
+                qw[1] |= w;
+                if (cw > 2)
                 {
-                    qw[1] |= w;
-                    if (cw > 2)
-                    {
-                        qw[2] |= w;
-                        qw[3] |= w;
-                    }
+                    qw[2] |= w;
+                    qw[3] |= w;
                 }
             }
         }
@@ -828,10 +831,13 @@ BOOL ProcessScanLine(int iVM)
 		}
 	}
 
-    // check if scan line is visible and if so redraw it
-	// THIS IS A LOT OF CODE
+    // THIS IS A LOT OF CODE
 	//
-    if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
+	// Based on the graphics mode, fill in a scanline's worth of data. It might be the actual data, or if PMG exist on this line,
+	// a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
+	// GTIA modes are a kind of hybrid approach since it's not so simple as which playfield colour is visible
+	//
+	if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
     {
         // redraw scan line
 
@@ -968,7 +974,7 @@ BOOL ProcessScanLine(int iVM)
 			
 			vpix = vpixO;
 			
-			// the artifacting colours
+			// the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
 			BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
 			BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
@@ -1670,7 +1676,7 @@ BOOL ProcessScanLine(int iVM)
             col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);	// like GR.0, the colour is just a luminence of the background colour
             col2 = sl.colpf2;
 
-			// the artifacting colours
+			// the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
 			red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
 			yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
@@ -1997,10 +2003,7 @@ BOOL ProcessScanLine(int iVM)
 
         pmg.fHitclr = 0;
 
-        // if in a 2 color mode, set playfield 1 color to some luminence of PF2
-
-        if ((sl.modelo == 2) || (sl.modelo == 3) || (sl.modelo == 15))
-            sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+		BOOL fHiRes = ((sl.modelo == 2) || (sl.modelo == 3) || (sl.modelo == 15));
 
         if ((wScan < wStartScan) || (wScan >= (wStartScan+wcScans)))
             goto Lnextscan;
@@ -2009,7 +2012,7 @@ BOOL ProcessScanLine(int iVM)
 
         qch += (wScan - wStartScan) * vcbScan;
 
-        // if GTIA, give players and missiles highest priority !!! is that true?
+        // if GTIA, give players and missiles highest priority !!! Not true for GR.10
 
         if (sl.modelo > 15)
             sl.prior = 1;
@@ -2024,6 +2027,30 @@ BOOL ProcessScanLine(int iVM)
         for (i = 0; i < X8; i++)
         {
             BYTE b = rgpix[i+((NTSCx - X8)>>1)];
+
+			// if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
+			// unless PF3 is also present, that can only happen in 5th player mode, so use that chroma value instead
+			// (text shows up on top of a fifth player using its chroma)
+			if (fHiRes &&  (b & bfPF3) && (b & bfPF1))
+				sl.colpf1 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
+			else if (fHiRes && (b & bfPF1))
+				sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+
+			BYTE colpm0 = pmg.colpm0;
+			BYTE colpm1 = pmg.colpm1;
+			BYTE colpm2 = pmg.colpm2;
+			BYTE colpm3 = pmg.colpm3;
+
+			// in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
+			if (fHiRes && (b & bfPF1))
+			{
+				colpm0 = (colpm0 & 0xf0) | (sl.colpf1 & 0x0f);
+				colpm1 = (colpm1 & 0xf0) | (sl.colpf1 & 0x0f);
+				colpm2 = (colpm2 & 0xf0) | (sl.colpf1 & 0x0f);
+				colpm3 = (colpm3 & 0xf0) | (sl.colpf1 & 0x0f);
+			}
+
+			// !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI
 
 			// Thank you Altirra
 			BYTE PRI0 = (sl.prior & 1) ? 0xff : 0;
@@ -2052,43 +2079,53 @@ BOOL ProcessScanLine(int iVM)
 			BYTE PF01 = PF0 | PF1;
 			BYTE PF23 = PF2 | PF3;
 
+			// OK, based on priority, which of the elements do we show? It could be more than one thing
+			// (overlap mode ORs the colours together). Any or all of the players might be in the same spot.
+			// Normally only one playfield colour is in any one spot, but a fifth player is like PF3 so there
+			// could be two playfields set here. Player 5 (PF3) gets priority unless its a hi-res mode
+			// where PF1 text goes on top
+
 			BYTE SP0 = P0 & ~(PF01 & PRI23) & ~(PRI2 & PF23);
 			BYTE SP1 = P1 & ~(PF01 & PRI23) & ~(PRI2 & PF23) & (~P0 | MULTI);
 			BYTE SP2 = P2 & ~P01 &  ~(PF23 & PRI12) &  ~(PF01 & ~PRI0);
 			BYTE SP3 = P3 & ~P01 & ~(PF23 & PRI12) & ~(PF01 & ~PRI0) & (~P2 | MULTI);
-			BYTE SF0 = PF0 & ~(P23 & PRI0) &  ~(P01 & PRI01) /* & ~SF3 meaning P5? */;
-			BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) /* & ~SF3 */;
-			BYTE SF2 = PF2 &  ~(P23 & PRI03) & ~(P01 & ~PRI2) /* & ~SF3 */;
+
 			BYTE SF3 = PF3 & ~(P23 & PRI03) & ~(P01 & ~PRI2);
+			BYTE SF0 = PF0 & ~(P23 & PRI0) &  ~(P01 & PRI01) & ~SF3;
+			BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) & (fHiRes ? 0xff : ~SF3);
+			BYTE SF2 = PF2 &  ~(P23 & PRI03) & ~(P01 & ~PRI2) & ~SF3;
 			BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
 			
-			// !!! 5th PLAYER MODE PRIORITY and OVERLAP COLOUR is not correct, even in GTIA
-
 			// GR. 9 - low nibble is the important LUM value. Now add back to chroma value
 			if (sl.modelo == 16)
-				if (P01 || P23)
+				if (P01 || P23)	// all players visible over all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = (b & 0x0f) | sl.colbk;
 
 			// GR. 10 - low nibble is an index into the colour to use
-			// !!! GR.10 does not necessarily have players overtop of playfields like I am doing
 			else if (sl.modelo == 17)
-				if (P01 || P23)
+				if (P01 || P23)	// !!! not true, but I'm making all players overtop all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = *(&COLPM0 + b);
 
 			// GR. 11 - low nibble is the important CHROM value. We'll shift it back to the high nibble and add the LUM value later
 			else if (sl.modelo == 18)
-				if (P01 || P23)
+				if (P01 || P23)	// all players above all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = (b << 4) | sl.colbk;
 
 			else
 			{
-				b = (SP0 & pmg.colpm0) | (SP1 & pmg.colpm1) | (SP2 & pmg.colpm2) | (SP3 & pmg.colpm3);
+				// OR together all the colours of all the visible things (ovelap mode support)
+				
+				// In hi-res modes (GR.0 & 8) each player colour is given the luminence of PF1 whenever they overlap
+				// even if the playfields are all behind the players. In other words, all text is readable on top of 
+				// player missile graphics, and if we don't do this, all text disappears
+
+				b = (SP0 & colpm0) | (SP1 & colpm1) | (SP2 & colpm2) | (SP3 & colpm3);
 				b = b | (SF0 & sl.colpf0) | (SF1 & sl.colpf1) | (SF2 & sl.colpf2) | (SF3 & sl.colpf3) | (SB & sl.colbk);
 			}
 
