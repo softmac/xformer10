@@ -271,7 +271,7 @@ BOOL CreateAllVMs()
 //
 BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 {
-    PROPS vTmp;
+	PROPS vTmp = { 0 };
     char rgch[MAX_PATH];
 	char *sz;
 	BOOL f = FALSE;
