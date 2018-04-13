@@ -1145,9 +1145,11 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	wFrame = 0;
 	
 	// SIO init
-	cSEROUT[iVM] = 0;
-	fSERIN[iVM] = FALSE;
-	isectorPos[iVM] = 0;
+	cSEROUT = 0;
+	fSERIN = FALSE;
+	isectorPos = 0;
+	fWant8 = 0;
+	fWant10 = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -1320,6 +1322,8 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 		rgvm[iVM].iLPT = 0;
 
 	BOOL f = InitAtariDisks(iVM);
+	// if we were in the middle of reading a sector through SIO, restore that data
+	SIOReadSector(iVM);
 
 	if (!f)
 		return f;
@@ -1443,29 +1447,30 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				{
 					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFE);
-					//ODS"IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+					//ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
 
 					if (regPC == bp)
-						fHitBP[iVM] = TRUE;
+						fHitBP = TRUE;
 
 					// after $8 (SEROUT FINISHED) for an entire frame comes SERIN, unless we're already transmitting
-					if (!(IRQST & 0x08) && !fSERIN[iVM])
+					if (!(IRQST & 0x08) && !fSERIN)
 					{
-						if (cSEROUT[iVM] == 5)
+						if (cSEROUT == 5)
 						{
-							cSEROUT[iVM] = 0;
-							if (rgSIO[iVM][0] == 0x31 && rgSIO[iVM][1] == 0x52)
+							cSEROUT = 0;
+							isectorPos = 0;
+							if (rgSIO[0] == 0x31 && rgSIO[1] == 0x52)
 							{
-								//ODS"DISK READ REQUEST\n");
-								bSERIN[iVM] = 0x41;	// start with ack
-								fSERIN[iVM] = wScan + SIO_DELAY;	// waiting less than this hangs apps who aren't ready for the data
-								if (fSERIN[iVM] >= NTSCY)
-									fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
+								//ODS("DISK READ REQUEST\n");
+								bSERIN = 0x41;	// start with ack
+								fSERIN = (wScan + SIO_DELAY);	// waiting less than this hangs apps who aren't ready for the data
+								if (fSERIN >= NTSCY)
+									fSERIN -= (NTSCY - 1);	// never be 0, that means stop
 								// hopefully this means it's OK to start now
 								if (IRQEN & 0x20)
 								{
 									IRQST &= ~0x20;
-									//ODS"TRIGGER SERIN\n");
+									//ODS("TRIGGER SERIN\n");
 								}
 							}
 						}
@@ -1514,7 +1519,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 					regPC = cpuPeekW(iVM, 0xFFFA);
 					
 					if (regPC == bp)
-						fHitBP[iVM] = TRUE;
+						fHitBP = TRUE;
 				}
 
 				// Joysticks and Keys are looked at hear the VBI too
@@ -1538,7 +1543,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		// Normally, executes about one horizontal scan line's worth of 6502 code, after the scan line is drawn
 		// because apps are not supposed to try and affect their own scan line in a DLI.
-		if (!fHitBP[iVM])	// if the beginning of the VBI is our breakpoint
+		if (!fHitBP)	// if the beginning of the VBI is our breakpoint
 			Go6502(iVM);
 
 		// hit a breakpoint during execution
@@ -1562,28 +1567,28 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			wScan = wScan + 1;
 
 			// we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
-			if ((IRQEN & 0x10) && fWant10[iVM] && (--fWant10[iVM] == 0))
+			if ((IRQEN & 0x10) && fWant10 && (--fWant10 == 0))
 			{
-				//ODS"TRIGGER - SEROUT NEEDED\n");
+				//ODS("TRIGGER - SEROUT NEEDED\n");
 				IRQST &= ~0x10;	// it might not be enabled yet
 			}
 
 			// the $8 IRQ is needed. 
 			// !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
-			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8[iVM] && (--fWant8[iVM] == 0))
+			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8 && (--fWant8 == 0))
 			{
-				//ODS"TRIGGER - SEROUT COMPLETE\n");
+				//ODS("TRIGGER - SEROUT COMPLETE\n");
 				IRQST &= ~0x08;	// it might not be enabled yet
-				fSERIN[iVM] = 0;	// abandon any pending transfer from before
+				fSERIN = 0;	// abandon any pending transfer from before
 			}
 
 			// SIO - periodically send the next data byte, too fast breaks them
-			if (fSERIN[iVM] == wScan && (IRQEN & 0x20))
+			if (fSERIN == wScan && (IRQEN & 0x20))
 			{
-				fSERIN[iVM] = wScan + SIO_DELAY;	// waiting less than this hangs apps who aren't ready for the data
-				if (fSERIN[iVM] >= NTSCY)
-					fSERIN[iVM] -= (NTSCY - 1);	// never be 0, that means stop
-				//ODS"TRIGGER SERIN\n");
+				fSERIN = (wScan + SIO_DELAY);	// waiting less than this hangs apps who aren't ready for the data
+				if (fSERIN >= NTSCY)
+					fSERIN -= (NTSCY - 1);	// never be 0, that means stop
+				//ODS("TRIGGER SERIN\n");
 				IRQST &= ~0x20;
 			}
 
@@ -1597,7 +1602,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				{
 					if (IRQEN & (irq + 1))
 					{
-						//ODS"TIMER %d FIRING\n", irq + 1);
+						//ODS("TIMER %d FIRING\n", irq + 1);
 						IRQST &= ~(irq + 1);				// fire away
 					}
 
@@ -1635,7 +1640,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
     } while (!fTrace && !fStop);
 
-	fHitBP[iVM] = FALSE;
+	fHitBP = FALSE;
     return (regPC != bp);
 }
 
@@ -1722,45 +1727,45 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	{
 		if (!fSERIN)
 		{
-			//ODS"UNEXPECTED SERIN\n");
+			//ODS("UNEXPECTED SERIN\n");
 			return 0;
 		}
 
 		IRQST |= 0x20;	// don't do another IRQ yet, we have to emulate a slow BAUD rate (VBI will turn back on)
 		
-		BYTE rv = bSERIN[iVM];
+		BYTE rv = bSERIN;
 
 		// remember, the data in the sector can be the same as the ack, complete or checksum
 
-		if (isectorPos[iVM] > 0 && isectorPos[iVM] < 128)
+		if (isectorPos > 0 && isectorPos < 128)
 		{
-			//ODS"DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
-			bSERIN[iVM] = sectorSIO[iVM][isectorPos[iVM]];
-			isectorPos[iVM]++;
+			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
+			bSERIN = sectorSIO[iVM][isectorPos];
+			isectorPos++;
 		}
-		else if (isectorPos[iVM] == 128)
+		else if (isectorPos == 128)
 		{
-			//ODS"DATA 0x%02x = 0x%02x\n", isectorPos[iVM] - 1, bSERIN[iVM]);
-			bSERIN[iVM] = checksum[iVM];
-			isectorPos[iVM]++;
+			//ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
+			bSERIN = checksum;
+			isectorPos++;
 		}
-		else if (isectorPos[iVM] == 129)
+		else if (isectorPos == 129)
 		{
-			//ODS"CHECKSUM = 0x%02x\n", bSERIN[iVM]);
-			fSERIN[iVM] = FALSE;	// all done
-			isectorPos[iVM] = 0;
+			//ODS("CHECKSUM = 0x%02x\n", bSERIN);
+			fSERIN = FALSE;	// all done
+			isectorPos = 0;
 		}
-		else if (bSERIN[iVM] == 0x41)	// ack
+		else if (bSERIN == 0x41)	// ack
 		{
-			bSERIN[iVM] = 0x43;	// complete
-			//ODS"ACK\n");
+			bSERIN = 0x43;	// complete
+			//ODS("ACK\n");
 		}
-		else if (bSERIN[iVM] == 0x43)
+		else if (bSERIN == 0x43)
 		{
-			//ODS"COMPLETE\n");
-			checksum[iVM] = SIOReadSector(iVM);
-			bSERIN[iVM] = sectorSIO[iVM][0];
-			isectorPos[iVM] = 1;	// next byte will be this one
+			//ODS("COMPLETE\n");
+			checksum = SIOReadSector(iVM);
+			bSERIN = sectorSIO[iVM][0];
+			isectorPos = 1;	// next byte will be this one
 		}
 		return rv;
 	}
@@ -1942,16 +1947,16 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         {
 			if (PBCTL == 0x34)
 			{
-				assert(cSEROUT[iVM] < 5);
-				//ODS"SEROUT #%d = 0x%02x %d %d %d\n", cSEROUT[iVM], b, wFrame, wScan, wLeft);
-				rgSIO[iVM][cSEROUT[iVM]] = b;
-				cSEROUT[iVM]++;
+				assert(cSEROUT < 5);
+				//ODS("SEROUT #%d = 0x%02x %d %d %d\n", cSEROUT, b, wFrame, wScan, wLeft);
+				rgSIO[cSEROUT] = b;
+				cSEROUT++;
 
 				// they'll need a scan line at least to prepare for the interrupt
-				fWant10[iVM] = 2;
+				fWant10 = 2;
 
 				// and one extra scan line to prepare for this interrupt
-				fWant8[iVM] = 3;
+				fWant8 = 3;
 			}
         }
         else if (addr == 14)
@@ -1959,7 +1964,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
-			//ODS"IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
+			//ODS("IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
 
         }
 		else if (addr <= 8)

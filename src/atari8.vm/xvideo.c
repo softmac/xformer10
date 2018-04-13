@@ -528,8 +528,13 @@ BOOL ProcessScanLine(int iVM)
 			Interrupt(iVM, FALSE);
 			regPC = cpuPeekW(iVM, 0xFFFA);
 
+			// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
+			// !!! This won't work for nested interrupts
+			WSYNC_Waited = FALSE;
+			WSYNC_on_RTI = TRUE;
+
 			if (regPC == bp)
-				fHitBP[iVM] = TRUE;
+				fHitBP = TRUE;
 		}
     }
 
