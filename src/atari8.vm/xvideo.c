@@ -175,7 +175,7 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
 		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
 		// no collisions to playfield in GTIA
-		BOOL fGTIA = sl.modelo > 15;
+		BOOL fGTIA = sl.prior & 0xc0;
 
         WORD NEAR *qw;
         
@@ -245,7 +245,7 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
 
 	// no collisions to playfield in GTIA
 	// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
-	BOOL fGTIA = sl.modelo > 15;
+	BOOL fGTIA = sl.prior & 0xc0;
 
 	if (pmg.fHitclr)
 		goto Ldm;
@@ -340,9 +340,28 @@ Ldm:
 			w = mppmbw[i];
 		
 		// !!! In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
-		// so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour.
-		//if (fFifth && fGTIA)
-		//	w = 0; // !!! This would mean the fifth player is invisible in GTIA instead of the wrong colour. Which is worse?
+		// so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour. We don't have
+		// any free bits to store anything about the fifth player unless we do something big and hacky which I'm not inclined to
+		// do right now, so we have 2 choices: 1) make the fifth player invisible or 2) make it visible but the wrong colour
+		// Neither is a good option. In games where it's supposed to be invisible, showing it at the wrong colour sticks out
+		// like a sore thumb. But in games where it's supposed to be visible, making in invisible loses part of the actual game
+		// graphics when it being the wrong colour would not have been a big deal. So the ideal compromise is to figure out
+		// if this mode supports the colour they want, and make it that correct colour. That way it will be invisible if they
+		// want. If we don't have a way of providing the right colour but we know it's supposed to be visible, make it "close"
+		// to the colour they want by matching the chroma or luma at least. This is rather clever, it's too bad only the silly 
+		// game "Battle Eagles" runs into this issue.
+
+		// !!! The wrong colours may show up here
+
+		if (fFifth && fGTIA)
+		{
+			if ((sl.prior & 0xc0) == 0x40)
+				w = sl.colpf3 & 0x0f;	// use the correct P5 luma, it may or may not be the right chroma
+			else if ((sl.prior & 0xc0) == 0x80)
+				w = 7;	// colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
+			else if ((sl.prior & 0xc0) == 0xc0)
+				w = (sl.colpf3 & 0xf0) >> 4;	// use the correct P5 chroma, but the luminence may be off
+		}
 		
         if (b2 & 2)
         {            
@@ -398,135 +417,135 @@ BOOL ProcessScanLine(int iVM)
 	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
 
 	// scan lines per line of each graphics mode
-    static const WORD mpMdScans[19] =
-        {
-        1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1, 1, 1, 1
-        };
+	static const WORD mpMdScans[19] =
+	{
+	1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1, 1, 1, 1
+	};
 
 	// BYTES per line of each graphics mode for NARROW playfield
-    static const WORD mpMdBytes[19] =
-        {
-        0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32, 32, 32, 32
-        };
+	static const WORD mpMdBytes[19] =
+	{
+	0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32, 32, 32, 32
+	};
 
-    // table that says how many bits of data to shift for each
-    // 2 clock horizontal delay
+	// table that says how many bits of data to shift for each
+	// 2 clock horizontal delay
 
-    static const WORD mpmdbits[19] =
-        {
-        0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
-        };
+	static const WORD mpmdbits[19] =
+	{
+	0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
+	};
 
-    int i, j;
-	
+	int i, j;
+
 	// !!! used to be static! Not even used, but I'm scared to remove it
-    WORD rgfChanged = 0;
+	WORD rgfChanged = 0;
 
 	// don't do anything in the invisible top and bottom sections
 	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
 		return 0;
 
 	// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
-    if (wScan == wStartScan)
-    {
-        fWait = 0;	// not doing JVB
-        fFetch = 1;	// start by grabbing a DLIST instruction
+	if (wScan == wStartScan)
+	{
+		fWait = 0;	// not doing JVB
+		fFetch = 1;	// start by grabbing a DLIST instruction
 	}
 
 	// grab a DLIST instruction - not in JVB, done previous instruction, and ANTIC is on.
-    if (!fWait && fFetch && (DMACTL & 32))
-    {
+	if (!fWait && fFetch && (DMACTL & 32))
+	{
 #ifndef NDEBUG
-        extern BOOL  fDumpHW;
+		extern BOOL  fDumpHW;
 
-        if (fDumpHW)
-            printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
-                 wScan, DLPC, cpuPeekB(iVM, DLPC));
+		if (fDumpHW)
+			printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
+				wScan, DLPC, cpuPeekB(iVM, DLPC));
 #endif
 
-        sl.modehi = cpuPeekB(iVM, DLPC);
-        sl.modelo = sl.modehi & 0x0F;
-        sl.modehi >>= 4;
-        IncDLPC(iVM);
+		sl.modehi = cpuPeekB(iVM, DLPC);
+		sl.modelo = sl.modehi & 0x0F;
+		sl.modehi >>= 4;
+		IncDLPC(iVM);
 
 		// vertical scroll bit enabled
-        if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
-            {
-            sl.fVscrol = TRUE;
-            sl.vscrol = VSCROL & 15;
+		if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
+		{
+			sl.fVscrol = TRUE;
+			sl.vscrol = VSCROL & 15;
 			iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
 								// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
 								// up to sscans. The last scan line is always when iscan == sscans.
 								// The actual scan line drawn will be iscan % (number of scan lines in that mode line)
-            }
-        else
-            {
-            iscan = 0;
-            sl.vscrol = 0;
-            }
+		}
+		else
+		{
+			iscan = 0;
+			sl.vscrol = 0;
+		}
 
-        switch (sl.modelo)
-            {
-        case 0:
-            // display list blank line(s) instruction
+		switch (sl.modelo)
+		{
+		case 0:
+			// display list blank line(s) instruction
 
-            scans = (sl.modehi & 7);	// scans = 1 less than the # of blank lines wanted
-            break;
+			scans = (sl.modehi & 7);	// scans = 1 less than the # of blank lines wanted
+			break;
 
-        case 1:
-            // display list jump instruction
+		case 1:
+			// display list jump instruction
 
-            scans = 0;
-            fWait = (sl.modehi & 4);	// JVB or JMP?
-			
+			scans = 0;
+			fWait = (sl.modehi & 4);	// JVB or JMP?
+
 			if (fWait)
 				fWait |= (sl.modehi & 8);	// a DLI on a JVB keeps firing every line
 
-            {
-            WORD w;
+			{
+				WORD w;
 
-            w = cpuPeekB(iVM, DLPC);
-            IncDLPC(iVM);
-            w |= (cpuPeekB(iVM, DLPC) << 8);
+				w = cpuPeekB(iVM, DLPC);
+				IncDLPC(iVM);
+				w |= (cpuPeekB(iVM, DLPC) << 8);
 
-            DLPC = w;
-            }
-            break;
+				DLPC = w;
+			}
+			break;
 
-        default:
-            // normal display list entry
+		default:
+			// normal display list entry
 
 			// how many scan lines a line of this graphics mode takes
-            scans = (BYTE)mpMdScans[sl.modelo]-1;
+			scans = (BYTE)mpMdScans[sl.modelo] - 1;
 
 			// LMS (load memory scan) attached to this line to give start of screen memory
-            if (sl.modehi & 4)
-                {
-                wAddr = cpuPeekB(iVM, DLPC);
-                IncDLPC(iVM);
-                wAddr |= (cpuPeekB(iVM, DLPC) << 8);
-                IncDLPC(iVM);
-                }
-            break;
-            }
+			if (sl.modehi & 4)
+			{
+				wAddr = cpuPeekB(iVM, DLPC);
+				IncDLPC(iVM);
+				wAddr |= (cpuPeekB(iVM, DLPC) << 8);
+				IncDLPC(iVM);
+			}
+			break;
+		}
 
 		// time to stop vscrol, this line doesn't use it
-        if (sl.fVscrol && (!(sl.modehi & 2) || (sl.modelo < 2)))
-            {
-            sl.fVscrol = FALSE;
-            scans = VSCROL;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
-            }
-    }
+		if (sl.fVscrol && (!(sl.modehi & 2) || (sl.modelo < 2)))
+		{
+			sl.fVscrol = FALSE;
+			scans = VSCROL;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
+		}
+	}
 
-    // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
+	// generate a DLI if necessary. Do so on the last scan line of a graphics mode line
 	// a JVB instruction with DLI set keeps firing them all the way to the VBI
-    if ((sl.modehi & 8) && (iscan == scans) || ((fWait & 0x08) && wScan ))
-    {
+	if ((sl.modehi & 8) && (iscan == scans) || ((fWait & 0x08) && wScan))
+	{
 #ifndef NDEBUG
-        extern BOOL  fDumpHW;
+		extern BOOL  fDumpHW;
 
-        if (fDumpHW)
-            printf("DLI interrupt at scan %d\n", wScan);
+		if (fDumpHW)
+			printf("DLI interrupt at scan %d\n", wScan);
 #endif
 
 		// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
@@ -544,110 +563,109 @@ BOOL ProcessScanLine(int iVM)
 			if (regPC == bp)
 				fHitBP = TRUE;
 		}
-    }
+	}
 
-    // Check playfield width and set cbWidth (number of bytes read by Antic)
-    // and the smaller cbDisp (number of bytes actually visible)
+	// Check playfield width and set cbWidth (number of bytes read by Antic)
+	// and the smaller cbDisp (number of bytes actually visible)
 
-    switch (DMACTL & 3)
-    {
-    default:
-        Assert(FALSE);
-        break;
+	switch (DMACTL & 3)
+	{
+	default:
+		Assert(FALSE);
+		break;
 
-	// cbDisp - actual number of bytes per line of this graphics mode visible
-	// cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
+		// cbDisp - actual number of bytes per line of this graphics mode visible
+		// cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
 
-    case 0:	// playfield off
-        sl.modelo = 0;
-        cbWidth = 0;
-        cbDisp = cbWidth;
-        break;
-    case 1: // narrow playfield
-        cbWidth = mpMdBytes[sl.modelo];		// cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
-        cbDisp = cbWidth;
-        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
-            cbWidth |= (cbWidth >> 2);
-        break;
-    case 2: // normal playfield
-        cbWidth = mpMdBytes[sl.modelo];		// bytes in NARROW mode, eg. 32
-        cbDisp = cbWidth | (cbWidth >> 2);	// cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
-        if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
-            cbWidth |= (cbWidth >> 1);			// boost cbWidth to mimic wide playfield, eg. 48
-        else
-            cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
-        break;
-    case 3: // wide playfield
-        cbWidth = mpMdBytes[sl.modelo];		// NARROW width
-        cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);	// visible area is half way between NORMAL and WIDE
-        cbWidth |= (cbWidth >> 1);			// WIDE width
-        break;
-    }
+	case 0:	// playfield off
+		sl.modelo = 0;
+		cbWidth = 0;
+		cbDisp = cbWidth;
+		break;
+	case 1: // narrow playfield
+		cbWidth = mpMdBytes[sl.modelo];		// cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
+		cbDisp = cbWidth;
+		if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
+			cbWidth |= (cbWidth >> 2);
+		break;
+	case 2: // normal playfield
+		cbWidth = mpMdBytes[sl.modelo];		// bytes in NARROW mode, eg. 32
+		cbDisp = cbWidth | (cbWidth >> 2);	// cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
+		if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
+			cbWidth |= (cbWidth >> 1);			// boost cbWidth to mimic wide playfield, eg. 48
+		else
+			cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
+		break;
+	case 3: // wide playfield
+		cbWidth = mpMdBytes[sl.modelo];		// NARROW width
+		cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);	// visible area is half way between NORMAL and WIDE
+		cbWidth |= (cbWidth >> 1);			// WIDE width
+		break;
+	}
 
 	// first scan line of a mode line, use the correct char set for this graphics mode line?
-    // !!! it's never too late, but the check will help find bugs by making the whole character bad not just the top row
+	// !!! it's never too late, but the check will help find bugs by making the whole character bad not just the top row
 	//if (iscan == sl.vscrol)
-    {
-        sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
-        sl.chactl = CHACTL & 7;
-    }
+	{
+		sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
+		sl.chactl = CHACTL & 7;
+	}
 
-    // fill in current sl structure
+	// fill in current sl structure
 
-    sl.scan   = iscan;
-    sl.addr   = wAddr;
-    sl.dmactl = DMACTL;
+	sl.scan = iscan;
+	sl.addr = wAddr;
+	sl.dmactl = DMACTL;
 
-	// !!! GTIA MODES outside of mode 15 not supported!
-
-    sl.prior  = PRIOR;
+	// NOTE: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
+	sl.prior = PRIOR;
 
 	// Horiz scrolling
-    if (((sl.modelo) >= 2) && (sl.modehi & 1))
-    {
-        sl.hscrol = HSCROL & 15;
+	if (((sl.modelo) >= 2) && (sl.modehi & 1))
+	{
+		sl.hscrol = HSCROL & 15;
 		// # of bits to shift the screen byte in CHAR modes
 		// in MAP modes, every 8 of these means you've shifted an entire screen byte
 		// even though you don't do it by shifting the bits in the screen byte
 		hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
 	}
-    else
-    {
-        sl.hscrol = 0;
-        hshift = 0;
-    }
+	else
+	{
+		sl.hscrol = 0;
+		hshift = 0;
+	}
 
-    pmg.hposmX = HPOSMX;
-    pmg.hpospX = HPOSPX;
-    pmg.sizem  = SIZEM;
-    pmg.sizepX = SIZEPX;
+	pmg.hposmX = HPOSMX;
+	pmg.hpospX = HPOSPX;
+	pmg.sizem = SIZEM;
+	pmg.sizepX = SIZEPX;
 
-    if (sl.dmactl & 0x10)
-        pmg.pmbase = PMBASE & 0xF8;
-    else
-        pmg.pmbase = PMBASE & 0xFC;
+	if (sl.dmactl & 0x10)
+		pmg.pmbase = PMBASE & 0xF8;
+	else
+		pmg.pmbase = PMBASE & 0xFC;
 
-    // enable PLAYER DMA and enable players?
-    if (sl.dmactl & 0x08 && GRACTL & 2)
-    {
+	// enable PLAYER DMA and enable players?
+	if (sl.dmactl & 0x08 && GRACTL & 2)
+	{
 		// single line resolution
-        if (sl.dmactl & 0x10)
-            {
-            pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
-            pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
-            pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
-            pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
-            }
+		if (sl.dmactl & 0x10)
+		{
+			pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
+			pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
+			pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
+			pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
+		}
 		// double line resolution
-        else
-            {
-            pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >>1));
-            pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >>1));
-            pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >>1));
-            pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >>1));
-            }
-        // !!! GRAFPX = pmg.grafpX;
-        }
+		else
+		{
+			pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1));
+			pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1));
+			pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1));
+			pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1));
+		}
+		// !!! GRAFPX = pmg.grafpX;
+	}
 
 	// we want players, but a constant value, not memory lookup. GRACTL need not be set.
 	else
@@ -669,50 +687,52 @@ BOOL ProcessScanLine(int iVM)
 	// we want missiles, but a constant value, not memory lookup. GRACTL does NOT have to be set!
 	else
 		pmg.grafm = GRAFM;
-	
-    if (pmg.grafpX)
-        {
-        // Players that are offscreen are treated as invisible
+
+	if (pmg.grafpX)
+	{
+		// Players that are offscreen are treated as invisible
 		// the limits are 40 and 216, but a quad sized player could be 32 wide
 		// probably not worth looking at size to find actual width?
-        if ((pmg.hposp0 < 8) || (pmg.hposp0 >= 216))
-            pmg.grafp0 = 0;
-        if ((pmg.hposp1 < 8) || (pmg.hposp1 >= 216))
-            pmg.grafp1 = 0;
-        if ((pmg.hposp2 < 8) || (pmg.hposp2 >= 216))
-            pmg.grafp2 = 0;
-        if ((pmg.hposp3 < 8) || (pmg.hposp3 >= 216))
-            pmg.grafp3 = 0;
-        }
+		if ((pmg.hposp0 < 8) || (pmg.hposp0 >= 216))
+			pmg.grafp0 = 0;
+		if ((pmg.hposp1 < 8) || (pmg.hposp1 >= 216))
+			pmg.grafp1 = 0;
+		if ((pmg.hposp2 < 8) || (pmg.hposp2 >= 216))
+			pmg.grafp2 = 0;
+		if ((pmg.hposp3 < 8) || (pmg.hposp3 >= 216))
+			pmg.grafp3 = 0;
+	}
 
-    if (pmg.grafm)
-        {
-        // Missiles that are offsecreen are treated as invisible
+	if (pmg.grafm)
+	{
+		// Missiles that are offsecreen are treated as invisible
 		// 47 and 208 are the limits, make sure it doesn't encroach
-        if ((pmg.hposm0 < 8) || (pmg.hposm0 >= 216))
-            pmg.grafm &= ~0x03;
-        if ((pmg.hposm1 < 8) || (pmg.hposm1 >= 216))
-            pmg.grafm &= ~0x0C;
-        if ((pmg.hposm2 < 8) || (pmg.hposm2 >= 216))
-            pmg.grafm &= ~0x30;
-        if ((pmg.hposm3 < 8) || (pmg.hposm3 >= 216))
-            pmg.grafm &= ~0xC0;
-        }
+		if ((pmg.hposm0 < 8) || (pmg.hposm0 >= 216))
+			pmg.grafm &= ~0x03;
+		if ((pmg.hposm1 < 8) || (pmg.hposm1 >= 216))
+			pmg.grafm &= ~0x0C;
+		if ((pmg.hposm2 < 8) || (pmg.hposm2 >= 216))
+			pmg.grafm &= ~0x30;
+		if ((pmg.hposm3 < 8) || (pmg.hposm3 >= 216))
+			pmg.grafm &= ~0xC0;
+	}
 
-    // set PM/G flag if any player or missile data is non-zero
+	// set PM/G flag if any player or missile data is non-zero
 
-    sl.fpmg = (pmg.grafpX || pmg.grafm);
+	sl.fpmg = (pmg.grafpX || pmg.grafm);
 
-    // If GTIA is enabled, only let mode 15 display GTIA, all others blank
-	// mode 15 is GTIA mode. prior says whether that will be GR. 9, 10 or 11.
-    if (sl.prior & 0xC0)
-    {
-        if (sl.modelo >= 15)
-        {
-            sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
-        }
+	// If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
+	if (sl.prior & 0xC0)
+	{
+		if (sl.modelo == 15)
+		{
+			sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
+		}
+		else if (sl.modelo == 2 || sl.modelo == 3)
+			;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
         else
         {
+			// !!! ANTIC does something strange, but I can't emulate it right now!
             sl.modelo = 0;
             cbWidth = 0;
         }
@@ -724,7 +744,7 @@ BOOL ProcessScanLine(int iVM)
 	//static BYTE sModeLast;	// last ANTIC mode we saw
 
 	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
-	sl.colbk = ((PRIOR & 0xC0) == 0x80) ? COLPM0 : COLBK;
+	sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
 	
 	sl.colpfX = COLPFX;
     pmg.colpmX = COLPMX;
@@ -880,7 +900,7 @@ BOOL ProcessScanLine(int iVM)
 
 			// GTIA modes 9, 10 & 11 don't use the PF registers since they can have 16 colours instead of 4
 			// so we CANNOT do a special bitfield mode. See the PRIOR code
-			if (sl.modelo <= 15)
+			if (!(sl.prior & 0xc0))
 			{
 				sl.colbk = bfBK;
 				sl.colpf0 = bfPF0;
@@ -892,33 +912,27 @@ BOOL ProcessScanLine(int iVM)
 		else
             qch += (wScan - wStartScan) * vcbScan;
 
+		// what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
+		// Unless we're in GR.9 or GR.11, in which case we're still using sl.colbk, but in the case of pmg, a 4-bit version
+		// We've already accounted above for GR.10 having a different register for its background colour.
+		BYTE bkbk = sl.fpmg ? 0 : sl.colbk;
+		if (sl.prior & 0x40)	// GR.9 or 11
+		{
+			bkbk = sl.colbk;
+			if (sl.fpmg && (sl.prior & 0xc0) == 0xc0) // GR.11 the interesting part is the high nibble
+				bkbk = sl.colbk >> 4;
+			if (sl.fpmg)
+				bkbk = bkbk & 0x0f;
+		}
+
 		// narrow playfield - if we're in bitfield mode and GTIA GR. 9-11, the background colour has to occupy the lower nibble only.
 		// in GR.10, it's the index to the background colour, since the background colour itself is 8 bits and won't fit in a nibble.
         if ((sl.modelo >= 2) && ((sl.dmactl & 3) == 1))
         {
 			if (rgfChanged & (fPMG | fDmactl | fModelo | fColbk))
 			{
-				if (sl.fpmg && sl.modelo == 16)
-				{
-					memset(qch, sl.colbk & 0x0f, (X8 - NARROWx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NARROWx) >> 1), sl.colbk & 0x0f, (X8 - NARROWx) >> 1);	// background colour after
-				}
-				else if (sl.fpmg && sl.modelo == 17)
-				{
-					memset(qch, 0, (X8 - NARROWx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NARROWx) >> 1), 0, (X8 - NARROWx) >> 1);	// background colour after
-				}
-				else if (sl.fpmg && sl.modelo == 18)
-				{
-					memset(qch, sl.colbk >> 4, (X8 - NARROWx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NARROWx) >> 1), sl.colbk >> 4, (X8 - NARROWx) >> 1);	// background colour after
-				}
-				else
-				{
-					memset(qch, sl.colbk, (X8 - NARROWx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NARROWx) >> 1), sl.colbk, (X8 - NARROWx) >> 1);	// background colour after
-
-				}
+				memset(qch, bkbk, (X8 - NARROWx) >> 1);		// background colour before
+				memset(qch + X8 - ((X8 - NARROWx) >> 1), bkbk, (X8 - NARROWx) >> 1);	// background colour after
 			}
             qch += (X8-NARROWx)>>1;
         }
@@ -928,30 +942,12 @@ BOOL ProcessScanLine(int iVM)
 		{
 			if (rgfChanged & (fPMG | fDmactl | fModelo | fColbk))
 			{
-				if (sl.fpmg && sl.modelo == 16)
-				{
-					memset(qch, sl.colbk & 0x0f, (X8 - NORMALx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NORMALx) >> 1), sl.colbk & 0x0f, (X8 - NORMALx) >> 1);	// background colour after
-				}
-				else if (sl.fpmg && sl.modelo == 17)
-				{
-					memset(qch, 0, (X8 - NORMALx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NORMALx) >> 1), 0, (X8 - NORMALx) >> 1);	// background colour after
-				}
-				else if (sl.fpmg && sl.modelo == 18)
-				{
-					memset(qch, sl.colbk >> 4, (X8 - NORMALx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NORMALx) >> 1), sl.colbk >> 4, (X8 - NORMALx) >> 1);	// background colour after
-				}
-				else
-				{
-					memset(qch, sl.colbk, (X8 - NORMALx) >> 1);		// background colour before
-					memset(qch + X8 - ((X8 - NORMALx) >> 1), sl.colbk, (X8 - NORMALx) >> 1);	// background colour after
-				}
+				memset(qch, bkbk, (X8 - NORMALx) >> 1);		// background colour before
+				memset(qch + X8 - ((X8 - NORMALx) >> 1), bkbk, (X8 - NORMALx) >> 1);	// background colour after
 			}
 			qch += (X8 - NORMALx) >> 1;
 		}
-	
+
 		// wide playfield takes up the whole width
 
         rgfChanged &= ~fDisp;
@@ -965,9 +961,8 @@ BOOL ProcessScanLine(int iVM)
             if (!(rgfChanged & (fPMG | fDmactl | fModelo | fColbk)))
                 break;
 
-            // just draw a blank scan line - which in GR.10 w/ PMG (bitfield mode) is just an index
-			// no matter what actual ANTIC mode, if GTIA is in GR.10 mode, we use its background colour
-            _fmemset(qch, (sl.fpmg && ((PRIOR & 0xC0) == 0x80)) ? 0 : sl.colbk, X8);
+            // This is a blank scan line - just draw the background colour
+            _fmemset(qch, bkbk, X8);
             break;
 
 		// GR.0 and descended character GR.0
@@ -1124,81 +1119,189 @@ BOOL ProcessScanLine(int iVM)
 
 //    col2 ^= cpuPeekB(20);
 
-                // See mode 15 for artifacting theory of operation
-
-				// do a pair of pixels, even then odd
-				for (j = 0; j < 4; j++)
+				// undocumented GR.9 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+				// but treat them as GR.9 luminences
+				if ((sl.prior & 0xC0) == 0x40)
 				{
-					// EVEN
+					col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);	// let the user screw up the colours if they want, like a real 810
+					col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
 
-					switch (b2 & 0x80)
+				    // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
+					if (sl.fpmg)
 					{
-					case 0x00:
-						*qch++ = col2;
-						break;
-
-					case 0x80:
-						// don't walk off the beginning of the array
-						BYTE last = col2, last2 = col2;
-
-						if (i != 0 || j != 0)
-						{
-							last = *(qch - 1);
-							last2 = *(qch - 2);
-						}
-
-						if (last == col2)
-						{
-							*qch++ = fArtifacting ? red : col1;
-							if (last2 == red)
-								*(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
-						}
-						else
-						{
-							*qch++ = col1;
-							if (last == green)
-							{
-								*(qch - 2) = col1; // yellow doesn't seem to work
-								//*(qch - 1) = yellow;
-							}
-						}
+						col1 &= 0x0f;
+						col2 &= 0x0f;
 					}
 					
-					// ODD
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
 
-					switch (b2 & 0x40)
-					{
-					case 0x00:
-						*qch++ = col2;
-						break;
-
-					case 0x40:
-						// don't walk off the beginning of the array later on
-						BYTE last, last2 = col2;
-
-						last = *(qch - 1);
-						if (i == 0 && j == 0)
-							last2 = col2;
-						else
-							last2 = *(qch - 2);
-
-						if (last == col2)
-						{
-							*qch++ = fArtifacting ? green : col1;
-							if (last2 == green)
-								*(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
-						}
-						else
-						{
-							*qch++ = col1;
-							if (last == red)
-								*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
-						}
-					}
-
-					b2 <<= 2;
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
 				}
 
+				// undocumented GR.10 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+				// but treat them as GR.10 indexes
+				else if ((sl.prior & 0xC0) == 0x80)
+				{
+
+					col1 = (b2 >> 4);
+					col2 = (b2 & 15);
+
+					// if PMG are present on this line, we are asked to make a bitfield in the low nibble of which colours we are 
+					// using. That's not possible in GR.10 which has >4 possible colours, so we'll just use our index. If we're not
+					// in bitfield mode, we'll use the actual colour
+
+					if (!sl.fpmg)
+					{
+						if (col1 < 9)
+							col1 = *(((BYTE FAR *)&COLPM0) + col1);
+						else if (col1 < 12)
+							col1 = *(((BYTE FAR *)&COLPM0) + 8);	// col. 9-11 are copies of c.8
+						else
+							col1 = *(((BYTE FAR *)&COLPM0) + col1 - 8);	// col. 12-15 are copies of c.4-7
+
+						if (col2 < 9)
+							col2 = *(((BYTE FAR *)&COLPM0) + col2);
+						else if (col2 < 12)
+							col2 = *(((BYTE FAR *)&COLPM0) + 8);	// col. 9-11 are copies of c.8
+						else
+							col2 = *(((BYTE FAR *)&COLPM0) + col2 - 8);	// col. 12-15 are copies of c.4-7
+					}
+					else
+					{
+						if (col1 < 9)
+							;
+						else if (col1 < 12)
+							col1 = 8;			// col. 9-11 are copies of c.8
+						else
+							col1 = col1 - 8;	// col. 12-15 are copies of c.4-7
+
+						if (col2 < 9)
+							;
+						else if (col2 < 12)
+							col2 = 8;			// col. 9-11 are copies of c.8
+						else
+							col2 = col2 - 8;	// col. 12-15 are copies of c.4-7
+					}
+
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
+
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
+				}
+
+				// undocumented GR.11 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+				// but treat them as GR.11 chromas
+				else if ((sl.prior & 0xC0) == 0xC0)
+				{
+					col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);	// lum comes from 712
+					col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
+
+					// We're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
+					// we'll shift it back up and put the luma value back in later
+					if (sl.fpmg)
+					{
+						col1 = col1 >> 4;
+						col2 = col2 >> 4;
+					}
+
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
+					*qch++ = col1;
+
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
+					*qch++ = col2;
+				}
+
+				// GR.0 See mode 15 for artifacting theory of operation
+				else
+				{
+					// do a pair of pixels, even then odd
+					for (j = 0; j < 4; j++)
+					{
+						// EVEN
+
+						switch (b2 & 0x80)
+						{
+						case 0x00:
+							*qch++ = col2;
+							break;
+
+						case 0x80:
+							// don't walk off the beginning of the array
+							BYTE last = col2, last2 = col2;
+
+							if (i != 0 || j != 0)
+							{
+								last = *(qch - 1);
+								last2 = *(qch - 2);
+							}
+
+							if (last == col2)
+							{
+								*qch++ = fArtifacting ? red : col1;
+								if (last2 == red)
+									*(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
+							}
+							else
+							{
+								*qch++ = col1;
+								if (last == green)
+								{
+									*(qch - 2) = col1; // yellow doesn't seem to work
+									//*(qch - 1) = yellow;
+								}
+							}
+						}
+
+						// ODD
+
+						switch (b2 & 0x40)
+						{
+						case 0x00:
+							*qch++ = col2;
+							break;
+
+						case 0x40:
+							// don't walk off the beginning of the array later on
+							BYTE last, last2 = col2;
+
+							last = *(qch - 1);
+							if (i == 0 && j == 0)
+								last2 = col2;
+							else
+								last2 = *(qch - 2);
+
+							if (last == col2)
+							{
+								*qch++ = fArtifacting ? green : col1;
+								if (last2 == green)
+									*(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
+							}
+							else
+							{
+								*qch++ = col1;
+								if (last == red)
+									*(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
+							}
+						}
+
+						b2 <<= 2;
+					}
+				}
 //                _fmemcpy(qch,rgch,8);
             }
             break;
@@ -1951,9 +2054,7 @@ BOOL ProcessScanLine(int iVM)
 
 				col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);	// lum comes from 712
 				col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
-				//col1 = ((b2 >> 4) << 4) | (sl.colbk & 15);
-                //col2 = ((b2 & 15) << 4) | (sl.colbk & 15);
-
+				
 				// we're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
 				// we'll shift it back up and put the luma value back in later
 				if (sl.fpmg)
@@ -1978,9 +2079,9 @@ BOOL ProcessScanLine(int iVM)
     }
 
 	// may have been altered if we were in BITFIELD mode b/c PMG are active. Put them back to what they were
-	if (sl.modelo <= 15)
+	if (!(sl.prior & 0xc0))
 	{
-		sl.colbk = ((PRIOR & 0xC0) == 0x80) ? COLPM0 : COLBK;
+		sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
 		sl.colpfX = COLPFX;
 	}
 
@@ -2018,11 +2119,6 @@ BOOL ProcessScanLine(int iVM)
         // now map the rgpix array to the screen
 
         qch += (wScan - wStartScan) * vcbScan;
-
-        // if GTIA, give players and missiles highest priority !!! Not true for GR.10
-
-        if (sl.modelo > 15)
-            sl.prior = 1;
 
 		// turn the rgpix array from a bitfield of which items are present (player or field colours)
 		// into the actual colour that will show up there, based on priorities
@@ -2109,21 +2205,24 @@ BOOL ProcessScanLine(int iVM)
 			BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
 			
 			// GR. 9 - low nibble is the important LUM value. Now add back to chroma value
-			if (sl.modelo == 16)
+			// Remember, GR.0 can be a secret GTIA mode
+			if ((sl.prior & 0xc0) == 0x40)
 				if (P01 || P23)	// all players visible over all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = (b & 0x0f) | sl.colbk;
 
 			// GR. 10 - low nibble is an index into the colour to use
-			else if (sl.modelo == 17)
+			// Remember, GR.0 can be a secret GTIA mode
+			else if ((sl.prior & 0xc0) == 0x80)
 				if (P01 || P23)	// !!! not true, but I'm making all players overtop all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = *(&COLPM0 + b);
 
 			// GR. 11 - low nibble is the important CHROM value. We'll shift it back to the high nibble and add the LUM value later
-			else if (sl.modelo == 18)
+			// Remember, GR.0 can be a secret GTIA mode
+			else if ((sl.prior & 0xc0) == 0xC0)
 				if (P01 || P23)	// all players above all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
@@ -2132,7 +2231,7 @@ BOOL ProcessScanLine(int iVM)
 			else
 			{
 				// OR together all the colours of all the visible things (ovelap mode support)
-				
+
 				// In hi-res modes (GR.0 & 8) each player colour is given the luminence of PF1 whenever they overlap
 				// even if the playfields are all behind the players. In other words, all text is readable on top of 
 				// player missile graphics, and if we don't do this, all text disappears
