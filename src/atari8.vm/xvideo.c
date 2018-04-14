@@ -237,23 +237,23 @@ void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
     int i;
     int cw;
     BYTE b2;
-    WORD w;
-
-    if (pmg.fHitclr)
-        goto Ldm;
+    WORD w = 0;
 
 	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
 	// Also, PF1 (the text) is always visible on top of a player by affecting its colour
 	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
-    // First do missile-to-player and missile-to-playfield collisions, fifth player doesn't affect collisions, but Hi-res does
+	// no collisions to playfield in GTIA
+	// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
+	BOOL fGTIA = sl.modelo > 15;
+
+	if (pmg.fHitclr)
+		goto Ldm;
+
+	// First do missile-to-player and missile-to-playfield collisions, fifth player doesn't affect collisions, but Hi-res does
 
     for (i = 0; i < 4; i++)
     {
-		// no collisions to playfield in GTIA
-		// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
-		BOOL fGTIA = sl.modelo > 15;
-
 		WORD NEAR *qw;
         
 		b2 = (pmg.grafm >> (i + i)) & 3;
@@ -332,13 +332,18 @@ Ldm:
 
 		// treat fifth player like PF3 being present instead of its corresponding player. This is the only case
 		// where more than one playfield colour could be present at one time. That's how we can tell a fifth player
-		// is in use, and do the right thing later
+		// is in use, and do the right thing later.
 
 		if (fFifth)
-            w  = mppmbw[4];
-        else
-            w  = mppmbw[i];
-
+			w = mppmbw[4];
+		else
+			w = mppmbw[i];
+		
+		// !!! In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
+		// so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour.
+		//if (fFifth && fGTIA)
+		//	w = 0; // !!! This would mean the fifth player is invisible in GTIA instead of the wrong colour. Which is worse?
+		
         if (b2 & 2)
         {            
             qw[0] |= w;
@@ -592,6 +597,8 @@ BOOL ProcessScanLine(int iVM)
     sl.scan   = iscan;
     sl.addr   = wAddr;
     sl.dmactl = DMACTL;
+
+	// !!! GTIA MODES outside of mode 15 not supported!
 
     sl.prior  = PRIOR;
 
@@ -2029,12 +2036,14 @@ BOOL ProcessScanLine(int iVM)
             BYTE b = rgpix[i+((NTSCx - X8)>>1)];
 
 			// if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
-			// unless PF3 is also present, that can only happen in 5th player mode, so use that chroma value instead
-			// (text shows up on top of a fifth player using its chroma)
-			if (fHiRes &&  (b & bfPF3) && (b & bfPF1))
-				sl.colpf1 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
-			else if (fHiRes && (b & bfPF1))
+			if (fHiRes && (b & bfPF1))
 				sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+
+			// If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
+			// (so that text shows up on top of a fifth player using its chroma). Put it back later.
+			BYTE colpf3Sav = sl.colpf3;
+			if (fHiRes && (b & bfPF3) && (b & bfPF1))
+				sl.colpf3 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
 
 			BYTE colpm0 = pmg.colpm0;
 			BYTE colpm1 = pmg.colpm1;
@@ -2090,9 +2099,12 @@ BOOL ProcessScanLine(int iVM)
 			BYTE SP2 = P2 & ~P01 &  ~(PF23 & PRI12) &  ~(PF01 & ~PRI0);
 			BYTE SP3 = P3 & ~P01 & ~(PF23 & PRI12) & ~(PF01 & ~PRI0) & (~P2 | MULTI);
 
+			// usually, the fifth player is above all playfields, even with priority 8
+			// !!! NYI quirk where fifth player is below players in prior 8 if PF0 and PF1 not present
+
 			BYTE SF3 = PF3 & ~(P23 & PRI03) & ~(P01 & ~PRI2);
 			BYTE SF0 = PF0 & ~(P23 & PRI0) &  ~(P01 & PRI01) & ~SF3;
-			BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) & (fHiRes ? 0xff : ~SF3);
+			BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) & ~SF3;
 			BYTE SF2 = PF2 &  ~(P23 & PRI03) & ~(P01 & ~PRI2) & ~SF3;
 			BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
 			
@@ -2128,6 +2140,9 @@ BOOL ProcessScanLine(int iVM)
 				b = (SP0 & colpm0) | (SP1 & colpm1) | (SP2 & colpm2) | (SP3 & colpm3);
 				b = b | (SF0 & sl.colpf0) | (SF1 & sl.colpf1) | (SF2 & sl.colpf2) | (SF3 & sl.colpf3) | (SB & sl.colbk);
 			}
+
+			// put this back if we temporarily changed it to support text visible through the fifth player
+			sl.colpf3 = colpf3Sav;
 
             qch[i] = b;
         }
