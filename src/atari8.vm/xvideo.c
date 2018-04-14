@@ -442,8 +442,11 @@ BOOL ProcessScanLine(int iVM)
 	WORD rgfChanged = 0;
 
 	// don't do anything in the invisible top and bottom sections
-	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
+	if (wScan < wStartScan)
 		return 0;
+	
+	if (wScan >= wStartScan + wcScans)
+		return 0;	// uh oh, ANTIC is over - extending itself
 
 	// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
 	if (wScan == wStartScan)
@@ -464,15 +467,16 @@ BOOL ProcessScanLine(int iVM)
 #endif
 
 		sl.modehi = cpuPeekB(iVM, DLPC);
+		//ODS("scan 0x%03x FETCH 0x%02x\n", wScan, sl.modehi);
 		sl.modelo = sl.modehi & 0x0F;
 		sl.modehi >>= 4;
 		IncDLPC(iVM);
 
-		// vertical scroll bit enabled
+		// vertical scroll bit enabled - you can only start vscrolling on a real mode
 		if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
 		{
 			sl.fVscrol = TRUE;
-			sl.vscrol = VSCROL & 15;
+			sl.vscrol = VSCROL & 15;	// NOT USED
 			iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
 								// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
 								// up to sscans. The last scan line is always when iscan == sscans.
@@ -518,6 +522,11 @@ BOOL ProcessScanLine(int iVM)
 			// how many scan lines a line of this graphics mode takes
 			scans = (BYTE)mpMdScans[sl.modelo] - 1;
 
+			// !!! GR.9++ quirk, if this is a single scan line mode, VSCROL of 3 does not mean duplicate the line as you count
+			// from 3 to 16, like normal, it means scroll 3 times (I think, works for Bump Pong)
+			if (iscan > scans && scans == 0 && iscan <= 8)
+				iscan = 16 - iscan;
+
 			// LMS (load memory scan) attached to this line to give start of screen memory
 			if (sl.modehi & 4)
 			{
@@ -529,11 +538,13 @@ BOOL ProcessScanLine(int iVM)
 			break;
 		}
 
-		// time to stop vscrol, this line doesn't use it
-		if (sl.fVscrol && (!(sl.modehi & 2) || (sl.modelo < 2)))
+		// time to stop vscrol, this line doesn't use it. !!! stop if the mode is different than the mode when we started scrolling?
+		// allow blank mode lines to mean duplicates of previous lines (GR.9++)
+		if (sl.fVscrol && (!(sl.modehi & 2)))
 		{
 			sl.fVscrol = FALSE;
-			scans = VSCROL;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
+			// why is somebody setting the high bits of this sometimes?
+			scans = VSCROL & 0x0f;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
 		}
 	}
 
@@ -728,7 +739,7 @@ BOOL ProcessScanLine(int iVM)
 		{
 			sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
 		}
-		else if (sl.modelo == 2 || sl.modelo == 3)
+		else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
 			;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
         else
         {
@@ -749,8 +760,9 @@ BOOL ProcessScanLine(int iVM)
 	sl.colpfX = COLPFX;
     pmg.colpmX = COLPMX;
 
-    if ((wScan < wStartScan) || (wScan >= wStartScan + wcScans))
-        goto Lnextscan;
+	// we can't let ANTIC overextend itself off our bitmap end and crash
+	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
+		goto Lnextscan;
 
     rgfChanged = 0;
 
@@ -864,6 +876,7 @@ BOOL ProcessScanLine(int iVM)
 	// a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
 	// GTIA modes are a kind of hybrid approach since it's not so simple as which playfield colour is visible
 	//
+	// sorry, ANTIC trying to draw too many scan lines, we'll crash if we let you
 	if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
     {
         // redraw scan line
@@ -962,7 +975,7 @@ BOOL ProcessScanLine(int iVM)
                 break;
 
             // This is a blank scan line - just draw the background colour
-            _fmemset(qch, bkbk, X8);
+			_fmemset(qch, bkbk, X8);
             break;
 
 		// GR.0 and descended character GR.0
