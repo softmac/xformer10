@@ -23,7 +23,7 @@
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
-#define WSYNC_Left 6				// how many instructions can execute after WSYNC before next DLI/VBI
+#define WSYNC_Left 25 // how many cycles can execute after WSYNC before next DLI/VBI (must be at least 25 for Pitfall 2, Worm War, etc.)
 
 // instructions that can be run per scan line for each ANTIC mode (ANTIC steals more cycles the higher res it is, or if character mode)
 // !!! this doesn't account for PMG DMA which slows all of this down
@@ -32,9 +32,8 @@ static const WORD rgINSperSL[19] =
 // # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
 //   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
-	31, 31,		21, 21, 21, 21,		26, 26,		32, 32, 32,		30, 30,		26, 26,		21,		21, 21, 21
-// my timing produced these results, but <21 for GTIA breaks BUMP PONG
-//	32, 32,		19, 19, 19, 19,		26, 26,		32, 32, 32,		30, 30,		26, 26,		20,		20, 20, 20
+	114, 114,	80, 80, 80, 80,		93, 93,		114, 114, 114,	107, 107,	93, 93,		80,		80, 80, 80
+// !!! Actually time this
 };
 
 
@@ -74,7 +73,7 @@ BYTE poly9[(1 << 9) - 1];
 BYTE poly17[(1 << 17) - 1];
 int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4]; 	// each voice keeps track of its own poly position
 unsigned int random17pos;	// needs to be unsigned
-ULONGLONG random17last;	// instruction count last time a random number was asked for
+ULONGLONG random17last;	// cycle count last time a random number was asked for
 
 // Time Travel stuff
 
@@ -238,14 +237,14 @@ typedef struct
     BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, pad1B;
 
     WORD m_wFrame, m_wScan;
-    WORD m_wLeft;
-	WORD m_wLeftMax;	 // keeps track of how many 6502 instructions we're executing this scan line
-	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only 6 opcodes?
+    short m_wLeft;		 // signed, cycles to go can go <0 finishing the last 6502 instruction
+	short m_wLeftMax;	 // keeps track of how many 6502 cycles we're executing this scan line
+	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only ~25 cycles?
 	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_WAITED after a DLI
 
 	WORD pad8W;
     
-	WORD m_bias;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted
+	short m_bias;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
 	
 	BYTE m_rgSIO[5];	// holds the SIO command frame
 	BYTE m_cSEROUT;		// how many bytes we've gotten so far of the 5
@@ -305,7 +304,7 @@ typedef struct
 	unsigned char    m_srC;
 	unsigned char    m_pad;
 
-	ULONG m_irqPokey[4];	// POKEY h/w timers, how many instructions to go
+	LONG m_irqPokey[4];	// POKEY h/w timers, how many cycles to go
 
 	int m_iXESwap;			// which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
