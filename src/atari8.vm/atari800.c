@@ -499,14 +499,14 @@ BOOL ReadCart(int iVM)
 	}
 
 	// 128K and 1st bank is the main one - ATARIMAX
-	else if (type == 41 || (type == 0 && cb == 131072 && *(pb + cb - 4) == 0 && 
+	else if (type == 41 || (type == 0 && cb == 131072 && *(pb + 8188) == 0 && 
 		((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
 	{
 		bCartType = CART_ATARIMAX1;
 	}
 	
 	// 1M and first bank is the main one - ATARIMAX127
-	else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + cb - 4) == 0 &&
+	else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + 8188) == 0 &&
 		((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
 	{
 		bCartType = CART_ATARIMAX8;
@@ -1114,12 +1114,18 @@ BOOL __cdecl WarmbootAtari(int iVM)
     cntTick = 255;	// delay for banner messages
     
 	fBrakes = TRUE;	// go back to real time
+	clockMult = 1;	// NYI
 	wFrame = 0;
 	wScan = 0;	// start at top of screen again
 	wLeft = 0;
+	PSL = 0;
 
-	// too slow to do anytime but startup
-	//InitSound();	// need to reset and queue audio buffers
+	// SIO init
+	cSEROUT = 0;
+	fSERIN = FALSE;
+	isectorPos = 0;
+	fWant8 = 0;
+	fWant10 = 0;
 
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
@@ -1134,25 +1140,14 @@ BOOL __cdecl ColdbootAtari(int iVM)
     unsigned addr;
 	//OutputDebugString("\n\nCOLD START\n\n");
 
+	// first do the warm start stuff
+	if (!WarmbootAtari(iVM))
+		return FALSE;
+
 	BOOL f = InitAtariDisks(iVM);
 
 	if (!f)
 		return FALSE;
-
-	cntTick = 255;	// start the banner up again
-    
-	fBrakes = TRUE; // go back to real time
-	clockMult = 1;	// per instance speed-up
-	wScan = 0;	// start at top of screen again
-	wFrame = 0;
-	wLeft = 0;
-
-	// SIO init
-	cSEROUT = 0;
-	fSERIN = FALSE;
-	isectorPos = 0;
-	fWant8 = 0;
-	fWant10 = 0;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -1177,7 +1172,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // reset the registers, and say which HW it is running
     cpuReset(iVM);
-	cpuInit(PeekBAtari, PokeBAtari);
 
 	// XL's need hardware to cold start, and can only warm start through emulation.
 	// We have to invalidate this checksum to force a cold start
@@ -1286,11 +1280,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
 	//too slow to do anytime but app startup
 	//InitSound();	// Need to reset and queue audio buffers
-	
-	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
-	CaptureJoysticks();
 
-	return TimeTravelReset(iVM); // state is now a valid anchor point
+	return TRUE;
 }
 
 // SAVE: return a pointer to our data, and how big it is. It will not be harmed, and used before we are Uninit'ed, so don't
