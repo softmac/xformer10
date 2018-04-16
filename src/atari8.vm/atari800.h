@@ -23,8 +23,20 @@
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
-#define INSTR_PER_SCAN_NO_DMA 30	// when DMA is off, we can do about 30. Unfortunately, with DMA on, it's variable
 #define WSYNC_Left 6				// how many instructions can execute after WSYNC before next DLI/VBI
+
+// instructions that can be run per scan line for each ANTIC mode (ANTIC steals more cycles the higher res it is, or if character mode)
+// !!! this doesn't account for PMG DMA which slows all of this down
+static const WORD rgINSperSL[19] =
+{
+// # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
+//   88-89      125                 102 101     86  87  89      92          100         121     121
+//   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
+	31, 31,		21, 21, 21, 21,		26, 26,		32, 32, 32,		30, 30,		26, 26,		21,		21, 21, 21
+// my timing produced these results, but <21 for GTIA breaks BUMP PONG
+//	32, 32,		19, 19, 19, 19,		26, 26,		32, 32, 32,		30, 30,		26, 26,		20,		20, 20, 20
+};
+
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1

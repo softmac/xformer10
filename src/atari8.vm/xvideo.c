@@ -446,16 +446,16 @@ BOOL ProcessScanLine(int iVM)
 		return 0;
 	
 	if (wScan >= wStartScan + wcScans)
-		return 0;	// uh oh, ANTIC is over - extending itself
+		return 0;	// uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
 
 	// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
 	if (wScan == wStartScan)
 	{
-		fWait = 0;	// not doing JVB
+		fWait = 0;	// not doing JVB anymore, we reached the top
 		fFetch = 1;	// start by grabbing a DLIST instruction
 	}
 
-	// grab a DLIST instruction - not in JVB, done previous instruction, and ANTIC is on.
+	// grab a DLIST instruction - if we're not in JVB, we're done the previous instruction, and ANTIC is on.
 	if (!fWait && fFetch && (DMACTL & 32))
 	{
 #ifndef NDEBUG
@@ -471,6 +471,8 @@ BOOL ProcessScanLine(int iVM)
 		sl.modelo = sl.modehi & 0x0F;
 		sl.modehi >>= 4;
 		IncDLPC(iVM);
+
+		fFetch = FALSE;
 
 		// vertical scroll bit enabled - you can only start vscrolling on a real mode
 		if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
@@ -548,9 +550,19 @@ BOOL ProcessScanLine(int iVM)
 		}
 	}
 
+	// DMA is off, and we're wanting to fetch because we finished the last thing it was doing when it was turned off
+	// so just do blank mode lines until DMA comes back on
+	if (fFetch && !(DMACTL & 0x20))
+	{
+		sl.modelo = 0;
+		sl.modehi = 0;
+		iscan = 1;		// keep this from running free, make it look like it's just finished
+		scans = 0;		// pretend it's a 1-line blank mode
+	}
+
 	// generate a DLI if necessary. Do so on the last scan line of a graphics mode line
-	// a JVB instruction with DLI set keeps firing them all the way to the VBI
-	if ((sl.modehi & 8) && (iscan == scans) || ((fWait & 0x08) && wScan))
+	// a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
+	if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
 	{
 #ifndef NDEBUG
 		extern BOOL  fDumpHW;
@@ -627,10 +639,8 @@ BOOL ProcessScanLine(int iVM)
 	sl.scan = iscan;
 	sl.addr = wAddr;
 	sl.dmactl = DMACTL;
-
-	// NOTE: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
-	sl.prior = PRIOR;
-
+	sl.prior = PRIOR; // in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
+	
 	// Horiz scrolling
 	if (((sl.modelo) >= 2) && (sl.modehi & 1))
 	{
@@ -895,10 +905,10 @@ BOOL ProcessScanLine(int iVM)
 
 		// more unimplemented code to see if we're dirty
         if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
-            {
+        {
             wScanMin = min(wScanMin, (wScan - wStartScan));
             wScanMac = max(wScanMac, (wScan - wStartScan) + 1);
-            }
+        }
 
 		if (sl.fpmg)
 		{
@@ -970,6 +980,8 @@ BOOL ProcessScanLine(int iVM)
 
         switch (sl.modelo)
         {
+
+		// blank scan line
         default:
             if (!(rgfChanged & (fPMG | fDmactl | fModelo | fColbk)))
                 break;
@@ -2104,6 +2116,7 @@ BOOL ProcessScanLine(int iVM)
     if ((wScan < wStartScan) || (wScan >= (wStartScan+wcScans)))
         goto Lnextscan;
 
+	// even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
         BYTE *qch = vrgvmi[iVM].pvBits;
@@ -2331,7 +2344,9 @@ BOOL ProcessScanLine(int iVM)
 Lnextscan:
     // move on to the next scan line
 
-    fFetch = (iscan == scans);
+	// When we're done with this mode line, fetch again. If we couldn't fetch because DMA was off, keep wanting to fetch
+	if (!fFetch)
+		fFetch = (iscan == scans);
     iscan = (iscan + 1) & 15;
 
     if (fFetch)
