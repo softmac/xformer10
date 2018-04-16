@@ -1488,24 +1488,24 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// Scan lines 249-261 are the rest of the scan lines, without DMA
 
 			if (wScan < wStartScan) {
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA should be off for the first 10 lines
+				wLeft = rgINSperSL[0];	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
 			else if (wScan < STARTSCAN + Y8) {	// the visible part of the screen
-				// ProcessScanLine, above, will set the graphics mode we are on. We can execute 30 instr/line on a blank line.
+				// ProcessScanLine, above, will set the graphics mode we are on. We can execute ~30 instr/line on a blank line.
 				// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-				// But with a character mode, ANTIC steals so many cycles it could be as few as 21.
-				// !!! DMA cycle stealing is more complex than this! Should we actually work it out for real?
-				// Last I timed it, for z=1 to 1000 in GR.0 took 125 jiffies (DMA on) or 88-89 (DMA off) on a real 800.
-				// Using 21 and 30, Gem took 120 (on) and 96 (off).
-				wLeft = (fBrakes && (DMACTL & 3) && sl.modelo >= 2) ? 21 : INSTR_PER_SCAN_NO_DMA;	// runs faster with ANTIC turned off (all approximate)
+				// But with a character mode, ANTIC steals so many cycles it could be as few as ~21.
+				// !!! DMA cycle stealing is more complex than this! Should we actually work it out for real? Include PMG DMA!
+				// We will approximate by looking up how many cycels each different possible ANTIC mode took on average when I timed it
+				// without PMG DMA (which will slow things down and make these numbers even more inaccurate).
+				wLeft = (DMACTL & 3) ? rgINSperSL[sl.modelo] : rgINSperSL[0];	// runs faster with ANTIC fetch DMA turned off
 				wLeftMax = wLeft;	// remember what it started at
 			}
 
 			// VBI happens at scan line 248
 			else if (wScan == STARTSCAN + Y8)
 			{
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// DMA will be off during the VBI
+				wLeft = rgINSperSL[0];	// DMA will be off during the VBI
 				wLeftMax = wLeft;
 
 				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
@@ -1528,7 +1528,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 			else if (wScan > STARTSCAN + Y8)
 			{
-				wLeft = INSTR_PER_SCAN_NO_DMA;	// for this retrace section, there will be no DMA
+				wLeft = rgINSperSL[0];	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
 			}
 		
@@ -1707,7 +1707,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
 	// !!! this assumes 30 instructions per scanline always (not true)
 	if (addr == 0xD20A) {
-		int cur = (wFrame * NTSCY * INSTR_PER_SCAN_NO_DMA + wScan * INSTR_PER_SCAN_NO_DMA + (INSTR_PER_SCAN_NO_DMA - wLeft));
+		int cur = (wFrame * NTSCY * rgINSperSL[0] + wScan * rgINSperSL[0] + (rgINSperSL[0] - wLeft));
 		int delta = (int)(cur - random17last);
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
@@ -1971,6 +1971,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
 			// we're (wScan / 262) of the way through the scan lines and (wLeftMax - wLeft) of the way through this scan line
+			// !!! we assume all the scan lines were the same mode as we are!
 			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)
 				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
@@ -2071,11 +2072,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xD4:      // ANTIC
         addr &= 15;
 		
-        rgbMem[writeANTIC+addr] = b;
+		rgbMem[writeANTIC+addr] = b;
 
 		// the display list pointer is the only ANTIC register that is R/W
 		if (addr == 2 || addr == 3)
 			rgbMem[0xd400 + addr] = b;
+
+		// Do NOT reload the DL to the top when DMA fetch is turned on, that turned out to be disastrous
 
 		if (addr == 10)
 		{
