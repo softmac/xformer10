@@ -229,9 +229,9 @@ void Interrupt(int iVM, BOOL b)
 	if (b)
 		regPC--;
 
-	// it always reads on by the processor
+	// B bit always reads as 1 by the processor
 	regP |= 0x10;	// regB
-	regP |= IBIT;
+	regP |= IBIT;	// interrupts always SEI
 }
 
 // What happens when it's scan line 241 and it's time to start the VBI
@@ -740,7 +740,7 @@ void ResetPokeyTimer(int iVM, int irq)
 
 	// f = how many cycles do we have to count down from? (Might be joined to another channel)
 	// c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
-	// Then set now how many instructions have to execute before reaching 0 (447447 instr/s @ 4 cycles/instr)
+	// Then set now how many cycles have to execute before reaching 0
 
 	// STIMER will call us for all 4 voices in order, so the math will work out.
 
@@ -748,21 +748,21 @@ void ResetPokeyTimer(int iVM, int irq)
 	{
 		f[0] = AUDF1;
 		c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
-		irqPokey[0] = (ULONG)((ULONGLONG)f[0] * 447447 / c[0]);
+		irqPokey[0] = (LONG)((ULONGLONG)f[0] * 1789790 / c[0]);
 	}
 	else if (irq == 1)
 	{
 		f[1] = (AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2; // when joined, these count down much slower
 		c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
 		c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? 15700 : 63921);
-		irqPokey[1] = (ULONG)((ULONGLONG)f[1] * 447447 / c[1]);
+		irqPokey[1] = (LONG)((ULONGLONG)f[1] * 1789790 / c[1]);
 	}
 	else if (irq == 3)
 	{
 		f[3] = (AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4;
 		c[2] = (AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);	// irq 3 needs to know what this is
 		c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? 15700 : 63921);
-		irqPokey[3] = (ULONG)((ULONGLONG)f[3] * 447447 / c[3]);
+		irqPokey[3] = (LONG)((ULONGLONG)f[3] * 1789790 / c[3]);
 	}
 
 	// 0 means not being used, so the minimum value for wanting an interrupt is 1
@@ -1114,7 +1114,9 @@ BOOL __cdecl WarmbootAtari(int iVM)
     cntTick = 255;	// delay for banner messages
     
 	fBrakes = TRUE;	// go back to real time
+	wFrame = 0;
 	wScan = 0;	// start at top of screen again
+	wLeft = 0;
 
 	// too slow to do anytime but startup
 	//InitSound();	// need to reset and queue audio buffers
@@ -1143,7 +1145,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	clockMult = 1;	// per instance speed-up
 	wScan = 0;	// start at top of screen again
 	wFrame = 0;
-	
+	wLeft = 0;
+
 	// SIO init
 	cSEROUT = 0;
 	fSERIN = FALSE;
@@ -1409,7 +1412,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 	do {
 
 		// when tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions
-		if (wLeft == 0)
+		// since we have to finish a 6502 instruction, we might do too many cycles and end up < 0. Don't let errors propagate.
+		// Add wLeft back in to the next round.
+		if (wLeft <= 0)
 		{
 
 #ifndef NDEBUG
@@ -1488,24 +1493,24 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// Scan lines 249-261 are the rest of the scan lines, without DMA
 
 			if (wScan < wStartScan) {
-				wLeft = rgINSperSL[0];	// DMA should be off for the first 10 lines
+				wLeft += rgINSperSL[0];	// DMA should be off for the first 10 lines
 				wLeftMax = wLeft;
 			}
 			else if (wScan < STARTSCAN + Y8) {	// the visible part of the screen
-				// ProcessScanLine, above, will set the graphics mode we are on. We can execute ~30 instr/line on a blank line.
-				// 30 instr/line * 262 lines/frame * 60 frames/sec * 4 cycles/instr = 1789790 cycles/sec
-				// But with a character mode, ANTIC steals so many cycles it could be as few as ~21.
+				// ProcessScanLine, above, will set the graphics mode we are on. We can execute ~114 cycles/line on a blank line.
+				// ~114 cycles/line * 262 lines/frame * 60 frames/sec = 1789790 cycles/sec
+				// But with a character mode, ANTIC steals so many cycles it could be as few as ~80
 				// !!! DMA cycle stealing is more complex than this! Should we actually work it out for real? Include PMG DMA!
-				// We will approximate by looking up how many cycels each different possible ANTIC mode took on average when I timed it
+				// We will approximate by looking up how many cycles each different possible ANTIC mode took on average when I timed it
 				// without PMG DMA (which will slow things down and make these numbers even more inaccurate).
-				wLeft = (DMACTL & 3) ? rgINSperSL[sl.modelo] : rgINSperSL[0];	// runs faster with ANTIC fetch DMA turned off
+				wLeft += (DMACTL & 3) ? rgINSperSL[sl.modelo] : rgINSperSL[0];	// runs faster with ANTIC fetch DMA turned off
 				wLeftMax = wLeft;	// remember what it started at
 			}
 
 			// VBI happens at scan line 248
 			else if (wScan == STARTSCAN + Y8)
 			{
-				wLeft = rgINSperSL[0];	// DMA will be off during the VBI
+				wLeft += rgINSperSL[0];	// DMA will be off during the VBI
 				wLeftMax = wLeft;
 
 				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
@@ -1522,13 +1527,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 						fHitBP = TRUE;
 				}
 
-				// Joysticks and Keys are looked at hear the VBI too
+				// Joysticks and Keys are looked at near the VBI too
 				DoVBI(iVM);
 			}
 
 			else if (wScan > STARTSCAN + Y8)
 			{
-				wLeft = rgINSperSL[0];	// for this retrace section, there will be no DMA
+				wLeft += rgINSperSL[0];	// for this retrace section, there will be no DMA
 				wLeftMax = wLeft;
 			}
 		
@@ -1550,7 +1555,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		if (regPC == bp)
 			fStop = TRUE;
 
-		assert(wLeft == 0 || fTrace == 1 || regPC == bp);
+		assert(wLeft <= 0 || fTrace == 1 || regPC == bp);
 
 		// Code tried to somehow jump to the SIO routine, which talks to the serial bus - we emulate that separately
 		// and skip running the OS code
@@ -1562,7 +1567,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		}
 
 		// next scan line
-		if (wLeft == 0)
+		if (wLeft <= 0)
 		{
 			wScan = wScan + 1;
 
@@ -1606,7 +1611,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 						IRQST &= ~(irq + 1);				// fire away
 					}
 
-					UINT isav = irqPokey[irq];				// remember
+					LONG isav = irqPokey[irq];				// remember
 
 					ResetPokeyTimer(iVM, irq);			// start it up again, they keep cycling forever
 
@@ -1704,8 +1709,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 
 	// RANDOM and its shadows
 	// we've been asked for a random number. How many times would the poly counter have advanced?
-	// !!! we don't cycle count, so we are advancing once every instruction, which averages 4 cycles or so
-	// !!! this assumes 30 instructions per scanline always (not true)
+	// !!! this assumes ~114 instructions per scanline always (not true)
 	if (addr == 0xD20A) {
 		int cur = (wFrame * NTSCY * rgINSperSL[0] + wScan * rgINSperSL[0] + (rgINSperSL[0] - wLeft));
 		int delta = (int)(cur - random17last);
@@ -1717,7 +1721,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 110 VCOUNT increments
 	else if (addr == 0xD40B)
 	{
-		if (wLeft < WSYNC_Left + 1)		// it's about to decrement
+		if (wLeft < WSYNC_Left)		// it's about to decrement
 			return (BYTE)((wScan + 1) >> 1);
 		else
 			return (BYTE)(wScan >> 1);
@@ -2078,6 +2082,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		if (addr == 2 || addr == 3)
 			rgbMem[0xd400 + addr] = b;
 
+		if (addr == 14 && b != 0)
+			addr = addr;
+
 		// Do NOT reload the DL to the top when DMA fetch is turned on, that turned out to be disastrous
 
 		if (addr == 10)
@@ -2091,25 +2098,23 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// A DLI is not supposed to attempt to change its own scan line, since it's current partly drawn.
 			// Hopefully they won't because I don't support it... ProcessScanLine() has already drawn this scan line.
 			//
-			// A call to WSYNC halts until about clock 105, where only 20 cycles (~6 instructions) will have time to run before
-			// the next line's clock 10. At an average of 4 cyc/instr, that would be 5 opcodes, but partial opcodes are allowed
-			// to complete and short opcodes are usually used (PHA, TXA, etc) so in practice, 6 get to execute.
-			// Always 6 - it doesn't matter if DMA is on or off, it's done fetching that line and DMA won't be used anymore.
-			// A call to WSYNC with fewer (not less) than 6 instructions has already missed that scan lines' WSYNC,
-			// so we need to stop executing, and start up the next scan line with only 6 instructions allowed.
+			// A call to WSYNC halts until about clock 105, where only 25 cycles will have time to run before
+			// the next line's clock 10. It doesn't matter if DMA is on or off, it's done fetching that line and DMA won't be used anymore.
+			// A call to WSYNC with fewer (not less) than 25 cycles has already missed that scan lines' WSYNC,
+			// so we need to stop executing, and start up the next scan line with only 25 cycles allowed.
 			// 
 			// VCOUNT is updated just after WSYNC is released. !!! I assume nobody will read it so quickly that it won't have updated!
-			// The code to read VCOUNT reports one higher if the read comes with < 6 instructions left.
+			// The code to read VCOUNT reports one higher if the read comes with < 25 cycles left.
 			//
 			// Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
-			// its last 6 opcodes, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
+			// its last ~25 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
-			if (wLeft >= WSYNC_Left + 1) // we're about to decrement, so this means only WSYNC_Wait instructions remain
-				wLeft = WSYNC_Left + 1;
+			if (wLeft >= WSYNC_Left)
+				wLeft = WSYNC_Left;
 			else
 			{
-				wLeft = 1;				// stop right now and wait till next line's WSYNC
-				WSYNC_Waited = TRUE;	// next scan line only gets 6 opcodes
+				wLeft = 0;				// stop right now and wait till next line's WSYNC
+				WSYNC_Waited = TRUE;	// next scan line only gets 25 cycles
 			}
 		}
         else if (addr == 15)

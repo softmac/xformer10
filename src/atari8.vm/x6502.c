@@ -399,9 +399,9 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 
 // if this is a breakpoint, set wLeft to 0 so we stop, but restore wLeft when we come back or debugging the code will alter the timing of it
 #ifndef NDEBUG
-#define HANDLER_END() if (regPC == bp) { wLeft = 1; bias = wLeft - 1;} wLeft--; if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (regPC == bp) { bias = wLeft; wLeft = 0;} if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #else
-#define HANDLER_END() if ((--wLeft) > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #endif
 
 						//--wLeft; (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
@@ -411,10 +411,6 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
 
 #define HANDLER(opcode) void __fastcall opcode (int iVM) {
-
-// !!! former code - until somebody actually looks at the instruction counter, don't waste time keeping track of it
-//#define HANDLER(opcode) void __fastcall opcode (int iVM) { \
-//  countInstr++;
 
 #if 0
     xprintf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X  ", \
@@ -571,7 +567,14 @@ void HELPER1(ST_com, BYTE x)
 
 void HELPER1(Jcc_com, int f)
 {
-    WORD offset = (signed short)(signed char) READ_BYTE(iVM, regPC++); if (f) regPC += offset;
+	// taking a branch is an extra cycle. Crossing a page boundary from the instruction after the branch is an extra cycle.
+	WORD offset = (signed short)(signed char)READ_BYTE(iVM, regPC++); wLeft -= 2;
+	if (f)
+	{
+		wLeft -= ((regPC & 0xff) == ((regPC + offset) & 0xff)) ? 0 : 1;
+		regPC += offset;
+		wLeft--;
+	}
 } }
 
 void HELPER(BIT_com)
@@ -777,22 +780,21 @@ WORD HELPER(PopWord)
 
 HANDLER(op00)
 {
-	if (!(regP & IBIT))
-	{
-		PackP(iVM);	// we'll be pushing it
-		Interrupt(iVM, TRUE);	// yes, this is a BRK IRQ
-		regPC = cpuPeekW(iVM, 0xFFFE);
-	}
+	// !!! Does BRK or any other INT set the interrupt flag? It is not maskable itself, right?
+	PackP(iVM);	// we'll be pushing it
+	Interrupt(iVM, TRUE);	// yes, this is a BRK IRQ
+	regPC = cpuPeekW(iVM, 0xFFFE);
+	wLeft -= 7;
     HANDLER_END_FLOW();
 }
 
 // ORA (zp,X)
 
-
 HANDLER(op01)
 {
     EA_zpXind(iVM);
     ORA_com(iVM);
+	wLeft -= 6;
     HANDLER_END();
 }
 
@@ -801,6 +803,7 @@ HANDLER(op01)
 HANDLER(op04)
 {
 	EA_zp(iVM);
+	wLeft -= 3;
 	HANDLER_END();
 }
 
@@ -810,7 +813,8 @@ HANDLER(op05)
 {
     EA_zp(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // ASL zp
@@ -819,7 +823,8 @@ HANDLER(op06)
 {
     EA_zp(iVM);
     ASL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // SLO zp (ASL + ORA)
@@ -829,7 +834,7 @@ HANDLER(op07)
 	EA_zp(iVM);
 	ASL_mem(iVM);
 	ORA_com(iVM);
-
+	wLeft -= 5;
 	HANDLER_END();
 }
 
@@ -839,7 +844,8 @@ HANDLER(op08)
 {
     PackP(iVM);
     PushByte(iVM, regP);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // ORA #
@@ -848,7 +854,8 @@ HANDLER(op09)
 {
     EA_imm(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ASL A
@@ -860,7 +867,8 @@ HANDLER(op0A)
     regA += regA;
     update_NZ(iVM, regA);
     srC = newC;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // NOP abs
@@ -868,6 +876,7 @@ HANDLER(op0A)
 HANDLER(op0C)
 {
 	EA_abs(iVM);
+	wLeft -= 4;
 	HANDLER_END();
 }
 
@@ -877,6 +886,7 @@ HANDLER(op0D)
 {
 	EA_abs(iVM);
 	ORA_com(iVM);
+	wLeft -= 4;
 	HANDLER_END();
 }
 
@@ -886,7 +896,8 @@ HANDLER(op0E)
 {
     EA_abs(iVM);
     ASL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // BPL rel8
@@ -903,7 +914,8 @@ HANDLER(op11)
 {
     EA_zpYind(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);
+	HANDLER_END();
 }
 
 // ORA zp,X
@@ -912,7 +924,8 @@ HANDLER(op15)
 {
     EA_zpX(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // ASL zp,X
@@ -921,7 +934,8 @@ HANDLER(op16)
 {
     EA_zpX(iVM);
     ASL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // CLC
@@ -929,7 +943,8 @@ HANDLER(op16)
 HANDLER(op18)
 {
     srC = 0;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ORA abs,Y
@@ -938,13 +953,15 @@ HANDLER(op19)
 {
     EA_absY(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // NOP
 
 HANDLER(op1a)
 {
+	wLeft -= 2;
 	HANDLER_END();
 }
 
@@ -954,7 +971,8 @@ HANDLER(op1D)
 {
     EA_absX(iVM);
     ORA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // ASL abs,X
@@ -963,7 +981,8 @@ HANDLER(op1E)
 {
     EA_absX(iVM);
     ASL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
 
 // JSR abs
@@ -975,21 +994,22 @@ HANDLER(op20)
     PushWord(iVM, regPC - 1);
 
     regPC = regEA;
-	
-	// some apps jump directly to $e959, which is what $e459 jmps to
+	wLeft -= 6;
+
+	// some apps jump directly to $e959, which is what $e459 jmps to !!! messes with cycle accuracy
     if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
     {
         // this is our SIO hook!
 
         fSIO = 1;
-        wLeft = 1;
+        wLeft = 0;
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 1;
+        wLeft = 0;
     }
 
     HANDLER_END_FLOW();
@@ -1001,7 +1021,8 @@ HANDLER(op21)
 {
     EA_zpXind(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // BIT zp
@@ -1010,7 +1031,8 @@ HANDLER(op24)
 {
     EA_zp(iVM);
     BIT_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // AND zp
@@ -1019,7 +1041,8 @@ HANDLER(op25)
 {
     EA_zp(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // ROL zp
@@ -1028,7 +1051,8 @@ HANDLER(op26)
 {
     EA_zp(iVM);
     ROL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // PLP
@@ -1038,7 +1062,8 @@ HANDLER(op28)
     regP = PopByte(iVM);
 	regP |= 0x10;	// force srB
     UnpackP(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // AND #
@@ -1047,7 +1072,8 @@ HANDLER(op29)
 {
     EA_imm(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ROL A
@@ -1059,7 +1085,8 @@ HANDLER(op2A)
     regA += regA + (srC != 0);
     update_NZ(iVM, regA);
     srC = newC;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // BIT abs
@@ -1068,7 +1095,8 @@ HANDLER(op2C)
 {
     EA_abs(iVM);
     BIT_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // AND abs
@@ -1077,7 +1105,8 @@ HANDLER(op2D)
 {
     EA_abs(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // ROL abs
@@ -1086,7 +1115,8 @@ HANDLER(op2E)
 {
     EA_abs(iVM);
     ROL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // RLA abs
@@ -1096,6 +1126,7 @@ HANDLER(op2F)
 	EA_abs(iVM);
 	ROL_mem(iVM);
 	AND_com(iVM);
+	wLeft -= 6;
 	HANDLER_END();
 }
 
@@ -1113,7 +1144,8 @@ HANDLER(op31)
 {
     EA_zpYind(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5); 
+	HANDLER_END();
 }
 
 // AND zp,X
@@ -1122,7 +1154,8 @@ HANDLER(op35)
 {
     EA_zpX(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // ROL zp,X
@@ -1131,7 +1164,8 @@ HANDLER(op36)
 {
     EA_zpX(iVM);
     ROL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // SEC
@@ -1139,7 +1173,8 @@ HANDLER(op36)
 HANDLER(op38)
 {
     srC = 0x80;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // AND abs,Y
@@ -1148,7 +1183,8 @@ HANDLER(op39)
 {
     EA_absY(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // AND abs,X
@@ -1157,7 +1193,8 @@ HANDLER(op3D)
 {
     EA_absX(iVM);
     AND_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // ROL abs,X
@@ -1166,7 +1203,8 @@ HANDLER(op3E)
 {
     EA_absX(iVM);
     ROL_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
 
 // RTI
@@ -1183,6 +1221,7 @@ HANDLER(op40)
 		WSYNC_Waited = TRUE;
 	WSYNC_on_RTI = FALSE;
     
+	wLeft -= 6;
 	HANDLER_END_FLOW();
 }
 
@@ -1192,15 +1231,7 @@ HANDLER(op41)
 {
     EA_zpXind(iVM);
     EOR_com(iVM);
-    HANDLER_END();
-}
-
-// EOR (zp,X)
-
-HANDLER(op42)
-{
-	EA_zpXind(iVM);
-	EOR_com(iVM);
+	wLeft -= 6;
 	HANDLER_END();
 }
 
@@ -1210,7 +1241,8 @@ HANDLER(op45)
 {
     EA_zp(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // LSR zp
@@ -1219,7 +1251,8 @@ HANDLER(op46)
 {
     EA_zp(iVM);
     LSR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // PHA
@@ -1227,7 +1260,8 @@ HANDLER(op46)
 HANDLER(op48)
 {
     PushByte(iVM, regA);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // EOR #
@@ -1236,7 +1270,8 @@ HANDLER(op49)
 {
     EA_imm(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LSR A
@@ -1248,7 +1283,8 @@ HANDLER(op4A)
     regA >>= 1;
     update_NZ(iVM, regA);
     srC = newC;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // JMP abs
@@ -1258,20 +1294,22 @@ HANDLER(op4C)
     EA_abs(iVM);
 
     regPC = regEA;
+	wLeft -= 3;
 
+	// !!! These mess with cycle accuracy
     if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == 0) || (wPBDATA & 1)))
     {
         // this is our SIO hook!
 
         fSIO = 1;
-        wLeft = 1;
+        wLeft = 0;
     }
     else if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 1;
+        wLeft = 0;
     }
 
     HANDLER_END_FLOW();
@@ -1283,7 +1321,8 @@ HANDLER(op4D)
 {
     EA_abs(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // LSR abs
@@ -1292,7 +1331,8 @@ HANDLER(op4E)
 {
     EA_abs(iVM);
     LSR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // BVC rel8
@@ -1309,7 +1349,8 @@ HANDLER(op51)
 {
     EA_zpYind(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+    wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);
+	HANDLER_END();
 }
 
 // NOP (zp),X
@@ -1317,6 +1358,7 @@ HANDLER(op51)
 HANDLER(op54)
 {
 	EA_zpXind(iVM);
+	wLeft -= 6;
 	HANDLER_END();
 }
 
@@ -1326,7 +1368,8 @@ HANDLER(op55)
 {
     EA_zpX(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // LSR zp,X
@@ -1335,7 +1378,8 @@ HANDLER(op56)
 {
     EA_zpX(iVM);
     LSR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // CLI
@@ -1343,7 +1387,8 @@ HANDLER(op56)
 HANDLER(op58)
 {
     srI = 0;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // EOR abs,Y
@@ -1352,7 +1397,8 @@ HANDLER(op59)
 {
     EA_absY(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // EOR abs,X
@@ -1361,7 +1407,8 @@ HANDLER(op5D)
 {
     EA_absX(iVM);
     EOR_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // LSR abs,X
@@ -1370,7 +1417,8 @@ HANDLER(op5E)
 {
     EA_absX(iVM);
     LSR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
 
 // SRE abs,X
@@ -1380,6 +1428,7 @@ HANDLER(op5F)
 	EA_absX(iVM);
 	LSR_mem(iVM);
 	EOR_com(iVM);
+	wLeft -= 7;
 	HANDLER_END();
 }
 
@@ -1388,20 +1437,22 @@ HANDLER(op5F)
 HANDLER(op60)
 {
 	regPC = PopWord(iVM) + 1;
+	wLeft -= 6;
 
+	// !!! so much for cycle accuracy
     if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 1;
+        wLeft = 0;
     }
 	else if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
 	{
 		// this is our SIO hook!
 
 		fSIO = 1;
-		wLeft = 1;
+		wLeft = 0;
 	}
 
     HANDLER_END_FLOW();
@@ -1413,7 +1464,8 @@ HANDLER(op61)
 {
     EA_zpXind(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // ADC zp
@@ -1422,7 +1474,8 @@ HANDLER(op65)
 {
     EA_zp(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // ROR zp
@@ -1431,7 +1484,8 @@ HANDLER(op66)
 {
     EA_zp(iVM);
     ROR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // PLA
@@ -1440,7 +1494,8 @@ HANDLER(op68)
 {
     regA = PopByte(iVM);
     update_NZ(iVM, regA);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // ADC #
@@ -1449,7 +1504,8 @@ HANDLER(op69)
 {
     EA_imm(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ROR A
@@ -1461,7 +1517,8 @@ HANDLER(op6A)
     regA = (regA >> 1) | (srC & 0x80);
     update_NZ(iVM, regA);
     srC = newC;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // JMP (abs)
@@ -1470,20 +1527,22 @@ HANDLER(op6C)
 {
     EA_abs(iVM);
     regPC = READ_WORD(iVM, regEA);
+	wLeft -= 5;
 
+	// !!! these mess with cycle accuracy
 	if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
 	{
 		// this is our SIO hook!
 
 		fSIO = 1;
-		wLeft = 1;
+		wLeft = 0;
 	}
 	else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
 	{
 		// this is our XE BUS hook!
 
 		fSIO = 1;
-		wLeft = 1;
+		wLeft = 0;
 	}
 
     HANDLER_END_FLOW();
@@ -1495,7 +1554,8 @@ HANDLER(op6D)
 {
     EA_abs(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // ROR abs
@@ -1504,7 +1564,8 @@ HANDLER(op6E)
 {
     EA_abs(iVM);
     ROR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // RRA abs
@@ -1514,6 +1575,7 @@ HANDLER(op6F)
 	EA_abs(iVM);
 	ROR_mem(iVM);
 	ADC_com(iVM);
+	wLeft -= 6;
 	HANDLER_END();
 }
 
@@ -1531,7 +1593,8 @@ HANDLER(op71)
 {
     EA_zpYind(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5); // some instructions take an extra cycle crossing a page boundary
+	HANDLER_END();
 }
 
 // ADC zp,X
@@ -1540,7 +1603,8 @@ HANDLER(op75)
 {
     EA_zpX(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // ROR zp,X
@@ -1549,7 +1613,8 @@ HANDLER(op76)
 {
     EA_zpX(iVM);
     ROR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // RRA zp,x - (ROR + ADC)
@@ -1559,6 +1624,7 @@ HANDLER(op77)
 	EA_zpX(iVM);
 	ROR_mem(iVM);
 	ADC_com(iVM);
+	wLeft -= 6;
 	HANDLER_END();
 }
 
@@ -1567,7 +1633,8 @@ HANDLER(op77)
 HANDLER(op78)
 {
     srI = 0x04;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ADC abs,Y
@@ -1576,7 +1643,8 @@ HANDLER(op79)
 {
     EA_absY(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // ADC abs,X
@@ -1585,7 +1653,8 @@ HANDLER(op7D)
 {
     EA_absX(iVM);
     ADC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4); 
+	HANDLER_END();
 }
 
 // ROR abs,X
@@ -1594,7 +1663,8 @@ HANDLER(op7E)
 {
     EA_absX(iVM);
     ROR_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
 
 // NOP #imm
@@ -1602,6 +1672,7 @@ HANDLER(op7E)
 HANDLER(op80)
 {
 	EA_imm(iVM);
+	wLeft -= 2;
 	HANDLER_END();
 }
 
@@ -1611,7 +1682,8 @@ HANDLER(op81)
 {
     EA_zpXind(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // SAX (zp,x)
@@ -1621,6 +1693,7 @@ HANDLER(op83)
 
 	EA_zpXind(iVM);
 	ST_com(iVM, regA & regX);
+	wLeft -= 6;	// best guess
 	HANDLER_END();
 }
 
@@ -1629,9 +1702,10 @@ HANDLER(op83)
 HANDLER(op84)
 {
  
-   EA_zp(iVM);
+	EA_zp(iVM);
     cpuPokeB(iVM, regEA, regY);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // STA zp
@@ -1640,7 +1714,8 @@ HANDLER(op85)
 {
     EA_zp(iVM);
     cpuPokeB(iVM, regEA, regA);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // STX zp
@@ -1649,7 +1724,8 @@ HANDLER(op86)
 {
     EA_zp(iVM);
     cpuPokeB(iVM, regEA, regX);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // DEY
@@ -1657,7 +1733,8 @@ HANDLER(op86)
 HANDLER(op88)
 {
     update_NZ(iVM, --regY);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // NOP imm
@@ -1665,6 +1742,7 @@ HANDLER(op88)
 HANDLER(op89)
 {
 	EA_imm(iVM);
+	wLeft -= 2;
 	HANDLER_END();
 }
 
@@ -1674,7 +1752,8 @@ HANDLER(op8A)
 {
     regA = regX;
     update_NZ(iVM, regX);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // ANE imm
@@ -1682,6 +1761,7 @@ HANDLER(op8A)
 HANDLER(op8B)
 {
 	regPC++;	// !!! NYI
+	wLeft -= 2; // best guess
 	HANDLER_END()
 }
 
@@ -1691,7 +1771,8 @@ HANDLER(op8C)
 {
     EA_abs(iVM);
     ST_com(iVM, regY);
-    HANDLER_END()
+	wLeft -= 4;
+	HANDLER_END()
 }
 
 // STA abs
@@ -1700,7 +1781,8 @@ HANDLER(op8D)
 {
     EA_abs(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 4;	// note that the decrementing comes last, so that STA WSYNC or similar should set wLeft = 0 to stop executing now
+	HANDLER_END();
 }
 
 // STX abs
@@ -1709,7 +1791,8 @@ HANDLER(op8E)
 {
     EA_abs(iVM);
     ST_com(iVM, regX);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // SAX abs
@@ -1718,6 +1801,7 @@ HANDLER(op8F)
 {
 	EA_abs(iVM);
 	ST_com(iVM, regA & regX);
+	wLeft -= 4; // best guess
 	HANDLER_END();
 }
 
@@ -1735,7 +1819,8 @@ HANDLER(op91)
 {
     EA_zpYind(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // STY zp,X
@@ -1744,7 +1829,8 @@ HANDLER(op94)
 {
     EA_zpX(iVM);
     ST_com(iVM, regY);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // STA zp,X
@@ -1753,7 +1839,8 @@ HANDLER(op95)
 {
     EA_zpX(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // STX zp,Y
@@ -1762,7 +1849,8 @@ HANDLER(op96)
 {
     EA_zpY(iVM);
     ST_com(iVM, regX);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // TYA
@@ -1771,7 +1859,8 @@ HANDLER(op98)
 {
     regA = regY;
     update_NZ(iVM, regY);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // STA abs,Y
@@ -1780,7 +1869,8 @@ HANDLER(op99)
 {
     EA_absY(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // TXS
@@ -1788,7 +1878,8 @@ HANDLER(op99)
 HANDLER(op9A)
 {
     regSP = regX | 0x100;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // STA abs,X
@@ -1797,7 +1888,8 @@ HANDLER(op9D)
 {
     EA_absX(iVM);
     ST_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // SHA abs,Y
@@ -1806,6 +1898,7 @@ HANDLER(op9F)
 {
 	regPC++;	// !!! NYI
 	regPC++;
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5); // best guess?
 	HANDLER_END();
 }
 
@@ -1815,7 +1908,8 @@ HANDLER(opA0)
 {
     EA_imm(iVM);
     LDY_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LDA (zp,X)
@@ -1824,7 +1918,8 @@ HANDLER(opA1)
 {
     EA_zpXind(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // LDX #
@@ -1833,7 +1928,8 @@ HANDLER(opA2)
 {
     EA_imm(iVM);
     LDX_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LDY zp
@@ -1842,7 +1938,8 @@ HANDLER(opA4)
 {
     EA_zp(iVM);
     LDY_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // LDA zp
@@ -1851,7 +1948,8 @@ HANDLER(opA5)
 {
     EA_zp(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // LDX zp
@@ -1860,7 +1958,8 @@ HANDLER(opA6)
 {
     EA_zp(iVM);
     LDX_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // TAY
@@ -1869,7 +1968,8 @@ HANDLER(opA8)
 {
     regY = regA;
     update_NZ(iVM, regA);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LDA #
@@ -1878,7 +1978,8 @@ HANDLER(opA9)
 {
     EA_imm(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // TAX
@@ -1887,7 +1988,8 @@ HANDLER(opAA)
 {
     regX = regA;
     update_NZ(iVM, regA);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LXA imm
@@ -1897,6 +1999,7 @@ HANDLER(opAB)
 	EA_imm(iVM);
 	LDX_com(iVM);
 	LDA_com(iVM);
+	wLeft -= 2;
 	HANDLER_END();
 }
 
@@ -1906,7 +2009,8 @@ HANDLER(opAC)
 {
     EA_abs(iVM);
     LDY_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // LDA abs
@@ -1915,7 +2019,7 @@ HANDLER(opAD)
 {
     EA_abs(iVM);
 	LDA_com(iVM);
-
+	wLeft -= 4;
     HANDLER_END();
 }
 
@@ -1925,7 +2029,8 @@ HANDLER(opAE)
 {
     EA_abs(iVM);
     LDX_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // LAX abs
@@ -1935,6 +2040,7 @@ HANDLER(opAF)
 	EA_abs(iVM);
 	LDA_com(iVM);
 	LDX_com(iVM);
+	wLeft -= 4;
 	HANDLER_END();
 }
 
@@ -1952,7 +2058,8 @@ HANDLER(opB1)
 {
     EA_zpYind(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);
+	HANDLER_END();
 }
 
 // LDY zp,X
@@ -1961,7 +2068,8 @@ HANDLER(opB4)
 {
     EA_zpX(iVM);
     LDY_com(iVM);
-    HANDLER_END()
+	wLeft -= 4;
+	HANDLER_END()
 }
 
 // LDA zp,X
@@ -1970,7 +2078,8 @@ HANDLER(opB5)
 {
     EA_zpX(iVM);
     LDA_com(iVM);
-    HANDLER_END()
+	wLeft -= 4;
+	HANDLER_END()
 }
 
 // LDX zp,Y
@@ -1979,7 +2088,8 @@ HANDLER(opB6)
 {
     EA_zpY(iVM);
     LDX_com(iVM);
-    HANDLER_END()
+	wLeft -= 4;
+	HANDLER_END()
 }
 
 // CLV
@@ -1987,7 +2097,8 @@ HANDLER(opB6)
 HANDLER(opB8)
 {
     srV = 0;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LDA abs,Y
@@ -1996,7 +2107,8 @@ HANDLER(opB9)
 {
     EA_absY(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // TSX
@@ -2005,7 +2117,8 @@ HANDLER(opBA)
 {
     regX = (BYTE)(regSP & 255);
     update_NZ(iVM, regX);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // LDY abs,X
@@ -2014,7 +2127,8 @@ HANDLER(opBC)
 {
     EA_absX(iVM);
     LDY_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // LDA abs,X
@@ -2023,7 +2137,8 @@ HANDLER(opBD)
 {
     EA_absX(iVM);
     LDA_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // LDX abs,Y
@@ -2032,7 +2147,8 @@ HANDLER(opBE)
 {
     EA_absY(iVM);
     LDX_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // CPY #
@@ -2041,7 +2157,8 @@ HANDLER(opC0)
 {
     EA_imm(iVM);
     CMP_com(iVM, regY);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // CMP (zp,X)
@@ -2050,7 +2167,8 @@ HANDLER(opC1)
 {
     EA_zpXind(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // CPY zp
@@ -2059,7 +2177,8 @@ HANDLER(opC4)
 {
     EA_zp(iVM);
     CMP_com(iVM, regY);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // CMP zp
@@ -2068,7 +2187,8 @@ HANDLER(opC5)
 {
     EA_zp(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // DEC zp
@@ -2077,7 +2197,8 @@ HANDLER(opC6)
 {
     EA_zp(iVM);
     DEC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // INY
@@ -2085,7 +2206,8 @@ HANDLER(opC6)
 HANDLER(opC8)
 {
     update_NZ(iVM, ++regY);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // CMP #
@@ -2094,7 +2216,8 @@ HANDLER(opC9)
 {
     EA_imm(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // DEX
@@ -2102,7 +2225,8 @@ HANDLER(opC9)
 HANDLER(opCA)
 {
     update_NZ(iVM, --regX);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // CPY abs
@@ -2111,7 +2235,8 @@ HANDLER(opCC)
 {
     EA_abs(iVM);
     CMP_com(iVM, regY);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // CMP abs
@@ -2120,7 +2245,8 @@ HANDLER(opCD)
 {
     EA_abs(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // DEC abs
@@ -2129,7 +2255,8 @@ HANDLER(opCE)
 {
     EA_abs(iVM);
     DEC_mem(iVM);
-    HANDLER_END()
+	wLeft -= 6;
+	HANDLER_END()
 }
 
 // BNE rel8
@@ -2146,7 +2273,8 @@ HANDLER(opD1)
 {
     EA_zpYind(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);
+	HANDLER_END();
 }
 
 // DCP (zp),y (decrement and compare)
@@ -2156,6 +2284,7 @@ HANDLER(opD3)
 	EA_zpYind(iVM);
 	DEC_mem(iVM);
 	CMP_com(iVM, regA);
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5); // best guess
 	HANDLER_END();
 }
 
@@ -2163,7 +2292,8 @@ HANDLER(opD3)
 
 HANDLER(opD4)
 {
-	EA_zpXind(iVM);
+	EA_zpX(iVM);
+	wLeft -= 4;
 	HANDLER_END();
 }
 
@@ -2173,7 +2303,8 @@ HANDLER(opD5)
 {
     EA_zpX(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // DEC zp,X
@@ -2182,7 +2313,8 @@ HANDLER(opD6)
 {
     EA_zpX(iVM);
     DEC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // CLD
@@ -2190,7 +2322,8 @@ HANDLER(opD6)
 HANDLER(opD8)
 {
     srD = 0;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // CMP abs,Y
@@ -2199,7 +2332,8 @@ HANDLER(opD9)
 {
     EA_absY(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // CMP abs,X
@@ -2208,7 +2342,8 @@ HANDLER(opDD)
 {
     EA_absX(iVM);
     CMP_com(iVM, regA);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // DEC abs,X
@@ -2217,22 +2352,19 @@ HANDLER(opDE)
 {
     EA_absX(iVM);
     DEC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
+
+// DCP abs,x
 
 HANDLER(opDF)
 {
-    EA_imm(iVM);
-#if 0
-    cmp   al,0DFh
-    jne   short @F
-
-    ; this is our SIO hook!
-    mov   fSIO,1
-    jmp   done
-@@:
-#endif
-    HANDLER_END();
+	EA_absX(iVM);
+	DEC_mem(iVM);
+	CMP_com(iVM, regA);
+	wLeft -= 7; // best guess
+	HANDLER_END();
 }
 
 // CPX #
@@ -2241,7 +2373,8 @@ HANDLER(opE0)
 {
     EA_imm(iVM);
     CMP_com(iVM, regX);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // SBC (zp,X)
@@ -2250,7 +2383,8 @@ HANDLER(opE1)
 {
     EA_zpXind(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // CPX zp
@@ -2259,7 +2393,8 @@ HANDLER(opE4)
 {
     EA_zp(iVM);
     CMP_com(iVM, regX);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // SBC zp
@@ -2268,7 +2403,8 @@ HANDLER(opE5)
 {
     EA_zp(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= 3;
+	HANDLER_END();
 }
 
 // INC zp
@@ -2277,7 +2413,8 @@ HANDLER(opE6)
 {
     EA_zp(iVM);
     INC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 5;
+	HANDLER_END();
 }
 
 // ISB zp - INC + SBC
@@ -2287,6 +2424,7 @@ HANDLER(opE7)
 	EA_zp(iVM);
 	INC_mem(iVM);
 	SBC_com(iVM);
+	wLeft -= 5;
 	HANDLER_END();
 }
 
@@ -2295,7 +2433,8 @@ HANDLER(opE7)
 HANDLER(opE8)
 {
     update_NZ(iVM, ++regX);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // SBC #
@@ -2304,13 +2443,15 @@ HANDLER(opE9)
 {
     EA_imm(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // NOP
 
 HANDLER(opEA)
 {
+	wLeft -= 2;
     HANDLER_END();
 }
 
@@ -2320,6 +2461,7 @@ HANDLER(opEB)
 {
 	EA_imm(iVM);
 	SBC_com(iVM);
+	wLeft -= 2; 
 	HANDLER_END();
 }
 
@@ -2329,7 +2471,8 @@ HANDLER(opEC)
 {
     EA_abs(iVM);
     CMP_com(iVM, regX);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // SBC abs
@@ -2338,7 +2481,8 @@ HANDLER(opED)
 {
     EA_abs(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // INC abs
@@ -2347,7 +2491,8 @@ HANDLER(opEE)
 {
     EA_abs(iVM);
     INC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // BEQ rel8
@@ -2364,7 +2509,8 @@ HANDLER(opF1)
 {
     EA_zpYind(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);
+	HANDLER_END();
 }
 
 // ISB (zp),Y
@@ -2374,6 +2520,7 @@ HANDLER(opF3)
 	EA_zpYind(iVM);
 	INC_mem(iVM);
 	SBC_com(iVM);
+	wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5); // best guess
 	HANDLER_END();
 }
 
@@ -2383,7 +2530,8 @@ HANDLER(opF5)
 {
     EA_zpX(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= 4;
+	HANDLER_END();
 }
 
 // INC zp,X
@@ -2392,7 +2540,8 @@ HANDLER(opF6)
 {
     EA_zpX(iVM);
     INC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 6;
+	HANDLER_END();
 }
 
 // SED
@@ -2400,7 +2549,8 @@ HANDLER(opF6)
 HANDLER(opF8)
 {
     srD = 0x08;
-    HANDLER_END();
+	wLeft -= 2;
+	HANDLER_END();
 }
 
 // SBC abs,Y
@@ -2409,7 +2559,8 @@ HANDLER(opF9)
 {
     EA_absY(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // SBC abs,X
@@ -2418,7 +2569,8 @@ HANDLER(opFD)
 {
     EA_absX(iVM);
     SBC_com(iVM);
-    HANDLER_END();
+	wLeft -= (((BYTE)regEA == 0xff) ? 5 : 4);
+	HANDLER_END();
 }
 
 // INC abs,X
@@ -2427,7 +2579,8 @@ HANDLER(opFE)
 {
     EA_absX(iVM);
     INC_mem(iVM);
-    HANDLER_END();
+	wLeft -= 7;
+	HANDLER_END();
 }
 
 HANDLER(unused)
@@ -2506,7 +2659,7 @@ PFNOP jump_tab_RO[256] =
     unused,
     op40,
     op41,
-    op42,
+    unused,
     unused,
     unused,
     op45,
@@ -2724,8 +2877,6 @@ void __cdecl Go6502(int iVM)
         } while (wLeft > 0);
 
     PackP(iVM);
-
-    //if (wLeft < 0) wLeft = 0;
 
     wLeft += bias;
 }

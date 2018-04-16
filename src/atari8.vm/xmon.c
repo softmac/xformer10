@@ -478,9 +478,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 				// auto-brk if we jump to 0 (MULE actually does legit jmp to z-page)
 				do { // do at least 1 thing, don't get stuck at the breakpoint
 					u = regPC;
-					CchDisAsm(iVM, &u);
-					FExecVM(v.iVM, TRUE, FALSE);
-					CchShowRegs(iVM);
+					CchDisAsm(iVM, &u);			// what's about to execute
+					FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+					CchShowRegs(iVM);			// !!! when interrupted, this will show the results of the first interrupt instruction!
 					if (GetAsyncKeyState(VK_END) & 0x8000)
 						break;
 				} while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
