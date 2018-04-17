@@ -1118,7 +1118,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	wFrame = 0;
 	wScan = 0;	// start at top of screen again
 	wLeft = 0;
-	PSL = 0;
+	//PSL = 0;
 
 	// SIO init
 	cSEROUT = 0;
@@ -1476,6 +1476,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 			// Fill the bitmap for this scan line. Possibly trigger a DLI, which will come before the IRQ, above.
 			// Also determines which graphics mode this current line is
+			wLeftMax = 1; wLeft = 0; // force entire scan line
 			ProcessScanLine(iVM);
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
