@@ -81,6 +81,20 @@ VMINFO const vmi800 =
 //
 CANDYHW *vrgcandy[MAX_VM];
 
+const BYTE rgDMA[114] =
+{
+	/*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
+	/*  9 - 16 */ W8, 0, W2, 0, W4, WC4, W2, WC2,	// extreme of wide playfield is overscan and never fetches characters
+	/* 17 - 24 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
+	/* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+	/* 89 - 96 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
+	/* 97- 104 */ W8, WC4, W2, WC2, W4, 0, W2, 0,
+	/* 105-113 */ 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
 BOOL fDumpHW;
 
 // get ready for time travel!
@@ -827,6 +841,8 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	static BOOL fInited;
 	if (!fInited) // static, only 1 instance needs to do this
 	{
+		CreateDMATables();	// maps of where the electron beam is on each CPU cycle
+
 		int j, p;
 		extern void * jump_tab[512];
 		extern void * jump_tab_RO[256];
@@ -1118,7 +1134,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	wFrame = 0;
 	wScan = 0;	// start at top of screen again
 	wLeft = 0;
-	//PSL = 0;
+	PSL = 0;
 
 	// SIO init
 	cSEROUT = 0;
@@ -1474,37 +1490,22 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				}
 			}
 
-			// Fill the bitmap for this scan line. Possibly trigger a DLI, which will come before the IRQ, above.
-			// Also determines which graphics mode this current line is
-			wLeftMax = 1; wLeft = 0; // force entire scan line
-			ProcessScanLine(iVM);
+			// Start the scan line off, enough to figure out what mode we're in
+			PSLPrepare(iVM);
+
+			// look up table element 114 has the starting value of wLeft for this kind of situation
+			wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+				[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][114];
+			wLeftMax = wLeft;
 
 			// Scan line 0-7 are not visible, 8 lines without DMA
 			// Scan lines 8-247 are 240 visible lines, amount of DMA depends on the line
 			// Scan line 248 is the VBLANK, without DMA
 			// Scan lines 249-261 are the rest of the scan lines, without DMA
 
-			if (wScan < wStartScan) {
-				wLeft += rgINSperSL[0];	// DMA should be off for the first 10 lines
-				wLeftMax = wLeft;
-			}
-			else if (wScan < STARTSCAN + Y8) {	// the visible part of the screen
-				// ProcessScanLine, above, will set the graphics mode we are on. We can execute ~114 cycles/line on a blank line.
-				// ~114 cycles/line * 262 lines/frame * 60 frames/sec = 1789790 cycles/sec
-				// But with a character mode, ANTIC steals so many cycles it could be as few as ~80
-				// !!! DMA cycle stealing is more complex than this! Should we actually work it out for real? Include PMG DMA!
-				// We will approximate by looking up how many cycles each different possible ANTIC mode took on average when I timed it
-				// without PMG DMA (which will slow things down and make these numbers even more inaccurate).
-				wLeft += (DMACTL & 3) ? rgINSperSL[sl.modelo] : rgINSperSL[0];	// runs faster with ANTIC fetch DMA turned off
-				wLeftMax = wLeft;	// remember what it started at
-			}
-
 			// VBI happens at scan line 248
-			else if (wScan == STARTSCAN + Y8)
+			if (wScan == STARTSCAN + Y8)
 			{
-				wLeft += rgINSperSL[0];	// DMA will be off during the VBI
-				wLeftMax = wLeft;
-
 				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
 				NMIST = (NMIST & 0x20) | 0x5F;
 
@@ -1523,16 +1524,12 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				DoVBI(iVM);
 			}
 
-			else if (wScan > STARTSCAN + Y8)
-			{
-				wLeft += rgINSperSL[0];	// for this retrace section, there will be no DMA
-				wLeftMax = wLeft;
-			}
-		
 			// this scan line is only going to be from after the WSYNC to the end, see WSYNC - THEORY OF OPERATION
+			// That point is stored in index 115 of this array, and +1 because the index is 0-based
 			if (WSYNC_Waited)
 			{
-				wLeft = WSYNC_Left;
+				wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+					[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115] + 1;	// the stored WSYNC point
 				WSYNC_Waited = FALSE;
 			}
 
@@ -1561,6 +1558,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		// next scan line
 		if (wLeft <= 0)
 		{
+			// now finish off any part of the scan line that didn't get drawn during execution
+			ProcessScanLine(iVM);
+
 			wScan = wScan + 1;
 
 			// we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
@@ -1703,7 +1703,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// we've been asked for a random number. How many times would the poly counter have advanced?
 	// !!! this assumes ~114 instructions per scanline always (not true)
 	if (addr == 0xD20A) {
-		int cur = (wFrame * NTSCY * rgINSperSL[0] + wScan * rgINSperSL[0] + (rgINSperSL[0] - wLeft));
+		int cur = (wFrame * NTSCY * 114 + wScan * 114 + (114 - wLeft));
 		int delta = (int)(cur - random17last);
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
@@ -1711,9 +1711,11 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	}
 
 	// VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 110 VCOUNT increments
+	// !!! This is not quite right, it's a few cycles later than the WSYNC point which is 105
 	else if (addr == 0xD40B)
 	{
-		if (wLeft < WSYNC_Left)		// it's about to decrement
+		if (wLeft < rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+				[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115])
 			return (BYTE)((wScan + 1) >> 1);
 		else
 			return (BYTE)(wScan >> 1);
@@ -1883,7 +1885,12 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         break;
 
     case 0xD0:      // GTIA
-        addr &= 31;
+		
+		// CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
+		// before we change the values. The next time its called will be with the new values.
+		ProcessScanLine(iVM);
+        
+		addr &= 31;
         bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
 	
@@ -2087,22 +2094,22 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// the next scan line's clock 10. That is where ANTIC triggers a DLI, so it makes sense to exit and let
 			// ANTIC draw the next scan line and trigger a DLI at that point.
 			//
-			// A DLI is not supposed to attempt to change its own scan line, since it's current partly drawn.
-			// Hopefully they won't because I don't support it... ProcessScanLine() has already drawn this scan line.
-			//
-			// A call to WSYNC halts until about clock 105, where only 25 cycles will have time to run before
-			// the next line's clock 10. It doesn't matter if DMA is on or off, it's done fetching that line and DMA won't be used anymore.
-			// A call to WSYNC with fewer (not less) than 25 cycles has already missed that scan lines' WSYNC,
-			// so we need to stop executing, and start up the next scan line with only 25 cycles allowed.
+			// A call to WSYNC halts until about clock 105, and we have saved how many CPU instructions can still execute before
+			// the next line's clock 10.
+			// A call to WSYNC with fewer (not less) than that number of cycles has already missed that scan lines' WSYNC,
+			// so we need to stop executing, and start up the next scan line with only so many cycles allowed.
 			// 
 			// VCOUNT is updated just after WSYNC is released. !!! I assume nobody will read it so quickly that it won't have updated!
-			// The code to read VCOUNT reports one higher if the read comes with < 25 cycles left.
+			// The code to read VCOUNT reports one higher if the read comes with after the WSYNC point.
 			//
 			// Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
 			// its last ~25 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
-			if (wLeft >= WSYNC_Left)
-				wLeft = WSYNC_Left;
+			// the index is 0-based and wLeft should be set one higher
+			if (wLeft > rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+						[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115])
+				wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+						[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115] + 1;
 			else
 			{
 				wLeft = 0;				// stop right now and wait till next line's WSYNC
