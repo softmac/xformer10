@@ -20,13 +20,13 @@
 
 const WORD mpsizecw[4] = { 1, 2, 1, 4 };
 
-const WORD mppmbw[5] =
+const BYTE mppmbw[5] =
     {
-    (bfPM0 << 8) | bfPM0,
-    (bfPM1 << 8) | bfPM1,
-    (bfPM2 << 8) | bfPM2,
-    (bfPM3 << 8) | bfPM3,
-    (bfPF3 << 8) | bfPF3,
+    /* (bfPM0 << 8) | */ bfPM0,
+    /* (bfPM1 << 8) | */ bfPM1,
+    /* (bfPM2 << 8) | */ bfPM2,
+    /* (bfPM3 << 8) | */ bfPM3,
+    /* (bfPF3 << 8) | */ bfPF3,
     };
 
 BYTE const * const rgszModes[6] =
@@ -46,6 +46,25 @@ BYTE const * const rgszModes[6] =
 #define NORMALx 320
 #define WIDEx 384
 
+// scan lines per line of each graphics mode
+static const WORD mpMdScans[19] =
+{
+	1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1, 1, 1, 1
+};
+
+// BYTES per line of each graphics mode for NARROW playfield
+static const WORD mpMdBytes[19] =
+{
+	0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32, 32, 32, 32
+};
+
+// table that says how many bits of data to shift for each
+// 2 clock horizontal delay
+
+static const WORD mpmdbits[19] =
+{
+	0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
+};
 
 void ShowCountDownLine(int iVM)
 {
@@ -54,7 +73,7 @@ void ShowCountDownLine(int iVM)
     // make sure bottom 8 scan lines
 
     if (i < 8 && i >= 0)
-        {
+    {
         char *pch;
         int cch;
         BYTE *qch = vrgvmi[iVM].pvBits;
@@ -104,127 +123,315 @@ void ShowCountDownLine(int iVM)
         if (i == 7)
             cntTick--;
 
-		// !!! not implemented attempt to see if dirty
-        if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
-            {
-            wScanMin = min(wScanMin, (wScan - wStartScan));
-            wScanMac = max(wScanMac, (wScan - wStartScan) + 1);
-            }
-        }
+    }
+}
+
+// make the tables of where the electron beam is for each CPU cycle. Lookup table is the only acceptable fast way of figuring this out.
+
+void CreateDMATables()
+{
+	// a 1 means CPU blocked, a 0 means CPU free
+
+	BYTE mode, pf, width, first, player, missile, lms, cycle;
+	
+	for (mode = 0; mode < 20; mode++)
+	{
+		for (pf = 0; pf < 2; pf++)
+			for (width = 0; width < 3; width++)
+				for (first = 0; first < 2; first++)
+					for (player = 0; player < 2; player++)
+						for (missile = 0; missile < 2; missile++)
+							for (lms = 0; lms < 2; lms++)
+								for (cycle = 0; cycle < 114; cycle++)
+								{
+
+									// assume free
+									rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
+
+									// missile DMA?
+									if (rgDMA[cycle] == DMA_M)
+									{
+										if (missile)
+											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+
+										// player DMA?
+									}
+									else if (rgDMA[cycle] == DMA_P)
+									{
+										if (player)
+										{
+											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+									}
+
+									// nothing else halts the CPU if Playfield DMA is off
+
+									if (pf)
+									{
+										// fetch will happen on the first scan line of a mode
+										// !!! NO, if this is the LAST line of a mode, the next line will do a fetch
+										if (rgDMA[cycle] == DMA_DL)
+										{
+											if (first)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// we're told when the next line has a LMS
+										else if (rgDMA[cycle] == DMA_LMS)
+										{
+											if (lms)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all wide playfield modes (>= 2) use this one on every scan line
+										else if (rgDMA[cycle] == W8)
+										{
+											if (mode >= 2 && width == 2)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// wide playfield hi and med res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == W4)
+										{
+											if (mode >= 2 && width == 2 && (mode != 8 && mode != 9))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// wide playfield hi res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == W2)
+										{
+											if (width == 2 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// wide playfield character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == WC4)
+										{
+											if (width == 2 && first && (mode >= 2 && mode <= 7))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// wide playfield hi-res character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == WC2)
+										{
+											if (width == 2 && first && (mode >= 2 && mode <= 5))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all but narrow playfield modes (>= 2) use this one on every scan line
+										else if (rgDMA[cycle] == N8)
+										{
+											if (mode >= 2 && width > 0)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all but narrow playfield hi and med res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == N4)
+										{
+											if (mode >= 2 && width > 0 && (mode != 8 && mode != 9))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all but narrow playfield hi res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == N2)
+										{
+											if (width > 0 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all but narrow playfield character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == NC4)
+										{
+											if (width > 0 && first && (mode >= 2 && mode <= 7))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all but narrow playfield hi-res character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == NC2)
+										{
+											if (width > 0 && first && (mode >= 2 && mode <= 5))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all playfield modes (>= 2) use this one on every scan line
+										else if (rgDMA[cycle] == A8)
+										{
+											if (mode >= 2)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all playfield hi and med res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == A4)
+										{
+											if (mode >= 2 && mode != 8 && mode != 9)
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all playfield hi res modes use this cycle on every scan line
+										else if (rgDMA[cycle] == A2)
+										{
+											if ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all playfield character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == AC4)
+										{
+											if (first && (mode >= 2 && mode <= 7))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+										// all playfield hi-res character modes use this cycle on the first scan line
+										else if (rgDMA[cycle] == AC2)
+										{
+											if (first && (mode >= 2 && mode <= 5))
+												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+										}
+									}
+								}
+	}	
+	
+	// OK, now massage it so that looking up by index cycle == wLeft (# of cycles the CPU can still do this scan line)
+	// returns the pixel of that scan line that the electron beam is drawing at that moment
+	// Note that a full wLeft == wLeftMax starts at cycle 10 (when the DLI is fired) so the last few cycles when wLeft is small
+	// (that indicate the electron beam is actually in the first 10 cycles of the next scan line) will return 352 saying
+	// that the beam is at the very end of the active scan line, since no drawing takes place in the first 10 clocks of a line.
+	// 
+	// Index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
+	// Index 115 will tell you what wLeft should be set to on a WSYNC (what its value should be at cycle 105)
+
+	for (mode = 0; mode < 20; mode++)
+	{
+		for (pf = 0; pf < 2; pf++)
+			for (width = 0; width < 3; width++)
+				for (first = 0; first < 2; first++)
+					for (player = 0; player < 2; player++)
+						for (missile = 0; missile < 2; missile++)
+							for (lms = 0; lms < 2; lms++)
+							{
+								rgDMAMap[mode][pf][width][first][player][missile][lms][115] = 0;	// clear WSYNC point
+
+								short array[115];
+								short index = 10;
+								BOOL fWrap = FALSE;
+
+								// calculate the CPU cycle of the scan line that will be drawing at each cycle == wLeft
+								for (cycle = 0; cycle < 114; cycle++)
+								{
+									// go backwards, find a free cycle
+									do {
+										index--;
+										if (index < 0)
+										{
+											index = 113;	// wrap
+											fWrap = TRUE;
+										}
+										if (index == 9 && fWrap)		// all done
+											break;
+									} while (rgDMAMap[mode][pf][width][first][player][missile][lms][index] == 1);
+
+									if (index == 9 && fWrap)
+										break;
+
+									// we found a free cycle. This is where wLeft == index will execute
+									array[cycle] = (index >= 10) ? index : 114;	// being in the first 9 clocks is at the end of last scan line
+									
+									// remember what wLeft should jump to on a WSYNC
+									if (index == 105)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle;
+									// oops, 105 was busy
+									else if (index < 105 && rgDMAMap[mode][pf][width][first][player][missile][lms][115] == 0)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle - 1;
+								}
+
+								// This is what wLeft should start at for this kind of line
+								rgDMAMap[mode][pf][width][first][player][missile][lms][114] = cycle;
+
+								// now convert CPU cycles to pixels... We start drawing at cycle 13 and there are 4 pixels per cycle
+								for (cycle = 0; cycle < 114; cycle++)
+								{
+									if (array[cycle] < 13)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
+									else if (array[cycle] >= 101)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = X8;
+									else
+										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = (array[cycle] - 13) << 2;
+								}
+							}
+	}
 }
 
 // Each PM pixel is 2 screen pixels wide, so we treat the screen RAM as an array of WORDS instead of BYTES
 //
-void DrawPlayers(int iVM, WORD NEAR *pw)
+void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 {
-	int i;
-	int j;
-	int cw;
 	BYTE b2;
-	WORD w;
+	BYTE c;
+	int off[4], a[4], b[4], cw[4];
+	int i;
 
-	// first, fill the bit array with all the players located at each spot
+	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
+	// no collisions to playfield in GTIA
+	BOOL fGTIA = sl.prior & 0xc0;
+
+	// first loop, fill the bit array with all the players located at each spot
 	for (i = 0; i < 4; i++)
 	{
-		WORD NEAR *qw;
-
-		qw = pw;
-		qw += (pmg.hposp[i] - ((NTSCx - X8) >> 2));
-
 		// no PM data in this pixel
 		b2 = pmg.grafp[i];
 		if (!b2)
 			continue;
 
-		cw = mpsizecw[pmg.sizep[i] & 3];
+		off[i] = (pmg.hposp[i] - ((NTSCx - X8) >> 2));
 
-		w = mppmbw[i];
+		cw[i] = mpsizecw[pmg.sizep[i] & 3];	// normal, double or quad size?
+		if (cw[i] == 4)
+			cw[i] = 3;	//# of times to shift to divide by (cw *2)
 
-		// look at each bit of Player data
-		for (j = 0; j < 8; j++)
+		a[i] = off[i] << 1;		// first pixel affected by this player, compare to start
+		b[i] = a[i] + (8 << cw[i]);	// the pixel after the last one affected, compare to stop
+
+		// no part of the player is in the region we care about
+		if (a[i] >= stop || b[i] <= start)
+			continue;
+
+		c = mppmbw[i];
+
+		// first loop, fill in where each player is
+		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
 		{
-			if (b2 & 0x80)
-			{
-				qw[0] |= w;
-				if (cw > 1)
-				{
-					qw[1] |= w;
-					if (cw > 2)
-					{
-						qw[2] |= w;
-						qw[3] |= w;
-					}
-				}
-			}
+			BYTE *pq = qb + z;
 
-			qw += cw;
-			b2 <<= 1;
+			if (b2 & (0x80 >> ((z - a[i]) >> cw[i])))
+				*pq |= c;
 		}
 	}
 
-	// now do player-to-player and player-to-playfield collisions
-
+	// don't want collisions
 	if (pmg.fHitclr)
 		return;
 
-	// loop through all players
+	// second loop, check for collisions once all the players have reported
 	for (i = 0; i < 4; i++)
 	{
-		// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-		BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
-
-		// no collisions to playfield in GTIA
-		BOOL fGTIA = sl.prior & 0xc0;
-
-        WORD NEAR *qw;
-        
+		// no PM data in this pixel
 		b2 = pmg.grafp[i];
 		if (!b2)
-            continue;
+			continue;
 
-        qw = pw;
-		qw += (pmg.hposp[i] - ((NTSCx - X8) >> 2));
+		// no part of the player is in the region we care about
+		if (a[i] >= stop || b[i] <= start)
+			continue;
 
-        cw = mpsizecw[ pmg.sizep[i] & 3];
+		c = mppmbw[i];
 
-		// loop through all bits of a player, which take up 2 high res playfield bits
-        for (j = 0; j < 8; j++)
-        {
-			// Bit 8-j has this player present... is another player or a PF colour present too?
-            if (b2 & 0x80)
-                {
-                PXPL[i] |= (*qw >> 12);
-				PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
+		// first loop, fill in where each player is
+		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		{
+			BYTE *pq = qb + z;
 
-				// double sized player, check the next bit too
-                if (cw > 1)
-                    {
-                    PXPL[i] |= (*qw >> 12);
-                    PXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
+			if (b2 & (0x80 >> ((z - a[i]) >> cw[i])))
+			{
+				PXPL[i] |= ((*pq) >> 4);
+				PXPF[i] |= fHiRes ? ((*pq & 0x02) << 1) : (fGTIA ? 0 : *pq);
+			}
+		}
+	}
 
-					// quad sized player, check the next 2 bits too
-                    if (cw > 2)
-                        {
-                        PXPL[i] |= (*qw >> 12);
-						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : (fGTIA ? 0 : *qw++);
-						PXPL[i] |= (*qw >> 12);
-						PXPF[i] |= fHiRes ? (((*qw++) & 0x02)) << 1 : (fGTIA ? 0 : *qw++);
-					}
-                    }
-                }
-            else
-                qw += cw;
+    // mask out upper 4 bits of each collision register
+    // and mask out same player collisions
 
-            b2 <<= 1;
-        }
-
-        // mask out upper 4 bits of each collision register
-        // and mask out same player collisions
-
-        *(ULONG *)PXPF &= 0x0F0F0F0F;
-        *(ULONG *)PXPL &= 0x070B0D0E;
-        }
+    *(ULONG *)PXPF &= 0x0F0F0F0F;
+    *(ULONG *)PXPL &= 0x070B0D0E;
 }
 
 #if _MSC_VER >= 1200
@@ -232,81 +439,57 @@ void DrawPlayers(int iVM, WORD NEAR *pw)
 #pragma optimize("",off)
 #endif
 
-void DrawMissiles(int iVM, WORD NEAR *pw, int fFifth)
+void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop)
 {
-    int i;
-    int cw;
-    BYTE b2;
-    WORD w = 0;
+	BYTE b2;
+	BYTE c;
+	int off[4], a[4], b[4], cw[4];
+	int i;
 
 	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-	// Also, PF1 (the text) is always visible on top of a player by affecting its colour
 	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
 	// no collisions to playfield in GTIA
-	// !!! Make these faster as probably few people ever check this anyway, do one if at top, and multiple code paths w/o further ifs
 	BOOL fGTIA = sl.prior & 0xc0;
 
+	// no collisions wanted
 	if (pmg.fHitclr)
 		goto Ldm;
 
-	// First do missile-to-player and missile-to-playfield collisions, fifth player doesn't affect collisions, but Hi-res does
-
-    for (i = 0; i < 4; i++)
-    {
-		WORD NEAR *qw;
-        
+	// first loop, fill the bit array with all the players located at each spot
+	for (i = 0; i < 4; i++)
+	{
 		b2 = (pmg.grafm >> (i + i)) & 3;
 		if (!b2)
-            continue;
+			continue;
 
-        qw = (WORD NEAR *)pw;
-        qw += (pmg.hposm[i] - ((NTSCx-X8)>>2));
+		off[i] = (pmg.hposm[i] - ((NTSCx - X8) >> 2));
 
-        cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
+		cw[i] = mpsizecw[((pmg.sizem >> (i + i))) & 3];
+		if (cw[i] == 4)
+			cw[i] = 3;	//# of times to shift to divide by (cw *2)
 
-        if (b2 & 2)
-        {
-            MXPL[i] |= (*qw >> 12);
-			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
+		a[i] = off[i] << 1;		// first pixel affected by this player, compare to start
+		b[i] = a[i] + (2 << cw[i]);	// the pixel after the last one affected, compare to stop
 
-            if (cw > 1)
-            {
-                MXPL[i] |= (*qw >> 12);
-				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
+									// no part of the player is in the region we care about
+		if (a[i] >= stop || b[i] <= start)
+			continue;
 
-                if (cw > 2)
-                {
-                    MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
-					MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
-				}
-            }
-        }
-        else
-            qw += cw;
+		c = mppmbw[i];
 
-        if (b2 & 1)
-        {
-            MXPL[i] |= (*qw >> 12);
-			MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
+		// first loop, fill in where each player is
+		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		{
+			BYTE *pq = qb + z;
 
-            if (cw > 1)
-            {
-                MXPL[i] |= (*qw >> 12);
-				MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
-
-                if (cw > 2)
-                {
-                    MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
-					MXPL[i] |= (*qw >> 12);
-					MXPF[i] |= fHiRes ? (((*qw++) & 0x02) << 1) : (fGTIA ? 0 : *qw++);
-				}
-            }
-        }
-    }
+			if (b2 & (0x02 >> ((z - a[i]) >> cw[i])))
+			{
+				MXPL[i] |= ((*pq) >> 4);
+				MXPF[i] |= fHiRes ? (((*pq) & 0x02) << 1) : (fGTIA ? 0 : *pq);
+			}
+		}
+	}
 
     // mask out upper 4 bits of each collision register
 
@@ -319,26 +502,23 @@ Ldm:
 	
     for (i = 0; i < 4; i++)
     {
-        WORD NEAR *qw;
-        
 		b2 = (pmg.grafm >> (i + i)) & 3;
 		if (!b2)
-            continue;
-
-        qw = (WORD NEAR *)pw;
-        qw += (pmg.hposm[i] - ((NTSCx-X8) >> 2));
-
-        cw = mpsizecw[((pmg.sizem >> (i+i))) & 3];
+			continue;
+		
+		// no part of the player is in the region we care about
+		if (a[i] >= stop || b[i] <= start)
+			continue;
 
 		// treat fifth player like PF3 being present instead of its corresponding player. This is the only case
 		// where more than one playfield colour could be present at one time. That's how we can tell a fifth player
 		// is in use, and do the right thing later.
 
 		if (fFifth)
-			w = mppmbw[4];
+			c = mppmbw[4];
 		else
-			w = mppmbw[i];
-		
+			c = mppmbw[i];
+
 		// !!! In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
 		// so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour. We don't have
 		// any free bits to store anything about the fifth player unless we do something big and hacky which I'm not inclined to
@@ -356,41 +536,19 @@ Ldm:
 		if (fFifth && fGTIA)
 		{
 			if ((sl.prior & 0xc0) == 0x40)
-				w = sl.colpf3 & 0x0f;	// use the correct P5 luma, it may or may not be the right chroma
+				c = sl.colpf3 & 0x0f;	// use the correct P5 luma, it may or may not be the right chroma
 			else if ((sl.prior & 0xc0) == 0x80)
-				w = 7;	// colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
+				c = 7;	// colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
 			else if ((sl.prior & 0xc0) == 0xc0)
-				w = (sl.colpf3 & 0xf0) >> 4;	// use the correct P5 chroma, but the luminence may be off
+				c = (sl.colpf3 & 0xf0) >> 4;	// use the correct P5 chroma, but the luminence may be off
 		}
-		
-        if (b2 & 2)
-        {            
-            qw[0] |= w;
-            if (cw > 1)	// double size
-            {
-                qw[1] |= w;
-                if (cw > 2)	// quad size
-                {
-                    qw[2] |= w;
-                    qw[3] |= w;
-                }
-            }
-        }
-        qw += cw;
 
-        if (b2 & 1)
-        {
-            qw[0] |= w;
-            if (cw > 1)
-            {
-                qw[1] |= w;
-                if (cw > 2)
-                {
-                    qw[2] |= w;
-                    qw[3] |= w;
-                }
-            }
-        }
+		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		{
+			BYTE *pq = qb + z;
+			if (b2 & (0x02 >> ((z - a[i]) >> cw[i])))
+				*pq |= c;
+		}
     }
 }
 
@@ -399,6 +557,18 @@ Ldm:
 __inline void IncDLPC(int iVM)
 {
     DLPC = (DLPC & 0xFC00) | ((DLPC+1) & 0x03FF);
+}
+
+// Given our current scan mode, how many bits is it convenient to write at a time?
+short BitsAtATime(int iVM)
+{
+	short it = mpMdBytes[sl.modelo] >> 3;	// how many multiples of 8 bytes per scan line in narrow mode
+	short i = 8;		// assume 8
+	if (it == 2)
+		i <<= 1;	// lo res mode - write 16 bits at a time
+	else if (it == 1)
+		i <<= 2;	// even lower res mode - writes 32 bits at a time
+	return i;
 }
 
 // THEORY OF OPERATION
@@ -412,249 +582,294 @@ __inline void IncDLPC(int iVM)
 // cbWidth is boosted to the next size if horiz scrolling
 // wAddr is the start of screen memory set by a LMS (load memory scan)
 
-BOOL ProcessScanLine(int iVM)
+// We have wLeft cycles left to execute on this scan line, out of a total of wLeftMax.
+// PSL is the first colour clock still not filled in. Process the appropriate number of
+// colour clocks of this scan line. At the end of the scan line, make sure to call us
+// with wLeft <= 0 to finish up. For instance, we do X8 == 352 colour clocks, so if wLeftMax = 114
+// and wLeft = 72, we're halfway done and PSL will be 176.
+
+////////////////////////////////////////////////////
+// 1. INITIAL SET UP WHEN WE FIRST START A SCAN LINE
+////////////////////////////////////////////////////
+
+// call before Go6502 to figure out what mode this scan line will be and how many cycles can execute during it
+
+void PSLPrepare(int iVM)
 {
-	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
-
-	// scan lines per line of each graphics mode
-	static const WORD mpMdScans[19] =
+	if (PSL == 0 || PSL == X8)	// or just trust the caller and don't check
 	{
-	1, 1, 8, 10, 8, 16, 8, 16, 8, 4, 4, 2, 1, 2, 1, 1, 1, 1, 1
-	};
+		PSL = 0;	// allow PSL to do stuff again
 
-	// BYTES per line of each graphics mode for NARROW playfield
-	static const WORD mpMdBytes[19] =
-	{
-	0, 0, 32, 32, 32, 32, 16, 16,	8, 8, 16, 16, 16, 32, 32, 32, 32, 32, 32
-	};
+		// overscan area
+		if (wScan < wStartScan || wScan >= wStartScan + wcScans)
+		{
+			sl.modelo = 0;
+			sl.modehi = 0;
 
-	// table that says how many bits of data to shift for each
-	// 2 clock horizontal delay
+			// !!! I don't make sure they know PF fetch is turned off!
+			// !!! Nextscanhi also not set
+		}
 
-	static const WORD mpmdbits[19] =
-	{
-	0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
-	};
+		// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
+		if (wScan == wStartScan)
+		{
+			fWait = 0;	// not doing JVB anymore, we reached the top
+			fFetch = 1;	// start by grabbing a DLIST instruction
+		}
 
-	int i, j;
-
-	// !!! used to be static! Not even used, but I'm scared to remove it
-	WORD rgfChanged = 0;
-
-	// don't do anything in the invisible top and bottom sections
-	if (wScan < wStartScan)
-		return 0;
-	
-	if (wScan >= wStartScan + wcScans)
-		return 0;	// uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
-
-	// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
-	if (wScan == wStartScan)
-	{
-		fWait = 0;	// not doing JVB anymore, we reached the top
-		fFetch = 1;	// start by grabbing a DLIST instruction
-	}
-
-	// grab a DLIST instruction - if we're not in JVB, we're done the previous instruction, and ANTIC is on.
-	if (!fWait && fFetch && (DMACTL & 32))
-	{
+		// grab a DLIST instruction - if we're not in JVB, we're done the previous instruction, and ANTIC is on.
+		if (!fWait && fFetch && (DMACTL & 32))
+		{
 #ifndef NDEBUG
-		extern BOOL  fDumpHW;
+			extern BOOL  fDumpHW;
 
-		if (fDumpHW)
-			printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
-				wScan, DLPC, cpuPeekB(iVM, DLPC));
+			if (fDumpHW)
+				printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
+					wScan, DLPC, cpuPeekB(iVM, DLPC));
 #endif
 
-		sl.modehi = cpuPeekB(iVM, DLPC);
-		//ODS("scan 0x%03x FETCH 0x%02x\n", wScan, sl.modehi);
-		sl.modelo = sl.modehi & 0x0F;
-		sl.modehi >>= 4;
-		IncDLPC(iVM);
+			sl.modehi = cpuPeekB(iVM, DLPC);
+			//ODS("scan 0x%03x FETCH 0x%02x\n", wScan, sl.modehi);
+			sl.modelo = sl.modehi & 0x0F;
+			sl.modehi >>= 4;
+			IncDLPC(iVM);
 
-		fFetch = FALSE;
+			fFetch = FALSE;
 
-		// vertical scroll bit enabled - you can only start vscrolling on a real mode
-		if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
-		{
-			sl.fVscrol = TRUE;
-			sl.vscrol = VSCROL & 15;	// NOT USED
-			iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
-								// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
-								// up to sscans. The last scan line is always when iscan == sscans.
-								// The actual scan line drawn will be iscan % (number of scan lines in that mode line)
-		}
-		else
-		{
-			iscan = 0;
-			sl.vscrol = 0;
-		}
-
-		switch (sl.modelo)
-		{
-		case 0:
-			// display list blank line(s) instruction
-
-			scans = (sl.modehi & 7);	// scans = 1 less than the # of blank lines wanted
-			break;
-
-		case 1:
-			// display list jump instruction
-
-			scans = 0;
-			fWait = (sl.modehi & 4);	// JVB or JMP?
-
-			if (fWait)
-				fWait |= (sl.modehi & 8);	// a DLI on a JVB keeps firing every line
-
+			// vertical scroll bit enabled - you can only start vscrolling on a real mode
+			if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
 			{
-				WORD w;
-
-				w = cpuPeekB(iVM, DLPC);
-				IncDLPC(iVM);
-				w |= (cpuPeekB(iVM, DLPC) << 8);
-
-				DLPC = w;
+				sl.fVscrol = TRUE;
+				sl.vscrol = VSCROL & 15;	// NOT USED
+				iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
+									// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
+									// up to sscans. The last scan line is always when iscan == sscans.
+									// The actual scan line drawn will be iscan % (number of scan lines in that mode line)
 			}
-			break;
+			else
+			{
+				iscan = 0;
+				sl.vscrol = 0;
+			}
 
+			switch (sl.modelo)
+			{
+			case 0:
+				// display list blank line(s) instruction
+
+				scans = (sl.modehi & 7);	// scans = 1 less than the # of blank lines wanted
+				break;
+
+			case 1:
+				// display list jump instruction
+
+				scans = 0;
+				fWait = (sl.modehi & 4);	// JVB or JMP?
+
+				if (fWait)
+					fWait |= (sl.modehi & 8);	// a DLI on a JVB keeps firing every line
+
+				{
+					WORD w;
+
+					w = cpuPeekB(iVM, DLPC);
+					IncDLPC(iVM);
+					w |= (cpuPeekB(iVM, DLPC) << 8);
+
+					DLPC = w;
+				}
+				break;
+
+			default:
+				// normal display list entry
+
+				// how many scan lines a line of this graphics mode takes
+				scans = (BYTE)mpMdScans[sl.modelo] - 1;
+
+				// !!! GR.9++ quirk, if this is a single scan line mode, VSCROL of 3 does not mean duplicate the line as you count
+				// from 3 to 16, like normal, it means scroll 3 times (I think, works for Bump Pong)
+				if (iscan > scans && scans == 0 && iscan <= 8)
+					iscan = 16 - iscan;
+
+				// LMS (load memory scan) attached to this line to give start of screen memory
+				if (sl.modehi & 4)
+				{
+					wAddr = cpuPeekB(iVM, DLPC);
+					IncDLPC(iVM);
+					wAddr |= (cpuPeekB(iVM, DLPC) << 8);
+					IncDLPC(iVM);
+				}
+				break;
+			}
+
+			// time to stop vscrol, this line doesn't use it. !!! stop if the mode is different than the mode when we started scrolling?
+			// allow blank mode lines to mean duplicates of previous lines (GR.9++)
+			if (sl.fVscrol && (!(sl.modehi & 2)))
+			{
+				sl.fVscrol = FALSE;
+				// why is somebody setting the high bits of this sometimes?
+				scans = VSCROL & 0x0f;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
+			}
+		}
+
+		Nextmodehi = cpuPeekB(iVM, DLPC);	// peek ahead to see if a LMS is next
+		if (((Nextmodehi & 0x0f) > 1) && (Nextmodehi & 0x40))
+			Nextmodehi = 1;
+		else
+			Nextmodehi = 0;
+
+		// DMA is off, and we're wanting to fetch because we finished the last thing it was doing when it was turned off
+		// so just do blank mode lines until DMA comes back on
+		if (fFetch && !(DMACTL & 0x20))
+		{
+			sl.modelo = 0;
+			sl.modehi = 0;
+			iscan = 1;		// keep this from running free, make it look like it's just finished
+			scans = 0;		// pretend it's a 1-line blank mode
+		}
+
+		// generate a DLI if necessary. Do so on the last scan line of a graphics mode line
+		// a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
+		if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
+		{
+#ifndef NDEBUG
+			extern BOOL  fDumpHW;
+
+			if (fDumpHW)
+				printf("DLI interrupt at scan %d\n", wScan);
+#endif
+
+			// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
+			NMIST = (NMIST & 0x20) | 0x9F;
+			if (NMIEN & 0x80)	// DLI enabled
+			{
+				Interrupt(iVM, FALSE);
+				regPC = cpuPeekW(iVM, 0xFFFA);
+
+				// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
+				// !!! This won't work for nested interrupts
+				WSYNC_Waited = FALSE;
+				WSYNC_on_RTI = TRUE;
+
+				if (regPC == bp)
+					fHitBP = TRUE;
+			}
+		}
+
+		// Check playfield width and set cbWidth (number of bytes read by Antic)
+		// and the smaller cbDisp (number of bytes actually visible)
+
+		switch (DMACTL & 3)
+		{
 		default:
-			// normal display list entry
+			Assert(FALSE);
+			break;
 
-			// how many scan lines a line of this graphics mode takes
-			scans = (BYTE)mpMdScans[sl.modelo] - 1;
+			// cbDisp - actual number of bytes per line of this graphics mode visible
+			// cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
 
-			// !!! GR.9++ quirk, if this is a single scan line mode, VSCROL of 3 does not mean duplicate the line as you count
-			// from 3 to 16, like normal, it means scroll 3 times (I think, works for Bump Pong)
-			if (iscan > scans && scans == 0 && iscan <= 8)
-				iscan = 16 - iscan;
-
-			// LMS (load memory scan) attached to this line to give start of screen memory
-			if (sl.modehi & 4)
-			{
-				wAddr = cpuPeekB(iVM, DLPC);
-				IncDLPC(iVM);
-				wAddr |= (cpuPeekB(iVM, DLPC) << 8);
-				IncDLPC(iVM);
-			}
+		case 0:	// playfield off
+			sl.modelo = 0;
+			cbWidth = 0;
+			cbDisp = cbWidth;
+			break;
+		case 1: // narrow playfield
+			cbWidth = mpMdBytes[sl.modelo];		// cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
+			cbDisp = cbWidth;
+			if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
+				cbWidth |= (cbWidth >> 2);
+			break;
+		case 2: // normal playfield
+			cbWidth = mpMdBytes[sl.modelo];		// bytes in NARROW mode, eg. 32
+			cbDisp = cbWidth | (cbWidth >> 2);	// cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
+			if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
+				cbWidth |= (cbWidth >> 1);			// boost cbWidth to mimic wide playfield, eg. 48
+			else
+				cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
+			break;
+		case 3: // wide playfield
+			cbWidth = mpMdBytes[sl.modelo];		// NARROW width
+			cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);	// visible area is half way between NORMAL and WIDE
+			cbWidth |= (cbWidth >> 1);			// WIDE width
 			break;
 		}
 
-		// time to stop vscrol, this line doesn't use it. !!! stop if the mode is different than the mode when we started scrolling?
-		// allow blank mode lines to mean duplicates of previous lines (GR.9++)
-		if (sl.fVscrol && (!(sl.modehi & 2)))
+		// we do not support changing HSCROL in the middle of a scan line. I doubt it's necessary, it would slow things down,
+		// and it's complicated anyway
+
+		// Horiz scrolling
+		if (((sl.modelo) >= 2) && (sl.modehi & 1))
 		{
-			sl.fVscrol = FALSE;
-			// why is somebody setting the high bits of this sometimes?
-			scans = VSCROL & 0x0f;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
+			sl.hscrol = HSCROL & 15;
+			// # of bits to shift the screen byte in CHAR modes
+			// in MAP modes, every 8 of these means you've shifted an entire screen byte
+			// even though you don't do it by shifting the bits in the screen byte
+			hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
 		}
-	}
-
-	// DMA is off, and we're wanting to fetch because we finished the last thing it was doing when it was turned off
-	// so just do blank mode lines until DMA comes back on
-	if (fFetch && !(DMACTL & 0x20))
-	{
-		sl.modelo = 0;
-		sl.modehi = 0;
-		iscan = 1;		// keep this from running free, make it look like it's just finished
-		scans = 0;		// pretend it's a 1-line blank mode
-	}
-
-	// generate a DLI if necessary. Do so on the last scan line of a graphics mode line
-	// a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
-	if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
-	{
-#ifndef NDEBUG
-		extern BOOL  fDumpHW;
-
-		if (fDumpHW)
-			printf("DLI interrupt at scan %d\n", wScan);
-#endif
-
-		// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
-		NMIST = (NMIST & 0x20) | 0x9F;
-		if (NMIEN & 0x80)	// DLI enabled
-		{
-			Interrupt(iVM, FALSE);
-			regPC = cpuPeekW(iVM, 0xFFFA);
-
-			// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
-			// !!! This won't work for nested interrupts
-			WSYNC_Waited = FALSE;
-			WSYNC_on_RTI = TRUE;
-
-			if (regPC == bp)
-				fHitBP = TRUE;
-		}
-	}
-
-	// Check playfield width and set cbWidth (number of bytes read by Antic)
-	// and the smaller cbDisp (number of bytes actually visible)
-
-	switch (DMACTL & 3)
-	{
-	default:
-		Assert(FALSE);
-		break;
-
-		// cbDisp - actual number of bytes per line of this graphics mode visible
-		// cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
-
-	case 0:	// playfield off
-		sl.modelo = 0;
-		cbWidth = 0;
-		cbDisp = cbWidth;
-		break;
-	case 1: // narrow playfield
-		cbWidth = mpMdBytes[sl.modelo];		// cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
-		cbDisp = cbWidth;
-		if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
-			cbWidth |= (cbWidth >> 2);
-		break;
-	case 2: // normal playfield
-		cbWidth = mpMdBytes[sl.modelo];		// bytes in NARROW mode, eg. 32
-		cbDisp = cbWidth | (cbWidth >> 2);	// cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
-		if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
-			cbWidth |= (cbWidth >> 1);			// boost cbWidth to mimic wide playfield, eg. 48
 		else
-			cbWidth |= (cbWidth >> 2);			// otherwise same as cbDisp
-		break;
-	case 3: // wide playfield
-		cbWidth = mpMdBytes[sl.modelo];		// NARROW width
-		cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);	// visible area is half way between NORMAL and WIDE
-		cbWidth |= (cbWidth >> 1);			// WIDE width
-		break;
-	}
+		{
+			sl.hscrol = 0;
+			hshift = 0;
+		}
 
-	// first scan line of a mode line, use the correct char set for this graphics mode line?
-	// !!! it's never too late, but the check will help find bugs by making the whole character bad not just the top row
-	//if (iscan == sl.vscrol)
+		// HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
+		int j = 0;
+		if (cbDisp != cbWidth)
+		{
+			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin
+			// subtract one for every multiple of 8 hshift is, that's an entire character shift
+			j = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
+			hshift &= 7;	// now only consider the part < 8
+		}
+
+		if (((wAddr + j) & 0xFFF) < 0xFD0)
+		{
+			_fmemcpy(sl.rgb, &rgbMem[wAddr + j], cbWidth);
+			rgbSpecial = rgbMem[wAddr + j - 1];	// the byte just offscreen to the left may be needed if scrolling
+		}
+		else
+		{
+			for (int i = 0; i < cbWidth; i++)
+				sl.rgb[i] = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
+			rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
+		}
+
+	}
+}
+
+void PSLPostpare(int iVM)
+{
+	/////////////////////////////////////////////////////////////////////
+	// 4. WHEN DONE, MOVE ON TO THE NEXT SCAN LINE NEXT TIME WE'RE CALLED
+	/////////////////////////////////////////////////////////////////////
+
+	if (PSL == X8)
 	{
-		sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
-		sl.chactl = CHACTL & 7;
+		// When we're done with this mode line, fetch again. If we couldn't fetch because DMA was off, keep wanting to fetch
+		if (!fFetch)
+			fFetch = (iscan == scans);
+		iscan = (iscan + 1) & 15;
+
+		if (fFetch)
+		{
+			// ANTIC's PC can't cross a 4K boundary, poor thing
+			wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);
+		}
 	}
+}
 
-	// fill in current sl structure
+void PSLReadRegs(int iVM)
+{
+	///////////////////////////////////////////////////////////////////////////
+	// 2. RE-READ ALL THE H/W REGISTERS TO ALLOW THINGS TO CHANGE MID-SCAN LINE
+	///////////////////////////////////////////////////////////////////////////
 
+	sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
+	sl.chactl = CHACTL & 7;
 	sl.scan = iscan;
 	sl.addr = wAddr;
 	sl.dmactl = DMACTL;
 	sl.prior = PRIOR; // in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
-	
-	// Horiz scrolling
-	if (((sl.modelo) >= 2) && (sl.modehi & 1))
-	{
-		sl.hscrol = HSCROL & 15;
-		// # of bits to shift the screen byte in CHAR modes
-		// in MAP modes, every 8 of these means you've shifted an entire screen byte
-		// even though you don't do it by shifting the bits in the screen byte
-		hshift = (sl.hscrol * mpmdbits[sl.modelo]) >> 1;
-	}
-	else
-	{
-		sl.hscrol = 0;
-		hshift = 0;
-	}
 
 	pmg.hposmX = HPOSMX;
 	pmg.hpospX = HPOSPX;
@@ -751,143 +966,62 @@ BOOL ProcessScanLine(int iVM)
 		}
 		else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
 			;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
-        else
-        {
-			// !!! ANTIC does something strange, but I can't emulate it right now!
-            sl.modelo = 0;
-            cbWidth = 0;
-        }
-    }
-
-// RENDER section - used to be called separately
-
-	BYTE rgbSpecial = 0;	// the byte off the left of the screen that needs to be scrolled on
-	//static BYTE sModeLast;	// last ANTIC mode we saw
-
-	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
-	sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
-	
-	sl.colpfX = COLPFX;
-    pmg.colpmX = COLPMX;
-
-	// we can't let ANTIC overextend itself off our bitmap end and crash
-	if (wScan < wStartScan || wScan >= wStartScan + wcScans)
-		goto Lnextscan;
-
-    rgfChanged = 0;
-
-#define fModelo       1
-#define fModehi       2
-#define fScan       4
-#define fAddr       8
-#define fDmactl       16
-#define fChbase       32
-#define fChactl       64
-#define fColbk       128
-#define fColpf0       256
-#define fColpf1       512
-#define fColpf2       1024
-#define fColpf3       2048
-#define fColpfX       (fColpf0|fColpf1|fColpf2|fColpf3)
-#define fPrior      4096
-#define fFineScroll 8192
-#define fPMG        16384
-#define fDisp       0x8000
-#define fAll        0xFFFF
-
-	// remove the code that attempted to avoid unnecessary rendering when nothing changed, until then, keep this hack
-	SL *psl = &sl;
-
-#if 0
-	psl = &rgsl[0];	// look at how things were at the top of the screen compared to now?
-	
-	if (sl.modelo != psl->modelo) rgfChanged |= fModelo;
-    if (sl.modehi != psl->modehi) rgfChanged |= fModehi;
-    if (sl.scan   != psl->scan  ) rgfChanged |= fScan;    
-    if (sl.addr   != psl->addr  ) rgfChanged |= fAddr;    
-    if (sl.dmactl != psl->dmactl) rgfChanged |= fDmactl;
-    if (sl.chbase != psl->chbase) rgfChanged |= fChbase;
-    if (sl.chactl != psl->chactl) rgfChanged |= fChactl;
-    if (sl.colbk  != psl->colbk ) rgfChanged |= fColbk;    
-#if 1
-    if (sl.colpfX != psl->colpfX) rgfChanged |= fColpfX;
-#else
-    if (sl.colpf0 != psl->colpf0) rgfChanged |= fColpf0;
-    if (sl.colpf1 != psl->colpf1) rgfChanged |= fColpf1;
-    if (sl.colpf2 != psl->colpf2) rgfChanged |= fColpf2;
-    if (sl.colpf3 != psl->colpf3) rgfChanged |= fColpf3;
-#endif
-    if (sl.prior  != psl->prior)  rgfChanged |= fPrior;
-    if (sl.vscrol != psl->vscrol) rgfChanged |= fFineScroll;
-    if (sl.hscrol != psl->hscrol) rgfChanged |= fFineScroll;
-
-    if (sl.fpmg   |  psl->fpmg)   rgfChanged |= fPMG;
-	
-#if 0
-    if (rgfChanged & fPMG)
-        {
-        rgfChanged |= fAll;
-        }
-#endif
-#endif
-
-	// !!! we no longer support trying to save time and skip some rendering if things are the same.
-	// It won't save much time, and it's really hard to get right (it never was)
-	// This is for variables rgfChanged and fDataChanged
-    rgfChanged |= fAll;
-
-	// Old comment:
-    // Even if rgfChanged is 0 at this point, we have to check the 10 to 48
-    // data bytes associated with this scan line. If it is the first scan line
-    // of this mode then we need to blit and compare the memory.
-    // If it isn't the first scan line and !fDataChanged then there is no
-    // need to blit and compare since nothing changed since the first scan line.
-
-	if (((sl.modelo) >= 2) && (rgfChanged || (iscan == sl.vscrol) || (fDataChanged)))
-	{
-		j = 0;
-
-		// HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
-
-		if (cbDisp != cbWidth)
-		{
-			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin
-			// subtract one for every multiple of 8 hshift is, that's an entire character shift
-			j = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
-			hshift &= 7;	// now only consider the part < 8
-		}
-
-		if (fDataChanged)
-		{
-			// sl.rgb already has data from previous scan line
-		}
-		else if (((wAddr + j) & 0xFFF) < 0xFD0)
-		{
-			_fmemcpy(sl.rgb, &rgbMem[wAddr + j], cbWidth);
-			rgbSpecial = rgbMem[wAddr + j - 1];	// the byte just offscreen to the left may be needed if scrolling
-		}
 		else
 		{
-			for (i = 0; i < cbWidth; i++)
-				sl.rgb[i] = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
-			rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
-		}
-
-		if (fDataChanged || memcmp(&sl.rgb, &psl->rgb[0], cbWidth))
-		{
-			rgfChanged |= fDisp;
-			fDataChanged = 1;
+			// !!! ANTIC does something strange, but I can't emulate it right now!
+			sl.modelo = 0;
+			cbWidth = 0;
 		}
 	}
 
-    // THIS IS A LOT OF CODE
-	//
+	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
+	sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
+
+	sl.colpfX = COLPFX;
+	pmg.colpmX = COLPMX;
+}
+
+BOOL ProcessScanLine(int iVM)
+{
+	// don't do anything in the invisible top and bottom sections
+	if (wScan < wStartScan)
+		return 0;
+
+	if (wScan >= wStartScan + wcScans)
+		return 0;	// uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
+
+	// what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
+	// so the index into the array, which is 0-based, is (wLeft - 1).
+	// Finally, oOnce the whole scan line executes, we're called with wLeft == 0
+	// !!! if wLeft < 0, we're hopefully not in the visible part of the screen so it's OK to just use 0
+	short cclock = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
+		[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][wLeft > 0 ? wLeft - 1 : 0];
+
+	// what part of the scan line were we on last time?
+	short cclockPrev = PSL;
+	
+	if (cclock <= PSL)
+		return TRUE;	// nothing to do
+
+	PSL = cclock;	// next time we're called, start from here
+
+	// now we are responsible for drawing starting from location cclockPrev up to but not including cclock
+
+	PSLReadRegs(iVM);	// read our hardware registers to find brand-new values to use starting this cycle
+
+	////////////////////////////////////////////////////////////////
+	// 3. DRAW THIS PORTION OF THE SCAN LINE - THIS IS A LOT OF CODE
+	////////////////////////////////////////////////////////////////
+
+	// PMG can exist outside the visible boundaries of this line, so we need an extra long line to avoid complicating things
+	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
+
+	int i, j;
+
 	// Based on the graphics mode, fill in a scanline's worth of data. It might be the actual data, or if PMG exist on this line,
 	// a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
 	// GTIA modes are a kind of hybrid approach since it's not so simple as which playfield colour is visible
 	//
-	// sorry, ANTIC trying to draw too many scan lines, we'll crash if we let you
-	if (rgfChanged && (wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
     {
         // redraw scan line
 
@@ -903,13 +1037,6 @@ BOOL ProcessScanLine(int iVM)
         // annoying debug pixels near top of screen: qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
 #endif
 
-		// more unimplemented code to see if we're dirty
-        if ((wScan >= wStartScan) && (wScan < (wStartScan+wcScans)))
-        {
-            wScanMin = min(wScanMin, (wScan - wStartScan));
-            wScanMac = max(wScanMac, (wScan - wStartScan) + 1);
-        }
-
 		if (sl.fpmg)
 		{
 			// When PM/G are present on the scan line is first rendered
@@ -919,7 +1046,7 @@ BOOL ProcessScanLine(int iVM)
 			// in the process.
 
 			qch = &rgpix[(NTSCx - X8) >> 1];	// first visible screen NTSC pixel
-			_fmemset(rgpix, 0, sizeof(rgpix));
+			_fmemset(qch + cclockPrev, 0, cclock - cclockPrev); // zero out the section we'll be using
 
 			// GTIA modes 9, 10 & 11 don't use the PF registers since they can have 16 colours instead of 4
 			// so we CANNOT do a special bitfield mode. See the PRIOR code
@@ -933,7 +1060,10 @@ BOOL ProcessScanLine(int iVM)
 			}
 		}
 		else
-            qch += (wScan - wStartScan) * vcbScan;
+		{
+			// not doing a bitfield, just write into this scan line
+			qch += (wScan - wStartScan) * vcbScan;
+		}
 
 		// what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
 		// Unless we're in GR.9 or GR.11, in which case we're still using sl.colbk, but in the case of pmg, a 4-bit version
@@ -950,45 +1080,71 @@ BOOL ProcessScanLine(int iVM)
 
 		// narrow playfield - if we're in bitfield mode and GTIA GR. 9-11, the background colour has to occupy the lower nibble only.
 		// in GR.10, it's the index to the background colour, since the background colour itself is 8 bits and won't fit in a nibble.
-        if ((sl.modelo >= 2) && ((sl.dmactl & 3) == 1))
-        {
-			if (rgfChanged & (fPMG | fDmactl | fModelo | fColbk))
-			{
-				memset(qch, bkbk, (X8 - NARROWx) >> 1);		// background colour before
-				memset(qch + X8 - ((X8 - NARROWx) >> 1), bkbk, (X8 - NARROWx) >> 1);	// background colour after
-			}
-            qch += (X8-NARROWx)>>1;
-        }
 		
-		// normal playfield is 320 wide
-		if ((sl.modelo >= 2) && ((sl.dmactl & 3) == 2))
+		short bbars = 0;
+		if (sl.modelo >= 2)
 		{
-			if (rgfChanged & (fPMG | fDmactl | fModelo | fColbk))
+			if ((sl.dmactl & 3) == 1)
+				bbars = (X8 - NARROWx) >> 1;	// width of the "black" bar on the side of the visible playfield area
+			else if ((sl.dmactl & 3) == 2)
+				bbars = (X8 - NORMALx) >> 1;
+		
+			if (bbars)
 			{
-				memset(qch, bkbk, (X8 - NORMALx) >> 1);		// background colour before
-				memset(qch + X8 - ((X8 - NORMALx) >> 1), bkbk, (X8 - NORMALx) >> 1);	// background colour after
+				if (cclockPrev < bbars)
+					memset(qch + cclockPrev, bkbk, min(bbars, cclock) - cclockPrev);		// draw background colour before we start real data
+				if (cclock >= X8 - bbars)
+					memset(qch + max(cclockPrev, X8 - bbars), bkbk, cclock - (max(cclockPrev, X8 - bbars)));	// after finished real data
 			}
-			qch += (X8 - NORMALx) >> 1;
+        }
+
+		qch += cclockPrev;
+
+		// i is our loop inside each case statement for each possible mode. Set up where in the loop we need to start
+		// skip the portion inside the bar to where we start drawing real data
+		i = cclockPrev - bbars;
+		if (cclockPrev < bbars)
+		{
+			qch += (bbars - cclockPrev);
+			i = 0;
 		}
 
-		// wide playfield takes up the whole width
+		// i is a bit index, now make it a segment index, where each scan mode likes to create so many bits at a time per segment
+		i /= BitsAtATime(iVM);
 
-        rgfChanged &= ~fDisp;
+		// and where do we stop drawing? Don't go into the right hand bar
+		short iTop = cclock - bbars;
+		if (iTop <= 0)
+			iTop = 0;	// inside the left side bar
+		else if (iTop > X8 - bbars - bbars)
+			iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);	// inside the right side bar
+		else
+		{
+			iTop -= 1;	// any remainder needs to increase the quotient by 1 (any partial segment required fills the whole segment)
+			iTop = iTop / BitsAtATime(iVM) + 1;
+		}
 
-        if (hshift)
-            rgfChanged |= fFineScroll;
+		// nothing to draw! Our window is zero
+		if (i == iTop)
+		{
+			PSLPostpare(iVM);
+			return TRUE;
+		}
+
+		// We kind of have to draw more than asked to, so increment our bounds
+		short newTop = iTop * BitsAtATime(iVM) + bbars;
+		if (newTop > cclock)
+		{
+			cclock = newTop;
+			PSL = cclock;
+		}
+
+		// just fill in whatever we need to indicate background colour for our portion if there is no mode
+		if (sl.modelo < 2)
+			_fmemset(qch, bkbk, cclock - cclockPrev);
 
         switch (sl.modelo)
         {
-
-		// blank scan line
-        default:
-            if (!(rgfChanged & (fPMG | fDmactl | fModelo | fColbk)))
-                break;
-
-            // This is a blank scan line - just draw the background colour
-			_fmemset(qch, bkbk, X8);
-            break;
 
 		// GR.0 and descended character GR.0
         case 2:
@@ -1014,10 +1170,9 @@ BOOL ProcessScanLine(int iVM)
 			if ((sl.chactl & 4) && sl.modelo == 2)	// vertical reflect bit
 				vpix = 7 - (vpix & 7);
 			
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
             {
-                if (((b1 = sl.rgb[i]) == psl->rgb[i]) && !rgfChanged)
-                    continue;
+				b1 = sl.rgb[i];
 
 				if ((sl.chactl & 4) && sl.modelo == 3)
 				{
@@ -1141,8 +1296,6 @@ BOOL ProcessScanLine(int iVM)
 							b2 = ~b2;
 					}
 				}
-
-//    col2 ^= cpuPeekB(20);
 
 				// undocumented GR.9 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
 				// but treat them as GR.9 luminences
@@ -1334,7 +1487,7 @@ BOOL ProcessScanLine(int iVM)
         case 5:
             vpix = iscan >> 1;	// extra thick, use screen data twice for 2 output lines
         case 4:
-            if (sl.chactl & 4)
+			if (sl.chactl & 4)
                 vpix ^= 7;                // vertical reflect bit
             vpix &= 7;
 
@@ -1343,13 +1496,9 @@ BOOL ProcessScanLine(int iVM)
             col2 = sl.colpf1;
 //            col3 = sl.colpf2;
 
-            for (i = 0 ; i < cbDisp; i++)
-                {
-                if (((b1 = sl.rgb[i]) == psl->rgb[i]) && !rgfChanged)
-                    {
-                    qch += 8;
-                    continue;
-                    }
+            for (; i < iTop; i++)
+            {
+				b1 = sl.rgb[i];
 
                 if (hshift)
                 {
@@ -1413,7 +1562,7 @@ BOOL ProcessScanLine(int iVM)
                         }
                     b2 <<= 2;
                 }
-                }
+            }
             break;
 
         case 7:
@@ -1425,79 +1574,74 @@ BOOL ProcessScanLine(int iVM)
 
             col0 = sl.colbk;
 
-            for (i = 0 ; i < cbDisp; i++)
-                {
-                if (((b1 = sl.rgb[i]) != psl->rgb[i]) || rgfChanged)
-                    {
-                    col1 = sl.colpf[b1>>6];
+            for (; i < iTop; i++)
+            {
+				b1 = sl.rgb[i];
 
-					if (hshift)
-					{
-						// non-zero horizontal scroll
+				col1 = sl.colpf[b1>>6];
 
-						ULONGLONG u, vv;
+				if (hshift)
+				{
+					// non-zero horizontal scroll
 
-						// see comments for modes 2 & 3
-						int index = 0;
+					ULONGLONG u, vv;
+
+					// see comments for modes 2 & 3
+					int index = 0;
 						
-						vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
-						u = vv << (index << 3);
+					vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
+					u = vv << (index << 3);
 
-						if (hshift % 8)
-						{
-							index += 1;
-							vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
-							u |= (vv << (index << 3));
-						}
+					if (hshift % 8)
+					{
+						index += 1;
+						vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
+						u |= (vv << (index << 3));
+					}
 
-						b2 = (BYTE)(u >> hshift);
+					b2 = (BYTE)(u >> hshift);
 					
-                        for (j = 0; j < 8; j++)
-                            {
-                            if (j < hshift)	// hshift restricted to 7 or less, so this is sufficient
-                                col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i-1])>>6];
-							else
-								col1 = sl.colpf[b1 >> 6];
+                    for (j = 0; j < 8; j++)
+                        {
+                        if (j < hshift)	// hshift restricted to 7 or less, so this is sufficient
+                            col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i-1])>>6];
+						else
+							col1 = sl.colpf[b1 >> 6];
 
-                            if (b2 & 0x80)
-                                {
-                                *qch++ = col1;
-                                *qch++ = col1;
-                                }
-                            else
-                                {
-                                *qch++ = col0;
-                                *qch++ = col0;
-                                }
-                            b2 <<= 1;
-                            }
-                    }
-                    else
-                    {
-                        b2 = cpuPeekB(iVM, (sl.chbase << 8)
-                            + ((b1 & 0x3F) << 3) + vpix);
-
-                        for (j = 0; j < 8; j++)
+                        if (b2 & 0x80)
                             {
-                            if (b2 & 0x80)
-                                {
-                                *qch++ = col1;
-                                *qch++ = col1;
-                                }
-                            else
-                                {
-                                *qch++ = col0;
-                                *qch++ = col0;
-                                }
-                            b2 <<= 1;
+                            *qch++ = col1;
+                            *qch++ = col1;
                             }
+                        else
+                            {
+                            *qch++ = col0;
+                            *qch++ = col0;
+                            }
+                        b2 <<= 1;
                         }
-                    }
+                }
                 else
+                {
+                    b2 = cpuPeekB(iVM, (sl.chbase << 8)
+                        + ((b1 & 0x3F) << 3) + vpix);
+
+                    for (j = 0; j < 8; j++)
                     {
-                    qch += 16;
+                        if (b2 & 0x80)
+                        {
+                            *qch++ = col1;
+                            *qch++ = col1;
+                        }
+                        else
+                        {
+                            *qch++ = col0;
+                            *qch++ = col0;
+                        }
+                        b2 <<= 1;
                     }
                 }
+            }
             break;
 
         case 8:
@@ -1506,15 +1650,9 @@ BOOL ProcessScanLine(int iVM)
             col2 = sl.colpf1;
             col3 = sl.colpf2;
 
-			for (i = 0; i < cbDisp; i++)
+			for (; i < iTop; i++)
 			{
 				b2 = sl.rgb[i];
-
-				if (!rgfChanged && (b2 == psl->rgb[i]))
-				{
-					qch += 32;
-					continue;
-				}
 
 				WORD u = b2;
 
@@ -1570,15 +1708,9 @@ BOOL ProcessScanLine(int iVM)
             col0 = sl.colbk;
             col1 = sl.colpf0;
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
             {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 32;
-                    continue;
-                    }
 
 				WORD u = b2;
 
@@ -1625,15 +1757,9 @@ BOOL ProcessScanLine(int iVM)
             col2 = sl.colpf1;
             col3 = sl.colpf2;
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
             {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                {
-                    qch += 16;
-                    continue;
-                }
 
 				WORD u = b2;
 
@@ -1692,15 +1818,9 @@ BOOL ProcessScanLine(int iVM)
             col0 = sl.colbk;
             col1 = sl.colpf0;
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
                 {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 16;
-                    continue;
-                    }
 
 				WORD u = b2;
 
@@ -1748,15 +1868,9 @@ BOOL ProcessScanLine(int iVM)
             col2 = sl.colpf1;
             col3 = sl.colpf2;
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
                 {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 8;
-                    continue;
-                    }
 
 				WORD u = b2;
 
@@ -1818,15 +1932,9 @@ BOOL ProcessScanLine(int iVM)
 			// just for fun, don't interlace in B&W
 			fArtifacting = (rgvm[iVM].bfMon == monColrTV);
             
-			for (i = 0 ; i < cbDisp; i++)
+			for (; i < iTop; i++)
             {				
 				b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                {
-                    qch += 8;
-                    continue;
-                }
 
 				WORD u = b2;
 
@@ -1942,15 +2050,9 @@ BOOL ProcessScanLine(int iVM)
         case 16:
             // GTIA 16 grey mode
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
                 {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 8;
-                    continue;
-                    }
 
 				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
 				// use low nibble of previous byte
@@ -1984,15 +2086,9 @@ BOOL ProcessScanLine(int iVM)
         case 17:
             // GTIA 9 color mode - GR. 10
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
                 {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 8;
-                    continue;
-                    }
 
 				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
 				// use low nibble of previous byte
@@ -2057,15 +2153,9 @@ BOOL ProcessScanLine(int iVM)
         case 18:
             // GTIA 16 color mode GR. 11
 
-            for (i = 0 ; i < cbDisp; i++)
+            for (; i < iTop; i++)
                 {
                 b2 = sl.rgb[i];
-
-                if (!rgfChanged && (b2 == psl->rgb[i]))
-                    {
-                    qch += 8;
-                    continue;
-                    }
 
 				// GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
 				// use low nibble of previous byte
@@ -2110,20 +2200,15 @@ BOOL ProcessScanLine(int iVM)
 		sl.colpfX = COLPFX;
 	}
 
-    if (rgfChanged || fDataChanged)
-        *psl = sl;
-
-    if ((wScan < wStartScan) || (wScan >= (wStartScan+wcScans)))
-        goto Lnextscan;
-
-	// even with Fetch DMA off, PMG DMA might be on
+   // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
         BYTE *qch = vrgvmi[iVM].pvBits;
 
 		// now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
-		DrawPlayers(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)));
-		DrawMissiles(iVM, (WORD NEAR *)(rgpix + ((NTSCx - X8)>>1)), sl.prior & 16);	// 5th player?
+		// tell them what range they are to fill in data for (PSL to cclock)
+		DrawPlayers(iVM, (rgpix + ((NTSCx - X8)>>1)), cclockPrev, cclock);
+		DrawMissiles(iVM, (rgpix + ((NTSCx - X8)>>1)), sl.prior & 16, cclockPrev, cclock);	// 5th player?
 
 #ifndef NDEBUG
     if (0)
@@ -2139,9 +2224,6 @@ BOOL ProcessScanLine(int iVM)
 
 		BOOL fHiRes = ((sl.modelo == 2) || (sl.modelo == 3) || (sl.modelo == 15));
 
-        if ((wScan < wStartScan) || (wScan >= (wStartScan+wcScans)))
-            goto Lnextscan;
-
         // now map the rgpix array to the screen
 
         qch += (wScan - wStartScan) * vcbScan;
@@ -2153,7 +2235,7 @@ BOOL ProcessScanLine(int iVM)
 		// EXCEPT for GR.9, 10 & 11, which does not have playfield bitfield data. There are 16 colours in those modes and only 4 regsiters.
 		// So don't try to look at PF bits. In GR.9 & 11, all playfield is underneath all players.
 
-        for (i = 0; i < X8; i++)
+        for (i = cclockPrev; i < cclock; i++)
         {
             BYTE b = rgpix[i+((NTSCx - X8)>>1)];
 
@@ -2341,24 +2423,9 @@ BOOL ProcessScanLine(int iVM)
     }
 #endif // NDEBUG
 
-Lnextscan:
-    // move on to the next scan line
+	PSLPostpare(iVM);	// see if we're done this scan line and be ready to do the next one
 
-	// When we're done with this mode line, fetch again. If we couldn't fetch because DMA was off, keep wanting to fetch
-	if (!fFetch)
-		fFetch = (iscan == scans);
-    iscan = (iscan + 1) & 15;
-
-    if (fFetch)
-    {
-		// ANTIC's PC can't cross a 4K boundary, poor thing
-        wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);
-        fDataChanged = 0;
-    }
-
-#ifdef HWIN32
-    return rgfChanged;
-#endif
+	return TRUE;
 }
 
 void ForceRedraw(int iVM)

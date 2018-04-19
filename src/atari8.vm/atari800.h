@@ -23,11 +23,47 @@
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
-#define WSYNC_Left 25 // how many cycles can execute after WSYNC before next DLI/VBI (must be at least 25 for Pitfall 2, Worm War, etc.)
+// all the reasons ANTIC might do DMA and block the CPU
 
+#define DMA_M 1		// grab missile data if missile DMA is on
+#define DMA_DL 2	// grab DList mode if PF DMA is on
+#define DMA_P 3		// grab player data if player DMA is on
+#define DMA_LMS 4	// do the load memory scan
+
+#define W8 5		// wide playfield hi, med or lo res modes
+#define WC4 6		// 1st scan line of a character mode, hi or med res
+#define W4 7		// wide playfield hi or med res modes
+#define WC2 8		// 1st scan line of a character mode, hi res
+#define W2 9		// wide playfield hi res mode
+
+#define N8 10		// same for wide or normal playfield
+#define NC4 11
+#define N4 12
+#define NC2 13
+#define N2 14
+
+#define A8 15		// same for wide, normal or narrow playfield
+#define AC4 16
+#define A4 17
+#define AC2 18
+#define A2 19
+
+// Here is how each cycle of a scan line is used, only if an entry is 0 is the CPU definitely free
+
+extern const BYTE rgDMA[114];
+
+// all the possible variables affecting which cycles have the CPU blocked
+// 19 modes, PF DMA?, 3 playfield widths, first scan line of a mode or not, player DMA?, missile DMA?, LMS?, cycle #
+// cycle number is 0-113. 114 holds the wLeft value to start out with. 115 holds the WSYNC point.
+short rgDMAMap[19][2][3][2][2][2][2][116];
+
+// !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
+// !!! I ignore nine RAM refresh cycles
+
+#if 0
 // instructions that can be run per scan line for each ANTIC mode (ANTIC steals more cycles the higher res it is, or if character mode)
 // !!! this doesn't account for PMG DMA which slows all of this down
-static const WORD rgINSperSL[19] =
+const WORD rgINSperSL[19] =
 {
 // # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
@@ -35,7 +71,7 @@ static const WORD rgINSperSL[19] =
 	114, 114,	80, 80, 80, 80,		93, 93,		114, 114, 114,	107, 107,	93, 93,		80,		80, 80, 80
 // !!! Actually time this
 };
-
+#endif
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
@@ -234,7 +270,9 @@ typedef struct
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
     // cntTick: mode display countdown timer (18 Hz ticks)
 
-    BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick, pad1B;
+	BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick;
+
+	BYTE m_Nextmodehi;	// looking ahead 1 scan line to see if it's a LMS
 
     WORD m_wFrame, m_wScan;
     short m_wLeft;		 // signed, cycles to go can go <0 finishing the last 6502 instruction
@@ -242,9 +280,9 @@ typedef struct
 	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only ~25 cycles?
 	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_WAITED after a DLI
 
-	WORD pad8W;
+	short m_PSL;		// the value of wLeft last time ProcessScanLine was called
     
-	short m_bias;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
+	short pad2S;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
 	
 	BYTE m_rgSIO[5];	// holds the SIO command frame
 	BYTE m_cSEROUT;		// how many bytes we've gotten so far of the 5
@@ -262,12 +300,13 @@ typedef struct
     WORD FAR m_ramtop;
 
     WORD m_fStop;
-    WORD m_wStartScan, m_wScanMin, m_wScanMac;
+	WORD m_wStartScan;
+	WORD pad3W, pad4W;
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
-    ULONG padUL11;
-	ULONG padUL12;
+    ULONG pad5UL;
+	ULONG pad6UL;
 
     // clock multiplier 
     ULONG m_clockMult;
@@ -283,16 +322,16 @@ typedef struct
 
     BYTE m_fWait;       // wait until next VBI
     BYTE m_fFetch;      // fetch next DL instruction
-    BYTE m_fDataChanged;
+	BYTE m_rgbSpecial;	// the offscreen character being scrolled on
 
-	WORD padW13;
-	WORD padW14;
+	WORD pad7W;
+	WORD pad8W;
 
     BYTE m_bCartType;   // type of cartridge
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
     
-	BYTE padB15;
+	BYTE pad9B;
 
 	// the 8 status bits must be together and in the same order as in the 6502
 	unsigned char	 m_srN;
@@ -347,6 +386,8 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
 #define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
+#define PSL			  CANDY_STATE(PSL)
+#define rgbSpecial	  CANDY_STATE(rgbSpecial)
 #define rgSIO		  CANDY_STATE(rgSIO)
 #define cSEROUT		  CANDY_STATE(cSEROUT)
 #define fSERIN		  CANDY_STATE(fSERIN)
@@ -365,14 +406,13 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
+#define Nextmodehi    CANDY_STATE(Nextmodehi)
 #define wFrame        CANDY_STATE(wFrame)
 #define wScan         CANDY_STATE(wScan)
 #define wLeft         CANDY_STATE(wLeft)
 #define ramtop        CANDY_STATE(ramtop)
 #define fStop         CANDY_STATE(fStop)
 #define wStartScan    CANDY_STATE(wStartScan)
-#define wScanMin      CANDY_STATE(wScanMin)
-#define wScanMac      CANDY_STATE(wScanMac)
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)
@@ -387,7 +427,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wAddr         CANDY_STATE(wAddr)
 #define fWait         CANDY_STATE(fWait)
 #define fFetch        CANDY_STATE(fFetch)
-#define fDataChanged  CANDY_STATE(fDataChanged)
 #define bCartType     CANDY_STATE(bCartType)
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
@@ -667,6 +706,8 @@ void SIOV(int);
 BYTE SIOReadSector(int);
 void DeleteDrive(int, int);
 BOOL AddDrive(int, int, BYTE *);
+void CreateDMATables();
+void PSLPrepare(int);	// call at the beginning of the scan line to get the mode
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);
 BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);

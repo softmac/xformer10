@@ -397,18 +397,15 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 //
 //////////////////////////////////////////////////////////////////
 
-// if this is a breakpoint, set wLeft to 0 so we stop, but restore wLeft when we come back or debugging the code will alter the timing of it
+// in debug, stop on a breakpoint or if tracing
 #ifndef NDEBUG
-#define HANDLER_END() if (regPC == bp) { bias = wLeft; wLeft = 0;} if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (regPC != bp && !fTrace && wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #else
 #define HANDLER_END() if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #endif
 
-						//--wLeft; (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
-						// this used to not let a scan line end until there's an instruction that affects the PC
-
+// this used to not let a scan line end until there's an instruction that affects the PC
 #define HANDLER_END_FLOW() HANDLER_END()
-						//if ((--wLeft) > 0)      (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); }
 
 #define HANDLER(opcode) void __fastcall opcode (int iVM) {
 
@@ -2853,16 +2850,11 @@ PFNOP jump_tab_RO[256] =
 
 void __cdecl Go6502(int iVM)
 {
-    bias = fTrace ? wLeft - 1 : 0;
-
+    
 	// do not check your breakpoint here, you'll keep hitting it every time you try and execute and never get anywhere
-
-	wLeft = fTrace ? 1 : wLeft;
 
     UnpackP(iVM);
 
-    do
-        {
 #if 0
         BYTE t, t2;
         PackP();
@@ -2873,11 +2865,7 @@ void __cdecl Go6502(int iVM)
         if (t != t2) printf("BAD FLAGS STATE\n");
 #endif
 
-	        (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM);
-        } while (wLeft > 0);
+    (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM);
 
     PackP(iVM);
-
-    wLeft += bias;
 }
-
