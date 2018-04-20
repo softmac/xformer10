@@ -1418,8 +1418,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 	do {
 
-		// when tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions
-		// since we have to finish a 6502 instruction, we might do too many cycles and end up < 0. Don't let errors propagate.
+		// When tracing, we only do 1 instruction per call, so there might be some left over - go straight to doing more instructions.
+		// Since we have to finish a 6502 instruction, we might do too many cycles and end up < 0. Don't let errors propagate.
 		// Add wLeft back in to the next round.
 		if (wLeft <= 0)
 		{
@@ -1461,6 +1461,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 					regPC = cpuPeekW(iVM, 0xFFFE);
 					//ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
 
+					// check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
 					if (regPC == bp)
 						fHitBP = TRUE;
 
@@ -1490,18 +1491,18 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				}
 			}
 
-			// Start the scan line off, enough to figure out what mode we're in
+			// Prepare ProcessScanLine for a new scan line, and figure out everything we need to know to understand
+			// how ANTIC will steal cycles on a scan line like this
 			PSLPrepare(iVM);
 
-			// look up table element 114 has the starting value of wLeft for this kind of situation
-			wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-				[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][114];
+			// table element 114 has the starting value of wLeft for this kind of scan line
+			wLeft = DMAMAP[114];
 			wLeftMax = wLeft;
 
-			// Scan line 0-7 are not visible, 8 lines without DMA
-			// Scan lines 8-247 are 240 visible lines, amount of DMA depends on the line
-			// Scan line 248 is the VBLANK, without DMA
-			// Scan lines 249-261 are the rest of the scan lines, without DMA
+			// Scan line 0-7 are not visible
+			// Scan lines 8-247 are 240 visible lines, ANTIC DMA is possible, depending on a lot of things
+			// Scan line 248 is the VBLANK
+			// Scan lines 249-261 are the rest of the overscan lines
 
 			// VBI happens at scan line 248
 			if (wScan == STARTSCAN + Y8)
@@ -1509,13 +1510,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
 				NMIST = (NMIST & 0x20) | 0x5F;
 
-				// VBI enabled, generate VBI by setting PC to VBI routine. We'll do a few cycles of it
-				// every scan line now until it's done, then resume
+				// VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
 				if (NMIEN & 0x40) {
 					
 					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFA);
-					
+
+					// if the IRQ vector is our breakpoint, hit it, or we otherwise wouldn't notice
 					if (regPC == bp)
 						fHitBP = TRUE;
 				}
@@ -1524,20 +1525,18 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 				DoVBI(iVM);
 			}
 
-			// this scan line is only going to be from after the WSYNC to the end, see WSYNC - THEORY OF OPERATION
+			// We're supposed to start executing at the WSYNC release point (cycle 105) not the normal cycle 10
 			// That point is stored in index 115 of this array, and +1 because the index is 0-based
 			if (WSYNC_Waited)
 			{
-				wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-					[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115] + 1;	// the stored WSYNC point
+				wLeft = DMAMAP[115] + 1;	// the stored WSYNC point
 				WSYNC_Waited = FALSE;
 			}
 
 		} // if wLeft == 0
 
-		// Normally, executes about one horizontal scan line's worth of 6502 code, after the scan line is drawn
-		// because apps are not supposed to try and affect their own scan line in a DLI.
-		if (!fHitBP)	// if the beginning of the VBI is our breakpoint
+		// Normally, executes about one horizontal scan line's worth of 6502 code, drawing bits and pieces of it as it goes
+		if (!fHitBP)	// if we just hit a breakpoint at the IRQ vector above, then don't do anything
 			Go6502(iVM);
 
 		// hit a breakpoint during execution
@@ -1548,14 +1547,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 		// Code tried to somehow jump to the SIO routine, which talks to the serial bus - we emulate that separately
 		// and skip running the OS code
+		// !!! This messes with the timing, the I/O will complete exactly at the end of the current scan line
 		if (fSIO) {
 			fSIO = 0;
 			SIOV(iVM);
-			if (regPC == bp)	// it will be like stopping after after the routine executed
+			if (regPC == bp)	// a breakpoint here will be like stopping after the routine executed
 				fStop = TRUE;
 		}
 
-		// next scan line
+		// we finished the scan line
 		if (wLeft <= 0)
 		{
 			// now finish off any part of the scan line that didn't get drawn during execution
@@ -1572,6 +1572,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 			// the $8 IRQ is needed. 
 			// !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
+			// (hardb, Eidolon V2, 221B)
 			if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8 && (--fWant8 == 0))
 			{
 				//ODS("TRIGGER - SEROUT COMPLETE\n");
@@ -1582,14 +1583,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// SIO - periodically send the next data byte, too fast breaks them
 			if (fSERIN == wScan && (IRQEN & 0x20))
 			{
-				fSERIN = (wScan + SIO_DELAY);	// waiting less than this hangs apps who aren't ready for the data
+				fSERIN = (wScan + SIO_DELAY);	// waiting less than this hangs apps who aren't ready for the data (19,200 baud expected)
 				if (fSERIN >= NTSCY)
 					fSERIN -= (NTSCY - 1);	// never be 0, that means stop
 				//ODS("TRIGGER SERIN\n");
 				IRQST &= ~0x20;
 			}
 
-			// I'm worried about perf if I do this every instruction, so cheat for now and check only every scan line
+			// POKEY timers
+			// !!! I'm worried about perf if I do this every instruction, so cheat for now and check only every scan line
 			// if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
 			// 0 means timer not being used
 
@@ -1624,7 +1626,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 		// we process the audio after the whole frame is done
 		if (wScan >= NTSCY)
 		{
-			TimeTravelPrepare(iVM);
+			TimeTravelPrepare(iVM);		// periodically call this to enable TimeTravel
 
 			SoundDoneCallback(iVM, vi.rgwhdr, SAMPLES_PER_VOICE);	// finish this buffer and send it
 
@@ -1638,7 +1640,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
     } while (!fTrace && !fStop);
 
 	fHitBP = FALSE;
-    return (regPC != bp);
+    return (regPC != bp);	// fail if we hit a bp so the monitor will kick in
 }
 
 //
@@ -1714,8 +1716,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// !!! This is not quite right, it's a few cycles later than the WSYNC point which is 105
 	else if (addr == 0xD40B)
 	{
-		if (wLeft < rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-				[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115])
+		if (wLeft < DMAMAP[115])
 			return (BYTE)((wScan + 1) >> 1);
 		else
 			return (BYTE)(wScan >> 1);
@@ -1886,12 +1887,14 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
     case 0xD0:      // GTIA
 		
-		// CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
-		// before we change the values. The next time its called will be with the new values.
-		ProcessScanLine(iVM);
-        
 		addr &= 31;
-        bOld = rgbMem[writeGTIA+addr];
+		
+		// CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
+		// before we change the values. The next time its called will be with the new values.	
+		if (addr < 0x1e)
+			ProcessScanLine(iVM);	// !!! should anything else instantly affect the screen?
+        
+		bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
 	
         if (addr == 30)
@@ -1906,26 +1909,18 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             pmg.fHitclr = 1;
 
             //DebugStr("HITCLR!!\n");
-            }
+        }
         else if (addr == 31)
-            {
-            // 
+        {
+            // !!! REVIEW: click the speaker
 
+			// printf("CONSOL %02X %02X\n", bOld, b);
 
-            // REVIEW: click the speaker
-
-//            printf("CONSOL %02X %02X\n", bOld, b);
-
-            if (!vi.fWinNT)
 	            if ((bOld ^ b) & 8)
                 {
                 // toggle speaker state (mask out lowest bit?)
-
-#if !defined(_M_ARM) && !defined(_M_ARM64)
-                outp(0x61, (inp(0x61) & 0xFE) ^ 2);
-#endif
                 }
-            }
+        }
         break;
 
     case 0xD2:      // POKEY
@@ -2106,10 +2101,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// its last ~25 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
 			// the index is 0-based and wLeft should be set one higher
-			if (wLeft > rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-						[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115])
-				wLeft = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-						[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][115] + 1;
+			if (wLeft > DMAMAP[115])
+				wLeft = DMAMAP[115] + 1;
 			else
 			{
 				wLeft = 0;				// stop right now and wait till next line's WSYNC

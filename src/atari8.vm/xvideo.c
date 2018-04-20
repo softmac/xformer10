@@ -17,16 +17,17 @@
 
 #ifdef XFORMER
 
-
+// size of PMG
 const WORD mpsizecw[4] = { 1, 2, 1, 4 };
 
+// bits each player (incl. 5th player) use to indicate their presence in the bitfield
 const BYTE mppmbw[5] =
     {
-    /* (bfPM0 << 8) | */ bfPM0,
-    /* (bfPM1 << 8) | */ bfPM1,
-    /* (bfPM2 << 8) | */ bfPM2,
-    /* (bfPM3 << 8) | */ bfPM3,
-    /* (bfPF3 << 8) | */ bfPF3,
+    bfPM0,
+    bfPM1,
+    bfPM2,
+    bfPM3,
+    bfPF3,
     };
 
 BYTE const * const rgszModes[6] =
@@ -130,7 +131,7 @@ void ShowCountDownLine(int iVM)
 
 void CreateDMATables()
 {
-	// a 1 means CPU blocked, a 0 means CPU free
+	// First, simply note whether the CPU is blocked on each cycle of each type of scan line... 1 means CPU blocked, a 0 means CPU free
 
 	BYTE mode, pf, width, first, player, missile, lms, cycle;
 	
@@ -144,47 +145,42 @@ void CreateDMATables()
 							for (lms = 0; lms < 2; lms++)
 								for (cycle = 0; cycle < 114; cycle++)
 								{
-
 									// assume free
 									rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
 
-									// missile DMA?
+									// this cycle is for missile DMA? Then all the tables with missile DMA on have it blocked
 									if (rgDMA[cycle] == DMA_M)
 									{
 										if (missile)
 											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 
-										// player DMA?
+									// same for player DMA
 									}
 									else if (rgDMA[cycle] == DMA_P)
 									{
 										if (player)
-										{
 											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-											rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-										}
 									}
 
 									// nothing else halts the CPU if Playfield DMA is off
 
 									if (pf)
 									{
-										// fetch will happen on the first scan line of a mode
+										// mode fetch will happen on the first scan line of a mode
 										// !!! NO, if this is the LAST line of a mode, the next line will do a fetch
+										// since I run cycle 10 to cycle 10
 										if (rgDMA[cycle] == DMA_DL)
 										{
 											if (first)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// we're told when the next line has a LMS
+										// this cycle is blocked by a load memory scan
 										else if (rgDMA[cycle] == DMA_LMS)
 										{
 											if (lms)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all wide playfield modes (>= 2) use this one on every scan line
+										// all wide playfield modes (>= 2) use this cycle on every scan line
 										else if (rgDMA[cycle] == W8)
 										{
 											if (mode >= 2 && width == 2)
@@ -286,6 +282,12 @@ void CreateDMATables()
 	// 
 	// Index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
 	// Index 115 will tell you what wLeft should be set to on a WSYNC (what its value should be at cycle 105)
+	//
+	// But before we can do that we build an array that simply says given how many CPU cycles we have left to execute, what clock
+	// cycle will be be on (0-113).
+	//
+	// Then we change clock cycles to actual pixels on the screen in the final step
+	//
 
 	for (mode = 0; mode < 20; mode++)
 	{
@@ -303,6 +305,9 @@ void CreateDMATables()
 								BOOL fWrap = FALSE;
 
 								// calculate the CPU cycle of the scan line that will be drawing at each cycle == wLeft
+								// There are 0 CPU cycles left to execute at cycle 9, since that's the last cycle of our
+								// virtual scan line. Back up from there to the next free cycle that the CPU can use, and
+								// that will be where there is 1 CPU cycle left, then 2, etc.
 								for (cycle = 0; cycle < 114; cycle++)
 								{
 									// go backwards, find a free cycle
@@ -334,7 +339,7 @@ void CreateDMATables()
 								// This is what wLeft should start at for this kind of line
 								rgDMAMap[mode][pf][width][first][player][missile][lms][114] = cycle;
 
-								// now convert CPU cycles to pixels... We start drawing at cycle 13 and there are 4 pixels per cycle
+								// now convert CPU cycles to pixels... We start drawing at cycle 13 through 100 and there are 4 pixels per cycle
 								for (cycle = 0; cycle < 114; cycle++)
 								{
 									if (array[cycle] < 13)
@@ -994,8 +999,7 @@ BOOL ProcessScanLine(int iVM)
 	// so the index into the array, which is 0-based, is (wLeft - 1).
 	// Finally, oOnce the whole scan line executes, we're called with wLeft == 0
 	// !!! if wLeft < 0, we're hopefully not in the visible part of the screen so it's OK to just use 0
-	short cclock = rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol]
-		[(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi][wLeft > 0 ? wLeft - 1 : 0];
+	short cclock = DMAMAP[wLeft > 0 ? wLeft - 1 : 0];
 
 	// what part of the scan line were we on last time?
 	short cclockPrev = PSL;
@@ -2204,6 +2208,8 @@ BOOL ProcessScanLine(int iVM)
     if (sl.fpmg)
     {
         BYTE *qch = vrgvmi[iVM].pvBits;
+
+		// !!! VDELAY NYI
 
 		// now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
 		// tell them what range they are to fill in data for (PSL to cclock)
