@@ -26,7 +26,7 @@
 // all the reasons ANTIC might do DMA and block the CPU
 
 #define DMA_M 1		// grab missile data if missile DMA is on
-#define DMA_DL 2	// grab DList mode if PF DMA is on
+#define DMA_DL 2	// grab DList mode if Playfield DMA is on
 #define DMA_P 3		// grab player data if player DMA is on
 #define DMA_LMS 4	// do the load memory scan
 
@@ -36,7 +36,7 @@
 #define WC2 8		// 1st scan line of a character mode, hi res
 #define W2 9		// wide playfield hi res mode
 
-#define N8 10		// same for wide or normal playfield
+#define N8 10		// same for wide or normal playfield (present in all but narrow)
 #define NC4 11
 #define N4 12
 #define NC2 13
@@ -52,26 +52,31 @@
 
 extern const BYTE rgDMA[114];
 
-// all the possible variables affecting which cycles have the CPU blocked
-// 19 modes, PF DMA?, 3 playfield widths, first scan line of a mode or not, player DMA?, missile DMA?, LMS?, cycle #
-// cycle number is 0-113. 114 holds the wLeft value to start out with. 115 holds the WSYNC point.
+// all the possible variables affecting which cycles ANTIC will have the CPU blocked
+//
+// 19 modes
+// Playfield DMA on or off?
+// 3 playfield widths
+// first scan line of a mode or not?
+// player DMA on?
+// missile DMA on?
+// LMS (load memory scan) happening?
+// # of CPU cycles left to execute on this scan line (wLeft)
+//
+// cycle number is 0-113 (0 based, representing what pixel is being drawn when wLeft is from 1-114).
+// index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
+// index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
 short rgDMAMap[19][2][3][2][2][2][2][116];
+
+// this mess is how we properly index all of those arrays
+#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 // !!! I ignore nine RAM refresh cycles
 
-#if 0
-// instructions that can be run per scan line for each ANTIC mode (ANTIC steals more cycles the higher res it is, or if character mode)
-// !!! this doesn't account for PMG DMA which slows all of this down
-const WORD rgINSperSL[19] =
-{
-// # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
+// for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
 //   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
-	114, 114,	80, 80, 80, 80,		93, 93,		114, 114, 114,	107, 107,	93, 93,		80,		80, 80, 80
-// !!! Actually time this
-};
-#endif
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
