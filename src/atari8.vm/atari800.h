@@ -238,6 +238,17 @@ typedef struct
         BYTE sizep[4];
         };
 
+	// which pixel the players and missiles start at stop at, given their current hpos's and sizes
+	short hpospPixStart[4];
+	short hpospPixStop[4];
+	short hposmPixStart[4];
+	short hposmPixStop[4];
+	BYTE cwp[4];	// size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
+	BYTE cwm[4];
+
+	// is the current mode hi-res mono mode 2, 3 or 15? Is GTIA enabled in PRIOR?
+	BOOL fHiRes, fGTIA;
+
     BYTE grafm;
     BYTE sizem;
     BYTE pmbase;

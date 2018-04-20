@@ -353,20 +353,12 @@ void CreateDMATables()
 	}
 }
 
-// Each PM pixel is 2 screen pixels wide, so we treat the screen RAM as an array of WORDS instead of BYTES
-//
+
 void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 {
 	BYTE b2;
 	BYTE c;
-	int off[4], a[4], b[4], cw[4];
 	int i;
-
-	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
-
-	// no collisions to playfield in GTIA
-	BOOL fGTIA = sl.prior & 0xc0;
 
 	// first loop, fill the bit array with all the players located at each spot
 	for (i = 0; i < 4; i++)
@@ -376,27 +368,18 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 		if (!b2)
 			continue;
 
-		off[i] = (pmg.hposp[i] - ((NTSCx - X8) >> 2));
-
-		cw[i] = mpsizecw[pmg.sizep[i] & 3];	// normal, double or quad size?
-		if (cw[i] == 4)
-			cw[i] = 3;	//# of times to shift to divide by (cw *2)
-
-		a[i] = off[i] << 1;		// first pixel affected by this player, compare to start
-		b[i] = a[i] + (8 << cw[i]);	// the pixel after the last one affected, compare to stop
-
 		// no part of the player is in the region we care about
-		if (a[i] >= stop || b[i] <= start)
+		if (pmg.hpospPixStart[i] >= stop || pmg.hpospPixStop[i] <= start)
 			continue;
 
 		c = mppmbw[i];
 
 		// first loop, fill in where each player is
-		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		for (int z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
 		{
 			BYTE *pq = qb + z;
 
-			if (b2 & (0x80 >> ((z - a[i]) >> cw[i])))
+			if (b2 & (0x80 >> ((z - pmg.hpospPixStart[i]) >> pmg.cwp[i])))
 				*pq |= c;
 		}
 	}
@@ -414,20 +397,22 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 			continue;
 
 		// no part of the player is in the region we care about
-		if (a[i] >= stop || b[i] <= start)
+		if (pmg.hpospPixStart[i] >= stop || pmg.hpospPixStop[i] <= start)
 			continue;
 
 		c = mppmbw[i];
 
 		// first loop, fill in where each player is
-		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		for (int z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
 		{
 			BYTE *pq = qb + z;
 
-			if (b2 & (0x80 >> ((z - a[i]) >> cw[i])))
+			// fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+			// fGTIA - no collisions to playfield in GTIA
+			if (b2 & (0x80 >> ((z - pmg.hpospPixStart[i]) >> pmg.cwp[i])))
 			{
 				PXPL[i] |= ((*pq) >> 4);
-				PXPF[i] |= fHiRes ? ((*pq & 0x02) << 1) : (fGTIA ? 0 : *pq);
+				PXPF[i] |= pmg.fHiRes ? ((*pq & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
 			}
 		}
 	}
@@ -448,14 +433,7 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop)
 {
 	BYTE b2;
 	BYTE c;
-	int off[4], a[4], b[4], cw[4];
 	int i;
-
-	// GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-	BOOL fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
-
-	// no collisions to playfield in GTIA
-	BOOL fGTIA = sl.prior & 0xc0;
 
 	// no collisions wanted
 	if (pmg.fHitclr)
@@ -468,30 +446,23 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop)
 		if (!b2)
 			continue;
 
-		off[i] = (pmg.hposm[i] - ((NTSCx - X8) >> 2));
-
-		cw[i] = mpsizecw[((pmg.sizem >> (i + i))) & 3];
-		if (cw[i] == 4)
-			cw[i] = 3;	//# of times to shift to divide by (cw *2)
-
-		a[i] = off[i] << 1;		// first pixel affected by this player, compare to start
-		b[i] = a[i] + (2 << cw[i]);	// the pixel after the last one affected, compare to stop
-
-									// no part of the player is in the region we care about
-		if (a[i] >= stop || b[i] <= start)
+		// no part of the player is in the region we care about
+		if (pmg.hposmPixStart[i] >= stop || pmg.hposmPixStop[i] <= start)
 			continue;
 
 		c = mppmbw[i];
 
 		// first loop, fill in where each player is
-		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
 		{
 			BYTE *pq = qb + z;
 
-			if (b2 & (0x02 >> ((z - a[i]) >> cw[i])))
+			// fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+			// fGTIA - no collisions to playfield in GTIA
+			if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
 			{
 				MXPL[i] |= ((*pq) >> 4);
-				MXPF[i] |= fHiRes ? (((*pq) & 0x02) << 1) : (fGTIA ? 0 : *pq);
+				MXPF[i] |= pmg.fHiRes ? (((*pq) & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
 			}
 		}
 	}
@@ -512,7 +483,7 @@ Ldm:
 			continue;
 		
 		// no part of the player is in the region we care about
-		if (a[i] >= stop || b[i] <= start)
+		if (pmg.hposmPixStart[i] >= stop || pmg.hposmPixStop[i] <= start)
 			continue;
 
 		// treat fifth player like PF3 being present instead of its corresponding player. This is the only case
@@ -538,7 +509,7 @@ Ldm:
 
 		// !!! The wrong colours may show up here
 
-		if (fFifth && fGTIA)
+		if (fFifth && pmg.fGTIA)
 		{
 			if ((sl.prior & 0xc0) == 0x40)
 				c = sl.colpf3 & 0x0f;	// use the correct P5 luma, it may or may not be the right chroma
@@ -548,10 +519,10 @@ Ldm:
 				c = (sl.colpf3 & 0xf0) >> 4;	// use the correct P5 chroma, but the luminence may be off
 		}
 
-		for (int z = max(start, a[i]); z < min(stop, b[i]); z++)
+		for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
 		{
 			BYTE *pq = qb + z;
-			if (b2 & (0x02 >> ((z - a[i]) >> cw[i])))
+			if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
 				*pq |= c;
 		}
     }
@@ -581,17 +552,14 @@ short BitsAtATime(int iVM)
 // scans is the number of scan lines this graphics mode has, minus 1. So, 7 for GR.0
 // iscan is the current scan line being drawn of this graphics mode line, 0 based
 //		iscan == scans means you're on the last scan line (time for DLI?)
+// VSCROL set iscan to some higher initial number than 0, which will count to 16 and then back to 0
+//	Whenever iscan == scans is when the vscrol is done
+//
 // fWait means we're doing a JVB (jump and wait for VB)
 // fFetch means we finished an ANTIC instruction and are ready for a new one
 // cbDisp is the width of the playfield in bytes (could be narrow, normal or wide)
-// cbWidth is boosted to the next size if horiz scrolling
+// cbWidth is boosted to the next size if horiz scrolling, it's how many bytes we fetch even though some aren't shown (ready to scroll on)
 // wAddr is the start of screen memory set by a LMS (load memory scan)
-
-// We have wLeft cycles left to execute on this scan line, out of a total of wLeftMax.
-// PSL is the first colour clock still not filled in. Process the appropriate number of
-// colour clocks of this scan line. At the end of the scan line, make sure to call us
-// with wLeft <= 0 to finish up. For instance, we do X8 == 352 colour clocks, so if wLeftMax = 114
-// and wLeft = 72, we're halfway done and PSL will be 176.
 
 ////////////////////////////////////////////////////
 // 1. INITIAL SET UP WHEN WE FIRST START A SCAN LINE
@@ -839,6 +807,86 @@ void PSLPrepare(int iVM)
 			rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));	// ditto
 		}
 
+		// Other things we only need once per scan line
+
+		sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
+		sl.chactl = CHACTL & 7;
+		sl.scan = iscan;
+		sl.addr = wAddr;
+		sl.dmactl = DMACTL;
+
+		if (sl.dmactl & 0x10)
+			pmg.pmbase = PMBASE & 0xF8;
+		else
+			pmg.pmbase = PMBASE & 0xFC;
+
+		// enable PLAYER DMA and enable players?
+		if (sl.dmactl & 0x08 && GRACTL & 2)
+		{
+			// single line resolution
+			if (sl.dmactl & 0x10)
+			{
+				pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
+				pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
+				pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
+				pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
+			}
+			// double line resolution
+			else
+			{
+				pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1));
+				pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1));
+				pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1));
+				pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1));
+			}
+		}
+
+		// we want players, but a constant value, not memory lookup. GRACTL need not be set.
+		else
+			pmg.grafpX = GRAFPX;
+
+		// enable MISSILE DMA and enable missiles? (enabling players enables missiles too)
+		if ((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1)
+		{
+			// single res
+			if (sl.dmactl & 0x10)
+				pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + wScan);
+			// double res
+			else
+				pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1));
+		}
+
+		// we want missiles, but a constant value, not memory lookup. GRACTL does NOT have to be set!
+		else
+			pmg.grafm = GRAFM;
+
+		// If there is PMG data on this scan line, turn on special bitfield mode to deal with it.
+		// Even if they're off screen now, they could be moved on screen at any moment!
+		sl.fpmg = (pmg.grafpX || pmg.grafm);
+
+		// If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
+		// Be brave, and if GTIA is turned off halfway down the screen, turn back!
+		if (sl.prior & 0xC0)
+		{
+			if (sl.modelo == 15)
+			{
+				sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
+			}
+			else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
+				;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
+			else
+			{
+				// !!! ANTIC does something strange, but I can't emulate it right now!
+			}
+		}
+		else
+		{
+			if (sl.modelo > 15)
+				sl.modelo = 15;
+		}
+
+		// are we in a hi-res mono mode that has special collision detection rules?
+		pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 	}
 }
 
@@ -868,123 +916,75 @@ void PSLReadRegs(int iVM)
 	///////////////////////////////////////////////////////////////////////////
 	// 2. RE-READ ALL THE H/W REGISTERS TO ALLOW THINGS TO CHANGE MID-SCAN LINE
 	///////////////////////////////////////////////////////////////////////////
+	
+	// Note: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
 
-	sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
-	sl.chactl = CHACTL & 7;
-	sl.scan = iscan;
-	sl.addr = wAddr;
-	sl.dmactl = DMACTL;
-	sl.prior = PRIOR; // in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
+	sl.prior = PRIOR;
+	
+	// note if GTIA modes enabled... no collisions to playfield in GTIA
+	pmg.fGTIA = sl.prior & 0xc0;
 
-	pmg.hposmX = HPOSMX;
-	pmg.hpospX = HPOSPX;
-	pmg.sizem = SIZEM;
-	pmg.sizepX = SIZEPX;
+	// check if GRAFPX or GRAFM have changed (with PMG DMA it's only fetched once per scan line, but these can change more often)
+	// !!! If it changes from 0 to non-zero mid scan line, we won't do it, because it's too late, we already put ourselves into
+	// non-bitfield non-fpmg mode and can't change that mid scan line
 
-	if (sl.dmactl & 0x10)
-		pmg.pmbase = PMBASE & 0xF8;
-	else
-		pmg.pmbase = PMBASE & 0xFC;
-
-	// enable PLAYER DMA and enable players?
-	if (sl.dmactl & 0x08 && GRACTL & 2)
-	{
-		// single line resolution
-		if (sl.dmactl & 0x10)
-		{
-			pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
-			pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
-			pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
-			pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
-		}
-		// double line resolution
-		else
-		{
-			pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1));
-			pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1));
-			pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1));
-			pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1));
-		}
-		// !!! GRAFPX = pmg.grafpX;
-	}
-
-	// we want players, but a constant value, not memory lookup. GRACTL need not be set.
-	else
+	if (!(sl.dmactl & 0x08 && GRACTL & 2))
 		pmg.grafpX = GRAFPX;
 
-	// enable MISSILE DMA and enable missiles? (enabling players enables missiles too)
-	if ((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1)
-	{
-		// single res
-		if (sl.dmactl & 0x10)
-			pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + wScan);
-		// double res
-		else
-			pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1));
+	if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
+			pmg.grafm = GRAFM;	
 
-		//GRAFM = pmg.grafm;
-	}
-
-	// we want missiles, but a constant value, not memory lookup. GRACTL does NOT have to be set!
-	else
-		pmg.grafm = GRAFM;
-
-	if (pmg.grafpX)
-	{
-		// Players that are offscreen are treated as invisible
-		// the limits are 40 and 216, but a quad sized player could be 32 wide
-		// probably not worth looking at size to find actual width?
-		if ((pmg.hposp0 < 8) || (pmg.hposp0 >= 216))
-			pmg.grafp0 = 0;
-		if ((pmg.hposp1 < 8) || (pmg.hposp1 >= 216))
-			pmg.grafp1 = 0;
-		if ((pmg.hposp2 < 8) || (pmg.hposp2 >= 216))
-			pmg.grafp2 = 0;
-		if ((pmg.hposp3 < 8) || (pmg.hposp3 >= 216))
-			pmg.grafp3 = 0;
-	}
-
-	if (pmg.grafm)
-	{
-		// Missiles that are offsecreen are treated as invisible
-		// 47 and 208 are the limits, make sure it doesn't encroach
-		if ((pmg.hposm0 < 8) || (pmg.hposm0 >= 216))
-			pmg.grafm &= ~0x03;
-		if ((pmg.hposm1 < 8) || (pmg.hposm1 >= 216))
-			pmg.grafm &= ~0x0C;
-		if ((pmg.hposm2 < 8) || (pmg.hposm2 >= 216))
-			pmg.grafm &= ~0x30;
-		if ((pmg.hposm3 < 8) || (pmg.hposm3 >= 216))
-			pmg.grafm &= ~0xC0;
-	}
-
-	// set PM/G flag if any player or missile data is non-zero
-
-	sl.fpmg = (pmg.grafpX || pmg.grafm);
-
-	// If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
-	if (sl.prior & 0xC0)
-	{
-		if (sl.modelo == 15)
-		{
-			sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
-		}
-		else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
-			;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
-		else
-		{
-			// !!! ANTIC does something strange, but I can't emulate it right now!
-			sl.modelo = 0;
-			cbWidth = 0;
-		}
-	}
+	// update the colour registers
 
 	// GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
 	sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
-
 	sl.colpfX = COLPFX;
 	pmg.colpmX = COLPMX;
+
+	// !!! VDELAY NYI
+
+	// Did the H-pos or sizes change?
+	if (pmg.hposmX != HPOSMX || pmg.hpospX != HPOSPX || pmg.sizem != SIZEM || pmg.sizepX != SIZEPX)
+	{
+		pmg.hposmX = HPOSMX;
+		pmg.hpospX = HPOSPX;
+		pmg.sizem = SIZEM;
+		pmg.sizepX = SIZEPX;
+
+		short off[4];
+		int i;
+
+		// precompute on what pixel each player and missile start and stop
+		for (i = 0; i < 4; i++)
+		{
+			off[i] = (pmg.hposp[i] - ((NTSCx - X8) >> 2));
+
+			pmg.cwp[i] = (BYTE)mpsizecw[pmg.sizep[i] & 3];	// normal, double or quad size?
+			if (pmg.cwp[i] == 4)
+				pmg.cwp[i] = 3;	//# of times to shift to divide by (cw *2)
+
+			pmg.hpospPixStart[i] = off[i] << 1;		// first pixel affected by this player, compare to start
+			pmg.hpospPixStop[i] = pmg.hpospPixStart[i] + (8 << pmg.cwp[i]);	// the pixel after the last one affected, compare to stop
+
+			// now do missiles
+
+			off[i] = (pmg.hposm[i] - ((NTSCx - X8) >> 2));
+
+			pmg.cwm[i] = (BYTE)mpsizecw[((pmg.sizem >> (i + i))) & 3];
+			if (pmg.cwm[i] == 4)
+				pmg.cwm[i] = 3;	//# of times to shift to divide by (cw *2)
+
+			pmg.hposmPixStart[i] = off[i] << 1;		// first pixel affected by this player, compare to start
+			pmg.hposmPixStop[i] = pmg.hposmPixStart[i] + (2 << pmg.cwm[i]);	// the pixel after the last one affected, compare to stop
+		}
+	}
 }
+
+// We have wLeft cycles left to execute on this scan line, out of a total of wLeftMax.
+// Our DMA tables will translate that to which pixel is currently being drawn.
+// PSL is the first pixel not drawn last time. Process the appropriate number of
+// pixels of this scan line. At the end of the scan line, make sure to call us
+// with wLeft <= 0 to finish up.
 
 BOOL ProcessScanLine(int iVM)
 {
@@ -997,8 +997,8 @@ BOOL ProcessScanLine(int iVM)
 
 	// what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
 	// so the index into the array, which is 0-based, is (wLeft - 1).
-	// Finally, oOnce the whole scan line executes, we're called with wLeft == 0
-	// !!! if wLeft < 0, we're hopefully not in the visible part of the screen so it's OK to just use 0
+	// Finally, once the whole scan line executes, we will be called with wLeft == 0 to finish things up
+	// if wLeft < 0, we're hopefully not in the visible part of the screen so it's OK to just use 0, that doesn't happen til at least -5.
 	short cclock = DMAMAP[wLeft > 0 ? wLeft - 1 : 0];
 
 	// what part of the scan line were we on last time?
@@ -1018,7 +1018,7 @@ BOOL ProcessScanLine(int iVM)
 	////////////////////////////////////////////////////////////////
 
 	// PMG can exist outside the visible boundaries of this line, so we need an extra long line to avoid complicating things
-	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas
+	BYTE rgpix[NTSCx];	// an entire NTSC scan line, including retrace areas, used in PMG bitfield mode
 
 	int i, j;
 
@@ -2228,8 +2228,6 @@ BOOL ProcessScanLine(int iVM)
 
         pmg.fHitclr = 0;
 
-		BOOL fHiRes = ((sl.modelo == 2) || (sl.modelo == 3) || (sl.modelo == 15));
-
         // now map the rgpix array to the screen
 
         qch += (wScan - wStartScan) * vcbScan;
@@ -2246,13 +2244,13 @@ BOOL ProcessScanLine(int iVM)
             BYTE b = rgpix[i+((NTSCx - X8)>>1)];
 
 			// if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
-			if (fHiRes && (b & bfPF1))
+			if (pmg.fHiRes && (b & bfPF1))
 				sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
 
 			// If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
 			// (so that text shows up on top of a fifth player using its chroma). Put it back later.
 			BYTE colpf3Sav = sl.colpf3;
-			if (fHiRes && (b & bfPF3) && (b & bfPF1))
+			if (pmg.fHiRes && (b & bfPF3) && (b & bfPF1))
 				sl.colpf3 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
 
 			BYTE colpm0 = pmg.colpm0;
@@ -2261,7 +2259,7 @@ BOOL ProcessScanLine(int iVM)
 			BYTE colpm3 = pmg.colpm3;
 
 			// in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
-			if (fHiRes && (b & bfPF1))
+			if (pmg.fHiRes && (b & bfPF1))
 			{
 				colpm0 = (colpm0 & 0xf0) | (sl.colpf1 & 0x0f);
 				colpm1 = (colpm1 & 0xf0) | (sl.colpf1 & 0x0f);
