@@ -28,265 +28,6 @@ typedef void (__fastcall * PFNOP)(int iVM);
 PFNOP jump_tab_RO[256];
 PFNOP jump_tab[256];
 
-BYTE    rgbRainbow[256*3] =
-{
-     0,     0,     0,               // $00
-     8,     8,     8,
-    16,    16,    16,
-    24,    24,    24,
-    31,    31,    31,
-    36,    36,    36,
-    40,    40,    40,
-    44,    44,    44,
-    47,    47,    47,
-    50,    50,    50,
-    53,    53,    53,
-    56,    56,    56,
-    58,    58,    58,
-    60,    60,    60,
-    62,    62,    62,
-    63,    63,    63,
-     6,     5,     0,               // $10
-    12,    10,     0,
-    24,    15,     1,
-    30,    20,     2,
-    35,    27,     3,
-    39,    33,     6,
-    44,    42,    12,
-    47,    44,    17,
-    49,    48,    20,
-    52,    51,    23,
-    54,    53,    26,
-    55,    55,    29,
-    56,    56,    33,
-    57,    57,    36,
-    58,    58,    39,
-    59,    59,    41,
-    9,      5,     0,               // $20
-    14,     9,     0,
-    20,    13,     0,
-    28,    20,     0,
-    36,    28,     1,
-    43,    33,     1,
-    47,    39,    10,
-    49,    43,    17,
-    51,    46,    24,
-    53,    47,    26,
-    55,    49,    28,
-    57,    50,    30,
-    59,    51,    32,
-    60,    53,    36,
-    61,    55,    39,
-    62,    56,    40,
-    11,     3,     1,               // $30
-    18,     5,     2,
-    27,     7,     4,
-    36,    11,     8,
-    44,    20,    13,
-    46,    24,    16,
-    49,    28,    21,
-    51,    30,    25,
-    53,    35,    30,
-    54,    38,    34,
-    55,    42,    37,
-    56,    43,    38,
-    57,    44,    39,
-    57,    46,    40,
-    58,    48,    42,
-    59,    49,    44,
-    11,     1,     3,               // $40
-    22,     6,     9,
-    37,    10,    17,
-    42,    15,    22,
-    45,    21,    28,
-    48,    24,    30,
-    50,    26,    32,
-    52,    28,    34,
-    53,    30,    36,
-    54,    33,    38,
-    55,    35,    40,
-    56,    37,    42,
-    57,    39,    44,
-    58,    41,    45,
-    59,    42,    46,
-    60,    43,    47,
-    12,     0,    11,               // $50
-    20,     2,    18,
-    28,     4,    26,
-    39,     8,    37,
-    48,    18,    49,
-    53,    24,    53,
-    55,    29,    55,
-    56,    32,    56,
-    57,    35,    57,
-    58,    37,    58,
-    59,    39,    59,
-    59,    41,    59,
-    59,    42,    59,
-    59,    43,    59,
-    59,    44,    59,
-    60,    45,    60,
-     5,     1,    16,               // $60
-    10,     2,    32,
-    22,    10,    46,
-    27,    15,    49,
-    32,    21,    51,
-    35,    25,    52,
-    38,    28,    53,
-    40,    32,    54,
-    42,    35,    55,
-    44,    37,    56,
-    46,    38,    57,
-    47,    40,    57,
-    48,    41,    58,
-    49,    43,    58,
-    50,    44,    59,
-    51,    45,    59,
-     0,     0,    13,               // $70
-     4,     4,    26,
-    10,    10,    46,
-    18,    18,    49,
-    24,    24,    53,
-    27,    27,    54,
-    30,    30,    55,
-    33,    33,    56,
-    36,    36,    57,
-    39,    39,    57,
-    41,    41,    58,
-    43,    43,    58,
-    44,    44,    59,
-    46,    46,    60,
-    48,    48,    61,
-    49,    49,    62,
-     1,     7,    18,               // $80
-     2,    13,    30,
-     3,    19,    42,
-     4,    24,    42,
-     9,    28,    45,
-    14,    32,    48,
-    17,    35,    51,
-    20,    37,    53,
-    24,    39,    55,
-    28,    41,    56,
-    31,    44,    57,
-    34,    46,    57,
-    37,    47,    58,
-    39,    48,    58,
-    41,    49,    59,
-    42,    50,    60,
-     1,     4,    12,               // $90
-     2,     6,    22,
-     3,    10,    32,
-     5,    15,    36,
-     8,    20,    38,
-    15,    25,    44,
-    21,    30,    47,
-    24,    34,    49,
-    27,    38,    52,
-    29,    42,    54,
-    31,    44,    55,
-    33,    46,    56,
-    36,    47,    57,
-    38,    49,    58,
-    40,    50,    59,
-    42,    51,    60,
-     0,     9,     7,               // $A0
-     1,    18,    14,
-     2,    26,    20,
-     3,    35,    27,
-     4,    42,    33,
-     6,    47,    38,
-    14,    51,    44,
-    18,    53,    46,
-    22,    55,    49,
-    25,    56,    51,
-    28,    57,    52,
-    32,    58,    53,
-    36,    59,    55,
-    40,    60,    56,
-    44,    61,    57,
-    45,    62,    58,
-     0,    10,     1,               // $B0
-     0,    16,     3,
-     1,    22,     5,
-     5,    33,     7,
-     9,    44,    16,
-    14,    48,    21,
-    19,    51,    24,
-    22,    52,    28,
-    24,    53,    31,
-    30,    55,    35,
-    36,    57,    38,
-    39,    58,    41,
-    41,    59,    44,
-    43,    59,    47,
-    46,    59,    49,
-    47,    60,    50,
-     3,    10,     0,               // $C0
-     6,    20,     0,
-     9,    30,     1,
-    14,    37,     4,
-    18,    44,     7,
-    22,    46,    12,
-    26,    48,    17,
-    29,    50,    22,
-    33,    52,    26,
-    36,    54,    28,
-    38,    55,    30,
-    40,    56,    33,
-    42,    57,    36,
-    45,    58,    39,
-    48,    59,    42,
-    49,    60,    43,
-     5,     9,     0,               // $D0
-    11,    22,     0,
-    17,    35,     1,
-    23,    42,     2,
-    29,    48,     8,
-    34,    50,    12,
-    38,    51,    17,
-    40,    52,    21,
-    42,    53,    24,
-    44,    54,    27,
-    46,    55,    29,
-    47,    56,    31,
-    48,    57,    34,
-    50,    58,    37,
-    52,    59,    40,
-    53,    60,    42,
-     8,     7,     0,               // $E0
-    19,    16,     0,
-    28,    24,     4,
-    33,    31,     6,
-    48,    38,     8,
-    52,    44,    12,
-    55,    50,    15,
-    57,    52,    19,
-    58,    54,    22,
-    58,    56,    24,
-    59,    57,    26,
-    59,    58,    29,
-    60,    58,    33,
-    61,    59,    35,
-    61,    59,    36,
-    62,    60,    38,
-     8,     5,     0,               // $F0
-    13,     9,     0,
-    22,    14,     1,
-    32,    21,     3,
-    42,    29,     5,
-    45,    33,     7,
-    48,    36,    12,
-    50,    39,    18,
-    53,    42,    24,
-    54,    45,    27,
-    55,    46,    30,
-    56,    47,    33,
-    57,    49,    36,
-    58,    50,    38,
-    58,    53,    39,
-    59,    54,    40,
-};
 
 //////////////////////////////////////////////////////////////////
 //
@@ -399,9 +140,9 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 
 // in debug, stop on a breakpoint or if tracing
 #ifndef NDEBUG
-#define HANDLER_END() if (regPC != bp && !fTrace && wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #else
-#define HANDLER_END() if (wLeft > 0) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
+#define HANDLER_END() if (wLeft > wNMI) (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM); } 
 #endif
 
 // this used to not let a scan line end until there's an instruction that affects the PC
@@ -1215,7 +956,7 @@ HANDLER(op40)
 
 	// before our DLI the main code was waiting on WSYNC
 	if (WSYNC_on_RTI)
-		WSYNC_Waited = TRUE;
+		WSYNC_Waiting = TRUE;
 	WSYNC_on_RTI = FALSE;
     
 	wLeft -= 6;
@@ -2848,9 +2589,17 @@ PFNOP jump_tab_RO[256] =
     unused,
 };
 
+// Run for "wLeft" cycles and then return after completing the last instruction (cycles may go negative)
+// In debug, tracing and breakpoints can return early.
+//
+// If "wNMI" is positive, stop at that point to perform an NMI, and then continue down to 0
+
 void __cdecl Go6502(int iVM)
 {
-    
+	//ODS("Scan %04x : %02x %02x\n", wScan, wLeft, wNMI);
+	if (wLeft <= wNMI)	// we're starting past the NMI point, so just do the rest of the line
+		wNMI = 0;
+
 	// do not check your breakpoint here, you'll keep hitting it every time you try and execute and never get anywhere
 
     UnpackP(iVM);
@@ -2865,7 +2614,62 @@ void __cdecl Go6502(int iVM)
         if (t != t2) printf("BAD FLAGS STATE\n");
 #endif
 
-    (*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM);
+	do {
+
+		// Start executing
+		(*jump_tab_RO[READ_BYTE(iVM, regPC++)])(iVM);
+
+		// if we hit a breakpoint, and an NMI is about to fire, just do the NMI, let the breakpoint get hit after the RTI
+
+		// trigger an NMI - VBI on scan line 248, DLI on others
+		if (wNMI && wLeft <= wNMI)
+		{
+			// VBI takes priority, but there should never be a DLI below scan 247
+			if (wScan == STARTSCAN + Y8)
+			{
+				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
+				NMIST = (NMIST & 0x20) | 0x5F;
+
+				// !!! A WSYNC set wLeft very low, and it should be set back to cycle 10 here
+				// VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
+				if (NMIEN & 0x40) {
+					PackP(iVM);	// we're inside Go6502 so we need to pack our flags to push them on the stack
+					//ODS("VBI at %04x %02x\n", wFrame, wLeft);
+					//if (wNMI - wLeft > 4)
+					//	ODS("DELAY!\n");
+					Interrupt(iVM, FALSE);
+					regPC = cpuPeekW(iVM, 0xFFFA);
+				}
+			}
+			else
+			{
+				// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
+				NMIST = (NMIST & 0x20) | 0x9F;
+				if (NMIEN & 0x80)	// DLI enabled
+				{
+					PackP(iVM);
+					//ODS("DLI at %02x\n", wLeft);
+					Interrupt(iVM, FALSE);
+					regPC = cpuPeekW(iVM, 0xFFFA);
+
+					// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
+					// !!! This won't work for nested interrupts
+					if (WSYNC_Waiting)
+					{
+						WSYNC_Waiting = FALSE;
+						WSYNC_on_RTI = TRUE;
+					}
+				}
+			}
+			wNMI = 0;
+		}
+
+#ifndef NDEBUG
+		if (fTrace || bp == regPC)
+			break;
+#endif
+
+	} while (wLeft > 0);
 
     PackP(iVM);
 }

@@ -167,124 +167,122 @@ void CreateDMATables()
 									if (pf)
 									{
 										// mode fetch will happen on the first scan line of a mode
-										// !!! NO, if this is the LAST line of a mode, the next line will do a fetch
-										// since I run cycle 10 to cycle 10
 										if (rgDMA[cycle] == DMA_DL)
 										{
 											if (first)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// this cycle is blocked by a load memory scan
+										// this cycle is blocked by a load memory scan (first scan line only)
 										else if (rgDMA[cycle] == DMA_LMS)
 										{
-											if (lms)
+											if (lms && first)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all wide playfield modes (>= 2) use this cycle on every scan line
+										// all wide playfield modes (>= 2) use this cycle on the first scan line
+										// (GTIA 9++ is an example of bitmap modes that actually do have subsequent scan lines
+										//  where DMA should not occur)
 										else if (rgDMA[cycle] == W8)
 										{
-											if (mode >= 2 && width == 2)
+											if (first && mode >= 2 && width == 2)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// wide playfield hi and med res modes use this cycle on every scan line
+										// wide playfield hi and med res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == W4)
 										{
-											if (mode >= 2 && width == 2 && (mode != 8 && mode != 9))
+											if (first && mode >= 2 && width == 2 && (mode != 8 && mode != 9))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// wide playfield hi res modes use this cycle on every scan line
+										// wide playfield hi res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == W2)
 										{
-											if (width == 2 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
+											if (first && width == 2 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// wide playfield character modes use this cycle on the first scan line
+										// wide playfield character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == WC4)
 										{
-											if (width == 2 && first && (mode >= 2 && mode <= 7))
+											if (width == 2 && (mode >= 2 && mode <= 7))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// wide playfield hi-res character modes use this cycle on the first scan line
+										// wide playfield hi-res character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == WC2)
 										{
-											if (width == 2 && first && (mode >= 2 && mode <= 5))
+											if (width == 2 && (mode >= 2 && mode <= 5))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all but narrow playfield modes (>= 2) use this one on every scan line
+										// all but narrow playfield modes (>= 2) use this one on the first scan line
 										else if (rgDMA[cycle] == N8)
 										{
-											if (mode >= 2 && width > 0)
+											if (first && mode >= 2 && width > 0)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all but narrow playfield hi and med res modes use this cycle on every scan line
+										// all but narrow playfield hi and med res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == N4)
 										{
-											if (mode >= 2 && width > 0 && (mode != 8 && mode != 9))
+											if (first && mode >= 2 && width > 0 && (mode != 8 && mode != 9))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all but narrow playfield hi res modes use this cycle on every scan line
+										// all but narrow playfield hi res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == N2)
 										{
-											if (width > 0 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
+											if (first && width > 0 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all but narrow playfield character modes use this cycle on the first scan line
+										// all but narrow playfield character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == NC4)
 										{
-											if (width > 0 && first && (mode >= 2 && mode <= 7))
+											if (width > 0 && (mode >= 2 && mode <= 7))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all but narrow playfield hi-res character modes use this cycle on the first scan line
+										// all but narrow playfield hi-res character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == NC2)
 										{
-											if (width > 0 && first && (mode >= 2 && mode <= 5))
+											if (width > 0 && (mode >= 2 && mode <= 5))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all playfield modes (>= 2) use this one on every scan line
+										// all playfield modes (>= 2) use this one on the first scan line
 										else if (rgDMA[cycle] == A8)
 										{
-											if (mode >= 2)
+											if (first && mode >= 2)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all playfield hi and med res modes use this cycle on every scan line
+										// all playfield hi and med res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == A4)
 										{
-											if (mode >= 2 && mode != 8 && mode != 9)
+											if (first && mode >= 2 && mode != 8 && mode != 9)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all playfield hi res modes use this cycle on every scan line
+										// all playfield hi res modes use this cycle on the first scan line
 										else if (rgDMA[cycle] == A2)
 										{
-											if ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18))
+											if (first && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all playfield character modes use this cycle on the first scan line
+										// all playfield character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == AC4)
 										{
-											if (first && (mode >= 2 && mode <= 7))
+											if (mode >= 2 && mode <= 7)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
-										// all playfield hi-res character modes use this cycle on the first scan line
+										// all playfield hi-res character modes use this cycle on every scan line to get char data
 										else if (rgDMA[cycle] == AC2)
 										{
-											if (first && (mode >= 2 && mode <= 5))
+											if (mode >= 2 && mode <= 5)
 												rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 										}
 									}
 								}
 	}	
 	
-	// OK, now massage it so that looking up by index cycle == wLeft (# of cycles the CPU can still do this scan line)
+	// Build an array that says given how many CPU cycles we have left to execute, what clock cycle we will be be on (0-113).
+	//
+	// Then, convert that to screen pixels so that we know that when so many CPU cycles are still left to execute, the electron beam is
+	// at massage it so that looking up by index cycle == wLeft (# of cycles the CPU can still do this scan line, 0 based)
 	// returns the pixel of that scan line that the electron beam is drawing at that moment
-	// Note that a full wLeft == wLeftMax starts at cycle 10 (when the DLI is fired) so the last few cycles when wLeft is small
-	// (that indicate the electron beam is actually in the first 10 cycles of the next scan line) will return 352 saying
-	// that the beam is at the very end of the active scan line, since no drawing takes place in the first 10 clocks of a line.
 	// 
 	// Index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
-	// Index 115 will tell you what wLeft should be set to on a WSYNC (what its value should be at cycle 105)
-	//
-	// But before we can do that we build an array that simply says given how many CPU cycles we have left to execute, what clock
-	// cycle will be be on (0-113).
+	// Index 115 will tell you what wLeft should be set to after WSYNC is released (cycle 105)
+	// Index 116 will tell you what wLeft will be on cycle 10, when it's time for an NMI (DLI/VBI)
 	//
 	// Then we change clock cycles to actual pixels on the screen in the final step
 	//
@@ -298,15 +296,31 @@ void CreateDMATables()
 						for (missile = 0; missile < 2; missile++)
 							for (lms = 0; lms < 2; lms++)
 							{
+								// Now block out 9 RAM refresh cycles, every 4 cycles starting at 25.
+								// They can be bumped up to the next cycles start point. The last one might be bumped all the way to 102
+								for (cycle = 0; cycle < 9; cycle++)
+								{
+									for (int xx = 0; xx < 4; xx++)
+									{
+										if (rgDMAMap[mode][pf][width][first][player][missile][lms][25 + 4 * cycle] == 0)
+										{
+											rgDMAMap[mode][pf][width][first][player][missile][lms][25 + 4 * cycle] = 1;
+											break;
+										}
+										if (cycle == 8 && xx == 3)
+											rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1;
+									}
+								}
+
 								rgDMAMap[mode][pf][width][first][player][missile][lms][115] = 0;	// clear WSYNC point
+								rgDMAMap[mode][pf][width][first][player][missile][lms][116] = 0;	// clear DLI/VBI point
 
-								short array[115];
-								short index = 10;
-								BOOL fWrap = FALSE;
+								short array[114];
+								short index = 114;
 
-								// calculate the CPU cycle of the scan line that will be drawing at each cycle == wLeft
-								// There are 0 CPU cycles left to execute at cycle 9, since that's the last cycle of our
-								// virtual scan line. Back up from there to the next free cycle that the CPU can use, and
+								// Calculate the CPU cycle that will be executing at each clock cycle of the scan line.
+								// There are 0 CPU cycles left to execute at cycle 113, the last cycle.
+								// Back up from there to the next free cycle that the CPU can use, and
 								// that will be where there is 1 CPU cycle left, then 2, etc.
 								for (cycle = 0; cycle < 114; cycle++)
 								{
@@ -314,26 +328,28 @@ void CreateDMATables()
 									do {
 										index--;
 										if (index < 0)
-										{
-											index = 113;	// wrap
-											fWrap = TRUE;
-										}
-										if (index == 9 && fWrap)		// all done
 											break;
 									} while (rgDMAMap[mode][pf][width][first][player][missile][lms][index] == 1);
 
-									if (index == 9 && fWrap)
+									if (index < 0)
 										break;
 
 									// we found a free cycle. This is where wLeft == index will execute
-									array[cycle] = (index >= 10) ? index : 114;	// being in the first 9 clocks is at the end of last scan line
+									array[cycle] = index;
 									
-									// remember what wLeft should jump to on a WSYNC
+									// index 115 - remember what wLeft should jump to on a WSYNC (cycle 105)
 									if (index == 105)
 										rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle;
 									// oops, 105 was busy
 									else if (index < 105 && rgDMAMap[mode][pf][width][first][player][missile][lms][115] == 0)
 										rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle - 1;
+
+									// index 116 - remember what wLeft will be when it's time for a DLI/VBI NMI (cycle 10)
+									if (index == 10)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle;
+									// oops, 10 was busy
+									else if (index < 10 && rgDMAMap[mode][pf][width][first][player][missile][lms][116] == 0)
+										rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle - 1;
 								}
 
 								// This is what wLeft should start at for this kind of line
@@ -573,19 +589,20 @@ void PSLPrepare(int iVM)
 	{
 		PSL = 0;	// allow PSL to do stuff again
 
-		// overscan area
+		// overscan area - all blank lines and never the first scan line of a mode (so there's no DMA fetch)
 		if (wScan < wStartScan || wScan >= wStartScan + wcScans)
 		{
 			sl.modelo = 0;
 			sl.modehi = 0;
-
-			// !!! I don't make sure they know PF fetch is turned off!
-			// !!! Nextscanhi also not set
+			iscan = 8;
+			sl.vscrol = 0;
+			return;
 		}
 
 		// we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
 		if (wScan == wStartScan)
 		{
+			//ODS("BEGIN scan 8\n");
 			fWait = 0;	// not doing JVB anymore, we reached the top
 			fFetch = 1;	// start by grabbing a DLIST instruction
 		}
@@ -602,7 +619,7 @@ void PSLPrepare(int iVM)
 #endif
 
 			sl.modehi = cpuPeekB(iVM, DLPC);
-			//ODS("scan 0x%03x FETCH 0x%02x\n", wScan, sl.modehi);
+			//ODS("scan %04x FETCH %02x %02x\n", wScan, sl.modehi, sl.modelo);
 			sl.modelo = sl.modehi & 0x0F;
 			sl.modehi >>= 4;
 			IncDLPC(iVM);
@@ -613,11 +630,12 @@ void PSLPrepare(int iVM)
 			if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
 			{
 				sl.fVscrol = TRUE;
-				sl.vscrol = VSCROL & 15;	// NOT USED
+				sl.vscrol = VSCROL & 15;	// stores the first value of iscan to see if this is the first scan line of the mode
 				iscan = sl.vscrol;	// start displaying at this scan line. If > # of scan lines per mode line (say, 14)
 									// we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
 									// up to sscans. The last scan line is always when iscan == sscans.
 									// The actual scan line drawn will be iscan % (number of scan lines in that mode line)
+				//ODS("%d iscan = %d\n", wScan, iscan);
 			}
 			else
 			{
@@ -650,6 +668,7 @@ void PSLPrepare(int iVM)
 					w |= (cpuPeekB(iVM, DLPC) << 8);
 
 					DLPC = w;
+					//ODS("Scan %04x JVB\n", wScan);
 				}
 				break;
 
@@ -662,7 +681,10 @@ void PSLPrepare(int iVM)
 				// !!! GR.9++ quirk, if this is a single scan line mode, VSCROL of 3 does not mean duplicate the line as you count
 				// from 3 to 16, like normal, it means scroll 3 times (I think, works for Bump Pong)
 				if (iscan > scans && scans == 0 && iscan <= 8)
+				{
 					iscan = 16 - iscan;
+					sl.vscrol = iscan; // this is the first scan line of a mode line
+				}
 
 				// LMS (load memory scan) attached to this line to give start of screen memory
 				if (sl.modehi & 4)
@@ -682,14 +704,9 @@ void PSLPrepare(int iVM)
 				sl.fVscrol = FALSE;
 				// why is somebody setting the high bits of this sometimes?
 				scans = VSCROL & 0x0f;	// the first mode line after a VSCROL area is truncated, ending at VSCROL
+				//ODS("%d FINISH: scans=%d\n", wScan, scans);
 			}
 		}
-
-		Nextmodehi = cpuPeekB(iVM, DLPC);	// peek ahead to see if a LMS is next
-		if (((Nextmodehi & 0x0f) > 1) && (Nextmodehi & 0x40))
-			Nextmodehi = 1;
-		else
-			Nextmodehi = 0;
 
 		// DMA is off, and we're wanting to fetch because we finished the last thing it was doing when it was turned off
 		// so just do blank mode lines until DMA comes back on
@@ -698,9 +715,12 @@ void PSLPrepare(int iVM)
 			sl.modelo = 0;
 			sl.modehi = 0;
 			iscan = 1;		// keep this from running free, make it look like it's just finished
+			sl.vscrol = 0;	// note that this is not the first scan line of a new mode line
 			scans = 0;		// pretend it's a 1-line blank mode
 		}
 
+// DLI now happens inside of Go6502 at the proper cycle (10)
+#if 0
 		// generate a DLI if necessary. Do so on the last scan line of a graphics mode line
 		// a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
 		if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
@@ -721,13 +741,14 @@ void PSLPrepare(int iVM)
 
 				// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
 				// !!! This won't work for nested interrupts
-				WSYNC_Waited = FALSE;
+				WSYNC_Waiting = FALSE;
 				WSYNC_on_RTI = TRUE;
 
 				if (regPC == bp)
 					fHitBP = TRUE;
 			}
 		}
+#endif
 
 		// Check playfield width and set cbWidth (number of bytes read by Antic)
 		// and the smaller cbDisp (number of bytes actually visible)
@@ -811,7 +832,6 @@ void PSLPrepare(int iVM)
 
 		sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
 		sl.chactl = CHACTL & 7;
-		sl.scan = iscan;
 		sl.addr = wAddr;
 		sl.dmactl = DMACTL;
 

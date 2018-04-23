@@ -15,6 +15,7 @@
 
 #include "atari800.h"
 
+
 //
 // Our VM's VMINFO structure
 //
@@ -77,19 +78,283 @@ VMINFO const vmi800 =
 // Globals
 //
 
+// the ATARI colour palette, there is no official colour chart, we kind of have to make it up
+BYTE    rgbRainbow[256 * 3] =
+{
+	0,     0,     0,               // $00
+	8,     8,     8,
+	16,    16,    16,
+	24,    24,    24,
+	31,    31,    31,
+	36,    36,    36,
+	40,    40,    40,
+	44,    44,    44,
+	47,    47,    47,
+	50,    50,    50,
+	53,    53,    53,
+	56,    56,    56,
+	58,    58,    58,
+	60,    60,    60,
+	62,    62,    62,
+	63,    63,    63,
+	6,     5,     0,               // $10
+	12,    10,     0,
+	24,    15,     1,
+	30,    20,     2,
+	35,    27,     3,
+	39,    33,     6,
+	44,    42,    12,
+	47,    44,    17,
+	49,    48,    20,
+	52,    51,    23,
+	54,    53,    26,
+	55,    55,    29,
+	56,    56,    33,
+	57,    57,    36,
+	58,    58,    39,
+	59,    59,    41,
+	9,      5,     0,               // $20
+	14,     9,     0,
+	20,    13,     0,
+	28,    20,     0,
+	36,    28,     1,
+	43,    33,     1,
+	47,    39,    10,
+	49,    43,    17,
+	51,    46,    24,
+	53,    47,    26,
+	55,    49,    28,
+	57,    50,    30,
+	59,    51,    32,
+	60,    53,    36,
+	61,    55,    39,
+	62,    56,    40,
+	11,     3,     1,               // $30
+	18,     5,     2,
+	27,     7,     4,
+	36,    11,     8,
+	44,    20,    13,
+	46,    24,    16,
+	49,    28,    21,
+	51,    30,    25,
+	53,    35,    30,
+	54,    38,    34,
+	55,    42,    37,
+	56,    43,    38,
+	57,    44,    39,
+	57,    46,    40,
+	58,    48,    42,
+	59,    49,    44,
+	11,     1,     3,               // $40
+	22,     6,     9,
+	37,    10,    17,
+	42,    15,    22,
+	45,    21,    28,
+	48,    24,    30,
+	50,    26,    32,
+	52,    28,    34,
+	53,    30,    36,
+	54,    33,    38,
+	55,    35,    40,
+	56,    37,    42,
+	57,    39,    44,
+	58,    41,    45,
+	59,    42,    46,
+	60,    43,    47,
+	12,     0,    11,               // $50
+	20,     2,    18,
+	28,     4,    26,
+	39,     8,    37,
+	48,    18,    49,
+	53,    24,    53,
+	55,    29,    55,
+	56,    32,    56,
+	57,    35,    57,
+	58,    37,    58,
+	59,    39,    59,
+	59,    41,    59,
+	59,    42,    59,
+	59,    43,    59,
+	59,    44,    59,
+	60,    45,    60,
+	5,     1,    16,               // $60
+	10,     2,    32,
+	22,    10,    46,
+	27,    15,    49,
+	32,    21,    51,
+	35,    25,    52,
+	38,    28,    53,
+	40,    32,    54,
+	42,    35,    55,
+	44,    37,    56,
+	46,    38,    57,
+	47,    40,    57,
+	48,    41,    58,
+	49,    43,    58,
+	50,    44,    59,
+	51,    45,    59,
+	0,     0,    13,               // $70
+	4,     4,    26,
+	10,    10,    46,
+	18,    18,    49,
+	24,    24,    53,
+	27,    27,    54,
+	30,    30,    55,
+	33,    33,    56,
+	36,    36,    57,
+	39,    39,    57,
+	41,    41,    58,
+	43,    43,    58,
+	44,    44,    59,
+	46,    46,    60,
+	48,    48,    61,
+	49,    49,    62,
+	1,     7,    18,               // $80
+	2,    13,    30,
+	3,    19,    42,
+	4,    24,    42,
+	9,    28,    45,
+	14,    32,    48,
+	17,    35,    51,
+	20,    37,    53,
+	24,    39,    55,
+	28,    41,    56,
+	31,    44,    57,
+	34,    46,    57,
+	37,    47,    58,
+	39,    48,    58,
+	41,    49,    59,
+	42,    50,    60,
+	1,     4,    12,               // $90
+	2,     6,    22,
+	3,    10,    32,
+	5,    15,    36,
+	8,    20,    38,
+	15,    25,    44,
+	21,    30,    47,
+	24,    34,    49,
+	27,    38,    52,
+	29,    42,    54,
+	31,    44,    55,
+	33,    46,    56,
+	36,    47,    57,
+	38,    49,    58,
+	40,    50,    59,
+	42,    51,    60,
+	0,     9,     7,               // $A0
+	1,    18,    14,
+	2,    26,    20,
+	3,    35,    27,
+	4,    42,    33,
+	6,    47,    38,
+	14,    51,    44,
+	18,    53,    46,
+	22,    55,    49,
+	25,    56,    51,
+	28,    57,    52,
+	32,    58,    53,
+	36,    59,    55,
+	40,    60,    56,
+	44,    61,    57,
+	45,    62,    58,
+	0,    10,     1,               // $B0
+	0,    16,     3,
+	1,    22,     5,
+	5,    33,     7,
+	9,    44,    16,
+	14,    48,    21,
+	19,    51,    24,
+	22,    52,    28,
+	24,    53,    31,
+	30,    55,    35,
+	36,    57,    38,
+	39,    58,    41,
+	41,    59,    44,
+	43,    59,    47,
+	46,    59,    49,
+	47,    60,    50,
+	3,    10,     0,               // $C0
+	6,    20,     0,
+	9,    30,     1,
+	14,    37,     4,
+	18,    44,     7,
+	22,    46,    12,
+	26,    48,    17,
+	29,    50,    22,
+	33,    52,    26,
+	36,    54,    28,
+	38,    55,    30,
+	40,    56,    33,
+	42,    57,    36,
+	45,    58,    39,
+	48,    59,    42,
+	49,    60,    43,
+	5,     9,     0,               // $D0
+	11,    22,     0,
+	17,    35,     1,
+	23,    42,     2,
+	29,    48,     8,
+	34,    50,    12,
+	38,    51,    17,
+	40,    52,    21,
+	42,    53,    24,
+	44,    54,    27,
+	46,    55,    29,
+	47,    56,    31,
+	48,    57,    34,
+	50,    58,    37,
+	52,    59,    40,
+	53,    60,    42,
+	8,     7,     0,               // $E0
+	19,    16,     0,
+	28,    24,     4,
+	33,    31,     6,
+	48,    38,     8,
+	52,    44,    12,
+	55,    50,    15,
+	57,    52,    19,
+	58,    54,    22,
+	58,    56,    24,
+	59,    57,    26,
+	59,    58,    29,
+	60,    58,    33,
+	61,    59,    35,
+	61,    59,    36,
+	62,    60,    38,
+	8,     5,     0,               // $F0
+	13,     9,     0,
+	22,    14,     1,
+	32,    21,     3,
+	42,    29,     5,
+	45,    33,     7,
+	48,    36,    12,
+	50,    39,    18,
+	53,    42,    24,
+	54,    45,    27,
+	55,    46,    30,
+	56,    47,    33,
+	57,    49,    36,
+	58,    50,    38,
+	58,    53,    39,
+	59,    54,    40,
+};
+
 // our machine specific data for each instance (ATARI specific stuff)
 //
 CANDYHW *vrgcandy[MAX_VM];
 
+// This map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
+// 0 means it never steals the cycle, but somebody else might (RAM refresh)
+//
 const BYTE rgDMA[114] =
 {
 	/*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
 	/*  9 - 16 */ W8, 0, W2, 0, W4, WC4, W2, WC2,	// extreme of wide playfield is overscan and never fetches characters
 	/* 17 - 24 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
 	/* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-	A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+				  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+				  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+				  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
 	/* 89 - 96 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
 	/* 97- 104 */ W8, WC4, W2, WC2, W4, 0, W2, 0,
 	/* 105-113 */ 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -1504,40 +1769,74 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// Scan line 248 is the VBLANK
 			// Scan lines 249-261 are the rest of the overscan lines
 
-			// VBI happens at scan line 248
 			if (wScan == STARTSCAN + Y8)
 			{
-				// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
-				NMIST = (NMIST & 0x20) | 0x5F;
-
-				// VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
-				if (NMIEN & 0x40) {
-					
-					Interrupt(iVM, FALSE);
-					regPC = cpuPeekW(iVM, 0xFFFA);
-
-					// if the IRQ vector is our breakpoint, hit it, or we otherwise wouldn't notice
-					if (regPC == bp)
-						fHitBP = TRUE;
-				}
-
-				// Joysticks and Keys are looked at near the VBI too
+				// Joysticks and Keys are looked at just before the VBI, because many games process them there
 				DoVBI(iVM);
 			}
 
-			// We're supposed to start executing at the WSYNC release point (cycle 105) not the normal cycle 10
+			// We're supposed to start executing at the WSYNC release point (cycle 105) not the beginning of the scan line
 			// That point is stored in index 115 of this array, and +1 because the index is 0-based
-			if (WSYNC_Waited)
+			if (WSYNC_Waiting)
 			{
+				//ODS("WAITING\n");
 				wLeft = DMAMAP[115] + 1;	// the stored WSYNC point
-				WSYNC_Waited = FALSE;
+				WSYNC_Waiting = FALSE;
+
+				// Uh oh, an NMI should happen in the mean time, so better do that now and delay the wait for WSYNC until the RTI
+				// and the main code is executing again
+				
+				if (wScan == STARTSCAN + Y8)
+				{
+					// clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
+					NMIST = (NMIST & 0x20) | 0x5F;
+
+					// VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
+					if (NMIEN & 0x40) {
+						//ODS("special VBI\n");
+						Interrupt(iVM, FALSE);
+						regPC = cpuPeekW(iVM, 0xFFFA);
+
+						if (regPC == bp)
+							fHitBP = TRUE;
+					}
+					
+					// !!! Let the VBI not start until the WSYNC because it's so long
+				}
+				else if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
+				{
+					// set DLI, clear VBI leave RST alone - even if we don't take the interrupt
+					NMIST = (NMIST & 0x20) | 0x9F;
+					if (NMIEN & 0x80)	// DLI enabled
+					{
+						//ODS("special DLI\n");
+						Interrupt(iVM, FALSE);
+						regPC = cpuPeekW(iVM, 0xFFFA);
+
+						// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT.
+						// It should start at the regular DLI start point. On RTI note to resume waiting for WSYNC
+						// !!! This won't work for nested interrupts, and what if the DLI does a WSYNC or takes a long time?
+						wLeft = DMAMAP[116];
+						WSYNC_Waiting = FALSE;
+						WSYNC_on_RTI = TRUE;
+
+						if (regPC == bp)
+							fHitBP = TRUE;
+					}
+				}
 			}
 
 		} // if wLeft == 0
 
-		// Normally, executes about one horizontal scan line's worth of 6502 code, drawing bits and pieces of it as it goes
-		if (!fHitBP)	// if we just hit a breakpoint at the IRQ vector above, then don't do anything
+		// Normally, executes one horizontal scan line's worth of 6502 code, drawing bits and pieces of it as it goes
+		// But tracing or breakpoints can affect that
+		// if we just hit a breakpoint at the IRQ vector above, then don't do anything
+		if (!fHitBP)
+		{
+			// If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+1 since it's 0-based)
+			wNMI = (((sl.modehi & 8) && (iscan == scans || (fWait & 0x08))) || (wScan == STARTSCAN + Y8)) ? DMAMAP[116] + 1 : 0;
 			Go6502(iVM);
+		}
 
 		// hit a breakpoint during execution
 		if (regPC == bp)
@@ -2098,7 +2397,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			// The code to read VCOUNT reports one higher if the read comes with after the WSYNC point.
 			//
 			// Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
-			// its last ~25 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
+			// its last ~8 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
 			// the index is 0-based and wLeft should be set one higher
 			if (wLeft > DMAMAP[115])
@@ -2106,7 +2405,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 			else
 			{
 				wLeft = 0;				// stop right now and wait till next line's WSYNC
-				WSYNC_Waited = TRUE;	// next scan line only gets 25 cycles
+				WSYNC_Waiting = TRUE;	// next scan line only gets a few cycles
 			}
 		}
         else if (addr == 15)

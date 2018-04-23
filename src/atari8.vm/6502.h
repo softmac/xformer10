@@ -16,6 +16,8 @@
 // 6502 specific implementation of the CPU API
 //
 
+// !!! It shouldn't be ATARI specific, get rid of every reference to CANDY, keep it's own thread-safe state
+
 void __cdecl Go6502(int);
 
 __inline BOOL cpuExec(int iVM)
@@ -24,6 +26,7 @@ __inline BOOL cpuExec(int iVM)
     return TRUE;
 }
 
+// !!! The monitor should use this
 __inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
 {
     // stub out for now
