@@ -12,6 +12,8 @@
 
 ***************************************************************************/
 
+// !!! This monitor should be made generic for any processor, right now it's ATARI 6502 specific and so is part of the ATARI VM
+
 #include "gemtypes.h"
 #include "atari800.h"
 

@@ -120,7 +120,6 @@ ULONGLONG cEmulationSpeed;	// each VM can tell us the percent of real time it is
 
 extern BOOL fDebug;			// enables DEBUG output
 extern void ODS(char *, ...);	// my printf to send to the output window, since the normal printf just goes to the ether
-extern BYTE rgbRainbow[];	// the possible colour palettes our VMs might use go here
 
 // 
 // We will make one thread per VM 

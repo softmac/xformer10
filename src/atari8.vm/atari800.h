@@ -23,6 +23,8 @@
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 
+extern BYTE rgbRainbow[];	// the ATARI colour palette
+
 // all the reasons ANTIC might do DMA and block the CPU
 
 #define DMA_M 1		// grab missile data if missile DMA is on
@@ -48,8 +50,7 @@
 #define AC2 18
 #define A2 19
 
-// Here is how each cycle of a scan line is used, only if an entry is 0 is the CPU definitely free
-
+// Describes what ANTIC does for each cycle, see comment in atari800.c
 extern const BYTE rgDMA[114];
 
 // all the possible variables affecting which cycles ANTIC will have the CPU blocked
@@ -66,10 +67,11 @@ extern const BYTE rgDMA[114];
 // cycle number is 0-113 (0 based, representing what pixel is being drawn when wLeft is from 1-114).
 // index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
 // index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
-short rgDMAMap[19][2][3][2][2][2][2][116];
+// index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
+short rgDMAMap[19][2][3][2][2][2][2][117];
 
 // this mess is how we properly index all of those arrays
-#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][Nextmodehi]
+#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 // !!! I ignore nine RAM refresh cycles
@@ -86,8 +88,8 @@ short rgDMAMap[19][2][3][2][2][2][2][116];
 
 #define CART_8K      1	// 0 for invalid
 #define CART_16K     2
-#define CART_OSSA    3   // Action
-#define CART_OSSAX   4   // 0 4 3 version
+#define CART_OSSA    3  // Action
+#define CART_OSSAX   4  // 0 4 3 version
 #define CART_OSSB    5  // Mac65
 #define CART_XEGS	 6
 #define CART_BOB	 7
@@ -142,7 +144,7 @@ typedef struct
     BYTE modelo;                // display list byte (lo nibble)
     WORD addr;                  // starting address of scan line
 
-    BYTE scan;                  // scan line within mode (0..15)
+    BYTE pad;                  // scan line within mode (0..15)
     BYTE dmactl;                // dmactl value
     BYTE chbase;                // starting page of text font
     BYTE chactl;                // character control
@@ -288,17 +290,17 @@ typedef struct
 
 	BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick;
 
-	BYTE m_Nextmodehi;	// looking ahead 1 scan line to see if it's a LMS
+	BYTE m_pad1B;
 
     WORD m_wFrame, m_wScan;
     short m_wLeft;		 // signed, cycles to go can go <0 finishing the last 6502 instruction
 	short m_wLeftMax;	 // keeps track of how many 6502 cycles we're executing this scan line
-	BYTE m_WSYNC_Waited; // do we need to limit the next scan line to only ~25 cycles?
-	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_WAITED after a DLI
+	BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
+	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_Waiting after a DLI
 
 	short m_PSL;		// the value of wLeft last time ProcessScanLine was called
     
-	short pad2S;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
+	short m_wNMI;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
 	
 	BYTE m_rgSIO[5];	// holds the SIO command frame
 	BYTE m_cSEROUT;		// how many bytes we've gotten so far of the 5
@@ -400,9 +402,10 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
-#define WSYNC_Waited  CANDY_STATE(WSYNC_Waited)
+#define WSYNC_Waiting  CANDY_STATE(WSYNC_Waiting)
 #define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
 #define PSL			  CANDY_STATE(PSL)
+#define wNMI		  CANDY_STATE(wNMI)
 #define rgbSpecial	  CANDY_STATE(rgbSpecial)
 #define rgSIO		  CANDY_STATE(rgSIO)
 #define cSEROUT		  CANDY_STATE(cSEROUT)
@@ -422,7 +425,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
-#define Nextmodehi    CANDY_STATE(Nextmodehi)
 #define wFrame        CANDY_STATE(wFrame)
 #define wScan         CANDY_STATE(wScan)
 #define wLeft         CANDY_STATE(wLeft)
@@ -714,7 +716,6 @@ __inline BYTE *_pbshift(int iVM)
 // Function prototypes
 //
 
-void __cdecl Go6502(int);
 void Interrupt(int, BOOL);
 void CheckKey(int);
 void UpdatePorts(int);
