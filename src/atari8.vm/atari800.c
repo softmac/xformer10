@@ -445,12 +445,8 @@ BOOL TimeTravel(unsigned iVM)
 		return FALSE;
 
 	// Two 5-second snapshots ago will be from 10-15 seconds back in time
-	if (LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]))	// restore our snapshot
-	{
-		// set up for going back to this same point until more time passes
-		f = TimeTravelReset(iVM);
-	}
-
+    f = LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]);	// restore our snapshot, and create a new anchor point here
+	
 	return f;
 }
 
@@ -1403,7 +1399,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	InitJoysticks();	// let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
-	return TimeTravelReset(iVM); // state is now a valid anchor point
+    return TRUE;
 }
 
 // Cold Start the machine - the first one is currently done when it first becomes the active instance
@@ -1554,7 +1550,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	//too slow to do anytime but app startup
 	//InitSound();	// Need to reset and queue audio buffers
 
-	return TRUE;
+    // Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
+    return TimeTravelReset(iVM);
 }
 
 // SAVE: return a pointer to our data, and how big it is. It will not be harmed, and used before we are Uninit'ed, so don't
@@ -1605,6 +1602,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 	InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
 	CaptureJoysticks();
 
+    // Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
 	f = TimeTravelReset(iVM); // state is now a valid anchor point
 
 	return f;
