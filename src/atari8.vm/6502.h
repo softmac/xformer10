@@ -18,6 +18,7 @@
 
 // !!! It shouldn't be ATARI specific, get rid of every reference to CANDY, keep it's own thread-safe state
 
+// !!! don't call this directly
 void __cdecl Go6502(int);
 
 __inline BOOL cpuExec(int iVM)
@@ -72,7 +73,7 @@ __inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
     extern PFNB pfnPeekB;
 	extern PFNL pfnPokeB;
 
-	// !!! global - each VM needs to set this every time a VM is Execute'd
+	// global - each VM needs to set this every time a VM is Execute'd
 	pfnPeekB = pvmPeekB;
 	pfnPokeB = pvmPokeB;
 

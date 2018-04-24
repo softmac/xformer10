@@ -82,7 +82,6 @@ void ODS(char *fmt, ...)
 #endif
 }
 
-
 // Come up with a name for our instance - it goes in the title bar and menu.
 // Use the name of the machine we're emulating followed by the cartridge name if it has one,
 // or if not, the filename being used by the first disk drive.

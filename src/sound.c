@@ -34,8 +34,8 @@ WAVEFORMATEX pcmwf;
 
 
 
-// !!! lots of globals, not per-instance. When switching instances, it will glitch, but who cares. Only 1 instance is
-// controlling sound at a time, even tiled.
+// These are globals, not per-instance. Only 1 instance is controlling sound at a time, even tiled, and it only switches when all
+// threads are asleep.
 typedef struct
 {
 	ULONG frequency;
@@ -106,12 +106,9 @@ void CALLBACK MyWaveOutProc(
 		}
 		if (cx == SNDBUFS)
 		{
-			//OutputDebugString("AUDIO GLITCH - EMPTY\n");
+			//ODS("AUDIO GLITCH - EMPTY\n");
 		}
-		
-        //char ods[100];
-	    //sprintf(ods, "DONE %08x (%d free)\n", dwParam1, cx);
-		//OutputDebugString(ods);
+	    //ODS("DONE %08x (%d free)\n", dwParam1, cx);
 	}
 #endif
 }
@@ -147,19 +144,17 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
 		// uh oh, no free buffers to write into (this will happen naturally when tiling or without brakes)
 		if (sCurBuf == -1 && !v.fTiling && fBrakes) {
-#ifndef NDEBUG
-			//OutputDebugString("AUDIO GLITCH - FULL\n");
-#endif
-			return; // whatever you don't don't call waveoutWrite!
+			//ODS("AUDIO GLITCH - FULL\n");
+			return; // whatever you do, don't call waveoutWrite!
 		}
 
-		// !!! we don't always do thge same #instr/scan line (21 or 30) so we will sometimes try to back up in time
+		// !!! we don't always do thge same #cycles/scan line so we will sometimes try to back up in time
 		if (iCurSample < sOldSample)
 			return;
 			
 		//fprintf(fp, "SOUND[0] %d-%d f=%d v=%d d=%d\n", sOldSample, iCurSample, AUDF1, AUDC1 & 0x0f, AUDC1 >> 4);
 
-		// nothing to write (make sure sOldSample is reset to 0 when iCurSample == 800)
+		// nothing to write (make sure sOldSample is reset to 0 when iCurSample == SAMPLES_PER_VOICE)
 		if (iCurSample == sOldSample) {
 			//ODS("Wow, Sound changed so fast we dropped a sample!\n");
 			goto SaveAud;	// at least remember the new values
@@ -391,10 +386,8 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 			pwhdr[sCurBuf].dwFlags &= ~WHDR_DONE;
 			waveOutWrite(hWave, &pwhdr[sCurBuf], sizeof(WAVEHDR));
 
-			//char ods[100];
-			//sprintf(ods, "Write %d %08x (t=%lld)\n", sCurBuf, &pwhdr[sCurBuf],GetJiffies());
-			//OutputDebugString(ods);
-
+			//ODS("Write %d %08x (t=%lld)\n", sCurBuf, &pwhdr[sCurBuf],GetJiffies());
+			
 			//unsigned char *bb = pwhdr[sCurBuf].lpData;
 			//for (int zz = 0; zz < 800; zz++)
 			//{
@@ -1048,7 +1041,7 @@ void InitJoysticks()
 #endif
 }
 
-// !!! globals, each warm and cold start will glitch the other VMs
+// globals, each warm and cold start will glitch the other VMs
 //
 void CaptureJoysticks()
 {
