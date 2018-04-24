@@ -275,16 +275,16 @@ void CreateDMATables()
 	}	
 	
 	// Build an array that says given how many CPU cycles we have left to execute, what clock cycle we will be be on (0-113).
+	// rgDMAMap will look like this, for instance:
+	// 113 110 105 ... 2 0(at index 60)
+	// meaning that when there are 60 cpu cycles left to execute on this scan line, we are at clock 0 of the scan line.
+	// When there is 1 cpu cycle left to execute, we will be at clock 110.
 	//
-	// Then, convert that to screen pixels so that we know that when so many CPU cycles are still left to execute, the electron beam is
-	// at massage it so that looking up by index cycle == wLeft (# of cycles the CPU can still do this scan line, 0 based)
-	// returns the pixel of that scan line that the electron beam is drawing at that moment
+	// We will have a table to convert horizontal clock cycle to screen pixels
 	// 
-	// Index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
+	// rgDMAMap index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
 	// Index 115 will tell you what wLeft should be set to after WSYNC is released (cycle 105)
 	// Index 116 will tell you what wLeft will be on cycle 10, when it's time for an NMI (DLI/VBI)
-	//
-	// Then we change clock cycles to actual pixels on the screen in the final step
 	//
 
 	for (mode = 0; mode < 20; mode++)
@@ -297,7 +297,8 @@ void CreateDMATables()
 							for (lms = 0; lms < 2; lms++)
 							{
 								// Now block out 9 RAM refresh cycles, every 4 cycles starting at 25.
-								// They can be bumped up to the next cycles start point. The last one might be bumped all the way to 102
+								// They can be bumped up to the next cycle's start point. The last one might be bumped all the way to 102
+								// (If there are no free cycles between 25 and 101, you just one one RAM refresh at 102)
 								for (cycle = 0; cycle < 9; cycle++)
 								{
 									for (int xx = 0; xx < 4; xx++)
@@ -308,15 +309,15 @@ void CreateDMATables()
 											break;
 										}
 										if (cycle == 8 && xx == 3)
-											rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1;
+											rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1; // !!! assumes it's the first free one
 									}
 								}
 
 								rgDMAMap[mode][pf][width][first][player][missile][lms][115] = 0;	// clear WSYNC point
 								rgDMAMap[mode][pf][width][first][player][missile][lms][116] = 0;	// clear DLI/VBI point
 
-								short array[114];
-								short index = 114;
+								char array[114];
+								char index = 114;
 
 								// Calculate the CPU cycle that will be executing at each clock cycle of the scan line.
 								// There are 0 CPU cycles left to execute at cycle 113, the last cycle.
@@ -352,20 +353,26 @@ void CreateDMATables()
 										rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle - 1;
 								}
 
-								// This is what wLeft should start at for this kind of line
-								rgDMAMap[mode][pf][width][first][player][missile][lms][114] = cycle;
+								// This is what wLeft should start at for this kind of line (plus one, since wLeft is one-based)
+								rgDMAMap[mode][pf][width][first][player][missile][lms][114] = cycle - 1;
 
-								// now convert CPU cycles to pixels... We start drawing at cycle 13 through 100 and there are 4 pixels per cycle
+								// copy the temp array over to the permanent array
 								for (cycle = 0; cycle < 114; cycle++)
 								{
-									if (array[cycle] < 13)
-										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
-									else if (array[cycle] >= 101)
-										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = X8;
-									else
-										rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = (array[cycle] - 13) << 2;
+									rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = array[cycle];
 								}
 							}
+	}
+
+	// now make a conversion table of clock cycles to pixels... We start drawing at cycle 13 through 100 and there are 4 pixels per cycle
+	for (cycle = 0; cycle < 114; cycle++)
+	{
+		if (cycle < 13)
+			rgPIXELMap[cycle] = 0;
+		else if (cycle >= 101)
+			rgPIXELMap[cycle] = X8;
+		else
+			rgPIXELMap[cycle] = (cycle - 13) << 2;
 	}
 }
 
@@ -511,7 +518,7 @@ Ldm:
 		else
 			c = mppmbw[i];
 
-		// !!! In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
+		// In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
 		// so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour. We don't have
 		// any free bits to store anything about the fifth player unless we do something big and hacky which I'm not inclined to
 		// do right now, so we have 2 choices: 1) make the fifth player invisible or 2) make it visible but the wrong colour
@@ -678,13 +685,14 @@ void PSLPrepare(int iVM)
 				// how many scan lines a line of this graphics mode takes
 				scans = (BYTE)mpMdScans[sl.modelo] - 1;
 
-				// !!! GR.9++ quirk, if this is a single scan line mode, VSCROL of 3 does not mean duplicate the line as you count
-				// from 3 to 16, like normal, it means scroll 3 times (I think, works for Bump Pong)
+#if 0	// I fixed cycle counting, and now VSCROL is correctly set to 13
+				// GR.9++ hack, if this is a single scan line mode, VSCROL is 3 instead of 13 like it's supposed to be
 				if (iscan > scans && scans == 0 && iscan <= 8)
 				{
 					iscan = 16 - iscan;
 					sl.vscrol = iscan; // this is the first scan line of a mode line
 				}
+#endif
 
 				// LMS (load memory scan) attached to this line to give start of screen memory
 				if (sl.modehi & 4)
@@ -697,7 +705,8 @@ void PSLPrepare(int iVM)
 				break;
 			}
 
-			// time to stop vscrol, this line doesn't use it. !!! stop if the mode is different than the mode when we started scrolling?
+			// time to stop vscrol, this line doesn't use it.
+			// !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
 			// allow blank mode lines to mean duplicates of previous lines (GR.9++)
 			if (sl.fVscrol && (!(sl.modehi & 2)))
 			{
@@ -740,7 +749,7 @@ void PSLPrepare(int iVM)
 				regPC = cpuPeekW(iVM, 0xFFFA);
 
 				// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
-				// !!! This won't work for nested interrupts
+				// This won't work for nested interrupts, or if DLI finishes either before or after WSYNC point!
 				WSYNC_Waiting = FALSE;
 				WSYNC_on_RTI = TRUE;
 
@@ -896,7 +905,7 @@ void PSLPrepare(int iVM)
 				;	// little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
 			else
 			{
-				// !!! ANTIC does something strange, but I can't emulate it right now!
+				// !!! ANTIC does something strange, but I don't emulate it right now!
 			}
 		}
 		else
@@ -1016,10 +1025,11 @@ BOOL ProcessScanLine(int iVM)
 		return 0;	// uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
 
 	// what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
-	// so the index into the array, which is 0-based, is (wLeft - 1).
+	// so the index into the DMA array, which is 0-based, is (wLeft - 1). That tells us the horizontal clock cycle we're on,
+	// which is an index into the PIXEL array to tell us the pixel we're drawing at this moment.
 	// Finally, once the whole scan line executes, we will be called with wLeft == 0 to finish things up
-	// if wLeft < 0, we're hopefully not in the visible part of the screen so it's OK to just use 0, that doesn't happen til at least -5.
-	short cclock = DMAMAP[wLeft > 0 ? wLeft - 1 : 0];
+	// if wLeft < 0, we're hopefully not in the visible part of the screen (that doesn't happen til at least -5) so it's OK to just use 0.
+	short cclock = rgPIXELMap[DMAMAP[wLeft > 0 ? wLeft - 1 : 0]];
 
 	// what part of the scan line were we on last time?
 	short cclockPrev = PSL;
@@ -1299,7 +1309,7 @@ BOOL ProcessScanLine(int iVM)
 				else
 				{
 					if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
-						// !!! was 0xFC
+						// !!! was 0xFC, not 0xFE
 						b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
 					else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
 						b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
@@ -2189,7 +2199,7 @@ BOOL ProcessScanLine(int iVM)
 					b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
 				}
 
-				// !!! restrict all drawing in ProcessScanLine of the background to lum=0 in ANTIC mode 18!
+				// !!! restrict all drawing in ProcessScanLine of the background to lum=0 in ANTIC mode 18 (GR.11)!
 
 				col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);	// lum comes from 712
 				col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
@@ -2347,7 +2357,7 @@ BOOL ProcessScanLine(int iVM)
 			// GR. 10 - low nibble is an index into the colour to use
 			// Remember, GR.0 can be a secret GTIA mode
 			else if ((sl.prior & 0xc0) == 0x80)
-				if (P01 || P23)	// !!! not true, but I'm making all players overtop all playfields
+				if (P01 || P23)	// !!! not proper, but I'm making all players overtop all playfields
 					b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
 				else
 					b = *(&COLPM0 + b);

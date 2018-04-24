@@ -41,7 +41,7 @@ VMINFO const vmi800 =
 	FALSE,	// fUsesMouse
 	TRUE,	// fUsesJoystick
 	"Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0",
-    "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",	// !!! support CAR files someday?
+    "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",
 
     InstallAtari,
 	UnInstallAtari,
@@ -1753,7 +1753,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			PSLPrepare(iVM);
 
 			// table element 114 has the starting value of wLeft for this kind of scan line
-			wLeft = DMAMAP[114];
+			wLeft = DMAMAP[114] + 1;
 			wLeftMax = wLeft;
 
 			// Scan line 0-7 are not visible
@@ -1793,7 +1793,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 							fHitBP = TRUE;
 					}
 					
-					// !!! Let the VBI not start until the WSYNC because it's so long
+					// !!! We let the VBI not start until the WSYNC point because it's so long anyway
 				}
 				else if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
 				{
@@ -1807,8 +1807,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 						// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT.
 						// It should start at the regular DLI start point. On RTI note to resume waiting for WSYNC
-						// !!! This won't work for nested interrupts, and what if the DLI does a WSYNC or takes a long time?
-						wLeft = DMAMAP[116];
+						// !!! This won't work for nested interrupts
+						// !!! This doesn't work, whether or not the DLI goes past the WSYNC point. (Most do a STA WSYNC)
+						wLeft = DMAMAP[116] + 1;
 						WSYNC_Waiting = FALSE;
 						WSYNC_on_RTI = TRUE;
 
@@ -1993,10 +1994,9 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	}
 
 	// RANDOM and its shadows
-	// we've been asked for a random number. How many times would the poly counter have advanced?
-	// !!! this assumes ~114 instructions per scanline always (not true)
+	// we've been asked for a random number. How many times would the poly counter have advanced? (same clock freq as CPU)
 	if (addr == 0xD20A) {
-		int cur = (wFrame * NTSCY * 114 + wScan * 114 + (114 - wLeft));
+		int cur = (wFrame * NTSCY * 114 + wScan * 114 + DMAMAP[wLeft - 1]);
 		int delta = (int)(cur - random17last);
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
@@ -2259,9 +2259,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		else if (addr <= 8)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
-			// we're (wScan / 262) of the way through the scan lines and (wLeftMax - wLeft) of the way through this scan line
-			// !!! we assume all the scan lines were the same mode as we are!
-			int iCurSample = (wScan * 100 + (wLeftMax - wLeft) * 100 / wLeftMax) * SAMPLES_PER_VOICE / 100 / NTSCY;
+			// we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
+			int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / 114) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)
 				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
 

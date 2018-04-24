@@ -143,14 +143,14 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 		}
 
 		// uh oh, no free buffers to write into (this will happen naturally when tiling or without brakes)
-		if (sCurBuf == -1 && !v.fTiling && fBrakes) {
-			//ODS("AUDIO GLITCH - FULL\n");
+		if (sCurBuf == -1)
+		{
+			//if (!v.fTiling && fBrakes) ODS("AUDIO GLITCH - FULL\n");
 			return; // whatever you do, don't call waveoutWrite!
 		}
 
-		// !!! we don't always do thge same #cycles/scan line so we will sometimes try to back up in time
-		if (iCurSample < sOldSample)
-			return;
+		// we should never try to go back in time
+		assert(iCurSample >= sOldSample);
 			
 		//fprintf(fp, "SOUND[0] %d-%d f=%d v=%d d=%d\n", sOldSample, iCurSample, AUDF1, AUDC1 & 0x0f, AUDC1 >> 4);
 

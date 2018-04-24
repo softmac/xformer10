@@ -68,7 +68,10 @@ extern const BYTE rgDMA[114];
 // index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
 // index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
 // index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
-short rgDMAMap[19][2][3][2][2][2][2][117];
+char rgDMAMap[19][2][3][2][2][2][2][117];
+
+// for clock cycle number 0-113 (0 based), what pixel is being drawn when wLeft is from 1-114).
+short rgPIXELMap[114];
 
 // this mess is how we properly index all of those arrays
 #define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
