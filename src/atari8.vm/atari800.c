@@ -1108,15 +1108,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 	{
 		CreateDMATables();	// maps of where the electron beam is on each CPU cycle
 
-		int j, p;
-		extern void * jump_tab[512];
-		extern void * jump_tab_RO[256];
-		unsigned i;
-
-		for (i = 0; i < 256; i++)
-		{
-			jump_tab[i] = jump_tab_RO[i];
-		}
+		int j;
 
 		// Initialize the poly counters
 		// run through all the poly counters and remember the results in a table
@@ -1124,7 +1116,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 		
 		// poly5's cycle is 31
 		poly5[0] = 0;
-		p = 0;
+		int p = 0;
 		for (j = 1; j < 0x1f; j++)
 		{
 			p = ((p >> 1) | ((~(p ^ (p >> 3)) & 0x01) << 4)) & 0x1F;
@@ -1389,7 +1381,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 	// tell the CPU which 
 	cpuInit(PeekBAtari, PokeBAtari);
 
-	//OutputDebugString("\n\nWARM START\n\n");
+	//ODS("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;	// delay for banner messages
@@ -1419,7 +1411,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 BOOL __cdecl ColdbootAtari(int iVM)
 {
     unsigned addr;
-	//OutputDebugString("\n\nCOLD START\n\n");
+	//ODS("\n\nCOLD START\n\n");
 
 	// first do the warm start stuff
 	if (!WarmbootAtari(iVM))
