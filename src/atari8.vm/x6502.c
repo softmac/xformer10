@@ -1037,6 +1037,7 @@ HANDLER(op40)
 	regPC = PopWord(iVM);
 
 	// before our DLI the main code was waiting on WSYNC
+	// !!! If we are now past the WSYNC point
 	if (WSYNC_on_RTI)
 		WSYNC_Waiting = TRUE;
 	WSYNC_on_RTI = FALSE;
@@ -2739,14 +2740,6 @@ void __cdecl Go6502(int iVM)
 					//ODS("DLI at %02x\n", wLeft);
 					Interrupt(iVM, FALSE);
 					regPC = cpuPeekW(iVM, 0xFFFA);
-
-					// the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
-					// !!! This won't work for nested interrupts
-					if (WSYNC_Waiting)
-					{
-						WSYNC_Waiting = FALSE;
-						WSYNC_on_RTI = TRUE;
-					}
 				}
 			}
 			wNMI = 0;
