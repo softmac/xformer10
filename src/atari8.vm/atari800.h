@@ -78,9 +78,9 @@ short rgPIXELMap[HCLOCKS];
 #define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
-// !!! I ignore nine RAM refresh cycles
 
-// !!! Why do I take 92/130 cycles in mode 0/2?
+// !!! Why do I take 92/130 cycles in mode 0/2 with 9 RAM refresh cycles?
+
 // for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
 //   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA

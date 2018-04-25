@@ -296,6 +296,7 @@ void CreateDMATables()
 						for (missile = 0; missile < 2; missile++)
 							for (lms = 0; lms < 2; lms++)
 							{
+                                // !!! correct timing seems to be with 4 refresh cycles?
 								// Now block out 9 RAM refresh cycles, every 4 cycles starting at 25.
 								// They can be bumped up to the next cycle's start point. The last one might be bumped all the way to 102
 								// (If there are no free cycles between 25 and 101, you just one one RAM refresh at 102)

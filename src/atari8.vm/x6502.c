@@ -821,14 +821,14 @@ HANDLER(op20)
         // this is our SIO hook!
 
         fSIO = 1;
-        wLeft = 0;
+        wLeft = wNMI;
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 0;
+        wLeft = wNMI;
     }
 
     HANDLER_END_FLOW();
@@ -1123,14 +1123,14 @@ HANDLER(op4C)
         // this is our SIO hook!
 
         fSIO = 1;
-        wLeft = 0;
+        wLeft = wNMI;
     }
     else if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 0;
+        wLeft = wNMI;
     }
 
     HANDLER_END_FLOW();
@@ -1267,14 +1267,14 @@ HANDLER(op60)
         // this is our XE BUS hook!
 
         fSIO = 1;
-        wLeft = 0;
+        wLeft = wNMI;
     }
 	else if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
 	{
 		// this is our SIO hook!
 
 		fSIO = 1;
-		wLeft = 0;
+		wLeft = wNMI;
 	}
 
     HANDLER_END_FLOW();
@@ -1357,14 +1357,14 @@ HANDLER(op6C)
 		// this is our SIO hook!
 
 		fSIO = 1;
-		wLeft = 0;
+		wLeft = wNMI;
 	}
 	else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
 	{
 		// this is our XE BUS hook!
 
 		fSIO = 1;
-		wLeft = 0;
+		wLeft = wNMI;
 	}
 
     HANDLER_END_FLOW();
@@ -1605,7 +1605,7 @@ HANDLER(op8D)
 {
     EA_absW(iVM);
     ST_com(iVM, regA);
-	wLeft -= 4;	// note that the decrementing comes last, so that STA WSYNC or similar should set wLeft = 0 to stop executing now
+	wLeft -= 4;	// note that the decrementing comes last, after the STA, so STA WSYNC sees the old value
 	HANDLER_END();
 }
 
