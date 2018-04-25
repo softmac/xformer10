@@ -22,6 +22,7 @@
 #define NTSCY 262	// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
 					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
 					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
+#define HCLOCKS 114 // number of clock cycles per horizontal scan line
 
 extern BYTE rgbRainbow[];	// the ATARI colour palette
 
@@ -51,7 +52,7 @@ extern BYTE rgbRainbow[];	// the ATARI colour palette
 #define A2 19
 
 // Describes what ANTIC does for each cycle, see comment in atari800.c
-extern const BYTE rgDMA[114];
+extern const BYTE rgDMA[HCLOCKS];
 
 // all the possible variables affecting which cycles ANTIC will have the CPU blocked
 //
@@ -68,10 +69,10 @@ extern const BYTE rgDMA[114];
 // index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
 // index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
 // index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
-char rgDMAMap[19][2][3][2][2][2][2][117];
+char rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
 
 // for clock cycle number 0-113 (0 based), what pixel is being drawn when wLeft is from 1-114).
-short rgPIXELMap[114];
+short rgPIXELMap[HCLOCKS];
 
 // this mess is how we properly index all of those arrays
 #define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
@@ -79,6 +80,7 @@ short rgPIXELMap[114];
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 // !!! I ignore nine RAM refresh cycles
 
+// !!! Why do I take 92/130 cycles in mode 0/2?
 // for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
 //   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
@@ -296,10 +298,10 @@ typedef struct
 	BYTE m_pad1B;
 
     WORD m_wFrame, m_wScan;
-    short m_wLeft;		 // signed, cycles to go can go <0 finishing the last 6502 instruction
-	short m_wLeftMax;	 // keeps track of how many 6502 cycles we're executing this scan line
+    short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
+	short pad2s;	      // keeps track of how many 6502 cycles we're executing this scan line
 	BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
-	BYTE m_WSYNC_on_RTI; // restore the state of m_WSYNC_Waiting after a DLI
+	BYTE m_WSYNC_on_RTI;  // restore the state of m_WSYNC_Waiting after a DLI
 
 	short m_PSL;		// the value of wLeft last time ProcessScanLine was called
     
@@ -420,7 +422,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fWant10		  CANDY_STATE(fWant10)
 #define fHitBP		  CANDY_STATE(fHitBP)
 #define bias		  CANDY_STATE(bias)
-#define wLeftMax      CANDY_STATE(wLeftMax)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp		      CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)

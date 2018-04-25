@@ -346,7 +346,7 @@ CANDYHW *vrgcandy[MAX_VM];
 // This map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
 // 0 means it never steals the cycle, but somebody else might (RAM refresh)
 //
-const BYTE rgDMA[114] =
+const BYTE rgDMA[HCLOCKS] =
 {
 	/*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
 	/*  9 - 16 */ W8, 0, W2, 0, W4, WC4, W2, WC2,	// extreme of wide playfield is overscan and never fetches characters
@@ -1661,12 +1661,12 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 
 // The big loop! Process an entire frame of execution and build the screen buffer, or, if fTrace, only do a single instruction.
 //
-// !!! fStep and fCont are ignored for now!
+// !!! fStep and fCont are ignored for now! Not needed, GEM uses a different tracing system now
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
  {
 	fCont; fStep;
 
-	// tell the 6502 which HW it is running this time
+	// tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
 	cpuInit(PeekBAtari, PokeBAtari);
 
 	fStop = 0;	// do not break out of big loop
@@ -1750,10 +1750,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// how ANTIC will steal cycles on a scan line like this
 			PSLPrepare(iVM);
 
-			// table element 114 has the starting value of wLeft for this kind of scan line
-			wLeft = DMAMAP[114] + 1;
-			wLeftMax = wLeft;
-
+			// table element HCLOCKS has the starting value of wLeft for this kind of scan line (0-based)
+			wLeft = DMAMAP[HCLOCKS] + 1;
+			
 			// Scan line 0-7 are not visible
 			// Scan lines 8-247 are 240 visible lines, ANTIC DMA is possible, depending on a lot of things
 			// Scan line 248 is the VBLANK
@@ -1885,9 +1884,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			// if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
 			// 0 means timer not being used
 
-			for (int irq = 0; irq < 4; irq = ((irq + 1) << 1) - 1)	// 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported)
+			for (int irq = 0; irq < 4; irq = ((irq + 1) << 1) - 1)	// 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported by the 800)
 			{
-				if (irqPokey[irq] && irqPokey[irq] <= wLeftMax)
+				if (irqPokey[irq] && irqPokey[irq] <= HCLOCKS)
 				{
 					if (IRQEN & (irq + 1))
 					{
@@ -1899,16 +1898,16 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
 					ResetPokeyTimer(iVM, irq);			// start it up again, they keep cycling forever
 
-					if (irqPokey[irq] > wLeftMax - isav)
+					if (irqPokey[irq] > HCLOCKS - isav)
 					{
-						irqPokey[irq] -= (wLeftMax - isav);	// don't let errors propagate
+						irqPokey[irq] -= (HCLOCKS - isav);	// don't let errors propagate
 					}
 					else
 						irqPokey[irq] = 1;					// uh oh, already time for the next one
 					//ODS("TIMER %d ADJUSTED to %d\n", irq + 1, irqPokey[irq]);
 				}
-				else if (irqPokey[irq] > wLeftMax)
-					irqPokey[irq] -= wLeftMax;
+				else if (irqPokey[irq] > HCLOCKS)
+					irqPokey[irq] -= HCLOCKS;
 			}
 
 		}
@@ -1994,7 +1993,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 	// RANDOM and its shadows
 	// we've been asked for a random number. How many times would the poly counter have advanced? (same clock freq as CPU)
 	if (addr == 0xD20A) {
-		int cur = (wFrame * NTSCY * 114 + wScan * 114 + DMAMAP[wLeft - 1]);
+		int cur = (wFrame * NTSCY * HCLOCKS + wScan * HCLOCKS + DMAMAP[wLeft - 1]);
 		int delta = (int)(cur - random17last);
 		random17last = cur;
 		random17pos = (random17pos + delta) % 0x1ffff;
@@ -2258,7 +2257,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 		{
 			// AUDFx, AUDCx or AUDCTL have changed - write some sound
 			// we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
-			int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / 114) * SAMPLES_PER_VOICE / 100 / NTSCY;
+			int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 / NTSCY;
 			if (iCurSample < SAMPLES_PER_VOICE)
 				SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
 
