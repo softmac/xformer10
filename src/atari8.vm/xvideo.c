@@ -143,7 +143,7 @@ void CreateDMATables()
 					for (player = 0; player < 2; player++)
 						for (missile = 0; missile < 2; missile++)
 							for (lms = 0; lms < 2; lms++)
-								for (cycle = 0; cycle < 114; cycle++)
+								for (cycle = 0; cycle < HCLOCKS; cycle++)
 								{
 									// assume free
 									rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
@@ -316,14 +316,14 @@ void CreateDMATables()
 								rgDMAMap[mode][pf][width][first][player][missile][lms][115] = 0;	// clear WSYNC point
 								rgDMAMap[mode][pf][width][first][player][missile][lms][116] = 0;	// clear DLI/VBI point
 
-								char array[114];
-								char index = 114;
+								char array[HCLOCKS];
+								char index = HCLOCKS;
 
 								// Calculate the CPU cycle that will be executing at each clock cycle of the scan line.
 								// There are 0 CPU cycles left to execute at cycle 113, the last cycle.
 								// Back up from there to the next free cycle that the CPU can use, and
 								// that will be where there is 1 CPU cycle left, then 2, etc.
-								for (cycle = 0; cycle < 114; cycle++)
+								for (cycle = 0; cycle < HCLOCKS; cycle++)
 								{
 									// go backwards, find a free cycle
 									do {
@@ -354,10 +354,10 @@ void CreateDMATables()
 								}
 
 								// This is what wLeft should start at for this kind of line (plus one, since wLeft is one-based)
-								rgDMAMap[mode][pf][width][first][player][missile][lms][114] = cycle - 1;
+								rgDMAMap[mode][pf][width][first][player][missile][lms][HCLOCKS] = cycle - 1;
 
 								// copy the temp array over to the permanent array
-								for (cycle = 0; cycle < 114; cycle++)
+								for (cycle = 0; cycle < HCLOCKS; cycle++)
 								{
 									rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = array[cycle];
 								}
@@ -365,7 +365,7 @@ void CreateDMATables()
 	}
 
 	// now make a conversion table of clock cycles to pixels... We start drawing at cycle 13 through 100 and there are 4 pixels per cycle
-	for (cycle = 0; cycle < 114; cycle++)
+	for (cycle = 0; cycle < HCLOCKS; cycle++)
 	{
 		if (cycle < 13)
 			rgPIXELMap[cycle] = 0;
@@ -601,7 +601,7 @@ void PSLPrepare(int iVM)
 		{
 			sl.modelo = 0;
 			sl.modehi = 0;
-			iscan = 8;
+			iscan = 8;  // this and sl.vscrol not being equal means we're not the first scan line of a mode, so no PF DMA
 			sl.vscrol = 0;
 			return;
 		}
@@ -724,7 +724,7 @@ void PSLPrepare(int iVM)
 			sl.modelo = 0;
 			sl.modehi = 0;
 			iscan = 1;		// keep this from running free, make it look like it's just finished
-			sl.vscrol = 0;	// note that this is not the first scan line of a new mode line
+			sl.vscrol = 0;	// note that this is not the first scan line of a new mode line (do not do PF DMA fetch)
 			scans = 0;		// pretend it's a 1-line blank mode
 		}
 
@@ -819,14 +819,15 @@ void PSLPrepare(int iVM)
 		int j = 0;
 		if (cbDisp != cbWidth)
 		{
-			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin
+			// wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin.
 			// subtract one for every multiple of 8 hshift is, that's an entire character shift
 			j = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
 			hshift &= 7;	// now only consider the part < 8
 		}
 
-		if (((wAddr + j) & 0xFFF) < 0xFD0)
+		if (((wAddr + j) & 0xFFF) < 0xFD0)  // even wide playfield won't wrap a 4K boundary
 		{
+            // tough to avoid memcpy if we support wrapping on a 4K boundary below
 			_fmemcpy(sl.rgb, &rgbMem[wAddr + j], cbWidth);
 			rgbSpecial = rgbMem[wAddr + j - 1];	// the byte just offscreen to the left may be needed if scrolling
 		}
@@ -889,11 +890,11 @@ void PSLPrepare(int iVM)
 		else
 			pmg.grafm = GRAFM;
 
-		// If there is PMG data on this scan line, turn on special bitfield mode to deal with it.
+		// If there is PMG data on this scan line, turn on special bitfield mode to deal with it, and init that buffer
 		// Even if they're off screen now, they could be moved on screen at any moment!
 		sl.fpmg = (pmg.grafpX || pmg.grafm);
 
-		// If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
+        // If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
 		// Be brave, and if GTIA is turned off halfway down the screen, turn back!
 		if (sl.prior & 0xC0)
 		{
@@ -1009,7 +1010,7 @@ void PSLReadRegs(int iVM)
 	}
 }
 
-// We have wLeft cycles left to execute on this scan line, out of a total of wLeftMax.
+// We have wLeft CPU cycles left to execute on this scan line.
 // Our DMA tables will translate that to which pixel is currently being drawn.
 // PSL is the first pixel not drawn last time. Process the appropriate number of
 // pixels of this scan line. At the end of the scan line, make sure to call us
@@ -1080,7 +1081,6 @@ BOOL ProcessScanLine(int iVM)
 			// in the process.
 
 			qch = &rgpix[(NTSCx - X8) >> 1];	// first visible screen NTSC pixel
-			_fmemset(qch + cclockPrev, 0, cclock - cclockPrev); // zero out the section we'll be using
 
 			// GTIA modes 9, 10 & 11 don't use the PF registers since they can have 16 colours instead of 4
 			// so we CANNOT do a special bitfield mode. See the PRIOR code
@@ -1172,6 +1172,12 @@ BOOL ProcessScanLine(int iVM)
 			cclock = newTop;
 			PSL = cclock;
 		}
+
+#if 0 // !!! This shouldn't be necessary?
+        if (sl.fpmg)
+            // zero out the section we'll be using, now that we know the proper value of cclock
+            _fmemset(&rgpix[(NTSCx - X8) >> 1] + cclockPrev, 0, cclock - cclockPrev);
+#endif
 
 		// just fill in whatever we need to indicate background colour for our portion if there is no mode
 		if (sl.modelo < 2)
