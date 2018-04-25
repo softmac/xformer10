@@ -1833,21 +1833,11 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 			fStop = TRUE;
 
 		assert(wLeft <= 0 || fTrace == 1 || regPC == bp);
-
-		// Code tried to somehow jump to the SIO routine, which talks to the serial bus - we emulate that separately
-		// and skip running the OS code
-		// !!! This messes with the timing, the I/O will complete exactly at the end of the current scan line
-		if (fSIO) {
-			fSIO = 0;
-			SIOV(iVM);
-			if (regPC == bp)	// a breakpoint here will be like stopping after the routine executed
-				fStop = TRUE;
-		}
-
+		
 		// we finished the scan line
 		if (wLeft <= 0)
 		{
-			// now finish off any part of the scan line that didn't get drawn during execution
+            // now finish off any part of the scan line that didn't get drawn during execution
 			ProcessScanLine(iVM);
 
 			wScan = wScan + 1;
