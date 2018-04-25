@@ -2138,7 +2138,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         // writing to XL/XE memory !!! what is this?
 
         if (addr == 0xD1FF)
-            {
+        {
             static const unsigned char rgbSIOR[] =
                 {
                 0x00, 0x00, 0x04, 0x80, 0x00, 0x4C, 0x70, 0xD7,
@@ -2148,28 +2148,29 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                 };
 
             if (b & 1)
-                {
+            {
                 // swap in XE BUS device 1 (R: handler)
 
                 memcpy(&rgbMem[0xD800], rgbSIOR, sizeof(rgbSIOR));
-                }
+            }
             else
-                {
+            {
                 // swap out XE BUS device 1 (R: handler)
 
                 memcpy(&rgbMem[0xD800], rgbXLXED800, sizeof(rgbSIOR));
-                }
             }
+        }
 
-        if (!(PORTB & 1) && (addr >= 0xC000))
-            {
+        // the OS is swapped out so allow writes to those locations
+        if (!(wPBDATA & 1) && (addr >= 0xC000))
+        {
             // write to XL/XE RAM under ROM
 
             if ((addr < 0xD000) || (addr >= 0xD800))
                 cpuPokeB(iVM, addr, b);
 
             break;
-            }
+        }
 
         break;
 
