@@ -289,11 +289,12 @@ typedef struct
     BYTE m_rgbMem[65536];
 
     // fTrace:  non-zero for single opcode execution
-    // fSIO:    non-zero for SIO call
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
     // cntTick: mode display countdown timer (18 Hz ticks)
 
-	BYTE m_fTrace, m_fSIO, m_mdXLXE, m_cntTick;
+    BYTE m_fTrace;
+    BYTE pad0B;
+    BYTE m_mdXLXE, m_cntTick;
 
 	BYTE m_pad1B;
 
@@ -426,7 +427,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define bp		      CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
 #define fTrace        CANDY_STATE(fTrace)
-#define fSIO          CANDY_STATE(fSIO)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
 #define wFrame        CANDY_STATE(wFrame)

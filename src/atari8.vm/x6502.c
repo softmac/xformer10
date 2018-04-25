@@ -593,6 +593,24 @@ WORD HELPER(PopWord)
     return w;
 } }
 
+__inline void SIOCheck(int iVM)
+{
+    // !!! This executes instantly, messing with cycle accuracy
+    // !!! You can't set a bp on $e459, $e959 or anything inside SIO
+    // Some people jump directly to $e959, where $e459 points to on the 800 only
+    // OS must be paged in on XL for this to really be SIO
+    if ((regPC == 0xe459 || regPC == 0xe959) && (mdXLXE == md800 || (wPBDATA & 1)))
+    {
+        // this is our SIO hook!
+        SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
+    }
+    else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
+    {
+        // this is our XE BUS hook!
+        SIOV(iVM);
+    }
+}
+
 
 // BRK
 
@@ -815,21 +833,7 @@ HANDLER(op20)
     regPC = regEA;
 	wLeft -= 6;
 
-	// some apps jump directly to $e959, which is what $e459 jmps to !!! messes with cycle accuracy
-    if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
-    {
-        // this is our SIO hook!
-
-        fSIO = 1;
-        wLeft = wNMI;
-    }
-    else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-    {
-        // this is our XE BUS hook!
-
-        fSIO = 1;
-        wLeft = wNMI;
-    }
+    SIOCheck(iVM);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1117,21 +1121,7 @@ HANDLER(op4C)
     regPC = regEA;
 	wLeft -= 3;
 
-	// !!! These mess with cycle accuracy
-    if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == 0) || (wPBDATA & 1)))
-    {
-        // this is our SIO hook!
-
-        fSIO = 1;
-        wLeft = wNMI;
-    }
-    else if ((mdXLXE != 0) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-    {
-        // this is our XE BUS hook!
-
-        fSIO = 1;
-        wLeft = wNMI;
-    }
+    SIOCheck(iVM);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1261,21 +1251,7 @@ HANDLER(op60)
 	regPC = PopWord(iVM) + 1;
 	wLeft -= 6;
 
-	// !!! so much for cycle accuracy
-    if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-    {
-        // this is our XE BUS hook!
-
-        fSIO = 1;
-        wLeft = wNMI;
-    }
-	else if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
-	{
-		// this is our SIO hook!
-
-		fSIO = 1;
-		wLeft = wNMI;
-	}
+    SIOCheck(iVM);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1351,21 +1327,7 @@ HANDLER(op6C)
     regPC = READ_WORD(iVM, regEA);
 	wLeft -= 5;
 
-	// !!! these mess with cycle accuracy
-	if ((regPC == 0xE459 || regPC == 0xE959) && ((mdXLXE == md800) || (wPBDATA & 1)))
-	{
-		// this is our SIO hook!
-
-		fSIO = 1;
-		wLeft = wNMI;
-	}
-	else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-	{
-		// this is our XE BUS hook!
-
-		fSIO = 1;
-		wLeft = wNMI;
-	}
+    SIOCheck(iVM);  // SIO hack
 
     HANDLER_END_FLOW();
 }
