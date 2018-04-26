@@ -6,7 +6,7 @@
     - Common include file for all Atari 800 VM components.
     - Defines all of the private variables used by the Atari 800 VM.
 
-    Copyright (C) 1986-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1986-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      open source release
@@ -18,34 +18,34 @@
 
 #include "common.h"
 
-#define STARTSCAN 8	// scan line ANTIC starts drawing at
-#define NTSCY 262	// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
-					// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
-					// I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
+#define STARTSCAN 8    // scan line ANTIC starts drawing at
+#define NTSCY 262    // ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
+                    // the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
+                    // I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
 #define HCLOCKS 114 // number of clock cycles per horizontal scan line
 
-extern BYTE rgbRainbow[];	// the ATARI colour palette
+extern BYTE rgbRainbow[];    // the ATARI colour palette
 
 // all the reasons ANTIC might do DMA and block the CPU
 
-#define DMA_M 1		// grab missile data if missile DMA is on
-#define DMA_DL 2	// grab DList mode if Playfield DMA is on
-#define DMA_P 3		// grab player data if player DMA is on
-#define DMA_LMS 4	// do the load memory scan
+#define DMA_M 1        // grab missile data if missile DMA is on
+#define DMA_DL 2    // grab DList mode if Playfield DMA is on
+#define DMA_P 3        // grab player data if player DMA is on
+#define DMA_LMS 4    // do the load memory scan
 
-#define W8 5		// wide playfield hi, med or lo res modes
-#define WC4 6		// 1st scan line of a character mode, hi or med res
-#define W4 7		// wide playfield hi or med res modes
-#define WC2 8		// 1st scan line of a character mode, hi res
-#define W2 9		// wide playfield hi res mode
+#define W8 5        // wide playfield hi, med or lo res modes
+#define WC4 6        // 1st scan line of a character mode, hi or med res
+#define W4 7        // wide playfield hi or med res modes
+#define WC2 8        // 1st scan line of a character mode, hi res
+#define W2 9        // wide playfield hi res mode
 
-#define N8 10		// same for wide or normal playfield (present in all but narrow)
+#define N8 10        // same for wide or normal playfield (present in all but narrow)
 #define NC4 11
 #define N4 12
 #define NC2 13
 #define N2 14
 
-#define A8 15		// same for wide, normal or narrow playfield
+#define A8 15        // same for wide, normal or narrow playfield
 #define AC4 16
 #define A4 17
 #define AC2 18
@@ -83,45 +83,45 @@ short rgPIXELMap[HCLOCKS];
 
 // for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
-//   0			2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
+//   0            2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
-#define X8 352		// screen width
-#define Y8 240		// screen height
+#define X8 352        // screen width
+#define Y8 240        // screen height
 
-#define CART_8K      1	// 0 for invalid
+#define CART_8K      1    // 0 for invalid
 #define CART_16K     2
 #define CART_OSSA    3  // Action
 #define CART_OSSAX   4  // 0 4 3 version
 #define CART_OSSB    5  // Mac65
-#define CART_XEGS	 6
-#define CART_BOB	 7
-#define CART_ATARIMAX1	8
+#define CART_XEGS     6
+#define CART_BOB     7
+#define CART_ATARIMAX1    8
 #define CART_ATARIMAX8 9
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
-BYTE *rgbSwapCart[MAX_VM];	// Contents of the cartridges
-int iSwapCart[MAX_VM];		// which bank is currently swapped in
-int candysize[MAX_VM];		// how big our persistable data is (bigger for XL/XE than 800)
+BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges
+int iSwapCart[MAX_VM];        // which bank is currently swapped in
+int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800)
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
-#define SIO_DELAY 6				// wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
+#define SIO_DELAY 6                // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
 // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
-BYTE sectorSIO[MAX_VM][128];	// disk sector
+BYTE sectorSIO[MAX_VM][128];    // disk sector
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
 // RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)
-BYTE poly4[(1 << 4) - 1];	// stores the sequence of the poly counter
+BYTE poly4[(1 << 4) - 1];    // stores the sequence of the poly counter
 BYTE poly5[(1 << 5) - 1];
 BYTE poly9[(1 << 9) - 1];
 BYTE poly17[(1 << 17) - 1];
-int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4]; 	// each voice keeps track of its own poly position
-unsigned int random17pos;	// needs to be unsigned
-ULONGLONG random17last;	// cycle count last time a random number was asked for
+int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4];     // each voice keeps track of its own poly position
+unsigned int random17pos;    // needs to be unsigned
+ULONGLONG random17last;    // cycle count last time a random number was asked for
 
 // Time Travel stuff
 
@@ -131,9 +131,9 @@ BOOL TimeTravelReset(unsigned);
 BOOL TimeTravelInit(unsigned);
 void TimeTravelFree(unsigned);
 
-ULONGLONG ullTimeTravelTime[MAX_VM];	// the time stamp of a snapshot
-char cTimeTravelPos[MAX_VM];	// which is the current snapshot?
-char *Time[MAX_VM][3];		// 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
+ULONGLONG ullTimeTravelTime[MAX_VM];    // the time stamp of a snapshot
+char cTimeTravelPos[MAX_VM];    // which is the current snapshot?
+char *Time[MAX_VM][3];        // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
 
 //
 // Scan line structure
@@ -245,16 +245,16 @@ typedef struct
         BYTE sizep[4];
         };
 
-	// which pixel the players and missiles start at stop at, given their current hpos's and sizes
-	short hpospPixStart[4];
-	short hpospPixStop[4];
-	short hposmPixStart[4];
-	short hposmPixStop[4];
-	BYTE cwp[4];	// size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
-	BYTE cwm[4];
+    // which pixel the players and missiles start at stop at, given their current hpos's and sizes
+    short hpospPixStart[4];
+    short hpospPixStop[4];
+    short hposmPixStart[4];
+    short hposmPixStop[4];
+    BYTE cwp[4];    // size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
+    BYTE cwm[4];
 
-	// is the current mode hi-res mono mode 2, 3 or 15? Is GTIA enabled in PRIOR?
-	BOOL fHiRes, fGTIA;
+    // is the current mode hi-res mono mode 2, 3 or 15? Is GTIA enabled in PRIOR?
+    BOOL fHiRes, fGTIA;
 
     BYTE grafm;
     BYTE sizem;
@@ -281,11 +281,11 @@ typedef struct
     WORD m_regEA;
     BYTE m_mdEA;
 
-	WORD m_fKeyPressed;	 // xkey.c
-	WORD m_bp;			 // breakpoint
-	BOOL m_wShiftChanged;// xkey.c
-						
-	// 6502 address space
+    WORD m_fKeyPressed;     // xkey.c
+    WORD m_bp;             // breakpoint
+    BOOL m_wShiftChanged;// xkey.c
+
+    // 6502 address space
     BYTE m_rgbMem[65536];
 
     // fTrace:  non-zero for single opcode execution
@@ -296,46 +296,46 @@ typedef struct
     BYTE pad0B;
     BYTE m_mdXLXE, m_cntTick;
 
-	BYTE m_pad1B;
+    BYTE m_pad1B;
 
     WORD m_wFrame, m_wScan;
     short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
-	short pad2s;	      // keeps track of how many 6502 cycles we're executing this scan line
-	BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
-	BYTE m_WSYNC_on_RTI;  // restore the state of m_WSYNC_Waiting after a DLI
+    short pad2s;          // keeps track of how many 6502 cycles we're executing this scan line
+    BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
+    BYTE m_WSYNC_on_RTI;  // restore the state of m_WSYNC_Waiting after a DLI
 
-	short m_PSL;		// the value of wLeft last time ProcessScanLine was called
-    
-	short m_wNMI;	// keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
-	
-	BYTE m_rgSIO[5];	// holds the SIO command frame
-	BYTE m_cSEROUT;		// how many bytes we've gotten so far of the 5
-	WORD m_fSERIN;		// we're executing a disk read command
-	BYTE m_bSERIN;		// byte to return in SERIN
-	BYTE m_isectorPos;	// where in the buffer are we?
-	BYTE m_checksum;	// buffer checksum
-	BYTE m_fWant8;		// we'd like the SEROUT DONE IRQ8
-	BYTE m_fWant10;		// we'd like the SEROUT NEEDED IRQ10
-	
-	BYTE m_fHitBP;		// anybody changing the PC outside of Go6502 needs to check and set this
+    short m_PSL;        // the value of wLeft last time ProcessScanLine was called
+
+    short m_wNMI;    // keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
+
+    BYTE m_rgSIO[5];    // holds the SIO command frame
+    BYTE m_cSEROUT;        // how many bytes we've gotten so far of the 5
+    WORD m_fSERIN;        // we're executing a disk read command
+    BYTE m_bSERIN;        // byte to return in SERIN
+    BYTE m_isectorPos;    // where in the buffer are we?
+    BYTE m_checksum;    // buffer checksum
+    BYTE m_fWant8;        // we'd like the SEROUT DONE IRQ8
+    BYTE m_fWant10;        // we'd like the SEROUT NEEDED IRQ10
+
+    BYTE m_fHitBP;        // anybody changing the PC outside of Go6502 needs to check and set this
 
     // size of RAM ($A000 or $C000)
 
     WORD FAR m_ramtop;
 
     WORD m_fStop;
-	WORD m_wStartScan;
-	WORD pad3W, pad4W;
+    WORD m_wStartScan;
+    WORD pad3W, pad4W;
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
     ULONG pad5UL;
-	ULONG pad6UL;
+    ULONG pad6UL;
 
-    // clock multiplier 
+    // clock multiplier
     ULONG m_clockMult;
-    
-	PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
+
+    PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
     SL m_sl;            // current scan line display info
     WORD m_cbWidth, m_cbDisp;
     WORD m_hshift;
@@ -346,41 +346,41 @@ typedef struct
 
     BYTE m_fWait;       // wait until next VBI
     BYTE m_fFetch;      // fetch next DL instruction
-	BYTE m_rgbSpecial;	// the offscreen character being scrolled on
+    BYTE m_rgbSpecial;    // the offscreen character being scrolled on
 
-	WORD pad7W;
-	WORD pad8W;
+    WORD pad7W;
+    WORD pad8W;
 
     BYTE m_bCartType;   // type of cartridge
     BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
-    
-	BYTE pad9B;
 
-	// the 8 status bits must be together and in the same order as in the 6502
-	unsigned char	 m_srN;
-	unsigned char    m_srV;
-	unsigned char    m_srB;
-	unsigned char    m_srD;
-	unsigned char    m_srI;
-	unsigned char    m_srZ;
-	unsigned char    m_srC;
-	unsigned char    m_pad;
+    BYTE pad9B;
 
-	LONG m_irqPokey[4];	// POKEY h/w timers, how many cycles to go
+    // the 8 status bits must be together and in the same order as in the 6502
+    unsigned char     m_srN;
+    unsigned char    m_srV;
+    unsigned char    m_srB;
+    unsigned char    m_srD;
+    unsigned char    m_srI;
+    unsigned char    m_srZ;
+    unsigned char    m_srC;
+    unsigned char    m_pad;
 
-	int m_iXESwap;			// which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
+    LONG m_irqPokey[4];    // POKEY h/w timers, how many cycles to go
 
-	char m_rgbXLExtMem;		// beginning of XL extended memory
-	
-	// which, if present, will look like this:
-	//
-	//char m_rgbSwapSelf[2048];	// extended XL memory
-	//char m_rgbSwapC000[4096];
-	//char m_rgbSwapD800[10240];
-	//
-	//char HUGE m_rgbXEMem[4][16384];	// !!! doesn't need to be HUGE anymore?
-	//
+    int m_iXESwap;            // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
+
+    char m_rgbXLExtMem;        // beginning of XL extended memory
+
+    // which, if present, will look like this:
+    //
+    //char m_rgbSwapSelf[2048];    // extended XL memory
+    //char m_rgbSwapC000[4096];
+    //char m_rgbSwapD800[10240];
+    //
+    //char HUGE m_rgbXEMem[4][16384];    // !!! doesn't need to be HUGE anymore?
+    //
 
 } CANDYHW;
 
@@ -410,21 +410,21 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waiting  CANDY_STATE(WSYNC_Waiting)
 #define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
-#define PSL			  CANDY_STATE(PSL)
-#define wNMI		  CANDY_STATE(wNMI)
-#define rgbSpecial	  CANDY_STATE(rgbSpecial)
-#define rgSIO		  CANDY_STATE(rgSIO)
-#define cSEROUT		  CANDY_STATE(cSEROUT)
-#define fSERIN		  CANDY_STATE(fSERIN)
-#define bSERIN		  CANDY_STATE(bSERIN)
-#define isectorPos	  CANDY_STATE(isectorPos)
-#define checksum	  CANDY_STATE(checksum)
-#define fWant8		  CANDY_STATE(fWant8)
-#define fWant10		  CANDY_STATE(fWant10)
-#define fHitBP		  CANDY_STATE(fHitBP)
-#define bias		  CANDY_STATE(bias)
+#define PSL              CANDY_STATE(PSL)
+#define wNMI          CANDY_STATE(wNMI)
+#define rgbSpecial      CANDY_STATE(rgbSpecial)
+#define rgSIO          CANDY_STATE(rgSIO)
+#define cSEROUT          CANDY_STATE(cSEROUT)
+#define fSERIN          CANDY_STATE(fSERIN)
+#define bSERIN          CANDY_STATE(bSERIN)
+#define isectorPos      CANDY_STATE(isectorPos)
+#define checksum      CANDY_STATE(checksum)
+#define fWant8          CANDY_STATE(fWant8)
+#define fWant10          CANDY_STATE(fWant10)
+#define fHitBP          CANDY_STATE(fHitBP)
+#define bias          CANDY_STATE(bias)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
-#define bp		      CANDY_STATE(bp)
+#define bp              CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
 #define fTrace        CANDY_STATE(fTrace)
 #define mdXLXE        CANDY_STATE(mdXLXE)
@@ -453,7 +453,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define irqPokey      CANDY_STATE(irqPokey)
-#define iXESwap		  CANDY_STATE(iXESwap)
+#define iXESwap          CANDY_STATE(iXESwap)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 
 // if present, here is where these would be
@@ -466,7 +466,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define rgbSwapC000   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE)
 #define rgbSwapD800   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE)
 
-#define rgbXEMem	  (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
+#define rgbXEMem      (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
 
 #include "6502.h"
 
@@ -474,7 +474,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 // Shift key status bits (are returned by PC BIOS)
 //
 
-#define wRCtrl	  0x80	// specifically, right control
+#define wRCtrl      0x80    // specifically, right control
 #define wCapsLock 0x40
 #define wNumLock  0x20
 #define wScrlLock 0x10
@@ -728,7 +728,7 @@ BYTE SIOReadSector(int);
 void DeleteDrive(int, int);
 BOOL AddDrive(int, int, BYTE *);
 void CreateDMATables();
-void PSLPrepare(int);	// call at the beginning of the scan line to get the mode
+void PSLPrepare(int);    // call at the beginning of the scan line to get the mode
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);
 BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);
@@ -737,7 +737,7 @@ void CchDisAsm(int, unsigned int *puMem);
 void CchShowRegs(int);
 void ControlKeyUp8(int);
 
-extern int fXFCable;	// !!! left uninitialized and used
+extern int fXFCable;    // !!! left uninitialized and used
 
 //int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
 //void ReadROMs();

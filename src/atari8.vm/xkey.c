@@ -5,7 +5,7 @@
 
     - Atari keyboard emulation
 
-    Copyright (C) 1986-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1986-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      open source release
@@ -25,8 +25,8 @@ void CheckKey(int iVM)
     BYTE ch = 0;
     WORD shift = 0;
     WORD dshift = 0;
-	//BOOL fForceCtrl = FALSE;
-     
+    //BOOL fForceCtrl = FALSE;
+
     extern BYTE rgbMapScans[1024];
 
 // printf("in CheckKey\n");
@@ -37,7 +37,7 @@ void CheckKey(int iVM)
         ch   = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
         vrgvmi[iVM].keytail &= 1023;
 
-		//DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
+        //DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
         if ((vrgvmi[iVM].keytail & 1) || (vrgvmi[iVM].keyhead & 1))
             vrgvmi[iVM].keytail = vrgvmi[iVM].keyhead = 0;
@@ -51,7 +51,7 @@ void CheckKey(int iVM)
         }
 
     shift = *pbshift & (wScrlLock | wCapsLock | wCtrl | wAnyShift);
-	//fBrakes = (shift & wScrlLock);	// using PGUP since modern keyboards don't have scroll lock anymore
+    //fBrakes = (shift & wScrlLock);    // using PGUP since modern keyboards don't have scroll lock anymore
     shift &= ~wScrlLock;
 
     if (shift & wCapsLock)
@@ -98,37 +98,37 @@ void CheckKey(int iVM)
 
     if (ch == 0xE0)
     {
-		switch (scan)
-		{
-			case 0x47:
-				// Home (not on numeric keypad) - Clear
-				goto lookitup;
+        switch (scan)
+        {
+            case 0x47:
+                // Home (not on numeric keypad) - Clear
+                goto lookitup;
 
-			case 0x4F:
-				// End (not on numeric keypad) - break key
+            case 0x4F:
+                // End (not on numeric keypad) - break key
 
-				if (IRQEN & 0x80)
-					IRQST &= ~0x80;
-				return;
+                if (IRQEN & 0x80)
+                    IRQST &= ~0x80;
+                return;
 
-			case 0x52:
-				// Ins (not on numeric keypad) - Insert a character (Ctrl Ins)
+            case 0x52:
+                // Ins (not on numeric keypad) - Insert a character (Ctrl Ins)
 
-				if (shift & 3)
-					goto lookitup;
+                if (shift & 3)
+                    goto lookitup;
 
-				KBCODE = 0xB7;
-				goto lookit2;
+                KBCODE = 0xB7;
+                goto lookit2;
 
-			case 0x53:
-				// Del (not on numeric keypad) - Delete a character (Ctrl Del)
+            case 0x53:
+                // Del (not on numeric keypad) - Delete a character (Ctrl Del)
 
-				if (shift & 3)
-					goto lookitup;
+                if (shift & 3)
+                    goto lookitup;
 
-				KBCODE = 0xB4;
-				goto lookit2;
-		}
+                KBCODE = 0xB4;
+                goto lookit2;
+        }
     }
 
     else if (scan == 0xE0)
@@ -172,186 +172,186 @@ void CheckKey(int iVM)
 
     switch (scan)
     {
-		default:
-			// function keys with Ctrl or Alt pressed
-			if ((scan >= 0x54) && (scan <= 0x5D))
-				scan -= 0x19;
-			else if ((scan >= 0x5E) && (scan <= 0x67))
-				scan -= 0x23;
-			break;
+        default:
+            // function keys with Ctrl or Alt pressed
+            if ((scan >= 0x54) && (scan <= 0x5D))
+                scan -= 0x19;
+            else if ((scan >= 0x5E) && (scan <= 0x67))
+                scan -= 0x23;
+            break;
 
-		case 0x77: // Control + Home
-			scan = 0x47;
-			break;
+        case 0x77: // Control + Home
+            scan = 0x47;
+            break;
 
-		case 0x75: // Control + End
-			scan = 0x4F;
-			break;
+        case 0x75: // Control + End
+            scan = 0x4F;
+            break;
 
-		case 0x8D: // Control + Up
-			scan = 0x48;
-			break;
+        case 0x8D: // Control + Up
+            scan = 0x48;
+            break;
 
-		case 0x73: // Control + Left
-			scan = 0x4B;
-			break;
+        case 0x73: // Control + Left
+            scan = 0x4B;
+            break;
 
-		case 0x74: // Control + Right
-			scan = 0x4D;
-			break;
+        case 0x74: // Control + Right
+            scan = 0x4D;
+            break;
 
-		case 0x91: // Control + Down
-			scan = 0x50;
-			break;
+        case 0x91: // Control + Down
+            scan = 0x50;
+            break;
 
-		case 0x92: // Insert
-		case 0x93: // Delete
-			// Insert/Delete with Contrl pressed
-			// need to be changed to their un-Controled scan codes
-			scan -= 0x40;
-			break;
+        case 0x92: // Insert
+        case 0x93: // Delete
+            // Insert/Delete with Contrl pressed
+            // need to be changed to their un-Controled scan codes
+            scan -= 0x40;
+            break;
 
-		case 0x97: // Home
-		case 0x98: // Up arrow
-		case 0x9B: // Left arrow
-		case 0x9D: // Right arrow
-		case 0x9F: // End
-		case 0xA0: // Down arrow
-		case 0xA2: // Insert
-		case 0xA3: // Delete
-			// cursor keys, Home, etc with Alt pressed
-			// need to be changed to their un-Alted scan codes
-			//fForceCtrl = TRUE;	// it's annoying to need to press CTRL to get these, but games break using cursors as joystick otherwise
-			scan -= 0x50;
-			break;
+        case 0x97: // Home
+        case 0x98: // Up arrow
+        case 0x9B: // Left arrow
+        case 0x9D: // Right arrow
+        case 0x9F: // End
+        case 0xA0: // Down arrow
+        case 0xA2: // Insert
+        case 0xA3: // Delete
+            // cursor keys, Home, etc with Alt pressed
+            // need to be changed to their un-Alted scan codes
+            //fForceCtrl = TRUE;    // it's annoying to need to press CTRL to get these, but games break using cursors as joystick otherwise
+            scan -= 0x50;
+            break;
 
-		case 0x47: // numeric 7 (Home)
-			if (ch == 0)                    // numlock off
-				{
-				rPADATA &= ~5;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x67;
-			break;
+        case 0x47: // numeric 7 (Home)
+            if (ch == 0)                    // numlock off
+                {
+                rPADATA &= ~5;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x67;
+            break;
 
-		case 0x48: // numeric 8 (if numeric keypad present, those cursor keys also serve as joystick)
-			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
-				{
-				rPADATA &= ~1;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x68;
-			break;
+        case 0x48: // numeric 8 (if numeric keypad present, those cursor keys also serve as joystick)
+            if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
+                {
+                rPADATA &= ~1;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x68;
+            break;
 
-		case 0x49: // numeric 9
-			if (ch == 0)                    // numlock off
-				{
-				rPADATA &= ~9;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x69;
-			break;
+        case 0x49: // numeric 9
+            if (ch == 0)                    // numlock off
+                {
+                rPADATA &= ~9;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x69;
+            break;
 
-		case 0x4B: // numeric 4
-			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
-				{
-				rPADATA &= ~4;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6A;
-			break;
+        case 0x4B: // numeric 4
+            if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
+                {
+                rPADATA &= ~4;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6A;
+            break;
 
-		case 0x4C: // numeric 5
-			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
-				{
-				rPADATA |= 15;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6B;
-			break;
+        case 0x4C: // numeric 5
+            if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
+                {
+                rPADATA |= 15;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6B;
+            break;
 
-		case 0x4D: // numeric 6
-			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
-				{
-				rPADATA &= ~8;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6C;
-			break;
+        case 0x4D: // numeric 6
+            if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
+                {
+                rPADATA &= ~8;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6C;
+            break;
 
-		case 0x4F: // numeric 1
-			if (ch == 0)                    // numlock off
-				{
-				rPADATA &= ~6;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6D;
-			break;
+        case 0x4F: // numeric 1
+            if (ch == 0)                    // numlock off
+                {
+                rPADATA &= ~6;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6D;
+            break;
 
-		case 0x50: // numeric 2
-			if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
-				{
-				rPADATA &= ~2;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6E;
-			break;
+        case 0x50: // numeric 2
+            if ((ch == 0) || (ch == 0xE0))  // numlock off or cursor key
+                {
+                rPADATA &= ~2;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6E;
+            break;
 
-		case 0x51: // numeric 3
-			if (ch == 0)                    // numlock off
-				{
-				rPADATA &= ~10;
-				UpdatePorts(iVM);
-				return;
-				}
-			else
-				scan = 0x6F;
-			break;
+        case 0x51: // numeric 3
+            if (ch == 0)                    // numlock off
+                {
+                rPADATA &= ~10;
+                UpdatePorts(iVM);
+                return;
+                }
+            else
+                scan = 0x6F;
+            break;
 
-		case 0x52: // numeric 0
-			if (ch == 0)                    // numlock off
-				{
-				TRIG0 &= ~1;                // JOY 0 fire button down
-				return;
-				}
+        case 0x52: // numeric 0
+            if (ch == 0)                    // numlock off
+                {
+                TRIG0 &= ~1;                // JOY 0 fire button down
+                return;
+                }
 
-			scan = 0x70;
-			break;
+            scan = 0x70;
+            break;
 
-		case 0x53: // numeric .
-			scan = 0x71;
-			break;
+        case 0x53: // numeric .
+            scan = 0x71;
+            break;
     }
 
 lookitup:
-    
-	int sh = shift;
-	
-	//if (fForceCtrl) sh = shift | 4;
 
-	KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
+    int sh = shift;
 
-	if (KBCODE == 255)
-	{
-		return;
-	}
-	
+    //if (fForceCtrl) sh = shift | 4;
+
+    KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
+
+    if (KBCODE == 255)
+    {
+        return;
+    }
+
 lookit2:
     SKSTAT &= ~0x04;
 
@@ -376,19 +376,19 @@ lookit2:
 
 BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 {
-	message;
+    message;
 
     int ch, scan;
     MSG msg;
     BOOL fDown =  (lParam & 0x80000000) == 0;
 
-	scan = (lParam >> 16) & 0xFF;
+    scan = (lParam >> 16) & 0xFF;
     ch = uParam;
 
-	// the VK codes for volume and brightness, etc. happen to have the same scan codes as ordinary letters
-	// and the ATARI will type them, so return early
-	if ((ch >= 0xa4 && ch <= 0xb7) || ch == 0xff)	// ff is both brightness keys, or possibly other future expansion keys too?
-		return FALSE;
+    // the VK codes for volume and brightness, etc. happen to have the same scan codes as ordinary letters
+    // and the ATARI will type them, so return early
+    if ((ch >= 0xa4 && ch <= 0xb7) || ch == 0xff)    // ff is both brightness keys, or possibly other future expansion keys too?
+        return FALSE;
 
 #if 0
     // eat repeating keystrokes
@@ -407,348 +407,348 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
         {
     default:
 
-		// FOREIGN KEYBOARD SUPPORT!
-		// Remap ASCII characters to U.S. scan codes
+        // FOREIGN KEYBOARD SUPPORT!
+        // Remap ASCII characters to U.S. scan codes
 
-		if (PeekMessage(&msg, hwnd, WM_CHAR, WM_CHAR + 1, PM_REMOVE))
-		{
-			if ((msg.lParam & 0x80000000) == 0)
-			{
-				// key being pressed down
+        if (PeekMessage(&msg, hwnd, WM_CHAR, WM_CHAR + 1, PM_REMOVE))
+        {
+            if ((msg.lParam & 0x80000000) == 0)
+            {
+                // key being pressed down
 
-				//DebugStr("2nd   KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, msg.wParam);
+                //DebugStr("2nd   KeyMsg800: keydown:%d  l:%08X  scan:%04X, ch:%02X\n", fDown, lParam, scan, msg.wParam);
 
-				wShiftChanged = (*pbshift & wAnyShift);
+                wShiftChanged = (*pbshift & wAnyShift);
 
-				// !!! this would prevent graphics characters from being typed
-				//*pbshift &= ~wCtrl; // on German keyboards, right Alt is same as Ctrl+Alt
+                // !!! this would prevent graphics characters from being typed
+                //*pbshift &= ~wCtrl; // on German keyboards, right Alt is same as Ctrl+Alt
 
-				switch (msg.wParam)
-				{
-				case '=':  scan = 0x0D; *pbshift &= ~wAnyShift; break;
-				case '+':  scan = 0x0D; *pbshift |= wAnyShift; break;
-				case '-':  scan = 0x0C; *pbshift &= ~wAnyShift; break;
-				case '_':  scan = 0x0C; *pbshift |= wAnyShift; break;
-				case '[':  scan = 0x1A; *pbshift &= ~wAnyShift; break;
-				case ']':  scan = 0x1B; *pbshift &= ~wAnyShift; break;
-				case ';':  scan = 0x27; *pbshift &= ~wAnyShift; break;
-				case ':':  scan = 0x27; *pbshift |= wAnyShift; break;
-				case '\'': scan = 0x28; *pbshift &= ~wAnyShift; break;
-				case '"':  scan = 0x28; *pbshift |= wAnyShift; break;
-				case ',':  scan = 0x33; *pbshift &= ~wAnyShift; break;
-				case '<':  scan = 0x33; *pbshift |= wAnyShift; break;
-				case '.':  scan = 0x34; *pbshift &= ~wAnyShift; break;
-				case '>':  scan = 0x34; *pbshift |= wAnyShift; break;
-				case '/':  scan = 0x35; *pbshift &= ~wAnyShift; break;
-				case '?':  scan = 0x35; *pbshift |= wAnyShift; break;
-				case '\\': scan = 0x2B; *pbshift &= ~wAnyShift; break;
-				case '|':  scan = 0x2B; *pbshift |= wAnyShift; break;
-				case '!':  scan = 0x02; *pbshift |= wAnyShift; break;
-				case '@':  scan = 0x03; *pbshift |= wAnyShift; break;
-				case '#':  scan = 0x04; *pbshift |= wAnyShift; break;
-				case '$':  scan = 0x05; *pbshift |= wAnyShift; break;
-				case '%':  scan = 0x06; *pbshift |= wAnyShift; break;
-				case '^':  scan = 0x07; *pbshift |= wAnyShift; break;
-				case '&':  scan = 0x08; *pbshift |= wAnyShift; break;
-				case '*':  scan = 0x09; *pbshift |= wAnyShift; break;
-				case '(':  scan = 0x0A; *pbshift |= wAnyShift; break;
-				case ')':  scan = 0x0B; *pbshift |= wAnyShift; break;
-				case '1':  scan = 0x02; *pbshift &= ~wAnyShift; break;
-				case '2':  scan = 0x03; *pbshift &= ~wAnyShift; break;
-				case '3':  scan = 0x04; *pbshift &= ~wAnyShift; break;
-				case '4':  scan = 0x05; *pbshift &= ~wAnyShift; break;
-				case '5':  scan = 0x06; *pbshift &= ~wAnyShift; break;
-				case '6':  scan = 0x07; *pbshift &= ~wAnyShift; break;
-				case '7':  scan = 0x08; *pbshift &= ~wAnyShift; break;
-				case '8':  scan = 0x09; *pbshift &= ~wAnyShift; break;
-				case '9':  scan = 0x0A; *pbshift &= ~wAnyShift; break;
-				case '0':  scan = 0x0B; *pbshift &= ~wAnyShift; break;
+                switch (msg.wParam)
+                {
+                case '=':  scan = 0x0D; *pbshift &= ~wAnyShift; break;
+                case '+':  scan = 0x0D; *pbshift |= wAnyShift; break;
+                case '-':  scan = 0x0C; *pbshift &= ~wAnyShift; break;
+                case '_':  scan = 0x0C; *pbshift |= wAnyShift; break;
+                case '[':  scan = 0x1A; *pbshift &= ~wAnyShift; break;
+                case ']':  scan = 0x1B; *pbshift &= ~wAnyShift; break;
+                case ';':  scan = 0x27; *pbshift &= ~wAnyShift; break;
+                case ':':  scan = 0x27; *pbshift |= wAnyShift; break;
+                case '\'': scan = 0x28; *pbshift &= ~wAnyShift; break;
+                case '"':  scan = 0x28; *pbshift |= wAnyShift; break;
+                case ',':  scan = 0x33; *pbshift &= ~wAnyShift; break;
+                case '<':  scan = 0x33; *pbshift |= wAnyShift; break;
+                case '.':  scan = 0x34; *pbshift &= ~wAnyShift; break;
+                case '>':  scan = 0x34; *pbshift |= wAnyShift; break;
+                case '/':  scan = 0x35; *pbshift &= ~wAnyShift; break;
+                case '?':  scan = 0x35; *pbshift |= wAnyShift; break;
+                case '\\': scan = 0x2B; *pbshift &= ~wAnyShift; break;
+                case '|':  scan = 0x2B; *pbshift |= wAnyShift; break;
+                case '!':  scan = 0x02; *pbshift |= wAnyShift; break;
+                case '@':  scan = 0x03; *pbshift |= wAnyShift; break;
+                case '#':  scan = 0x04; *pbshift |= wAnyShift; break;
+                case '$':  scan = 0x05; *pbshift |= wAnyShift; break;
+                case '%':  scan = 0x06; *pbshift |= wAnyShift; break;
+                case '^':  scan = 0x07; *pbshift |= wAnyShift; break;
+                case '&':  scan = 0x08; *pbshift |= wAnyShift; break;
+                case '*':  scan = 0x09; *pbshift |= wAnyShift; break;
+                case '(':  scan = 0x0A; *pbshift |= wAnyShift; break;
+                case ')':  scan = 0x0B; *pbshift |= wAnyShift; break;
+                case '1':  scan = 0x02; *pbshift &= ~wAnyShift; break;
+                case '2':  scan = 0x03; *pbshift &= ~wAnyShift; break;
+                case '3':  scan = 0x04; *pbshift &= ~wAnyShift; break;
+                case '4':  scan = 0x05; *pbshift &= ~wAnyShift; break;
+                case '5':  scan = 0x06; *pbshift &= ~wAnyShift; break;
+                case '6':  scan = 0x07; *pbshift &= ~wAnyShift; break;
+                case '7':  scan = 0x08; *pbshift &= ~wAnyShift; break;
+                case '8':  scan = 0x09; *pbshift &= ~wAnyShift; break;
+                case '9':  scan = 0x0A; *pbshift &= ~wAnyShift; break;
+                case '0':  scan = 0x0B; *pbshift &= ~wAnyShift; break;
 
-					// remap letters without affecting shift state
+                    // remap letters without affecting shift state
 
-				case 'A': case 'a': scan = 0x1E; break;
-				case 'B': case 'b': scan = 0x30; break;
-				case 'C': case 'c': scan = 0x2E; break;
-				case 'D': case 'd': scan = 0x20; break;
-				case 'E': case 'e': scan = 0x12; break;
-				case 'F': case 'f': scan = 0x21; break;
-				case 'G': case 'g': scan = 0x22; break;
-				case 'H': case 'h': scan = 0x23; break;
-				case 'I': case 'i': scan = 0x17; break;
-				case 'J': case 'j': scan = 0x24; break;
-				case 'K': case 'k': scan = 0x25; break;
-				case 'L': case 'l': scan = 0x26; break;
-				case 'M': case 'm': scan = 0x32; break;
-				case 'N': case 'n': scan = 0x31; break;
-				case 'O': case 'o': scan = 0x18; break;
-				case 'P': case 'p': scan = 0x19; break;
-				case 'Q': case 'q': scan = 0x10; break;
-				case 'R': case 'r': scan = 0x13; break;
-				case 'S': case 's': scan = 0x1F; break;
-				case 'T': case 't': scan = 0x14; break;
-				case 'U': case 'u': scan = 0x16; break;
-				case 'V': case 'v': scan = 0x2F; break;
-				case 'W': case 'w': scan = 0x11; break;
-				case 'X': case 'x': scan = 0x2D; break;
-				case 'Y': case 'y': scan = 0x15; break;
-				case 'Z': case 'z': scan = 0x2C; break;
-				}
+                case 'A': case 'a': scan = 0x1E; break;
+                case 'B': case 'b': scan = 0x30; break;
+                case 'C': case 'c': scan = 0x2E; break;
+                case 'D': case 'd': scan = 0x20; break;
+                case 'E': case 'e': scan = 0x12; break;
+                case 'F': case 'f': scan = 0x21; break;
+                case 'G': case 'g': scan = 0x22; break;
+                case 'H': case 'h': scan = 0x23; break;
+                case 'I': case 'i': scan = 0x17; break;
+                case 'J': case 'j': scan = 0x24; break;
+                case 'K': case 'k': scan = 0x25; break;
+                case 'L': case 'l': scan = 0x26; break;
+                case 'M': case 'm': scan = 0x32; break;
+                case 'N': case 'n': scan = 0x31; break;
+                case 'O': case 'o': scan = 0x18; break;
+                case 'P': case 'p': scan = 0x19; break;
+                case 'Q': case 'q': scan = 0x10; break;
+                case 'R': case 'r': scan = 0x13; break;
+                case 'S': case 's': scan = 0x1F; break;
+                case 'T': case 't': scan = 0x14; break;
+                case 'U': case 'u': scan = 0x16; break;
+                case 'V': case 'v': scan = 0x2F; break;
+                case 'W': case 'w': scan = 0x11; break;
+                case 'X': case 'x': scan = 0x2D; break;
+                case 'Y': case 'y': scan = 0x15; break;
+                case 'Z': case 'z': scan = 0x2C; break;
+                }
 
-				wShiftChanged ^= (*pbshift & wAnyShift);
-			}
-		}
-		
-		// don't pass ALT-ed keys to ATARI, but pass them to Windows for menuing
-		if (*pbshift & wAlt)
-			return FALSE;
+                wShiftChanged ^= (*pbshift & wAnyShift);
+            }
+        }
 
-		break;
+        // don't pass ALT-ed keys to ATARI, but pass them to Windows for menuing
+        if (*pbshift & wAlt)
+            return FALSE;
 
-	case 0x1c:	// normal ENTER
-	case 0x11C: // keypad ENTER?
-		
-		if (*pbshift & wAlt)
-			return FALSE;	// exit early to avoid passing the FULLSCREEN Alt-ENTER key to the ATARI
+        break;
 
-		scan = 0x72;    // Enter -> Enter
-		break;
+    case 0x1c:    // normal ENTER
+    case 0x11C: // keypad ENTER?
 
-	case 0x152:
-		ch = 0xE0;      // Insert
-		break;
+        if (*pbshift & wAlt)
+            return FALSE;    // exit early to avoid passing the FULLSCREEN Alt-ENTER key to the ATARI
 
-	case 0x153:
-		ch = 0xE0;      // Delete
-		break;
+        scan = 0x72;    // Enter -> Enter
+        break;
 
-	case 0x148:
-	case 0x14B:
-	case 0x14D:
-	case 0x150:
+    case 0x152:
+        ch = 0xE0;      // Insert
+        break;
 
-		// plus joystick emulation
+    case 0x153:
+        ch = 0xE0;      // Delete
+        break;
 
-		static BYTE mpJoyBit[9] = { 1, 1, 1, 4, 4, 8, 8, 8, 2 };
+    case 0x148:
+    case 0x14B:
+    case 0x14D:
+    case 0x150:
 
-		if (fDown)
-			rPADATA &= ~mpJoyBit[scan - 0x48];
-		else
-			rPADATA |= mpJoyBit[scan - 0x48];
+        // plus joystick emulation
 
-		UpdatePorts(iVM);
+        static BYTE mpJoyBit[9] = { 1, 1, 1, 4, 4, 8, 8, 8, 2 };
 
-		// !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee)
-		// pause the game on any keystroke! Playing without a joystick and using the arrow keys would
-		// continuously pause/unpause the game. Some games pause (Archon) on any keystroke, so let's NOT pass
-		// the arrow keys to Atari if RIGHT control is pressed. That will always work for joystick fire without
-		// interfering (although you have to use the left control for the cursor keys)
-		if (*pbshift & wCtrl && !(*pbshift & wRCtrl))
-		{
-			scan += 0x50;
-			break;	// pass to ATARI
-		}
-		
-		return FALSE;	// exit early so the ATARI doesn't see keystrokes when cursor used as joystick.
-						// some games pause or react badly.
-		
-	case 0x147:
-		ch = 0xE0;      // Home
-		break;
+        if (fDown)
+            rPADATA &= ~mpJoyBit[scan - 0x48];
+        else
+            rPADATA |= mpJoyBit[scan - 0x48];
 
-	case 0x14F:
-		ch = 0xE0;      // End
-		break;
+        UpdatePorts(iVM);
 
-	case 0x149:         // Page Up
+        // !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee)
+        // pause the game on any keystroke! Playing without a joystick and using the arrow keys would
+        // continuously pause/unpause the game. Some games pause (Archon) on any keystroke, so let's NOT pass
+        // the arrow keys to Atari if RIGHT control is pressed. That will always work for joystick fire without
+        // interfering (although you have to use the left control for the cursor keys)
+        if (*pbshift & wCtrl && !(*pbshift & wRCtrl))
+        {
+            scan += 0x50;
+            break;    // pass to ATARI
+        }
 
-		if (fDown)
-		{
+        return FALSE;    // exit early so the ATARI doesn't see keystrokes when cursor used as joystick.
+                        // some games pause or react badly.
+
+    case 0x147:
+        ch = 0xE0;      // Home
+        break;
+
+    case 0x14F:
+        ch = 0xE0;      // End
+        break;
+
+    case 0x149:         // Page Up
+
+        if (fDown)
+        {
 #if 0
-			// toggle higher clock speed
+            // toggle higher clock speed
 
-			clockMult++;
+            clockMult++;
 
-			if (clockMult > 64)
-				clockMult = 1;
+            if (clockMult > 64)
+                clockMult = 1;
 
-			printf("clock multiplier = %u\n", clockMult);
+            printf("clock multiplier = %u\n", clockMult);
 #endif
-			//SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
-			TimeTravel(iVM);
-		}
-		return FALSE;	// don't let ATARI see this
-
-#if 0
-	case 0x151:         // Page Dn
-		if (fDown)
-			TRIG0 &= ~1;                // JOY 0 fire button down
-		else
-			TRIG0 |= 1;                 // JOY 0 fire button up
-		return FALSE;
-#endif
-
-	case 0x85:
-		scan = 0x60;    // U.K. backslash
-		break;
-
-	case 0x47: // numeric 7
-		scan = 0x67;
-		break;
-
-	case 0x48: // numeric 8
-		scan = 0x68;
-		break;
-
-	case 0x49: // numeric 9
-		scan = 0x69;
-		break;
-
-	case 0x4B: // numeric 4
-		scan = 0x6A;
-		break;
-
-	case 0x4C: // numeric 5
-		scan = 0x6B;
-		break;
-
-	case 0x4D: // numeric 6
-		scan = 0x6C;
-		break;
-
-	case 0x4F: // numeric 1
-		scan = 0x6D;
-		break;
-
-	case 0x50: // numeric 2
-		scan = 0x6E;
-		break;
-
-	case 0x51: // numeric 3
-		scan = 0x6F;
-		break;
-
-	case 0x52: // numeric 0
-		scan = 0x70;
-		break;
-
-	case 0x53: // numeric .
-		scan = 0x71;
-		break;
-
-	case 0x37: // numeric *
-		ch = 0x2A;
-		break;
-
-		// some function key handling is done in the .rc file. The rest is done here.
-		// Only fn keys that make keystrokes that need to be processed in the 800's keyboard buffer are passed to CheckKey
-
-	case 0x3e:	// F4
-		if (*pbshift & wAlt)
-		{
-			PostMessage(vi.hWnd, WM_CLOSE, 0, 0);	// be polite and close
-		}
-		return TRUE; // don't let ATARI nor Windows see special function key presses (Windows might react)
-
-	case 0x40: // F6 - HELP key for XL/XE
-		if (fDown && mdXLXE != md800)
-		{
-			if (*pbshift & wAnyShift)	// HELP + CTRL + SHIFT unspecified, I choose shift.
-				rgbMem[0x02dc] = 81;
-			else if (*pbshift & wCtrl)
-				rgbMem[0x02dc] = 145;
-			else
-				rgbMem[0x02dc] = 17;
-		}
-		else if (mdXLXE != md800)
-			rgbMem[0x02dc] = 0;
-		
-		return TRUE; // dont' let ATARI see special function key presses
-
-	case 0x41: // F7 - START key
-		if (fDown)
-			CONSOL &= ~0x1;
-		else
-			CONSOL |= 0x01;
-		return TRUE; // don't let ATARI see special function key presses
-
-	case 0x42: // F8 - SELECT key
-		if (fDown)
-			CONSOL &= ~0x2;
-		else
-			CONSOL |= 0x02;
-		return TRUE; // don't let ATARI see special function key presses
-
-	case 0x43: // F9 - OPTION key
-		if (fDown)
-			CONSOL &= ~0x4;
-		else
-			CONSOL |= 0x04;
-		return TRUE; // don't let ATARI see special function key presses
+            //SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
+            TimeTravel(iVM);
+        }
+        return FALSE;    // don't let ATARI see this
 
 #if 0
-	// not implemented, and anyway, a VM thread can't call ColdStart!
-	case 0x58:
-		// ctrl F12 - next cartridge
-		if (fDown && (*pbshift & wCtrl))
-		{
-			NextCart();
-			ColdStart();
-		}
-		return;
+    case 0x151:         // Page Dn
+        if (fDown)
+            TRIG0 &= ~1;                // JOY 0 fire button down
+        else
+            TRIG0 |= 1;                 // JOY 0 fire button up
+        return FALSE;
 #endif
 
-	case 0x2A: // left shift
-	case 0x36: // right shift
-		if (fDown)
-		{
-			*pbshift |= wAnyShift;
-		}
-		else
-		{
-			*pbshift &= ~wAnyShift;
-		}break;
+    case 0x85:
+        scan = 0x60;    // U.K. backslash
+        break;
 
-	// MAME uses Left control for joystick fire, but that generates keystrokes with the arrows and some games (archon) pause.
-	// We can't use ALT because that works the menus, we can't use shift as that activates sticky keys.
-	// If your game pauses, use the RIGHT control key, we won't pass that to ATARI (you won't be able to move the arrows with it)
-	// (Altirra makes you toggle a menu item to enable joystick or not, but that's annoying too)
-	case 0x1D: // left control
-	case 0x11D: // right control
-		if (fDown)
-		{
-			if (((lParam >> 16) & 0x1FF) == 0x11D)
-				*pbshift |= wRCtrl;		// it's the RIGHT control
-			*pbshift |= wCtrl;
-			TRIG0 &= ~1;
-		}
-		else
-		{
-			if (((lParam >> 16) & 0x1FF) == 0x11D)
-				*pbshift &= ~wRCtrl;		// it's the RIGHT control
-			*pbshift &= ~wCtrl;
-			TRIG0 |= 1;
-		}
-		break;
+    case 0x47: // numeric 7
+        scan = 0x67;
+        break;
 
-	case 0x38: // left alt
-	case 0x138: // right alt
-		if (fDown)
-		{
-			*pbshift |= wAlt;
-		}
-		else
-		{
-			*pbshift &= ~wAlt;
-		}
-		return FALSE; // return EARLY (don't let ATARI see it) and FALSE (let windows see it)
-	
-	case 0x46: // Scrl Lock
+    case 0x48: // numeric 8
+        scan = 0x68;
+        break;
+
+    case 0x49: // numeric 9
+        scan = 0x69;
+        break;
+
+    case 0x4B: // numeric 4
+        scan = 0x6A;
+        break;
+
+    case 0x4C: // numeric 5
+        scan = 0x6B;
+        break;
+
+    case 0x4D: // numeric 6
+        scan = 0x6C;
+        break;
+
+    case 0x4F: // numeric 1
+        scan = 0x6D;
+        break;
+
+    case 0x50: // numeric 2
+        scan = 0x6E;
+        break;
+
+    case 0x51: // numeric 3
+        scan = 0x6F;
+        break;
+
+    case 0x52: // numeric 0
+        scan = 0x70;
+        break;
+
+    case 0x53: // numeric .
+        scan = 0x71;
+        break;
+
+    case 0x37: // numeric *
+        ch = 0x2A;
+        break;
+
+        // some function key handling is done in the .rc file. The rest is done here.
+        // Only fn keys that make keystrokes that need to be processed in the 800's keyboard buffer are passed to CheckKey
+
+    case 0x3e:    // F4
+        if (*pbshift & wAlt)
+        {
+            PostMessage(vi.hWnd, WM_CLOSE, 0, 0);    // be polite and close
+        }
+        return TRUE; // don't let ATARI nor Windows see special function key presses (Windows might react)
+
+    case 0x40: // F6 - HELP key for XL/XE
+        if (fDown && mdXLXE != md800)
+        {
+            if (*pbshift & wAnyShift)    // HELP + CTRL + SHIFT unspecified, I choose shift.
+                rgbMem[0x02dc] = 81;
+            else if (*pbshift & wCtrl)
+                rgbMem[0x02dc] = 145;
+            else
+                rgbMem[0x02dc] = 17;
+        }
+        else if (mdXLXE != md800)
+            rgbMem[0x02dc] = 0;
+
+        return TRUE; // dont' let ATARI see special function key presses
+
+    case 0x41: // F7 - START key
+        if (fDown)
+            CONSOL &= ~0x1;
+        else
+            CONSOL |= 0x01;
+        return TRUE; // don't let ATARI see special function key presses
+
+    case 0x42: // F8 - SELECT key
+        if (fDown)
+            CONSOL &= ~0x2;
+        else
+            CONSOL |= 0x02;
+        return TRUE; // don't let ATARI see special function key presses
+
+    case 0x43: // F9 - OPTION key
+        if (fDown)
+            CONSOL &= ~0x4;
+        else
+            CONSOL |= 0x04;
+        return TRUE; // don't let ATARI see special function key presses
+
+#if 0
+    // not implemented, and anyway, a VM thread can't call ColdStart!
+    case 0x58:
+        // ctrl F12 - next cartridge
+        if (fDown && (*pbshift & wCtrl))
+        {
+            NextCart();
+            ColdStart();
+        }
+        return;
+#endif
+
+    case 0x2A: // left shift
+    case 0x36: // right shift
+        if (fDown)
+        {
+            *pbshift |= wAnyShift;
+        }
+        else
+        {
+            *pbshift &= ~wAnyShift;
+        }break;
+
+    // MAME uses Left control for joystick fire, but that generates keystrokes with the arrows and some games (archon) pause.
+    // We can't use ALT because that works the menus, we can't use shift as that activates sticky keys.
+    // If your game pauses, use the RIGHT control key, we won't pass that to ATARI (you won't be able to move the arrows with it)
+    // (Altirra makes you toggle a menu item to enable joystick or not, but that's annoying too)
+    case 0x1D: // left control
+    case 0x11D: // right control
+        if (fDown)
+        {
+            if (((lParam >> 16) & 0x1FF) == 0x11D)
+                *pbshift |= wRCtrl;        // it's the RIGHT control
+            *pbshift |= wCtrl;
+            TRIG0 &= ~1;
+        }
+        else
+        {
+            if (((lParam >> 16) & 0x1FF) == 0x11D)
+                *pbshift &= ~wRCtrl;        // it's the RIGHT control
+            *pbshift &= ~wCtrl;
+            TRIG0 |= 1;
+        }
+        break;
+
+    case 0x38: // left alt
+    case 0x138: // right alt
+        if (fDown)
+        {
+            *pbshift |= wAlt;
+        }
+        else
+        {
+            *pbshift &= ~wAlt;
+        }
+        return FALSE; // return EARLY (don't let ATARI see it) and FALSE (let windows see it)
+
+    case 0x46: // Scrl Lock
         if (fDown)
             *pbshift ^= wScrlLock;
         //else
         //    DisplayStatus();
-		
-		return FALSE; // don't let ATARI see special key presses
+
+        return FALSE; // don't let ATARI see special key presses
 
     case 0x3A: // Caps Lock
         if (fDown)
@@ -760,8 +760,8 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
 
     AddToPacket(iVM, fDown ? scan : 0);
     AddToPacket(iVM, fDown ? ch   : 0);
-    
-    return FALSE;	// by default, let windows see the key - eg. to operate menus
+
+    return FALSE;    // by default, let windows see the key - eg. to operate menus
 }
 
 // Process Thread messages for keys and joystick, and Windows messages for keybaord, mouse, and joystick
@@ -786,7 +786,7 @@ BOOL __cdecl KeyAtari(int iVM, HWND hWnd, UINT message, WPARAM uParam, LPARAM lP
 
 // we don't use these custom thread messages
 #if 0
-	case TM_JOY0FIRE:
+    case TM_JOY0FIRE:
         if (uParam)
             TRIG0 &= ~1;                // JOY 0 fire button down
         else
@@ -805,8 +805,8 @@ printf("joy0move %d %d\n", uParam, lParam);
         return TRUE;
 #endif
 
-	// mouse moves will send these joystick messages, even though we don't use joystick callbacks
-	case MM_JOY1BUTTONDOWN:
+    // mouse moves will send these joystick messages, even though we don't use joystick callbacks
+    case MM_JOY1BUTTONDOWN:
     case MM_JOY1BUTTONUP:
         if (uParam & JOY_BUTTON1)
             TRIG0 &= ~1;                // JOY 0 fire button down
@@ -815,35 +815,35 @@ printf("joy0move %d %d\n", uParam, lParam);
         return TRUE;
 
 #if 0
-	case MM_JOY1MOVE:
-	{
-		int dir = (LOWORD(lParam) - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
-		dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
-		// printf("X dir = %d\n", dir);
+    case MM_JOY1MOVE:
+    {
+        int dir = (LOWORD(lParam) - (vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / 2);
+        dir /= (int)((vi.rgjc[0].wXmax - vi.rgjc[0].wXmin) / wJoySens);
+        // printf("X dir = %d\n", dir);
 
-		rPADATA |= 12;                  // assume joystick centered
+        rPADATA |= 12;                  // assume joystick centered
 
-		if (dir < 0)
-			rPADATA &= ~4;              // left
-		else if (dir > 0)
-			rPADATA &= ~8;              // right
+        if (dir < 0)
+            rPADATA &= ~4;              // left
+        else if (dir > 0)
+            rPADATA &= ~8;              // right
 
-		dir = (HIWORD(lParam) - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
-		dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
-		// printf("Y dir = %d\n", dir);
+        dir = (HIWORD(lParam) - (vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / 2);
+        dir /= (int)((vi.rgjc[0].wYmax - vi.rgjc[0].wYmin) / wJoySens);
+        // printf("Y dir = %d\n", dir);
 
-		rPADATA |= 3;                   // assume joystick centered
+        rPADATA |= 3;                   // assume joystick centered
 
-		if (dir < 0)
-			rPADATA &= ~1;              // up
-		else if (dir > 0)
-			rPADATA &= ~2;              // down
+        if (dir < 0)
+            rPADATA &= ~1;              // up
+        else if (dir > 0)
+            rPADATA &= ~2;              // down
 
-		UpdatePorts();
-		return TRUE;
-	}
+        UpdatePorts();
+        return TRUE;
+    }
 
-	case MM_JOY2MOVE:
+    case MM_JOY2MOVE:
         {
         int dir = (LOWORD(lParam) - (vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / 2);
         dir /= (int)((vi.rgjc[1].wXmax - vi.rgjc[1].wXmin) / wJoySens);
@@ -883,31 +883,31 @@ printf("joy0move %d %d\n", uParam, lParam);
 // mouse simulates (poorly) a joystick and just confuses apps because mouse moves to start GEM get passed to the app
 // and get stuck not centred.
 #if 0
-	case WM_MOUSEMOVE:
-	{
-		int dir = (LOWORD(lParam) - (vsthw.xpix * vi.fXscale) / 2) / (vsthw.xpix / 4);
+    case WM_MOUSEMOVE:
+    {
+        int dir = (LOWORD(lParam) - (vsthw.xpix * vi.fXscale) / 2) / (vsthw.xpix / 4);
 
-		rPADATA |= 12;                  // assume joystick centered
+        rPADATA |= 12;                  // assume joystick centered
 
-		if (dir < 0)
-			rPADATA &= ~4;              // left
-		else if (dir > 0)
-			rPADATA &= ~8;              // right
+        if (dir < 0)
+            rPADATA &= ~4;              // left
+        else if (dir > 0)
+            rPADATA &= ~8;              // right
 
-		dir = (HIWORD(lParam) - (vsthw.ypix * vi.fYscale) / 2) / (vsthw.ypix / 4);
+        dir = (HIWORD(lParam) - (vsthw.ypix * vi.fYscale) / 2) / (vsthw.ypix / 4);
 
-		rPADATA |= 3;                   // assume joystick centered
+        rPADATA |= 3;                   // assume joystick centered
 
-		if (dir < 0)
-			rPADATA &= ~1;              // up
-		else if (dir > 0)
-			rPADATA &= ~2;              // down
-		
-		UpdatePorts();
-		return TRUE;
-	}
+        if (dir < 0)
+            rPADATA &= ~1;              // up
+        else if (dir > 0)
+            rPADATA &= ~2;              // down
 
-	case WM_LBUTTONDOWN:
+        UpdatePorts();
+        return TRUE;
+    }
+
+    case WM_LBUTTONDOWN:
         TRIG0 &= ~1;                // JOY 0 fire button down
         return TRUE;
 
@@ -920,7 +920,7 @@ printf("joy0move %d %d\n", uParam, lParam);
         // return FMouseMsgST(hWnd, message, uParam, LOWORD(lParam), HIWORD(lParam));
         break;
 #endif
-		}
+        }
 
     return FALSE;
 }
@@ -929,9 +929,9 @@ printf("joy0move %d %d\n", uParam, lParam);
 //
 void ControlKeyUp8(int iVM)
 {
-	*pbshift &= ~wCtrl;
-	*pbshift &= ~wAlt;
-	*pbshift &= ~wAnyShift;
+    *pbshift &= ~wCtrl;
+    *pbshift &= ~wAlt;
+    *pbshift &= ~wAnyShift;
 }
 
 #endif // XFORMER
