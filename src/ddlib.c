@@ -13,7 +13,7 @@
 ****************************************************************************/
 
 #if 1
-#include "gemtypes.h" // main include file 
+#include "gemtypes.h" // main include file
 #else
 #include <windows.h>
 #include <ddraw.h>
@@ -53,7 +53,7 @@ BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
         60,     53,     36,             61,     55,     39,             62,     56,     40,             11,     3,      1,              18,     5,      2,
         27,     7,      4,              36,     11,     8,              44,     20,     13,             46,     24,     16,             49,     28,     21,
         51,     30,     25,             53,     35,     30,             54,     38,     34,             55,     42,     37,             56,     43,     38,
-        57,     44,     39,             57,     46,     40,             58,     48,     42,             59,     49,     44,             11,     1,      3,              
+        57,     44,     39,             57,     46,     40,             58,     48,     42,             59,     49,     44,             11,     1,      3,
         22,     6,      9,              37,     10,     17,             42,     15,     22,             45,     21,     28,             48,     24,     30,
         50,     26,     32,             52,     28,     34,             53,     30,     36,             54,     33,     38,             55,     35,     40,
         56,     37,     42,             57,     39,     44,             58,     41,     45,             59,     42,     46,             60,     43,     47,
@@ -69,7 +69,7 @@ BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
         46,     46,     60,             48,     48,     61,             49,     49,     62,             1,      7,      18,             2,      13,     30,
         3,      19,     42,             4,      24,     42,             9,      28,     45,             14,     32,     48,             17,     35,     51,
         20,     37,     53,             24,     39,     55,             28,     41,     56,             31,     44,     57,             34,     46,     57,
-        37,     47,     58,             39,     48,     58,             41,     49,     59,             42,     50,     60,             1,      4,      12,             
+        37,     47,     58,             39,     48,     58,             41,     49,     59,             42,     50,     60,             1,      4,      12,
         2,      6,      22,             3,      10,     32,             5,      15,     36,             8,      20,     38,             15,     25,     44,
         21,     30,     47,             24,     34,     49,             27,     38,     52,             29,     42,     54,             31,     44,     55,
         33,     46,     56,             36,     47,     57,             38,     49,     58,             40,     50,     59,             42,     51,     60,
@@ -85,10 +85,10 @@ BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
         45,     58,     39,             48,     59,     42,             49,     60,     43,             5,      9,      0,              11,     22,     0,
         17,     35,     1,              23,     42,     2,              29,     48,     8,              34,     50,     12,             38,     51,     17,
         40,     52,     21,             42,     53,     24,             44,     54,     27,             46,     55,     29,             47,     56,     31,
-        48,     57,     34,             50,     58,     37,             52,     59,     40,             53,     60,     42,             8,      7,      0,              
+        48,     57,     34,             50,     58,     37,             52,     59,     40,             53,     60,     42,             8,      7,      0,
         19,     16,     0,              28,     24,     4,              33,     31,     6,              48,     38,     8,              52,     44,     12,
         55,     50,     15,             57,     52,     19,             58,     54,     22,             58,     56,     24,             59,     57,     26,
-        59,     58,     29,             60,     58,     33,             61,     59,     35,             61,     59,     36,             62,     60,     38,             
+        59,     58,     29,             60,     58,     33,             61,     59,     35,             61,     59,     36,             62,     60,     38,
         8,      5,      0,              13,     9,      0,              22,     14,     1,              32,     21,     3,              42,     29,     5,
         45,     33,     7,              48,     36,     12,             50,     39,     18,             53,     42,     24,             54,     45,     27,
         55,     46,     30,             56,     47,     33,             57,     49,     36,             58,     50,     38,             58,     53,     39,
@@ -96,25 +96,25 @@ BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
 };
 
 #ifndef NDEBUG
-int CheckDDERR(HRESULT hRet) 
+int CheckDDERR(HRESULT hRet)
 {
-    switch(hRet) 
-    {       
-    case DDERR_EXCEPTION: return hRet;      
-    case DDERR_GENERIC: return hRet;        
-    case DDERR_INVALIDOBJECT: return hRet;          
-    case DDERR_INVALIDPARAMS : return hRet; 
+    switch(hRet)
+    {
+    case DDERR_EXCEPTION: return hRet;
+    case DDERR_GENERIC: return hRet;
+    case DDERR_INVALIDOBJECT: return hRet;
+    case DDERR_INVALIDPARAMS : return hRet;
     case DDERR_INVALIDRECT  : return hRet;
     case DDERR_NOBLTHW : return hRet;
-    case DDERR_SURFACEBUSY:         return hRet; 
-    case DDERR_SURFACELOST : return hRet;   
-    case DDERR_UNSUPPORTED: return hRet;    
+    case DDERR_SURFACEBUSY:         return hRet;
+    case DDERR_SURFACELOST : return hRet;
+    case DDERR_UNSUPPORTED: return hRet;
     case DDERR_OUTOFMEMORY: return hRet;
     case DDERR_WASSTILLDRAWING: return hRet;
     case DDERR_NOTLOCKED:   return hRet;
-    case DD_OK: break;      
-    default: return hRet;   
-    } 
+    case DD_OK: break;
+    default: return hRet;
+    }
 }
 #else
 #define CheckDDERR(hRet) (hRet)
@@ -144,8 +144,8 @@ BOOL FInitDirectDraw()
 
     if (CreateProc == NULL)
         {
-        // Run-Time Load the ddraw library 
-        if((HDDraw=LoadLibrary("ddraw.dll"))==NULL || 
+        // Run-Time Load the ddraw library
+        if((HDDraw=LoadLibrary("ddraw.dll"))==NULL ||
             (CreateProc=(DDProc)GetProcAddress(HDDraw, "DirectDrawCreate"))==NULL)
             return FALSE;
         }
@@ -156,7 +156,7 @@ BOOL FInitDirectDraw()
 
 BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 {
-	fReInit;
+    fReInit;
 
 //    DDSCAPS caps;
     HRESULT err;
@@ -183,7 +183,7 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 
     // Now we can set the resolution
 
-    while (dd->lpVtbl->SetDisplayMode(dd, *pdx, *pdy, *pbpp) != DD_OK) 
+    while (dd->lpVtbl->SetDisplayMode(dd, *pdx, *pdy, *pbpp) != DD_OK)
         {
         if (*pdy==200)
             {
@@ -265,20 +265,20 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
     // palette is setup like so:
     //
     // All 256 grays
-    
+
     hdc = GetDC(NULL);
     //if (GetDeviceCaps(hdc, RASTERCAPS) & RC_PALETTE)
     {
         int i;
-		// make a red, grn, and blu wash for our cube.
-		for (i=0; i<256; i++)
-		{
-			ape[i].peRed = abRainbow[0][i]*4;
-			ape[i].peGreen = abRainbow[1][i]*4;
-			ape[i].peBlue = abRainbow[2][i]*4;
-		}
-		if (!FAILED(dd->lpVtbl->CreatePalette(dd, DDPCAPS_8BIT, ape, &Palette, NULL)))
-			FrontBuffer->lpVtbl->SetPalette(FrontBuffer, Palette);
+        // make a red, grn, and blu wash for our cube.
+        for (i=0; i<256; i++)
+        {
+            ape[i].peRed = abRainbow[0][i]*4;
+            ape[i].peGreen = abRainbow[1][i]*4;
+            ape[i].peBlue = abRainbow[2][i]*4;
+        }
+        if (!FAILED(dd->lpVtbl->CreatePalette(dd, DDPCAPS_8BIT, ape, &Palette, NULL)))
+            FrontBuffer->lpVtbl->SetPalette(FrontBuffer, Palette);
     }
     SetCursor(NULL);                // Hide the mouse
     ReleaseDC(NULL, hdc);
@@ -315,8 +315,8 @@ void ClearSurface()
     BYTE *lpbSurface;
     int i;
     int j;
-    
-    if(!fDDEnabled) 
+
+    if(!fDDEnabled)
         return;
 
     if (lpbSurface = LockSurface(&i))
@@ -333,7 +333,7 @@ void ClearSurface()
 
 BYTE *LockSurface(int *pi)
 {
-    if(fDDEnabled && dwcLock++==0)  
+    if(fDDEnabled && dwcLock++==0)
         if(CheckDDERR(FrontBuffer->lpVtbl->Lock(FrontBuffer, NULL, &ddsd, DDLOCK_WAIT, NULL))
             == DDERR_SURFACELOST)
         {
@@ -348,7 +348,7 @@ BYTE *LockSurface(int *pi)
 
 void UnlockSurface()
 {
-    if(fDDEnabled && --dwcLock==0)  
+    if(fDDEnabled && --dwcLock==0)
         if(CheckDDERR(FrontBuffer->lpVtbl->Unlock(FrontBuffer, NULL))
             == DDERR_SURFACELOST)
         {
@@ -362,8 +362,8 @@ BOOL FCyclePalette(BOOL fForward)
 {
     PALETTEENTRY peT;
     LPDIRECTDRAWPALETTE lpDDPalette;
-    
-    if( CheckDDERR(FrontBuffer->lpVtbl->GetPalette(FrontBuffer, &lpDDPalette)) 
+
+    if( CheckDDERR(FrontBuffer->lpVtbl->GetPalette(FrontBuffer, &lpDDPalette))
         == DDERR_SURFACELOST)
     {
         Restore(FrontBuffer);
@@ -382,7 +382,7 @@ BOOL FCyclePalette(BOOL fForward)
 BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq)
 {
     LPDIRECTDRAWPALETTE lpDDPalette;
-    
+
     if(CheckDDERR(FrontBuffer->lpVtbl->GetPalette(FrontBuffer, &lpDDPalette))
         == DDERR_SURFACELOST)
     {
@@ -394,7 +394,7 @@ BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq)
         {
         ape[iPalette].peRed = ppq->rgbRed;
         ape[iPalette].peGreen = ppq->rgbGreen;
-        ape[iPalette].peBlue = ppq->rgbBlue; 
+        ape[iPalette].peBlue = ppq->rgbBlue;
         iPalette++;
         ppq++;
         }

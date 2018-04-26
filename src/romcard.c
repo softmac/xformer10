@@ -5,12 +5,12 @@
 
     - Reads and displays contents of Gemulator card(s)
 
-    Copyright (C) 1991-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      Gemulator 9.0 release
     03/03/2008  darekm      update for EmuTOS
-    
+
 ****************************************************************************/
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -1322,7 +1322,7 @@ LscanMagic:
         int i;
         HANDLE hFind;
         WIN32_FIND_DATA fd;
-        
+
         for (i = 0; i < 28; i++)
             {
             OFSTRUCT ofs;
@@ -1371,13 +1371,13 @@ LscanMagic:
 
                 if (type == DRIVE_NO_ROOT_DIR)
                     continue;
-    
+
                 if (type == DRIVE_CDROM)
                     continue;
-    
+
                 if (type == DRIVE_REMOTE && !fScanNet)
                         continue;
-    
+
                 if (type == DRIVE_REMOVABLE && !fScanFloppy)
                     continue;
 
@@ -1701,7 +1701,7 @@ LnotMac:
     AddROMsToVM();
 
     SetCursor(h);
-    
+
     return v.cOS;
 }
 
@@ -1772,7 +1772,7 @@ void ReadMagiC(char *sz)
             {
             if (b != 1)
                 *(DWORD *)memPvGetFlatAddress(papply, sizeof(DWORD)) = vmPeekL(papply) + lLoadAddr;
-            
+
             b = vmPeekB(addrMagic++);
             papply += ((b == 1) ? 254 : b);
             }
@@ -1827,32 +1827,32 @@ void ReadMagiC_PC(char *sz)
             int cb = 0x34A5C;
             unsigned char magic = 0x1C;
             unsigned char magic2 = 0;
-        
+
             pch[i++] = 0x60;
             i++;
-        
+
             while (cb > 255)
                 {
                 static unsigned char rgbAdd[8] =
                      { 0x53, 0x6D, 0x6B, 0xDF, 0x4F, 0x67, 0x47, 0xC7 };
-        
+
                 int j;
                 unsigned char rgb[256];
                 unsigned char chXOR = magic;
                 unsigned char chADD = rgbAdd[magic2 & 7];
-        
+
                 magic2++;
                 magic += magic2;
-        
+
                 memcpy(rgb, &pch[i], 256);
-        
+
                 for (j = 0; j < 256; j++)
                     {
                     pch[i] = rgb[chXOR] ^ chXOR;
                     chXOR += chADD;
                     i++;
                     }
-        
+
                 magic += 0x11;
                 cb -= 256;
                 }

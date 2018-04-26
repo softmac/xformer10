@@ -6,7 +6,7 @@
     - Virtual machine interface definitions.
     - defines memory accessors to guest physical memory and hardware
 
-    Copyright (C) 1991-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      Gemulator 9.0 release

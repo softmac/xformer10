@@ -1,12 +1,12 @@
 
 /***************************************************************************
 
-	MACHW.C
+    MACHW.C
 
-	- Macintosh virtual machine
+    - Macintosh virtual machine
 
-	08/22/2007  darekm  use vmPeek/vmPoke to avoid MMU translation
-	04/20/2008  darekm  implement HRESULT based accessors
+    08/22/2007  darekm  use vmPeek/vmPoke to avoid MMU translation
+    04/20/2008  darekm  implement HRESULT based accessors
 
 ***************************************************************************/
 
@@ -413,14 +413,14 @@ extern char *vszDiskImg;
 
 BOOL __cdecl mac_Install(PVMINFO pvmi, PVM pvm)
 {
-	pvm->pvmi = pvmi;
-	pvm->bfHW = BfFromWfI(pvmi->wfHW, 0);
-	pvm->bfCPU = BfFromWfI(pvmi->wfCPU, 0);
-	pvm->iOS = -1;
-	pvm->bfMon = BfFromWfI(pvmi->wfMon, 0);
-	pvm->bfRAM  = BfFromWfI(pvmi->wfRAM, 0);
-	pvm->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);
-	pvm->fUseVHD = fTrue;
+    pvm->pvmi = pvmi;
+    pvm->bfHW = BfFromWfI(pvmi->wfHW, 0);
+    pvm->bfCPU = BfFromWfI(pvmi->wfCPU, 0);
+    pvm->iOS = -1;
+    pvm->bfMon = BfFromWfI(pvmi->wfMon, 0);
+    pvm->bfRAM  = BfFromWfI(pvmi->wfRAM, 0);
+    pvm->ivdMac = sizeof(v.rgvm[0].rgvd)/sizeof(VD);
+    pvm->fUseVHD = fTrue;
 
     pvm->rgvd[0].dt = DISK_FLOPPY;
 
@@ -478,13 +478,13 @@ void SetMacMemMode(BOOL f32)
 
 BOOL __cdecl mac_Init()
 {
-	int i;
-	BOOL f;
+    int i;
+    BOOL f;
     int version = osCur.version;
     char szMacPRAM[MAX_PATH];
     ULONG pram;
 
-	SetCurrentDirectory(vi.szDefaultDir);
+    SetCurrentDirectory(vi.szDefaultDir);
 
     // Wipe away any stale 680x0 state
 
@@ -506,7 +506,7 @@ BOOL __cdecl mac_Init()
 
     // pick a default hardware
 
-	vmCur.bfHW = BfFromWfI(vmCur.pvmi->wfHW, 0);
+    vmCur.bfHW = BfFromWfI(vmCur.pvmi->wfHW, 0);
 
 Lunregistered:
 
@@ -699,7 +699,7 @@ Lunregistered:
         }
 #endif
 
-	// vi.cbRAM[0], vi.cbROM[0], and vi.eaROM[0] must have already been set
+    // vi.cbRAM[0], vi.cbROM[0], and vi.eaROM[0] must have already been set
 
     if (FIsMacNuBus(vmCur.bfHW))
         {
@@ -709,8 +709,8 @@ Lunregistered:
             vmCur.bfCPU = cpu68020;
         }
 
-	// Unprotect the RAM and video RAM memory blocks and also
-	// unprotect ROMs (at least 256K for Mac Plus detection to work)
+    // Unprotect the RAM and video RAM memory blocks and also
+    // unprotect ROMs (at least 256K for Mac Plus detection to work)
 
     f = memAllocAddressSpace(TRUE);
 
@@ -720,18 +720,18 @@ Lunregistered:
 #endif
 
     if (!f)
-		{
+        {
 #ifndef WORMHOLE
-		MessageBox(NULL, "Unable to allocate Macintosh memory. "
-			"Reduce the Memory setting or increase the Windows swap file size.",
-			vi.szAppName, MB_OK);
+        MessageBox(NULL, "Unable to allocate Macintosh memory. "
+            "Reduce the Memory setting or increase the Windows swap file size.",
+            vi.szAppName, MB_OK);
 #endif
         return FALSE;
         }
 
 #if !defined(NDEBUG) || defined(BETA)
-	vi.pProfile = malloc(65536 * sizeof(DWORD));    // profile array;
-	vi.pHistory = malloc(MAX_HIST*4);               // history array;
+    vi.pProfile = malloc(65536 * sizeof(DWORD));    // profile array;
+    vi.pHistory = malloc(MAX_HIST*4);               // history array;
 
     if (NULL != vi.pProfile)
         memset(vi.pProfile, 0, 65536 * sizeof(DWORD));
@@ -749,7 +749,7 @@ Lunregistered:
 #endif
         vpci = &cpi68K;
 
-	vpci->pfnInit(
+    vpci->pfnInit(
         vpregs,
         (ULONG)mac_ReadHWByte,
         (ULONG)mac_ReadHWWord,
@@ -788,13 +788,13 @@ Lunregistered:
     // Initialize the ROMs
 
     if (!FInstallROMs())
-		{
+        {
 #ifndef WORMHOLE
-		MessageBox(NULL, "Unable to install ROMs.",
-			vi.szAppName, MB_OK);
+        MessageBox(NULL, "Unable to install ROMs.",
+            vi.szAppName, MB_OK);
 #endif
-		return FALSE;
-		}
+        return FALSE;
+        }
 
     // REVIEW: patch ROMs here
 
@@ -924,29 +924,29 @@ Lcheck030:
 
     sprintf(szMacPRAM, "%s\\%08X.PRM", vi.szWindowsDir, vmPeekL(vi.eaROM[0]));
 
-	SetCurrentDirectory(vi.szWindowsDir);
-	CbReadWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
-	mac_Reset();
+    SetCurrentDirectory(vi.szWindowsDir);
+    CbReadWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
+    mac_Reset();
 
-#ifndef NDEBUG 
-	ClearProfile();
+#ifndef NDEBUG
+    ClearProfile();
 
-	DebugStr("pp = %08X, ph = %08X\n", vi.pProfile, vi.pHistory);
-	DebugStr("vi.cbROM[0]    = %08X  ", vi.cbROM[0]);
-	DebugStr("vi.cbRAM[0]    = %08X  ", vi.cbRAM[0]);
-	DebugStr("vi.pregs    = %08X  ", vi.pregs);
-	DebugStr("vi.pbRAM[0]    = %08X\n", vi.pbRAM[0]);
+    DebugStr("pp = %08X, ph = %08X\n", vi.pProfile, vi.pHistory);
+    DebugStr("vi.cbROM[0]    = %08X  ", vi.cbROM[0]);
+    DebugStr("vi.cbRAM[0]    = %08X  ", vi.cbRAM[0]);
+    DebugStr("vi.pregs    = %08X  ", vi.pregs);
+    DebugStr("vi.pbRAM[0]    = %08X\n", vi.pbRAM[0]);
 
-	DebugStr("PC = %08X  ", vpregs->PC);
-	DebugStr("SR = %08X  ", vpregs->SR);
-	DebugStr("A7 = %08X\n", vpregs->A7);
+    DebugStr("PC = %08X  ", vpregs->PC);
+    DebugStr("SR = %08X  ", vpregs->SR);
+    DebugStr("A7 = %08X\n", vpregs->A7);
 
-	DebugStr("&D0 = %08X\n", &vpregs->D0);
+    DebugStr("&D0 = %08X\n", &vpregs->D0);
 #endif
 
     MarkAllPagesDirty();
 
-	return TRUE;
+    return TRUE;
 }
 
 
@@ -962,7 +962,7 @@ BOOL __cdecl mac_UnInit()
             vmCur.bfCPU = cpu68040;
 
         SetCurrentDirectory(vi.szWindowsDir);
-		FWriteWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
+        FWriteWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
 
         memFreeAddressSpace();
         }
@@ -982,8 +982,8 @@ BOOL __cdecl mac_MountDisk(int i)
 {
     PVD pvd = &vmCur.rgvd[i];
 
-	// open VHD files. Try read-write first, then try read-only
-	// REVIEW: use registry
+    // open VHD files. Try read-write first, then try read-only
+    // REVIEW: use registry
 
     SetCurrentDirectory(vi.szDefaultDir);
 
@@ -1049,7 +1049,7 @@ LsetCD:
 Lcheckstub:
                         if (vi.rgpdi[i]->pdiStub)
                             {
-                            vi.rgpdi[i]->cSecStub = 
+                            vi.rgpdi[i]->cSecStub =
                                 vi.rgpdi[i]->pdiStub->size * 2;
 
 #if !defined(NDEBUG) || defined(BETA)
@@ -1165,7 +1165,7 @@ BOOL __cdecl mac_DumpHW(void)
         printf ("\n\nVIA regs: ");
 
 #if LATER
-		for (i = 0; i < 16; i++)
+        for (i = 0; i < 16; i++)
             {
             printf("%02X ", vmachw.rgvia[0].rgbVIA[i]);
             }
@@ -1263,51 +1263,51 @@ BOOL __cdecl mac_DumpHW(void)
         printf ("\n\nSCC regs:\n");
 
         printf("  SCC B (print) RR: ");
-		for (i = 0; i < 16; i++)
+        for (i = 0; i < 16; i++)
             {
             printf("%02X ", vmachw.aSCC[0].RR[i]);
             }
 
         printf("\n  SCC B (print) WR: ");
-		for (i = 0; i < 16; i++)
+        for (i = 0; i < 16; i++)
             {
             printf("%02X ", vmachw.aSCC[0].WR[i]);
             }
 
         printf("\n  SCC A (modem) RR: ");
-		for (i = 0; i < 16; i++)
+        for (i = 0; i < 16; i++)
             {
             printf("%02X ", vmachw.aSCC[1].RR[i]);
             }
 
         printf("\n  SCC A (modem) WR: ");
-		for (i = 0; i < 16; i++)
+        for (i = 0; i < 16; i++)
             {
             printf("%02X ", vmachw.aSCC[1].WR[i]);
             }
 
         printf ("\n\nIWM state: ");
 
-		for (i = 0; i < 8; i++)
+        for (i = 0; i < 8; i++)
             {
             printf("%1X ", vmachw.rgbIWMCtl[i]);
             }
 
         printf ("\n\nSCSI read state: ");
 
-		for (i = 0; i < 8; i++)
+        for (i = 0; i < 8; i++)
             {
             printf("%1X ", vmachw.rgbSCSIRd[i]);
             }
 
         printf ("\n\nSCSI write state: ");
 
-		for (i = 0; i < 8; i++)
+        for (i = 0; i < 8; i++)
             {
             printf("%1X ", vmachw.rgbSCSIWr[i]);
             }
         }
-	printf("\n\n\n");
+    printf("\n\n\n");
 
     return TRUE;
 }
@@ -1317,68 +1317,68 @@ BOOL __cdecl mac_Exec(fStep, fCont)
 int fStep;
 int fCont;
 {
-	ULONG tickStart, ticks;  // used to time the exeuction time of this function
-	ULONG stat;
+    ULONG tickStart, ticks;  // used to time the exeuction time of this function
+    ULONG stat;
     MSG msg;
 
 #if 0
-	vi.countR = 0;
-	vi.countW = 0;
+    vi.countR = 0;
+    vi.countW = 0;
 #endif
-	vi.cFreq  = 0;
+    vi.cFreq  = 0;
 
-	/* valid combinations of fStep and fCont
-	 *
-	 * fStep=0 fCont=0
-	 * fStep=0 fCont=1 = execute
-	 * fStep=1 fCont=0 = single step
-	 * fStep=1 fCont=1 = trace
-	 *
-	 */
+    /* valid combinations of fStep and fCont
+     *
+     * fStep=0 fCont=0
+     * fStep=0 fCont=1 = execute
+     * fStep=1 fCont=0 = single step
+     * fStep=1 fCont=1 = trace
+     *
+     */
 
-	if (!fStep)
-		{
+    if (!fStep)
+        {
         static int cips = 3000;
         static ULONG lTick;         // current reading of millisecond timer
         static ULONG lTick1000;     // previous reading of millisecond timer
 
-		/* non-tracing execution loop */
+        /* non-tracing execution loop */
 
-//		vrgf.fRefreshScreen = TRUE;
+//        vrgf.fRefreshScreen = TRUE;
 
         QueryTickCtr();
-		tickStart = Getms();
+        tickStart = Getms();
 
-		if (vi.fMouseMoved && vi.fHaveFocus && (vi.fGEMMouse || !vi.fVMCapture))
-			{
-			POINT pt;
+        if (vi.fMouseMoved && vi.fHaveFocus && (vi.fGEMMouse || !vi.fVMCapture))
+            {
+            POINT pt;
 
-//					DebugStr("m");
-			vi.fMouseMoved = FALSE;
-			GetCursorPos(&pt);
-			ScreenToClient(vi.hWnd, &pt);
-			FMouseMsgST(vi.hWnd, WM_MOUSEMOVE, -1, pt.x, pt.y);
-			}
+//                    DebugStr("m");
+            vi.fMouseMoved = FALSE;
+            GetCursorPos(&pt);
+            ScreenToClient(vi.hWnd, &pt);
+            FMouseMsgST(vi.hWnd, WM_MOUSEMOVE, -1, pt.x, pt.y);
+            }
 
-		for(;;)
-			{
-			// execute some 68000 code
+        for(;;)
+            {
+            // execute some 68000 code
 
-			stat = vpci->pfnGo(cips);
+            stat = vpci->pfnGo(cips);
 
-			if (stat != 0)
-				{
-//				DebugStr("exiting due to exit code %d\n", stat);
-				break;
-				}
+            if (stat != 0)
+                {
+//                DebugStr("exiting due to exit code %d\n", stat);
+                break;
+                }
 
 // this is in case we want to start tracing after a fixed # of instructions.
-//			if (vpregs->count > 250000)
-//				goto totrace;
+//            if (vpregs->count > 250000)
+//                goto totrace;
 
             lTick1000 = lTick;
             QueryTickCtr();
-			lTick = Getms();
+            lTick = Getms();
 
             // Try to keep the loops at about 3ms
 
@@ -1399,7 +1399,7 @@ int fCont;
 #endif
                     cips = cips + 200;
                 }
-            
+
 #if 0
             if (vmCur.fSound)
                 {
@@ -1409,10 +1409,10 @@ int fCont;
                 }
 #endif
 
-			// check for 60 Hz VBI
+            // check for 60 Hz VBI
 
-			if ((lTick - vsthw.lTickVBI) >= 17)
-				{
+            if ((lTick - vsthw.lTickVBI) >= 17)
+                {
 // printf("PC = %08X\n", vpregs->PC);
 
                 // HACK! HACK! HACK!
@@ -1545,27 +1545,27 @@ int fCont;
 
 
                 if (vmCur.fSound)
-					{
+                    {
                     // check sound
 
                     SoundDoneCallback();
                     }
 
-				// decrement printer timer
+                // decrement printer timer
 
-				if (vi.cPrintTimeout && vmCur.fShare)
-					{
-					vi.cPrintTimeout--;
-					if (vi.cPrintTimeout == 0)
-						{
-						FlushToPrinter();
-						UnInitPrinter();
-						}
-					}
+                if (vi.cPrintTimeout && vmCur.fShare)
+                    {
+                    vi.cPrintTimeout--;
+                    if (vi.cPrintTimeout == 0)
+                        {
+                        FlushToPrinter();
+                        UnInitPrinter();
+                        }
+                    }
 
                 if ((lTick - vsthw.lTickVBI) < 32)
                     {
-    				vsthw.lTickVBI += 17;
+                    vsthw.lTickVBI += 17;
                     }
                 else
                     {
@@ -1578,20 +1578,20 @@ int fCont;
 
                 vmachw.rgvia[0].vIFR |= 2;
 
-				// check for mouse movement
+                // check for mouse movement
 
-				if (vi.fMouseMoved && vi.fHaveFocus && (vi.fGEMMouse || !vi.fVMCapture))
-					{
-					POINT pt;
+                if (vi.fMouseMoved && vi.fHaveFocus && (vi.fGEMMouse || !vi.fVMCapture))
+                    {
+                    POINT pt;
 
-//					DebugStr("m");
-					vi.fMouseMoved = FALSE;
-					GetCursorPos(&pt);
-					ScreenToClient(vi.hWnd, &pt);
-					FMouseMsgST(vi.hWnd, WM_MOUSEMOVE, -1, pt.x, pt.y);
-					}
+//                    DebugStr("m");
+                    vi.fMouseMoved = FALSE;
+                    GetCursorPos(&pt);
+                    ScreenToClient(vi.hWnd, &pt);
+                    FMouseMsgST(vi.hWnd, WM_MOUSEMOVE, -1, pt.x, pt.y);
+                    }
 
-				CchSerialPending();
+                CchSerialPending();
 
 LsetVBI:
                 if (vmachw.V2Base || vmachw.RVBase)
@@ -1617,12 +1617,12 @@ LsetVBI:
 
                 if (vmachw.rgvia[0].vIFR & 1)
                     break;
-				}
+                }
 
             // about once a second, force full screen refresh and
             // force printer to flush
 
-			if ((lTick - vsthw.lTickSec) >= 1000)
+            if ((lTick - vsthw.lTickSec) >= 1000)
                 {
                 FlushToPrinter();
 
@@ -1639,38 +1639,38 @@ LsetVBI:
                 vmachw.rgvia[0].vIFR |= 1;
 
                 if ((lTick - vsthw.lTickSec) < 2000)
-    				vsthw.lTickSec += 1000;
+                    vsthw.lTickSec += 1000;
                 else
                     vsthw.lTickSec = lTick;
 
                 goto LsetVBI;       // this keeps the VBI more accurate
                 }
-			}
+            }
 
 // Lstop:
         QueryTickCtr();
-		ticks = Getms() - tickStart;
-		}
+        ticks = Getms() - tickStart;
+        }
 
-	else if (fCont)
-		{
-		int i = 0;
+    else if (fCont)
+        {
+        int i = 0;
 
-		/* trace execution */
+        /* trace execution */
 
-		do
-			{
-			stat = vpci->pfnStep(1);
-			FDumpRegsVM();
-			} while (!stat && (i++ < 20));
-		}
-	else
-		{
-		/* step execution */
+        do
+            {
+            stat = vpci->pfnStep(1);
+            FDumpRegsVM();
+            } while (!stat && (i++ < 20));
+        }
+    else
+        {
+        /* step execution */
 
-		stat = vpci->pfnStep(1);
-		FDumpRegsVM();
-		}
+        stat = vpci->pfnStep(1);
+        FDumpRegsVM();
+        }
 
     return stat;
 }
@@ -1684,7 +1684,7 @@ LsetVBI:
 //
 //   ReadHWByte(ea)    - read byte at ea
 //   ReadHWWord(ea)    - read word at ea
-//   WriteHWByte(ea,b) - write byte to ea 
+//   WriteHWByte(ea,b) - write byte to ea
 //   WriteHWByte(ea,w) - write word to ea
 //
 // All routines return 0 or a small positive number on success, or
@@ -3421,7 +3421,7 @@ printf("mapped to %08X\n", *pea);
         // Mac II wraps entire ROM address space.
         // Mac IIci wraps up to $42000000
         // Mac Quadra and PowerMac don't wrap at all.
-        
+
         if (FIsMac32(vmCur.bfHW) && (*pea > 0x42000000))
             mt = MT_ERROR;
         else
@@ -3656,39 +3656,39 @@ printf("mapped to %08X\n", *pea);
                 default:
                     mt = MT_ERROR;
                     break;
-    
+
                 case 0x00: // VIA1
                 case 0x01:
                     break;
-    
+
                 case 0x02: // VIA2
                 case 0x03:
                     if (vmachw.V2Base == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x0C: // SCC
                 case 0x0D:
                     break;
-    
+
                 case 0x10: // SCSI
                 case 0x11:
                     break;
-    
+
                 case 0x14: // ASC
                 case 0x15:
                     break;
-    
+
                 case 0x1E: // IWM
                 case 0x1F:
                     break;
-    
+
                 case 0x26: // RBV
                 case 0x27:
                     if (vmachw.RVBase == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x08:
                 case 0x09:
                 case 0x0A:
@@ -3708,7 +3708,7 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                     mt = MT_UNUSED;
                     }
                 }
-    
+
             else if ((vmCur.bfHW == vmMacQ700) || (vmCur.bfHW == vmMacQ900))
                 {
                 // Quadra 700/900 hardware
@@ -3718,38 +3718,38 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                 default:
                     mt = MT_ERROR;
                     break;
-    
+
                 case 0x00: // VIA1
                 case 0x01:
                     break;
-    
+
                 case 0x02: // VIA2
                 case 0x03:
                     if (vmachw.V2Base == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x0C: // SCC
                 case 0x0D:
                     break;
-    
+
                 case 0x0F: // SCSI
                     break;
-    
+
                 case 0x14: // ASC
                 case 0x15:
                     break;
-    
+
                 case 0x1E: // IWM
                 case 0x1F:
                     break;
-    
+
                 case 0x26: // RBV
                 case 0x27:
                     if (vmachw.RVBase == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x08:
                 case 0x09:
                 case 0x0A:
@@ -3775,38 +3775,38 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                 default:
                     mt = MT_ERROR;
                     break;
-    
+
                 case 0x00: // VIA1
                 case 0x01:
                     break;
-    
+
                 case 0x02: // VIA2
                 case 0x03:
                     if (vmachw.V2Base == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x0C: // SCC
                 case 0x0D:
                     break;
-    
+
                 case 0x0F: // SCSI
                     break;
-    
+
                 case 0x14: // ASC
                 case 0x15:
                     break;
-    
+
                 case 0x1E: // IWM
                 case 0x1F:
                     break;
-    
+
                 case 0x26: // RBV
                 case 0x27:
                     if (vmachw.RVBase == 0)
                         mt = MT_ERROR;
                     break;
-    
+
                 case 0x08:
                 case 0x09:
                 case 0x0A:
@@ -3824,7 +3824,7 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                     mt = MT_UNUSED;
                     }
                 }
-    
+
             else
                 {
                 // Default to a Macintosh IIci otherwise
@@ -3835,42 +3835,42 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                 default:
                     mt = MT_ERROR;
                     break;
-    
+
                 case 0x00: // VIA1
                 case 0x01:
                     break;
-    
+
                 case 0x02: // VIA2
                 case 0x03:
                     if (vmachw.V2Base == 0)
                         mt = MT_ZERO;
                     break;
-    
+
                 case 0x04: // SCC
                 case 0x05:
                     break;
-    
+
                 case 0x0E: // ???
                     // Mac Classic II ROMs insist on writing to $50F0E000
                     // printf("ACCESSING 50F0E000 at PC %08X!!!\n", vpregs->PC);
 
                     mt = MT_ZERO;
                     break;
-    
+
                 case 0x10: // SCSI
                 case 0x11:
                 case 0x12:
                 case 0x13:
                     break;
-    
+
                 case 0x14: // ASC
                 case 0x15:
                     break;
-    
+
                 case 0x16: // IWM
                 case 0x17:
                     break;
-    
+
                 case 0x18: // ???
                     // Mac Classic II ROMs insist on writing to $50F18000
                     // printf("ACCESSING 50F18000 at PC %08X!!!\n", vpregs->PC);
@@ -3881,14 +3881,14 @@ printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
                 case 0x1A: // ???
                     // LC580/LC630 ROMs write to $50F1A101 ?!?!?!?
                     // printf("ACCESSING %08X at PC %08X!!!\n", *pea, vpregs->PC);
-    
+
                     switch (PeekL(vi.eaROM[0]))
                         {
                     case 0x35C28F5F:                // LC II
                     case 0x3193670E:                // Classic II
                         mt = MT_ERROR;
                         break;
-    
+
                     default:
                         mt = MT_ZERO;
                         break;
@@ -4178,7 +4178,7 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
             char rgch[255];
 
             // Mac SCSI
-    
+
 #if TRACESCSI
             printf("Reading SCSI address %08X at %08X\n", ea, vpregs->PC);
 //            FDumpRegsVM();
@@ -4247,12 +4247,12 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
 
             return vmachw.rgbSCSIRd[ea];
             }
-    
+
     if ((ea >= (vmachw.IWMBase))
      && (ea < ((vmachw.IWMBase) + 0x1E01)))
             {
             // IWM chip
-    
+
             ea -= vmachw.IWMBase;
 
             if ((ea & 0xFF) != 0x00)
@@ -4293,7 +4293,7 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
         (ea < (vmachw.V1Base + 0x1E02)))
             {
             // VIA chip
-    
+
             ea -= vmachw.V1Base;
 
             if (FIsMacNuBus(vmCur.bfHW))
@@ -4339,7 +4339,7 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
                     // A Quadra sets the 4 CPUID bits depending on the model:
                     //
                     // These are the models where $5FFFFFFC is $A55A2BAD
-                    // $00 (0000) - 
+                    // $00 (0000) -
                     // $12 (0101) - Quadra 800
                     // $16 (0111) - ?? (Gestalt 59)
                     // $40 (1000) - Centris 610
@@ -4351,14 +4351,14 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
                     // $56 (1111) - ?? (Gestalt 59)
                     //
                     // These are the models when $5FFFFFFC is 0
-                    // $00 (0000) - 
+                    // $00 (0000) -
                     // $02 (0010) - Color Classic
                     // $10 (0100) - Quadra 950
                     // $12 (0101) - PowerBook 170 / 180
                     // $16 (0111) - IIsi
                     // $40 (1000) - Quadra 700
-                    // $42 (1001) - 
-                    // $44 (1010) - 
+                    // $42 (1001) -
+                    // $44 (1010) -
                     // $46 (1011) - IIci
                     // $50 (1100) - Quadra 900
                     // $52 (1101) - IIfx
@@ -4452,7 +4452,7 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
             if (ea == 0x1800)
                 return vmachw.rgvia[0].vPCR;
             }
-    
+
     if ((ea >= vmachw.RVBase) &&
         (ea < (vmachw.RVBase + 0x2000)))
             {
@@ -4669,7 +4669,7 @@ static ULONG __cdecl old_ReadHWByte(ULONG ea, BYTE *pb)
             // SCC chip
 
             BYTE b;
-    
+
             ea -= vmachw.SCCRBase;
 
             ea &= 7;
@@ -5050,7 +5050,7 @@ ULONG __cdecl old_WriteHWByte(ULONG ea, BYTE *pb)
         (ea < (vmachw.SCSIWr + 0x4000)))
             {
             // Mac SCSI
-    
+
 #if TRACESCSI
             printf("Writing SCSI address %08X with %02X at %08X\n", ea, b, vpregs->PC);
             FDumpRegsVM();
@@ -5071,20 +5071,20 @@ ULONG __cdecl old_WriteHWByte(ULONG ea, BYTE *pb)
             WriteMacSCSI(ea, b);
             return 0;
             }
-    
+
     if ((ea >= 0x00600000) && (ea < 0x00680000))
         {
         // it's a Mac RAM image at $600000
-    
+
         *(BYTE *)(vi.pbRAM[0] - (ea = 0x00600000)) = b;
         return 0;
         }
-    
+
     if ((ea >= vmachw.V1Base) &&
         (ea < (vmachw.V1Base + 0x1E02)))
             {
             // VIA chip
-    
+
             ea -= vmachw.V1Base;
 
             if (FIsMacNuBus(vmCur.bfHW))
@@ -5450,7 +5450,7 @@ printf("STUFFING DATA INTO ADB: %02X\n", vmachw.rgvia[0].vSR);
 
             return 0;
             }
-    
+
     if ((ea >= vmachw.RVBase) &&
         (ea < (vmachw.RVBase + 0x2000)))
             {
@@ -5683,7 +5683,7 @@ printf("STUFFING DATA INTO ADB: %02X\n", vmachw.rgvia[0].vSR);
         (ea < (vmachw.SCCWBase + 0x40)))
             {
             // SCC chip
-    
+
             ea -= vmachw.SCCWBase;
 
 #if TRACEHW
@@ -5702,12 +5702,12 @@ printf("STUFFING DATA INTO ADB: %02X\n", vmachw.rgvia[0].vSR);
 
             return 0;
             }
-    
+
     if ((ea >= vmachw.IWMBase)
      && (ea < (vmachw.IWMBase + 0x1E01)))
             {
             // IWM chip
-    
+
             ea -= vmachw.IWMBase;
 
             if ((ea & 0xFF) != 0x00)
@@ -6206,8 +6206,8 @@ BOOL __cdecl mac_Reset()
 
     sprintf(szMacPRAM, "%s\\%08X.PRM", vi.szWindowsDir, PeekL(vi.eaROM[0]));
 
-	SetCurrentDirectory(vi.szWindowsDir);
-	FWriteWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
+    SetCurrentDirectory(vi.szWindowsDir);
+    FWriteWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
 
     memset(&vsthw, 0, sizeof(vsthw));
     memset(&vmachw, 0, sizeof(vmachw));
@@ -6221,7 +6221,7 @@ BOOL __cdecl mac_Reset()
     else
         SetMacMemMode(FALSE);
 
-	CbReadWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
+    CbReadWholeFile(szMacPRAM, 256, &vmachw.rgbCMOS);
 
     if (vmCur.iBootDisk)
         {
@@ -6544,7 +6544,7 @@ Lrescan:
     else
         InitSound(370);
     InitMIDI();
-	FResetIKBD();
+    FResetIKBD();
 
     // find the sampled startup sound (1M ROMs and higher)
 
@@ -6926,7 +6926,7 @@ printf("sending Y interrupt\n");
                         {
                         // Mouse movement
 
-                        vmachw.rgvia[0].vSR = 
+                        vmachw.rgvia[0].vSR =
                         vmachw.rgbADBCmd[0] = (vmachw.ADBMouse.fUp ? 0x80 : 0x00) | 0x00;
                         vmachw.rgbADBCmd[1] = 0x80 | min(63, max(-63, (int)(vmachw.ADBMouseX - PeekW(0x82A))));
                         }
@@ -7002,7 +7002,7 @@ printf("sending Y interrupt\n");
                     }
                 }
             }
-    
+
         if (vmachw.rgvia[0].vIFR & vmachw.rgvia[0].vIER & 0x7F)
             {
             vmachw.rgvia[0].vIFR |= 0x80;

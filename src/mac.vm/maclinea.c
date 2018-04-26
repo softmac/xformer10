@@ -49,7 +49,7 @@ int CallMacLineA()
     extern ULONG lBreakpoint;
 
 #ifndef NDEBUG
-	char rgch[1024], rgch2[1024];
+    char rgch[1024], rgch2[1024];
 #endif
 
     // If we want to execute the regular Line A trap,
@@ -103,11 +103,11 @@ int CallMacLineA()
             case 1:
                 printf("_SCSI Get\n");
                 break;
-    
+
             case 2:
                 printf("_SCSI Select device %d\n", PeekW(vpregs->A7 + cbAutoPop + 2));
                 break;
-    
+
             case 3:
                 {
                 ULONG buf;
@@ -253,7 +253,7 @@ LhandledSCSI0_2:
 
                 vpregs->D0 = 0;     // noErr
                 goto LhandledSCSI0;
-    
+
             case 2:
             case 11:
 #if TRACESCSI
@@ -275,7 +275,7 @@ LhandledSCSI0_2:
 
                 vpregs->A7 += 2;        // pop targetID
                 goto LhandledSCSI0;
-    
+
             case 3:
                 {
                 ULONG buf = PeekL(vpregs->A7 + cbAutoPop + 4);
@@ -316,7 +316,7 @@ LhandledSCSI0_2:
                 {
                 printf("_SCSI Complete, pstat = $%08X, pmsg = $%08X, wait = %d\n",
                     PeekL(vpregs->A7 + cbAutoPop + 10), PeekL(vpregs->A7 + cbAutoPop + 6), PeekL(vpregs->A7 + cbAutoPop + 2));
-                printf("Contents of stat = %04X, msg = %04X\n", 
+                printf("Contents of stat = %04X, msg = %04X\n",
                     PeekW(PeekL(vpregs->A7 + cbAutoPop + 10)),
                     PeekW(PeekL(vpregs->A7 + cbAutoPop + 6)));
                 fTraceThis = 0;
@@ -415,9 +415,9 @@ LhandledSCSI0_2:
 #if !defined(DEMO)
                         if (fRead)
                             {
-							if (HostToGuestDataCopy(tibL1,
-							    &vi.pvSCSIData[vi.iSCSIRead],
-							    ACCESS_PHYSICAL_WRITE, tibL2))
+                            if (HostToGuestDataCopy(tibL1,
+                                &vi.pvSCSIData[vi.iSCSIRead],
+                                ACCESS_PHYSICAL_WRITE, tibL2))
                                 {
                                 vi.iSCSIRead += tibL2;
                                 break;
@@ -425,9 +425,9 @@ LhandledSCSI0_2:
                             }
                         else
                             {
-							if (GuestToHostDataCopy(tibL1,
-							    &vi.pvSCSIData[vi.iSCSIRead],
-							    ACCESS_PHYSICAL_READ, tibL2))
+                            if (GuestToHostDataCopy(tibL1,
+                                &vi.pvSCSIData[vi.iSCSIRead],
+                                ACCESS_PHYSICAL_READ, tibL2))
                                 {
                                 vi.iSCSIRead += tibL2;
                                 break;
@@ -555,7 +555,7 @@ LhandledSCSI0_2:
 
                 return 0;
                 }
-            
+
 #if 0
             printf("_Syserror\n");
             m68k_DumpRegs();
@@ -913,7 +913,7 @@ LhandledSCSI0_2:
 
                 while (count > 0)
                     {
-					int countT = max(count,1);
+                    int countT = max(count,1);
 
                     // limit to 18 sectors so as not to overflow rgbDiskBuffer
 
@@ -925,51 +925,51 @@ LhandledSCSI0_2:
                         sector, count, countT);
 #endif
 
-					vsthw.DMAbasis = vmachw.pbIO;
-					
-					pdi->sec = sector;
-					pdi->count = countT;
-					pdi->lpBuf = (BYTE *)&vsthw.rgbDiskBuffer;
+                    vsthw.DMAbasis = vmachw.pbIO;
 
-					if (fWrite)
-						{
+                    pdi->sec = sector;
+                    pdi->count = countT;
+                    pdi->lpBuf = (BYTE *)&vsthw.rgbDiskBuffer;
+
+                    if (fWrite)
+                        {
                         GuestToHostDataCopy(vmachw.pbIO,
                             vsthw.rgbDiskBuffer,
                             ACCESS_PHYSICAL_READ, countT * 512);
-						}
+                        }
 
-					if (FRawDiskRWPdi(pdi, fWrite))
-						{
-						if (!fWrite)
-							{
-							HostToGuestDataCopy(vmachw.pbIO,
-							    vsthw.rgbDiskBuffer,
-							    ACCESS_PHYSICAL_WRITE, countT * 512);
-							}
+                    if (FRawDiskRWPdi(pdi, fWrite))
+                        {
+                        if (!fWrite)
+                            {
+                            HostToGuestDataCopy(vmachw.pbIO,
+                                vsthw.rgbDiskBuffer,
+                                ACCESS_PHYSICAL_WRITE, countT * 512);
+                            }
 
-						PokeW(vpregs->A0 + 16, 0);  // noErr
-						vpregs->D0 = 0; // noErr
-						vpregs->rgfsr.bitZ = 1;
-						vpregs->rgfsr.bitN = 0;
+                        PokeW(vpregs->A0 + 16, 0);  // noErr
+                        vpregs->D0 = 0; // noErr
+                        vpregs->rgfsr.bitZ = 1;
+                        vpregs->rgfsr.bitN = 0;
 
 #if !defined(NDEBUG) || TRACEIWM
                         printf("I/O SUCCEEDED!\n");
 #endif
-						}
-					else
-						{
+                        }
+                    else
+                        {
 Lreadfail:
-						PokeW(vpregs->A0 + 16, -65);  // noLinErr
-						vpregs->D0 = -65; // noLinErr
-						vpregs->rgfsr.bitZ = 0;
-						vpregs->rgfsr.bitN = 1;
+                        PokeW(vpregs->A0 + 16, -65);  // noLinErr
+                        vpregs->D0 = -65; // noLinErr
+                        vpregs->rgfsr.bitZ = 0;
+                        vpregs->rgfsr.bitN = 1;
 #if !defined(NDEBUG) || defined(BETA) || TRACEIWM
                         printf("I/O FAILED!!!\n");
 #endif
 
 Sleep(200);
                         break;
-	                    }
+                        }
 
 #if !defined(NDEBUG) || TRACEIWM
                     printf("    data = %02X %02X %02X %02X\n",
@@ -1249,7 +1249,7 @@ Ltrydrive:
                     if (vmachw.fDisk1Dirty)
                         {
 // printf("_GetOSEvent 4\n");
-                        i = 1; 
+                        i = 1;
                         vmachw.fDisk1Dirty = fFalse;
                         if (vi.rgpdi[0] && vi.rgpdi[0]->fEjected)
                             vi.rgpdi[0]->fEjected = fFalse;

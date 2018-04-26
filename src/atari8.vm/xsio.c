@@ -5,7 +5,7 @@
 
     - Atari serial port emulation
 
-    Copyright (C) 1986-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1986-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      open source release
@@ -49,9 +49,9 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_OFF  0
 #define MD_SD   1
 #define MD_ED   2
-#define MD_DD   3			// normally, the first 3 sectors are 128 bytes long, then 768 bytes of blank, and then sector 4
-#define MD_DD_OLD_ATR1 10	// early .ATR files have the first half of the first three 256 byte sectors filled
-#define MD_DD_OLD_ATR2 11	// other early .ATR files sector 4 start at offset 384 w/o blank space
+#define MD_DD   3            // normally, the first 3 sectors are 128 bytes long, then 768 bytes of blank, and then sector 4
+#define MD_DD_OLD_ATR1 10    // early .ATR files have the first half of the first three 256 byte sectors filled
+#define MD_DD_OLD_ATR2 11    // other early .ATR files sector 4 start at offset 384 w/o blank space
 #define MD_QD   4
 #define MD_HD   5
 #define MD_RD   6
@@ -60,18 +60,18 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_FILE 9
 
 // scary globals
-int wCOM;		// !!! doesn't seem to be used
-int fXFCable;	// !!! left unitialized
+int wCOM;        // !!! doesn't seem to be used
+int fXFCable;    // !!! left unitialized
 
 // is this 128 byte buffer empty?
 BOOL IsEmpty(char *cc)
 {
-	for (int i = 0; i < 128; i++)
-	{
-		if (cc[i])
-			return FALSE;
-	}
-	return TRUE;
+    for (int i = 0; i < 128; i++)
+    {
+        if (cc[i])
+            return FALSE;
+    }
+    return TRUE;
 }
 
 void DeleteDrive(int iVM, int i)
@@ -138,33 +138,33 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             l = l << 4;
             rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
 
-			// !!! support 512 byte sector .ATR files
+            // !!! support 512 byte sector .ATR files
 
-			if (sc == 256)
-			{
-				char cc[128];
-				rgDrives[iVM][i].mode = MD_DD;
+            if (sc == 256)
+            {
+                char cc[128];
+                rgDrives[iVM][i].mode = MD_DD;
 
-				// Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
-				// 128-256 will be empty only in this version
-				if (_lseek(h, 128 + 16, SEEK_SET) == 128 + 16)
-					if (_read(h, cc, 128) == 128)
-						if (IsEmpty(cc))
-							rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
+                // Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
+                // 128-256 will be empty only in this version
+                if (_lseek(h, 128 + 16, SEEK_SET) == 128 + 16)
+                    if (_read(h, cc, 128) == 128)
+                        if (IsEmpty(cc))
+                            rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
 
-				// Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
-				// 384-512 will not be blank only in this version
-				if (_lseek(h, 384 + 16, SEEK_SET) == 384 + 16)
-					if (_read(h, cc, 128) == 128)
-						if (!IsEmpty(cc))
-							rgDrives[iVM][i].mode = MD_DD_OLD_ATR2;
-			}
+                // Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
+                // 384-512 will not be blank only in this version
+                if (_lseek(h, 384 + 16, SEEK_SET) == 384 + 16)
+                    if (_read(h, cc, 128) == 128)
+                        if (!IsEmpty(cc))
+                            rgDrives[iVM][i].mode = MD_DD_OLD_ATR2;
+            }
         }
         else
         {
             // assume it's a Xformer Cable created image
             // so just check for density
-			// !!! Error if it's not extension .XFD or always try it out?
+            // !!! Error if it's not extension .XFD or always try it out?
 
             rgDrives[iVM][i].ofs = 0;
 
@@ -199,7 +199,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
                 {
                 int j;
-				char *pch = (char *)pchPath;
+                char *pch = (char *)pchPath;
 
                 memset(rgDrives[iVM][i].name,' ',12);
 
@@ -240,7 +240,7 @@ Lbadfile:
         rgDrives[iVM][i].ofs = 0;
 
 //            _close(h);
-	return TRUE;
+    return TRUE;
 }
 
 #define NO_TRANSLATION    32
@@ -254,9 +254,9 @@ void BUS1(int iVM)
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
-    
-	// !!! statics. CIO won't work
-	static BYTE oldstat = 0;
+
+    // !!! statics. CIO won't work
+    static BYTE oldstat = 0;
     static BYTE mdTranslation = NO_TRANSLATION;
     static BYTE fConcurrent = FALSE;
 
@@ -470,15 +470,15 @@ void BUS1(int iVM)
 
     regP |= CBIT; // indicate that command completed successfully
 
-	//regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
-	//regSP = (regSP + 2) & 255 | 256;
+    //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+    //regSP = (regSP + 2) & 255 | 256;
 
-	// the stack might wrap!
-	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC = rgbMem[regSP];
-	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC |= (WORD)rgbMem[regSP] << 8;
-	regPC++;
+    // the stack might wrap!
+    regSP = 0x100 | ((regSP + 1) & 0xFF);
+    regPC = rgbMem[regSP];
+    regSP = 0x100 | ((regSP + 1) & 0xFF);
+    regPC |= (WORD)rgbMem[regSP] << 8;
+    regPC++;
 }
 
 
@@ -486,59 +486,59 @@ void BUS1(int iVM)
 //
 BYTE SIOReadSector(int iVM)
 {
-	WORD wDev, wDrive, wCom, wStat, wSector;
-	WORD  wBytes;
-	WORD wTimeout;
-	WORD md;
-	DRIVE *pdrive;
-	ULONG lcbSector;
+    WORD wDev, wDrive, wCom, wStat, wSector;
+    WORD  wBytes;
+    WORD wTimeout;
+    WORD md;
+    DRIVE *pdrive;
+    ULONG lcbSector;
 
-	wDev = 0x31;
-	wDrive = 0;
-	wCom = 0x52;
-	wStat = 0x40;
-	wTimeout = 0x1f;
-	wBytes = 128;
-	wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
-	
-	pdrive = &rgDrives[iVM][wDrive];
+    wDev = 0x31;
+    wDrive = 0;
+    wCom = 0x52;
+    wStat = 0x40;
+    wTimeout = 0x1f;
+    wBytes = 128;
+    wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
 
-	md = pdrive->mode;
+    pdrive = &rgDrives[iVM][wDrive];
 
-	if (md != MD_SD)
-		return 0;
+    md = pdrive->mode;
 
-	if (pdrive->h == -1)
-		return 0;
+    if (md != MD_SD)
+        return 0;
 
-	int cbSIO2PCFudge = pdrive->ofs;
+    if (pdrive->h == -1)
+        return 0;
 
-	if (wSector < 1)            /* invalid sector # */
-		return 0;
+    int cbSIO2PCFudge = pdrive->ofs;
 
-	if (wSector > pdrive->wSectorMac)   /* invalid sector # */
-		return 0;
+    if (wSector < 1)            /* invalid sector # */
+        return 0;
 
-	lcbSector = 128L;
+    if (wSector > pdrive->wSectorMac)   /* invalid sector # */
+        return 0;
 
-	_lseek(pdrive->h, (ULONG)((wSector - 1) * lcbSector) + cbSIO2PCFudge, SEEK_SET);
+    lcbSector = 128L;
 
-	if (_read(pdrive->h, sectorSIO[iVM], wBytes) < wBytes)
-		return 0;
+    _lseek(pdrive->h, (ULONG)((wSector - 1) * lcbSector) + cbSIO2PCFudge, SEEK_SET);
 
-	// now do the checksum
-	WORD ck = 0;
-	for (int i = 0; i < 128; i++)
-	{
-		ck += sectorSIO[iVM][i];
-		if (ck > 0xff)
-		{
-			ck = ck & 0xff;
-			ck++;	// add carry back in after every addition
-		}
-	}
-	ck = ck & 0xff;
-	return (BYTE)ck;
+    if (_read(pdrive->h, sectorSIO[iVM], wBytes) < wBytes)
+        return 0;
+
+    // now do the checksum
+    WORD ck = 0;
+    for (int i = 0; i < 128; i++)
+    {
+        ck += sectorSIO[iVM][i];
+        if (ck > 0xff)
+        {
+            ck = ck & 0xff;
+            ck++;    // add carry back in after every addition
+        }
+    }
+    ck = ck & 0xff;
+    return (BYTE)ck;
 }
 
 
@@ -557,7 +557,7 @@ void SIOV(int iVM)
     BYTE rgb[256];
     WORD i;
 
-	// we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
+    // we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
     if (regPC != 0xE459 && regPC != 0xE959)
     {
         BUS1(iVM);
@@ -626,13 +626,13 @@ lNAK:
          /*   printf("SIO command %c\n", wCom); */
             wRetStat = SIO_NAK;
             break;
-        
+
         /* format enhanced density, we don't support that */
         case '"':
             if (md != MD_ED)
                 wRetStat = SIO_NAK;
             break;
-  
+
         case '!':
             if (pdrive->fWP)       /* is drive write-protected? */
                 {
@@ -672,7 +672,7 @@ lNAK:
             cpuPokeB (iVM, wBuff++, 0xE0);         /* format timeout */
             cpuPokeB (iVM, wBuff, 0x00);           /* unused */
             break;
-            
+
         /* get configuration */
         case 'N':
           /*  printf("SIO command 'N'\n"); */
@@ -744,31 +744,31 @@ lNAK:
 
             if ((md == MD_FILE) || (md == MD_SD) || (md == MD_ED))
                 lcbSector = 128L;
-			else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
-			{
-				lcbSector = 128L;
-				// the data is in the first half of a 256 byte sector
-				if (md == MD_DD_OLD_ATR1)
-					lcbSector = 256;
-			}
-			else if (pdrive->ofs)
+            else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
+            {
+                lcbSector = 128L;
+                // the data is in the first half of a 256 byte sector
+                if (md == MD_DD_OLD_ATR1)
+                    lcbSector = 256;
+            }
+            else if (pdrive->ofs)
                 {
                 lcbSector = 256L;
-				if (pdrive->cb == 184720)	// !!! 400 byte header instead of 16
-					cbSIO2PCFudge += 384;
-				// the first 3 sectors were compacted
-				else if (md == MD_DD_OLD_ATR2)
-				{
-					wSector -= 1;
-					cbSIO2PCFudge -= 128;
-				}
-			}
+                if (pdrive->cb == 184720)    // !!! 400 byte header instead of 16
+                    cbSIO2PCFudge += 384;
+                // the first 3 sectors were compacted
+                else if (md == MD_DD_OLD_ATR2)
+                {
+                    wSector -= 1;
+                    cbSIO2PCFudge -= 128;
+                }
+            }
             else
                 lcbSector = 256L;
 
             _lseek(pdrive->h,(ULONG)((wSector-1) * lcbSector) + cbSIO2PCFudge,SEEK_SET);
 
-            if ((wCom == 'R'))	// wStat is only checked for cassette I/O not disk I/O, breaks apps // && (wStat == 0x40))
+            if ((wCom == 'R'))    // wStat is only checked for cassette I/O not disk I/O, breaks apps // && (wStat == 0x40))
                 {
 #if 0
                 printf("Read: sector = %d  wBuff = $%4x  wBytes = %d  lcbSector = %ld  md = %d\n",
@@ -842,7 +842,7 @@ lNAK:
                 }
             else if ((wCom == 'W') || (wCom == 'P'))
                 {
-                //if (wStat != 0x80)	// only the cassette handler checks this, not disk I/O, this would break apps
+                //if (wStat != 0x80)    // only the cassette handler checks this, not disk I/O, this would break apps
                 //    goto lNAK;
                 if (pdrive->fWP)
                     {
@@ -873,7 +873,7 @@ lNAK:
         switch(wCom)
             {
         /* status request */
-        case 'S': 
+        case 'S':
             while (timeout--)
                 {
                 if (FPrinterReady(iVM))
@@ -889,7 +889,7 @@ lNAK:
                     }
                 }
             break;
-            
+
         case 'W':
             /* print line */
             {
@@ -956,17 +956,17 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
-	//regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
-	//regSP = (regSP + 2) & 255 | 256;
+    //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+    //regSP = (regSP + 2) & 255 | 256;
 
-	// the stack might wrap!
-	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC = rgbMem[regSP];
-	regSP = 0x100 | ((regSP + 1) & 0xFF);
-	regPC |= (WORD)rgbMem[regSP] << 8;
-	regPC++;
+    // the stack might wrap!
+    regSP = 0x100 | ((regSP + 1) & 0xFF);
+    regPC = rgbMem[regSP];
+    regSP = 0x100 | ((regSP + 1) & 0xFF);
+    regPC |= (WORD)rgbMem[regSP] << 8;
+    regPC++;
 
-	//printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
+    //printf("SIO: returning to PC = %04X, SP = %03X, stat = %02X\n", regPC, regSP, regY);
 }
 
 #endif // XFORMER
@@ -975,132 +975,132 @@ lExit:
 #if 0
 void InitSIOV(int iVM, int argc, char **argv)
 {
-	int i, iArgv = 0;
+    int i, iArgv = 0;
 
 #ifdef HDOS16ORDOS32
-	_bios_printer(_PRINTER_INIT, 0, 0);
+    _bios_printer(_PRINTER_INIT, 0, 0);
 #endif
 
-	wCOM = -1;
+    wCOM = -1;
 
-	while ((argv[iArgv][0] == '-') || (argv[iArgv][0] == '/'))
-	{
-		switch (argv[iArgv][1])
-		{
-		case 'A':
-		case 'a':
-			fAutoStart = 1;
-			break;
+    while ((argv[iArgv][0] == '-') || (argv[iArgv][0] == '/'))
+    {
+        switch (argv[iArgv][1])
+        {
+        case 'A':
+        case 'a':
+            fAutoStart = 1;
+            break;
 
-		case 'D':
-		case 'd':
-			fDebugger = 1;
-			break;
+        case 'D':
+        case 'd':
+            fDebugger = 1;
+            break;
 
-		case 'N':
-		case 'n':
-			ramtop = 0xC000;
-			break;
+        case 'N':
+        case 'n':
+            ramtop = 0xC000;
+            break;
 
-		case '8':
-			mdXLXE = md800;
-			break;
+        case '8':
+            mdXLXE = md800;
+            break;
 
-		case 'S':
-		case 's':
+        case 'S':
+        case 's':
 #ifndef NDEBUG
-			printf("sound activated\n");
+            printf("sound activated\n");
 #endif
-			fSoundOn = TRUE;
+            fSoundOn = TRUE;
 #ifndef HWIN32
-			InitSoundBlaster();
+            InitSoundBlaster();
 #endif
-			break;
+            break;
 
-		case 'T':
-		case 't':
-			*pbshift &= ~wScrlLock;
-			break;
+        case 'T':
+        case 't':
+            *pbshift &= ~wScrlLock;
+            break;
 
-		case 'C':
-		case 'c':
-			wCOM = argv[iArgv][2] - '1';
+        case 'C':
+        case 'c':
+            wCOM = argv[iArgv][2] - '1';
 #ifndef NDEBUG
-			printf("setting modem to COM%d:\n", wCOM + 1);
+            printf("setting modem to COM%d:\n", wCOM + 1);
 #endif
-			break;
+            break;
 
 #ifndef HWIN32
-		case 'X':
-		case 'x':
-			fXFCable = 1;
-			if (argv[iArgv][2] == ':')
-			{
-				_SIO_Init();
-				sscanf(&argv[iArgv][3], "%d", &uBaudClock);
-			}
-			else
-			{
-				_SIO_Calibrate();
-			}
-			if (uBaudClock == 0)
-			{
-				fXFCable = 0;
-			}
-			else
-			{
-			}
-			break;
+        case 'X':
+        case 'x':
+            fXFCable = 1;
+            if (argv[iArgv][2] == ':')
+            {
+                _SIO_Init();
+                sscanf(&argv[iArgv][3], "%d", &uBaudClock);
+            }
+            else
+            {
+                _SIO_Calibrate();
+            }
+            if (uBaudClock == 0)
+            {
+                fXFCable = 0;
+            }
+            else
+            {
+            }
+            break;
 #endif // !HWIN32
 
-		case 'K':
-		case 'k':
-			if (argv[iArgv][2] == ':')
-				ReadCart(iVM, &argv[iArgv][3]);
-			break;
+        case 'K':
+        case 'k':
+            if (argv[iArgv][2] == ':')
+                ReadCart(iVM, &argv[iArgv][3]);
+            break;
 
 #ifndef HWIN32
-		case 'J':
-		case 'j':
+        case 'J':
+        case 'j':
 #ifndef NDEBUG
-			printf("joystick activated\n");
+            printf("joystick activated\n");
 #endif
-			MyReadJoy();
+            MyReadJoy();
 
-			if ((wJoy0X || wJoy1X))
-			{
-				fJoy = TRUE;
+            if ((wJoy0X || wJoy1X))
+            {
+                fJoy = TRUE;
 
-				wJoy0XCal = wJoy0X;
-				wJoy0YCal = wJoy0Y;
-				wJoy1XCal = wJoy1X;
-				wJoy1YCal = wJoy1Y;
-			}
+                wJoy0XCal = wJoy0X;
+                wJoy0YCal = wJoy0Y;
+                wJoy1XCal = wJoy1X;
+                wJoy1YCal = wJoy1Y;
+            }
 
 #if 0
-			for (;;)
-			{
-				MyReadJoy();
-				printf("0X: %04X  0Y: %04X  1X: %04X  1Y: %04X  BUT: %02X\n",
-					wJoy0X, wJoy0Y, wJoy1X, wJoy1Y, bJoyBut);
-			}
+            for (;;)
+            {
+                MyReadJoy();
+                printf("0X: %04X  0Y: %04X  1X: %04X  1Y: %04X  BUT: %02X\n",
+                    wJoy0X, wJoy0Y, wJoy1X, wJoy1Y, bJoyBut);
+            }
 #endif
 
-			break;
+            break;
 #endif // !HWIN32
-		};
+        };
 
-		iArgv++;
-	}
+        iArgv++;
+    }
 
-	for (i = 0; i < MAX_DRIVES; i++)
-	{
-		if (i < argc)
-		{
-			AddDrive(iVM, i, argv[i + iArgv]);
-		}
-		else
-			rgDrives[iVM][i].mode = MD_OFF;
-	}
+    for (i = 0; i < MAX_DRIVES; i++)
+    {
+        if (i < argc)
+        {
+            AddDrive(iVM, i, argv[i + iArgv]);
+        }
+        else
+            rgDrives[iVM][i].mode = MD_OFF;
+    }
 }
 #endif

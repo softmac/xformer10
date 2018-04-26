@@ -75,8 +75,8 @@ void __inline Conv4To3(unsigned char *p4, unsigned char *p3)
  * the software can be unlocked is to supply a matching "unlock" code,
  * which matches the code created here.
  *
- * returns: _STS_ERROR to indicate an error, _STS_SUCCESS indicates 
- * that the key string is present in the key field of the 
+ * returns: _STS_ERROR to indicate an error, _STS_SUCCESS indicates
+ * that the key string is present in the key field of the
  * incoming data structure
  */
 
@@ -108,7 +108,7 @@ _STS_CreateLockKey (_STS_ENCRYPT_STRUCT *p)
 	 * checksum, and lengths of 1st/2nd field
 	 */
 
-	sprintf (tmp, "%02X%02X%02X", (unsigned int)t, 
+	sprintf (tmp, "%02X%02X%02X", (unsigned int)t,
 		(unsigned int)strlen (p->field1), (unsigned int)strlen (p->field2));
 
 	/*
@@ -155,7 +155,7 @@ _STS_CreateLockKey (_STS_ENCRYPT_STRUCT *p)
 	 * now format an ASCII representation of this sequence
 	 * by converting groups of 3 characters into 4
 	 */
-    
+  
 // printf("encoding '%s'\n", k);
 
 	for (x = 0; x < y; x+=3)

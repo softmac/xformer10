@@ -5,7 +5,7 @@
 
     - Serial I/O routines
 
-    Copyright (C) 1991-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      Gemulator 9.0 release
@@ -15,7 +15,7 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "gemtypes.h" // main include file 
+#include "gemtypes.h" // main include file
 
 
 HANDLE hComm = INVALID_HANDLE_VALUE;
@@ -137,7 +137,7 @@ BOOL FInitSerialPort(int iCOM)
         return FALSE;
 
     rgch[3] = (char)('0' + iCOM);
-        
+
     hComm = CreateFile(rgch, GENERIC_READ | GENERIC_WRITE,
         0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -359,7 +359,7 @@ BOOL FSetBaudRate(int tsr, int ucr, int tddr, int tcdcr)
             break;
              }
 #endif
-            
+
         DebugStr("Setting BAUD to %d\n", dcb.BaudRate);
         }
 

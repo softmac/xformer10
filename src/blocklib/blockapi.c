@@ -5,7 +5,7 @@
 
     High level API for block device routines.
 
-    Copyright (C) 1998-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1998-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     10/10/2001  darekm
@@ -22,7 +22,7 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
     if (pdi->dt == DISK_NONE)
         return FS_RAW;
 
-    // Keep looping through partition sectors 
+    // Keep looping through partition sectors
     // until we find a valid boot sector
 
     for (;;)
@@ -74,8 +74,8 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
 
             if (!pdi->fNT && pdi->dt == DISK_FLOPPY)
                 {
-                pdi->size = 
-					(*(WORD *)&rgch[1024+18]) *
+                pdi->size =
+                    (*(WORD *)&rgch[1024+18]) *
                      SwapL(*(ULONG *)&rgch[1024+20]) / 1024;
 
                 if (pdi->size <= 400)
@@ -229,7 +229,7 @@ BOOL __stdcall FInitBlockDevLib(void)
 #if TRACEDISK
         printf("number of adapters = %d\n", NumAdapters);
 #endif
-        break; 
+        break;
 
     default:
 Lfail:
@@ -248,7 +248,7 @@ DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
 {
     DISKINFO *pdi;
     ULONG lSize;
-    
+
 #if USEHEAP
     pdi = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(DISKINFO));
 #else
@@ -277,7 +277,7 @@ DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
     pdi->lpBuf = NULL;
     pdi->offsec = 0;
     pdi->cfd = 0;
-	pdi->pfd = NULL;
+    pdi->pfd = NULL;
 
 #if USEHEAP
     HeapCompact(GetProcessHeap(), 0);
@@ -648,7 +648,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
             BYTE *lpBuf = pdi->lpBuf;
 
             if (!fWrite && 0)
-                ccached = CSectorsInCache(pdi, lpBuf, sec, count); 
+                ccached = CSectorsInCache(pdi, lpBuf, sec, count);
 
             if (count == ccached)
                 f = TRUE;
@@ -656,7 +656,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
                 f = FReadWriteSecNT(pdi, fWrite);
 
             if (f && 0)
-                FAddSectorsToCache(pdi, lpBuf, sec, count); 
+                FAddSectorsToCache(pdi, lpBuf, sec, count);
             }
         else
             {
@@ -730,7 +730,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
                         {
                         // either 400K or 800K disk image / Spectre Disk.
                         // Get the disk size from the boot sector
-            
+
                         pdi->size = SwapW(*(WORD *)&pdi->lpBuf[18]) *
                                  SwapL(*(ULONG *)&pdi->lpBuf[20]) / 1024;
 
@@ -740,7 +740,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
                             pdi->size = 800;
                         }
                     }
-            
+
                 count  -= countT;
                 sector += countT;
                 pdi->lpBuf += countT << 9;
@@ -781,7 +781,7 @@ BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite)
             IoBuffer = pdi->lpBuf;
 
         if (!fWrite)
-            ccached = CSectorsInCache(pdi, IoBuffer, realsec, realcount); 
+            ccached = CSectorsInCache(pdi, IoBuffer, realsec, realcount);
 
         if (realcount == ccached)
             f = TRUE;
