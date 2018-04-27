@@ -103,14 +103,13 @@ short rgPIXELMap[HCLOCKS];
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges
-int iSwapCart[MAX_VM];        // which bank is currently swapped in
 int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800)
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
 #define SIO_DELAY 6                // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
 // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
-BYTE sectorSIO[MAX_VM][128];    // disk sector
+BYTE sectorSIO[MAX_VM][128];    // disk sector, not persisted but reloaded
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
@@ -273,11 +272,10 @@ typedef struct
 
 typedef struct
 {
-    // 6502 register context
+    // 6502 register context - BELONGS IN CPU NOT HERE !!!
 
     WORD m_regPC, m_regSP;
     BYTE m_regA, m_regY, m_regX, m_regP;
-
     WORD m_regEA;
     BYTE m_mdEA;
 
@@ -296,7 +294,7 @@ typedef struct
     BYTE pad0B;
     BYTE m_mdXLXE, m_cntTick;
 
-    BYTE m_pad1B;
+    BYTE m_iSwapCart;   // which bank is currently swapped in
 
     WORD m_wFrame, m_wScan;
     short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
@@ -408,23 +406,24 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
-#define WSYNC_Waiting  CANDY_STATE(WSYNC_Waiting)
+#define WSYNC_Waiting CANDY_STATE(WSYNC_Waiting)
 #define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
-#define PSL              CANDY_STATE(PSL)
+#define PSL           CANDY_STATE(PSL)
 #define wNMI          CANDY_STATE(wNMI)
-#define rgbSpecial      CANDY_STATE(rgbSpecial)
-#define rgSIO          CANDY_STATE(rgSIO)
-#define cSEROUT          CANDY_STATE(cSEROUT)
-#define fSERIN          CANDY_STATE(fSERIN)
-#define bSERIN          CANDY_STATE(bSERIN)
-#define isectorPos      CANDY_STATE(isectorPos)
+#define rgbSpecial    CANDY_STATE(rgbSpecial)
+#define rgSIO         CANDY_STATE(rgSIO)
+#define cSEROUT       CANDY_STATE(cSEROUT)
+#define fSERIN        CANDY_STATE(fSERIN)
+#define bSERIN        CANDY_STATE(bSERIN)
+#define isectorPos    CANDY_STATE(isectorPos)
 #define checksum      CANDY_STATE(checksum)
-#define fWant8          CANDY_STATE(fWant8)
-#define fWant10          CANDY_STATE(fWant10)
-#define fHitBP          CANDY_STATE(fHitBP)
+#define fWant8        CANDY_STATE(fWant8)
+#define fWant10       CANDY_STATE(fWant10)
+#define fHitBP        CANDY_STATE(fHitBP)
 #define bias          CANDY_STATE(bias)
+#define iSwapCart     CANDY_STATE(iSwapCart)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
-#define bp              CANDY_STATE(bp)
+#define bp            CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
 #define fTrace        CANDY_STATE(fTrace)
 #define mdXLXE        CANDY_STATE(mdXLXE)
@@ -453,7 +452,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define irqPokey      CANDY_STATE(irqPokey)
-#define iXESwap          CANDY_STATE(iXESwap)
+#define iXESwap       CANDY_STATE(iXESwap)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 
 // if present, here is where these would be

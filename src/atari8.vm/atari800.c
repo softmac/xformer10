@@ -492,6 +492,7 @@ BOOL TimeTravelReset(unsigned iVM)
 void Interrupt(int iVM, BOOL b)
 {
     // the only time regB is used is to say if an IRQ was a BRK or not
+    // is what is pushed on the stack at this time
     if (!b)
         regP &= ~0x10;
     else
@@ -610,9 +611,9 @@ void UpdatePorts(int iVM)
         PORTB = wPBDDIR;
 }
 
-// Read in the cartridge
+// Read in the cartridge. Are we initializing and using the default bank, or restoring a saved state to the last bank used?
 //
-BOOL ReadCart(int iVM)
+BOOL ReadCart(int iVM, BOOL fDefaultBank)
 {
     unsigned char *pch = (unsigned char *)rgvm[iVM].rgcart.szName;
 
@@ -778,6 +779,10 @@ BOOL ReadCart(int iVM)
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
     {
         bCartType = CART_ATARIMAX1;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
     }
 
     // 1M and first bank is the main one - ATARIMAX127
@@ -785,6 +790,10 @@ BOOL ReadCart(int iVM)
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
     {
         bCartType = CART_ATARIMAX8;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
     }
 
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
@@ -795,7 +804,6 @@ BOOL ReadCart(int iVM)
     }
     else
         bCartType = 0;
-
 
 #if 0
     // unknown cartridge, do not attempt to run it
@@ -869,17 +877,36 @@ void InitCart(int iVM)
         ramtop = 0x8000;
     }
     // 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
-    else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
+    else if (bCartType == CART_ATARIMAX1)
     {
-        _fmemcpy(&rgbMem[0xA000], pb, 8192);
-        ramtop = 0xA000;
-        iSwapCart[iVM] = 0;    // this bank starts in
+        if (iSwapCart == 0x10)
+            ramtop = 0xc000;    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            ramtop = 0xa000;
+        }
+    }
+    else if (bCartType == CART_ATARIMAX8)
+    {
+        if (iSwapCart == 0x80)
+            ramtop = 0xc000;    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            ramtop = 0xa000;
+        }
+
     }
     // 8K main bank is the last one
     else if (bCartType == CART_XEGS)
     {
         _fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-        rgbMem[0x9ffc] = 0xff;    // right cartridge present bit must float high if it is not RAM and not part of this bank
+        // right cartridge present bit must float high if it is not RAM and not part of this bank
+        // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
+        // It's probably not zero, or cold start would crash.
+        if (rgbMem[0x9ffc] == 0)
+            rgbMem[0x9ffc] = 0xff;
         ramtop = 0x8000;
     }
 
@@ -888,7 +915,7 @@ void InitCart(int iVM)
 
 // Swap out cartridge banks
 //
-void BankCart(int iVM, int iBank, int value)
+void BankCart(int iVM, BYTE iBank, BYTE value)
 {
     PCART pcart = &(rgvm[iVM].rgcart);
     unsigned int cb = pcart->cbData;
@@ -967,28 +994,29 @@ void BankCart(int iVM, int iBank, int value)
             if (ramtop == 0xa000)
             {
                 _fmemcpy(swap, &rgbMem[0xa000], 8192);
-                _fmemcpy(&rgbMem[0xA000], pb + iSwapCart[iVM] * 8192, 8192);
-                _fmemcpy(pb + iSwapCart[iVM] * 8192, swap, 8192);
+                _fmemcpy(&rgbMem[0xA000], pb + iSwapCart * 8192, 8192);
+                _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
             }
             ramtop = 0xc000;
+            iSwapCart = iBank;
         }
         else if (iBank <= mask)
         {
             // want ROM, currently different ROM? First exchange with last bank used
-            if (ramtop == 0xa000 && iBank != iSwapCart[iVM])
+            if (ramtop == 0xa000 && iBank != iSwapCart)
             {
                 _fmemcpy(swap, &rgbMem[0xa000], 8192);
-                _fmemcpy(&rgbMem[0xa000], pb + iSwapCart[iVM] * 8192, 8192);
-                _fmemcpy(pb + iSwapCart[iVM] * 8192, swap, 8192);
+                _fmemcpy(&rgbMem[0xa000], pb + iSwapCart * 8192, 8192);
+                _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
             }
             // now exchange with current bank
-            if (ramtop == 0xc000 || iBank != iSwapCart[iVM])
+            if (ramtop == 0xc000 || iBank != iSwapCart)
             {
                 _fmemcpy(swap, &rgbMem[0xa000], 8192);
                 _fmemcpy(&rgbMem[0xa000], pb + iBank * 8192, 8192);
                 _fmemcpy(pb + iBank * 8192, swap, 8192);
 
-                iSwapCart[iVM] = iBank;    // what bank is in there now
+                iSwapCart = iBank;    // what bank is in there now
                 ramtop = 0xa000;
             }
         }
@@ -998,7 +1026,7 @@ void BankCart(int iVM, int iBank, int value)
     else if (bCartType == CART_XEGS)
     {
         while ((unsigned int)value >= cb >> 13)
-            value -= (cb >> 13);
+            value -= (BYTE)(cb >> 13);
 
         if (value < (int)(cb << 13))
             _fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
@@ -1293,8 +1321,8 @@ BOOL __cdecl InitAtari(int iVM)
 //  vi.cbRAM[1] = 0xC000;
 //  vi.pregs = &rgbMem[0];
 
-    // If our saved state had a cartridge, load it back in.
-    return ReadCart(iVM);
+    // load the cartridge data
+    return ReadCart(iVM, TRUE);
 }
 
 // Call when you are done with the VM, or need to change cartridges
@@ -1593,7 +1621,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
         return f;
 
     // If our saved state had a cartridge, load it back in
-    ReadCart(iVM);
+    ReadCart(iVM, FALSE);
     InitCart(iVM);
 
     // too slow to do anytime but app startup
@@ -1954,9 +1982,9 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     if (bCartType == CART_BOB)
     {
         if (addr >= 0x8ff6 && addr <= 0x8ff9)
-            BankCart(iVM, 0, addr - 0x8ff6);
+            BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
         if (addr >= 0x9ff6 && addr <= 0x9ff9)
-            BankCart(iVM, 1, addr - 0x9ff6);
+            BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
     }
 
     // implement SHADOW or MIRROR registers instantly yet quickly without any memcpy!
@@ -2048,6 +2076,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     }
 
     return cpuPeekB(iVM, addr);
+
 }
 
 // currently not used
@@ -2112,9 +2141,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     if (bCartType == CART_BOB)
     {
         if (addr >= 0x8ff6 && addr <= 0x8ff9)
-            BankCart(iVM, 0, addr - 0x8ff6);
+            BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
         if (addr >= 0x9ff6 && addr <= 0x9ff9)
-            BankCart(iVM, 1, addr - 0x9ff6);
+            BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
     }
 
     switch ((addr >> 8) & 255)
