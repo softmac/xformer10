@@ -129,9 +129,9 @@ typedef HRESULT (*DDProc)(GUID FAR *, LPDIRECTDRAW FAR *, IUnknown FAR *);
 
 #ifdef WINXP
 #define CreateProc DirectDrawCreate
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
 #pragma comment(linker, "/defaultlib:ddraw")
-#endif
+// #endif
 #else
 DDProc CreateProc;
 #endif
@@ -173,11 +173,11 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 
     if (dd == NULL)
         {
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
         if (FAILED(CreateProc(NULL, &dd, NULL)) ||      // Inialize Direct Draw
             FAILED(dd->lpVtbl->SetCooperativeLevel(dd, hwndApp,     // Setup the cooperation with Windows
             DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_ALLOWMODEX)))
-#endif
+// #endif
             return FALSE;
         }
 

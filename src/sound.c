@@ -379,7 +379,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
         }
 #endif
 
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
         // we have now filled the buffer
         if (iCurSample == SAMPLES_PER_VOICE)
         {
@@ -397,7 +397,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
             sCurBuf = -1;    // need to find a new buffer to write to next time
         }
-#endif
+// #endif
 #endif // #ifdef XFORMER
     }
 
@@ -838,9 +838,9 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
         DebugStr("Calling waveOutWrite: pwhdr = %08X, hdr # = %d\n", pwhdr, pwhdr - vi.rgwhdr);
 #endif
 
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
         waveOutWrite(hWave, pwhdr, sizeof(WAVEHDR));
-#endif
+// #endif
 
 
 #endif// ATARIST
@@ -850,7 +850,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
 void UninitSound()
 {
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     if (hWave)
         {
         int iHdr;
@@ -864,7 +864,7 @@ void UninitSound()
         waveOutClose(hWave);
         //fclose(fp);
         }
-#endif
+// #endif
 
     hWave = NULL;
     vi.fWaveOutput = FALSE;
@@ -880,7 +880,7 @@ void InitSound()
 
 // figure out a real way to turn sound on/off if you want to, probably not per-vm?
 
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     iMac = waveOutGetNumDevs();
 
     for (i = 0; i < iMac; i++)
@@ -954,7 +954,7 @@ void InitSound()
         }
         //fp = fopen("c:\\danny\\8bit\\out.txt", "w");
     } else GetLastError();
-#endif
+// #endif
 }
 
 // do we really want to allow each VM to independently decide to do MIDI or not?
@@ -967,7 +967,7 @@ void InitMIDI(int iVM)
     if (!rgvm[iVM].fMIDI)
         return;
 
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     iMac = midiOutGetNumDevs();
 
     //DebugStr("number of MIDI output devices = %d\n", iMac);
@@ -1002,12 +1002,12 @@ void InitMIDI(int iVM)
 
             }
         }
-#endif
+// #endif
 }
 
 void InitJoysticks()
 {
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     int i, j = 0, nj;
     MMRESULT mm;
     JOYCAPS jc;
@@ -1038,14 +1038,14 @@ void InitJoysticks()
         }
     }
     vi.njc = j;    // this is how many actual joysticks are plugged in, and we compacted the array of them
-#endif
+// #endif
 }
 
 // globals, each warm and cold start will glitch the other VMs
 //
 void CaptureJoysticks()
 {
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     int i;
     MMRESULT mm;
 
@@ -1058,15 +1058,15 @@ void CaptureJoysticks()
         mm = joySetThreshold(JOYSTICKID1 + i, (vi.rgjc[i].wXmax - vi.rgjc[i].wXmin) / 8);
         //mm = joySetCapture(vi.hWnd, JOYSTICKID1+i, 100, TRUE); // doesn't work, so we just poll
     }
-#endif
+// #endif
 }
 
 void ReleaseJoysticks()
 {
-#if !defined(_M_ARM)
+// #if !defined(_M_ARM)
     for (int z = 0; z < NUM_JOYDEVS; z++)
         //joyReleaseCapture(JOYSTICKID1 + z)
         ;
 
-#endif
+// #endif
 }
