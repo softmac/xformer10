@@ -1345,7 +1345,7 @@ int CALLBACK WinMain(
     // cloud support - clear the share memory thread ID
     //*(DWORD *)&vi.pbFrameBuf[1280*720] = 0;
 
-    return (msg.wParam); // Returns the value from PostQuitMessage
+    return (int)(INT_PTR)(msg.wParam); // Returns the value from PostQuitMessage
 }
 
 int PrintScreenStats()
