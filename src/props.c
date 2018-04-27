@@ -122,9 +122,16 @@ int AddVM(int type)
         // Make a thread for this VM and tell it which VM it is
         iThreadVM[iVM] = iVM;
         fKillThread[iVM] = FALSE;
+
+#pragma warning(push)
+#pragma warning(disable:4152) // function/data pointer conversion
+
         // default stack size of 1M is unnecessary
         if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[iVM], 0, NULL))
             f = FALSE;
+
+#pragma warning(pop)
+
     }
 
     if (f)
@@ -400,9 +407,16 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                     // create a thread to execute this VM
                     iThreadVM[i] = i;
                     fKillThread[i] = FALSE;
+
+#pragma warning(push)
+#pragma warning(disable:4152) // function/data pointer conversion
+
                     // default stack size of 1M is unnecessary
                     if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
                         f = FALSE;
+
+#pragma warning(pop)
+
                 }
             }
             if (f)
