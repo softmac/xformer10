@@ -951,6 +951,7 @@ lCable:
 #endif
 
 lExit:
+    ODS("SIOV %02x into %04x aux %04x returns %02x\n", wCom, wBuff, wSector, wRetStat);
     cpuPokeB (iVM, 0x303,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);

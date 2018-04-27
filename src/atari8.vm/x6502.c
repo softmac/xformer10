@@ -755,6 +755,18 @@ HANDLER(op11)
     HANDLER_END();
 }
 
+// SLO (zp),Y
+
+HANDLER(op13)
+{
+    EA_zpYindR(iVM);
+    ASL_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ORA_com(iVM);
+    wLeft -= (((BYTE)regEA == 0xff) ? 6 : 5);   // best guess
+    HANDLER_END();
+}
+
 // ORA zp,X
 
 HANDLER(op15)
@@ -771,6 +783,18 @@ HANDLER(op16)
 {
     EA_zpXW(iVM);
     ASL_zp(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
+// SLO zp,X
+
+HANDLER(op17)
+{
+    EA_zpXW(iVM);
+    ASL_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ORA_com(iVM);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2401,11 +2425,11 @@ PFNOP jump_tab[256] =
     op10,
     op11,
     unused,
-    unused,
+    op13,
     unused,
     op15,
     op16,
-    unused,
+    op17,
     op18,
     op19,
     op1a,
@@ -2690,6 +2714,7 @@ void __cdecl Go6502(int iVM)
                     //    ODS("DELAY!\n");
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
+                    UnpackP(iVM);   // unpack the I bit being set
                 }
             }
             else
@@ -2702,6 +2727,7 @@ void __cdecl Go6502(int iVM)
                     //ODS("DLI at %02x\n", wLeft);
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
+                    UnpackP(iVM);   // unpack the I bit being set
                 }
             }
             wNMI = 0;
