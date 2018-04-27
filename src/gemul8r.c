@@ -3546,10 +3546,11 @@ break;
             chFN[0] = 0;    // necessary!
             f = OpenTheFile(v.iVM, vi.hWnd, chFN, FALSE, 2);
             if (f)
+            {
                 f = LoadProperties(chFN, FALSE); // (we do want the VMs loaded too)
-
-            if (!f)
-                f = CreateAllVMs();
+                //if (!f)
+                //    f = CreateAllVMs();
+            }
 
             sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
             sVM = -1;    // the one in focus may be gone
