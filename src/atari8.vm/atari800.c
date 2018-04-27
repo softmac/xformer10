@@ -2252,7 +2252,10 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         // CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
         // before we change the values. The next time its called will be with the new values.
         if (addr < 0x1d)
+        {
+            //ODS("GTIA %04x=%02x at VCOUNT=%02x clock=%02x\n", addr, b, PeekBAtari(iVM, 0xd40b), DMAMAP[wLeft - 1]);
             ProcessScanLine(iVM);    // !!! should anything else instantly affect the screen?
+        }
 
         bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
