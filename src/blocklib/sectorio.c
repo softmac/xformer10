@@ -278,7 +278,7 @@ BOOL FReadWriteSec9x(DISKINFO *pdi, BOOL fWrite)
                 NULL
                 );
 
-        regs.reg_EBX = (long)pdi->lpBuf;    // buffer
+        regs.reg_EBX = (long)(LONG_PTR)(pdi->lpBuf);    // buffer
         regs.reg_EAX = (fWrite ? 0x0300 : 0x0200) | newcount;   /* read, count */
         regs.reg_ECX = (pdi->track<<8)|((pdi->track>>2)&192)|((pdi->sec+pdi->offsec+1)&63);
         regs.reg_EDX = (pdi->side << 8) | pdi->id;                     /* side, drive */
