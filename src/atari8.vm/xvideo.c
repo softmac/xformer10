@@ -872,10 +872,6 @@ void PSLPrepare(int iVM)
             }
         }
 
-        // we want players, but a constant value, not memory lookup. GRACTL need not be set.
-        else
-            pmg.grafpX = GRAFPX;
-
         // enable MISSILE DMA and enable missiles? (enabling players enables missiles too)
         if ((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1)
         {
@@ -886,14 +882,6 @@ void PSLPrepare(int iVM)
             else
                 pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1));
         }
-
-        // we want missiles, but a constant value, not memory lookup. GRACTL does NOT have to be set!
-        else
-            pmg.grafm = GRAFM;
-
-        // If there is PMG data on this scan line, turn on special bitfield mode to deal with it, and init that buffer
-        // Even if they're off screen now, they could be moved on screen at any moment!
-        sl.fpmg = (pmg.grafpX || pmg.grafm);
 
         // If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
         // Be brave, and if GTIA is turned off halfway down the screen, turn back!
@@ -955,15 +943,16 @@ void PSLReadRegs(int iVM)
     // note if GTIA modes enabled... no collisions to playfield in GTIA
     pmg.fGTIA = sl.prior & 0xc0;
 
-    // check if GRAFPX or GRAFM have changed (with PMG DMA it's only fetched once per scan line, but these can change more often)
-    // !!! If it changes from 0 to non-zero mid scan line, we won't do it, because it's too late, we already put ourselves into
-    // non-bitfield non-fpmg mode and can't change that mid scan line
-
+    // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
     if (!(sl.dmactl & 0x08 && GRACTL & 2))
         pmg.grafpX = GRAFPX;
 
     if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
             pmg.grafm = GRAFM;
+
+    // If there is PMG data on this scan line, turn on special bitfield mode to deal with it, and init that buffer
+    // Even if they're off screen now, they could be moved on screen at any moment!
+    sl.fpmg = (pmg.grafpX || pmg.grafm);
 
     // update the colour registers
 
