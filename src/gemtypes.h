@@ -433,7 +433,7 @@ typedef struct
 
     BOOL     fDebugMode:8;  // NOT USED: 1 = put CPU into debug mode
     BOOL     fNoSCSI:8;     // 1 = disables SCSI support
-    BOOL               :8;  // reserved (deprecated)
+    BOOL     fWheelSensitive:8;  // should we scroll tile mode faster for mouse wheels that aren't sensitive?
     BOOL     fNoTwoBut:8;   // 1 = disables use of two mouse buttons (force F11)
 
     BOOL    _mdCPU:8;       // -1 = Auto, 0 = 68000, 1 = 68010, 2 = 68020, etc.

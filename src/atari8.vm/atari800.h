@@ -102,8 +102,8 @@ short rgPIXELMap[HCLOCKS];
 #define CART_ATARIMAX8 9
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
-BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges
-int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800)
+BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
+int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800), set at Install
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
