@@ -291,7 +291,7 @@ typedef struct
     // cntTick: mode display countdown timer (18 Hz ticks)
 
     BYTE m_fTrace;
-    BYTE pad0B;
+    BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
     BYTE m_mdXLXE, m_cntTick;
 
     BYTE m_iSwapCart;   // which bank is currently swapped in
@@ -422,6 +422,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fHitBP        CANDY_STATE(fHitBP)
 #define bias          CANDY_STATE(bias)
 #define iSwapCart     CANDY_STATE(iSwapCart)
+#define fCartNeedsSwap CANDY_STATE(fCartNeedsSwap)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp            CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)

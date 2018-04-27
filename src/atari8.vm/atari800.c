@@ -1322,6 +1322,7 @@ BOOL __cdecl InitAtari(int iVM)
 //  vi.pregs = &rgbMem[0];
 
     // load the cartridge data
+    fCartNeedsSwap = FALSE; // forget that the old cart wasn't swapped in properly so we don't mess up the new cart
     return ReadCart(iVM, TRUE);
 }
 
@@ -1464,7 +1465,9 @@ BOOL __cdecl ColdbootAtari(int iVM)
     // load the OS
     InitBanks(iVM);
 
-    // load the cartridge
+    // load the proper initial bank back into the cartridge, for cartridges with a RAM bank, make sure it isn't in RAM mode
+    // or it will just erase everything and go to memo pad.
+    iSwapCart = 0;
     InitCart(iVM);
 
     // reset the registers, and say which HW it is running
@@ -1590,7 +1593,24 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 {
     // there are some time travel pointers in the structure, we need to be smart enough not to use them
     if (ppPersist)
+    {
+        // before saving, we need to put the RAM that's swapped into cartridge memory back into RAM so it will be persisted
+        // keep iSwapCart to tell us which bank should be swapped back in, so don't do this twice in a row!
+        // TimeTravel periodic save state could do this slow memory swap (and swap back) but it's a rare case when
+        // cartridges are first executing, they usually run in RAM mode
+        if (rgvm[iVM].rgcart.fCartIn && (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8) && ramtop == 0xa000 && !fCartNeedsSwap)
+        {
+            BYTE swap[8192];
+            _fmemcpy(swap, &rgbMem[0xa000], 8192);
+            _fmemcpy(&rgbMem[0xA000], rgbSwapCart[iVM] + iSwapCart * 8192, 8192);
+            _fmemcpy(rgbSwapCart[iVM] + iSwapCart * 8192, swap, 8192);
+            ramtop = 0xc000;
+            fCartNeedsSwap = TRUE;  // next Execute, swap it back (assumes caller is done with it by then)
+        }
+        
         *ppPersist = (char *)vrgcandy[iVM];
+    }
+    
     if (pcbPersist)
         *pcbPersist = candysize[iVM];
     return TRUE;
@@ -1698,6 +1718,17 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
     cpuInit(PeekBAtari, PokeBAtari);
 
     fStop = 0;    // do not break out of big loop
+
+    // to persist, we had to temporarily put the RAM saved in the cartridge space into memory that is persisted. Put it back.
+    if (fCartNeedsSwap && ramtop == 0xc000)
+    {
+        BYTE swap[8192];
+        _fmemcpy(swap, &rgbMem[0xa000], 8192);
+        _fmemcpy(&rgbMem[0xa000], rgbSwapCart[iVM] + iSwapCart * 8192, 8192);
+        _fmemcpy(rgbSwapCart[iVM] + iSwapCart * 8192, swap, 8192);
+        ramtop = 0xa000;
+        fCartNeedsSwap = FALSE;
+    }
 
     do {
 
