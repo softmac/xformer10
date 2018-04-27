@@ -32,14 +32,14 @@ __inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
 {
     // stub out for now
 
-	iVM;  pch; pPC;
+    iVM;  pch; pPC;
 
     return TRUE;
 }
 
 __inline BYTE cpuPeekB(int iVM, ADDR addr)
 {
-	Assert((addr & 0xFFFF0000) == 0);
+    Assert((addr & 0xFFFF0000) == 0);
 
     return rgbMem[addr];
 }
@@ -56,46 +56,46 @@ __inline WORD cpuPeekW(int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-	return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
+    return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
 }
 
 __inline BOOL cpuPokeW(int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-	rgbMem[addr + 0] = (w & 255);
-	rgbMem[addr + 1] = ((w >> 8) & 255);
-	return TRUE;
+    rgbMem[addr + 0] = (w & 255);
+    rgbMem[addr + 1] = ((w >> 8) & 255);
+    return TRUE;
 }
 
 __inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
 {
     extern PFNB pfnPeekB;
-	extern PFNL pfnPokeB;
+    extern PFNL pfnPokeB;
 
-	// global - each VM needs to set this every time a VM is Execute'd
-	pfnPeekB = pvmPeekB;
-	pfnPokeB = pvmPokeB;
+    // global - each VM needs to set this every time a VM is Execute'd
+    pfnPeekB = pvmPeekB;
+    pfnPokeB = pvmPokeB;
 
     return TRUE;
 }
 
 __inline BOOL cpuReset(int iVM)
 {
-	
-	// clear all registers
 
-	regA = 0;
-	regX = 0;
-	regY = 0;
-	regP = 0xFF;
+    // clear all registers
 
-	// set initial SP = $FF
+    regA = 0;
+    regX = 0;
+    regY = 0;
+    regP = 0xFF;
 
-	regSP = 0x1FF;
-	regPC = cpuPeekW(iVM, 0xFFFC);
+    // set initial SP = $FF
 
-	return TRUE;
+    regSP = 0x1FF;
+    regPC = cpuPeekW(iVM, 0xFFFC);
+
+    return TRUE;
 }
 
 
