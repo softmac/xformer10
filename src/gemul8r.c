@@ -443,6 +443,7 @@ void FixAllMenus()
     CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
+    CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
@@ -3232,6 +3233,11 @@ break;
 
             break;
 
+        // toggle how sensitive the mouse wheel is
+        case IDM_WHEELSENS:
+            v.fWheelSensitive = !v.fWheelSensitive;
+            FixAllMenus();
+
         // Delete this instance, and choose another
         case IDM_DELVM:
 
@@ -3813,7 +3819,7 @@ break;
         break;
 
     case WM_MOUSEWHEEL:
-        short int offset = GET_WHEEL_DELTA_WPARAM(uParam); // must be short to catch the sign
+        short int offset = GET_WHEEL_DELTA_WPARAM(uParam) * (v.fWheelSensitive ? 8 : 1); // must be short to catch the sign
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
         if (fZoom)

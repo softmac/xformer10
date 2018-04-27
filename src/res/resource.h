@@ -25,7 +25,7 @@
 #define IDM_DEBUGGER                    40210
 #define IDM_EXIT                        40220
 
-#define IDM_VM1							41999	// leave lots of room for many more before this one
+#define IDM_VM1							41999	// leave lots of room for many more before this one (thousands)
 
 #define IDM_FULLSCREEN                  40231
 #define IDM_STRETCH                     40232
@@ -44,7 +44,7 @@
 #define IDM_D4U                         40247
 #define IDM_CART                        40248
 #define IDM_NOCART						40249
-#define IDM_CARTSEP						40250
+#define IDM_WHEELSENS					40250
 
 #define IDM_ABOUT                       40260
 

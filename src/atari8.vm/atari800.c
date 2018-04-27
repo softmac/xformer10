@@ -1025,10 +1025,10 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     // 8k banks, given as contents, not the address
     else if (bCartType == CART_XEGS)
     {
-        while ((unsigned int)value >= cb >> 13)
+        while (value >= cb >> 13)
             value -= (BYTE)(cb >> 13);
 
-        if (value < (int)(cb << 13))
+        if (value < (cb << 13))
             _fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
     }
 }
