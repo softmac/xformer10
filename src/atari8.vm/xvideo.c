@@ -930,7 +930,7 @@ void PSLPostpare(int iVM)
     }
 }
 
-void PSLReadRegs(int iVM)
+void PSLReadRegs(int iVM, short start, short stop)
 {
     ///////////////////////////////////////////////////////////////////////////
     // 2. RE-READ ALL THE H/W REGISTERS TO ALLOW THINGS TO CHANGE MID-SCAN LINE
@@ -942,17 +942,6 @@ void PSLReadRegs(int iVM)
 
     // note if GTIA modes enabled... no collisions to playfield in GTIA
     pmg.fGTIA = sl.prior & 0xc0;
-
-    // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
-    if (!(sl.dmactl & 0x08 && GRACTL & 2))
-        pmg.grafpX = GRAFPX;
-
-    if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
-            pmg.grafm = GRAFM;
-
-    // If there is PMG data on this scan line, turn on special bitfield mode to deal with it, and init that buffer
-    // Even if they're off screen now, they could be moved on screen at any moment!
-    sl.fpmg = (pmg.grafpX || pmg.grafm);
 
     // update the colour registers
 
@@ -998,6 +987,33 @@ void PSLReadRegs(int iVM)
             pmg.hposmPixStop[i] = pmg.hposmPixStart[i] + (2 << pmg.cwm[i]);    // the pixel after the last one affected, compare to stop
         }
     }
+
+    // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
+    if (!(sl.dmactl & 0x08 && GRACTL & 2))
+        pmg.grafpX = GRAFPX;
+
+    if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
+        pmg.grafm = GRAFM;
+
+    // If there is PMG data on this scan line, turn on special bitfield mode to deal with it, and init that buffer
+    // Even if they're off screen now, they could be moved on screen at any moment!
+    sl.fpmg = (pmg.grafpX || pmg.grafm);
+
+    // Make sure a PMG is really showing in this section we're drawing because going into PMG mode is SLOW!
+    if (sl.fpmg)
+    {
+        BOOL fp = FALSE;
+        for (int i = 0; i < 4; i++)
+        {
+            if ((pmg.hpospPixStart[i] < stop && pmg.hpospPixStop[i] > start) || (pmg.hposmPixStart[i] < stop && pmg.hposmPixStop[i] > start))
+            {
+                fp = TRUE;
+                break;
+            }
+        }
+        if (!fp)
+            sl.fpmg = FALSE;
+    }
 }
 
 // We have wLeft CPU cycles left to execute on this scan line.
@@ -1030,9 +1046,50 @@ BOOL ProcessScanLine(int iVM)
 
     PSL = cclock;    // next time we're called, start from here
 
+    // We may need to draw more than asked for, to draw an integer # of bytes of a scan mode at a time (!!! current limitation)
+    // Figure out i & iTop, the beginning and ending pixel we have to draw to (iTop may be > cclock which will have to grow)
+
+    short bbars = 0, i = 0, iTop = 0;
+    if (sl.modelo >= 2)
+    {
+        if ((sl.dmactl & 3) == 1)
+            bbars = (X8 - NARROWx) >> 1;    // width of the "black" bar on the side of the visible playfield area
+        else if ((sl.dmactl & 3) == 2)
+            bbars = (X8 - NORMALx) >> 1;
+
+        // i is our loop inside each case statement for each possible mode. Set up where in the loop we need to start
+        // skip the portion inside the bar to where we start drawing real data
+        i = cclockPrev - bbars;
+        if (cclockPrev < bbars)
+            i = 0;
+
+        // i is a bit index, now make it a segment index, where each scan mode likes to create so many bits at a time per segment
+        i /= BitsAtATime(iVM);
+
+        // and where do we stop drawing? Don't go into the right hand bar
+        iTop = cclock - bbars;
+        if (iTop <= 0)
+            iTop = 0;    // inside the left side bar
+        else if (iTop > X8 - bbars - bbars)
+            iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);    // inside the right side bar
+        else
+        {
+            iTop -= 1;    // any remainder needs to increase the quotient by 1 (any partial segment required fills the whole segment)
+            iTop = iTop / BitsAtATime(iVM) + 1;
+        }
+
+        // We kind of have to draw more than asked to, so increment our bounds
+        short newTop = iTop * BitsAtATime(iVM) + bbars;
+        if (newTop > cclock)
+        {
+            cclock = newTop;
+            PSL = cclock;
+        }
+    }
+
     // now we are responsible for drawing starting from location cclockPrev up to but not including cclock
 
-    PSLReadRegs(iVM);    // read our hardware registers to find brand-new values to use starting this cycle
+    PSLReadRegs(iVM, cclockPrev, cclock);    // read our hardware registers to find brand-new values to use starting this cycle
 
     ////////////////////////////////////////////////////////////////
     // 3. DRAW THIS PORTION OF THE SCAN LINE - THIS IS A LOT OF CODE
@@ -1040,8 +1097,7 @@ BOOL ProcessScanLine(int iVM)
 
     // PMG can exist outside the visible boundaries of this line, so we need an extra long line to avoid complicating things
     BYTE rgpix[NTSCx];    // an entire NTSC scan line, including retrace areas, used in PMG bitfield mode
-
-    int i, j;
+    int j;
 
     // Based on the graphics mode, fill in a scanline's worth of data. It might be the actual data, or if PMG exist on this line,
     // a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
@@ -1105,76 +1161,38 @@ BOOL ProcessScanLine(int iVM)
         // narrow playfield - if we're in bitfield mode and GTIA GR. 9-11, the background colour has to occupy the lower nibble only.
         // in GR.10, it's the index to the background colour, since the background colour itself is 8 bits and won't fit in a nibble.
 
-        short bbars = 0;
-        if (sl.modelo >= 2)
+        if (bbars)
         {
-            if ((sl.dmactl & 3) == 1)
-                bbars = (X8 - NARROWx) >> 1;    // width of the "black" bar on the side of the visible playfield area
-            else if ((sl.dmactl & 3) == 2)
-                bbars = (X8 - NORMALx) >> 1;
-
-            if (bbars)
-            {
-                if (cclockPrev < bbars)
-                    memset(qch + cclockPrev, bkbk, min(bbars, cclock) - cclockPrev);        // draw background colour before we start real data
-                if (cclock >= X8 - bbars)
-                    memset(qch + max(cclockPrev, X8 - bbars), bkbk, cclock - (max(cclockPrev, X8 - bbars)));    // after finished real data
-            }
+            if (cclockPrev < bbars)
+                memset(qch + cclockPrev, bkbk, min(bbars, cclock) - cclockPrev);        // draw background colour before we start real data
+            if (cclock >= X8 - bbars)
+                memset(qch + max(cclockPrev, X8 - bbars), bkbk, cclock - (max(cclockPrev, X8 - bbars)));    // after finished real data
         }
 
-        qch += cclockPrev;
-
-        // i is our loop inside each case statement for each possible mode. Set up where in the loop we need to start
-        // skip the portion inside the bar to where we start drawing real data
-        i = cclockPrev - bbars;
-        if (cclockPrev < bbars)
-        {
-            qch += (bbars - cclockPrev);
-            i = 0;
-        }
-
-        // i is a bit index, now make it a segment index, where each scan mode likes to create so many bits at a time per segment
-        i /= BitsAtATime(iVM);
-
-        // and where do we stop drawing? Don't go into the right hand bar
-        short iTop = cclock - bbars;
-        if (iTop <= 0)
-            iTop = 0;    // inside the left side bar
-        else if (iTop > X8 - bbars - bbars)
-            iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);    // inside the right side bar
-        else
-        {
-            iTop -= 1;    // any remainder needs to increase the quotient by 1 (any partial segment required fills the whole segment)
-            iTop = iTop / BitsAtATime(iVM) + 1;
-        }
-
-        // nothing to draw! Our window is zero
-        if (i == iTop)
+        // nothing to draw! Our window is zero. Now that we've drawn the bars, if necessary, we are done
+        if (sl.modelo >=2 && i == iTop)
         {
             PSLPostpare(iVM);
             return TRUE;
         }
 
-        // We kind of have to draw more than asked to, so increment our bounds
-        short newTop = iTop * BitsAtATime(iVM) + bbars;
-        if (newTop > cclock)
-        {
-            cclock = newTop;
-            PSL = cclock;
-        }
+        // bring our buffer up to where we left off, but at least to the end of the bars
+        qch += max(cclockPrev, bbars);
 
-#if 0 // !!! This shouldn't be necessary?
+#if 0 // This shouldn't be necessary, the graphics mode touches every pixel
         if (sl.fpmg)
             // zero out the section we'll be using, now that we know the proper value of cclock
             _fmemset(&rgpix[(NTSCx - X8) >> 1] + cclockPrev, 0, cclock - cclockPrev);
 #endif
 
-        // just fill in whatever we need to indicate background colour for our portion if there is no mode
-        if (sl.modelo < 2)
-            _fmemset(qch, bkbk, cclock - cclockPrev);
-
         switch (sl.modelo)
         {
+
+        case 0:
+        case 1:
+            // just fill in whatever we need to indicate background colour for our portion if there is no mode
+            _fmemset(qch, bkbk, cclock - cclockPrev);
+            break;
 
         // GR.0 and descended character GR.0
         case 2:
@@ -2224,7 +2242,7 @@ BOOL ProcessScanLine(int iVM)
     }
 
     // may have been altered if we were in BITFIELD mode b/c PMG are active. Put them back to what they were
-    if (!(sl.prior & 0xc0))
+    if (sl.fpmg && !(sl.prior & 0xc0))
     {
         sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
         sl.colpfX = COLPFX;
