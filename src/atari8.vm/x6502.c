@@ -602,12 +602,16 @@ __inline void SIOCheck(int iVM)
     if ((regPC == 0xe459 || regPC == 0xe959) && (mdXLXE == md800 || (wPBDATA & 1)))
     {
         // this is our SIO hook!
+        PackP(iVM);
         SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
+        UnpackP(iVM);
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
         // this is our XE BUS hook!
+        PackP(iVM);
         SIOV(iVM);
+        UnpackP(iVM);
     }
 }
 

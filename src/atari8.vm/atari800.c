@@ -1403,8 +1403,8 @@ BOOL __cdecl UninitAtariDisks(int iVM)
 //
 BOOL __cdecl WarmbootAtari(int iVM)
 {
-    // tell the CPU which
-    cpuInit(PeekBAtari, PokeBAtari);
+    // tell the CPU which (done in Execute)
+    //cpuInit(PeekBAtari, PokeBAtari);
 
     //ODS("\n\nWARM START\n\n");
     NMIST = 0x20 | 0x1F;
@@ -1470,7 +1470,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     iSwapCart = 0;
     InitCart(iVM);
 
-    // reset the registers, and say which HW it is running
+    // reset the registers
     cpuReset(iVM);
 
     // XL's need hardware to cold start, and can only warm start through emulation.
@@ -1495,6 +1495,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
     {
         cpuPokeB(iVM, addr,0xFF);
     }
+
+    NMIST = 0x20 | 0x1F;    // the one in WARMSTART might get undone from the above clearing?
 
     // CTIA/GTIA reset
 
