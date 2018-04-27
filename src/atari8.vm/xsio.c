@@ -769,7 +769,7 @@ lNAK:
             _lseek(pdrive->h,(ULONG)((wSector-1) * lcbSector) + cbSIO2PCFudge,SEEK_SET);
 
             if ((wCom == 'R'))    // wStat is only checked for cassette I/O not disk I/O, breaks apps // && (wStat == 0x40))
-                {
+            {
 #if 0
                 printf("Read: sector = %d  wBuff = $%4x  wBytes = %d  lcbSector = %ld  md = %d\n",
                     wSector, wBuff, wBytes, lcbSector, md);
@@ -779,50 +779,50 @@ lNAK:
                 if (wBuff >= ramtop)
                     wRetStat = SIO_OK;
                 else if (md == MD_FILE)
-                    {
+                {
                     // read a normal file as an 8-bit file in a virtual disk
 
-                    memset(rgb,0,sizeof(rgb));
-                    _fmemset(&rgbMem[wBuff],0,128);
+                    memset(rgb, 0, sizeof(rgb));
+                    _fmemset(&rgbMem[wBuff], 0, 128);
 
                     if (wSector == 360)
-                        {
+                    {
                         // FAT sector
 
-                        rgbMem[wBuff+0] = 0x02;
-                        rgbMem[wBuff+1] = 0xC3;
-                        rgbMem[wBuff+2] = 0x02;
-                        rgbMem[wBuff+3] = 0xC2;
-                        rgbMem[wBuff+4] = 0x02;
-//                        memset(&rgbMem[wBuff+10],0x00,118);
-                        }
+                        rgbMem[wBuff + 0] = 0x02;
+                        rgbMem[wBuff + 1] = 0xC3;
+                        rgbMem[wBuff + 2] = 0x02;
+                        rgbMem[wBuff + 3] = 0xC2;
+                        rgbMem[wBuff + 4] = 0x02;
+                        //                        memset(&rgbMem[wBuff+10],0x00,118);
+                    }
                     else if (wSector == 361)
-                        {
+                    {
                         // directory sector
 
-                        rgbMem[wBuff+0] = 0x42;
-                        rgbMem[wBuff+1] = (BYTE)((pdrive->cb+124L) / 125L);
-                        rgbMem[wBuff+2] = (BYTE)((pdrive->cb+124L) / 32000L);
-                        rgbMem[wBuff+3] = 0x04;
-                        rgbMem[wBuff+4] = 0x00;
-                        memcpy(&rgbMem[wBuff+5],pdrive->name,11);
-                        }
+                        rgbMem[wBuff + 0] = 0x42;
+                        rgbMem[wBuff + 1] = (BYTE)((pdrive->cb + 124L) / 125L);
+                        rgbMem[wBuff + 2] = (BYTE)((pdrive->cb + 124L) / 32000L);
+                        rgbMem[wBuff + 3] = 0x04;
+                        rgbMem[wBuff + 4] = 0x00;
+                        memcpy(&rgbMem[wBuff + 5], pdrive->name, 11);
+                    }
                     else if (wSector >= 4)
-                        {
+                    {
                         // data sector
 
                         if (wSector > 368)   // skip FAT/directory sectors
                             wSector -= 9;
 
-                        _lseek(pdrive->h,(ULONG)((wSector-4) * 125L),SEEK_SET);
+                        _lseek(pdrive->h, (ULONG)((wSector - 4) * 125L), SEEK_SET);
 
-                        if ((rgbMem[wBuff+127] = (BYTE)_read(pdrive->h,&rgbMem[wBuff],125)) < 125)
-                            {
-                            rgbMem[wBuff+125] = 0x00;
-                            rgbMem[wBuff+126] = 0x00;
-                            }
+                        if ((rgbMem[wBuff + 127] = (BYTE)_read(pdrive->h, &rgbMem[wBuff], 125)) < 125)
+                        {
+                            rgbMem[wBuff + 125] = 0x00;
+                            rgbMem[wBuff + 126] = 0x00;
+                        }
                         else
-                            {
+                        {
                             wSector++;
 
                             if (wSector >= 360)
@@ -830,16 +830,34 @@ lNAK:
                             else if (wSector > 720)
                                 wSector = 0;
 
-                            rgbMem[wBuff+125] = (BYTE)(wSector >> 8);
-                            rgbMem[wBuff+126] = (BYTE)wSector;
-                            }
+                            rgbMem[wBuff + 125] = (BYTE)(wSector >> 8);
+                            rgbMem[wBuff + 126] = (BYTE)wSector;
                         }
                     }
-                else if (_read(pdrive->h,&rgbMem[wBuff],wBytes) < wBytes)
+                }
+                else if (_read(pdrive->h, &rgbMem[wBuff], wBytes) < wBytes)
                     wRetStat = SIO_DEVDONE;
                 else
+                {
+                    // now pretend 7 jiffies elapsed for apps that time disk sector reads (Repton)
+                    BYTE jif = 7;
+                    // reading the same sector as last time takes twice as long
+                    if (wSector == wLastSIOSector)
+                        jif = 14;
+                    BYTE oldjif = rgbMem[20];
+                    rgbMem[20] = oldjif + jif;
+                    if (oldjif >= (256 - jif))
+                    {
+                        oldjif = rgbMem[19];
+                        rgbMem[19]++;
+                        if (oldjif == 255)
+                            rgbMem[18]++;
+                    }
+
                     wRetStat = SIO_OK;
+                    wLastSIOSector = wSector;
                 }
+            }
             else if ((wCom == 'W') || (wCom == 'P'))
                 {
                 //if (wStat != 0x80)    // only the cassette handler checks this, not disk I/O, this would break apps
@@ -951,7 +969,7 @@ lCable:
 #endif
 
 lExit:
-    ODS("SIOV %02x into %04x aux %04x returns %02x\n", wCom, wBuff, wSector, wRetStat);
+    //ODS("SIOV %02x into %04x aux %04x returns %02x\n", wCom, wBuff, wSector, wRetStat);
     cpuPokeB (iVM, 0x303,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
