@@ -1793,12 +1793,14 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                                 fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                                 if (fSERIN >= NTSCY)
                                     fSERIN -= (NTSCY - 1);    // never be 0, that means stop
+#if 0
                                 // hopefully this means it's OK to start now
                                 if (IRQEN & 0x20)
                                 {
                                     IRQST &= ~0x20;
                                     //ODS("TRIGGER SERIN\n");
                                 }
+#endif
                             }
                         }
                     }
@@ -1926,6 +1928,25 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     fSERIN -= (NTSCY - 1);    // never be 0, that means stop
                 //ODS("TRIGGER SERIN\n");
                 IRQST &= ~0x20;
+
+#if 0   // this doesn't help any known app, and kind of breaks hardb
+                // now pretend 7 jiffies elapsed for apps that time disk sector reads
+                BYTE jif = 7;
+                // reading the same sector as last time takes twice as long
+                short wSector = rgSIO[2] | (short)rgSIO[3] << 8;
+                if (wSector == wLastSIOSector)
+                    jif = 14;
+                BYTE oldjif = rgbMem[20];
+                rgbMem[20] = oldjif + jif;
+                if (oldjif >= (256 - jif))
+                {
+                    oldjif = rgbMem[19];
+                    rgbMem[19]++;
+                    if (oldjif == 255)
+                        rgbMem[18]++;
+                }
+                wLastSIOSector = wSector;
+#endif
             }
 
             // POKEY timers
