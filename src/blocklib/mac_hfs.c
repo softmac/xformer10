@@ -5,10 +5,11 @@
 
     File manipulation code for Macintosh HFS disks
 
-    Copyright (C) 1998-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1998-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/09/1998  darekm
+    04/27/2018  darekm      cleanup for 10.0 release for Windows 10
 
 ****************************************************************************/
 
@@ -47,7 +48,7 @@ typedef union B_node
         ND      nd;
         unsigned char    *rgbX;
 
-		unsigned char rgb[512];
+        unsigned char rgb[512];
         unsigned short   *rgofs;
 } NODE;
 
@@ -85,7 +86,7 @@ typedef struct B_rec
             unsigned char rgbDataExtent[12];
             unsigned char rgbRsrcExtent[12];
         
-			unsigned short dirFlag;
+            unsigned short dirFlag;
             unsigned short dirVal;
             unsigned long dirID;
             unsigned long dirCrDat;
@@ -145,9 +146,9 @@ void SzFrom8_3(char *szTo, char *szFrom)
 
     for (i = 0; i < 12; i++)
         {
-		char sz[2];
-		sz[0] = szFrom[i - (i > 8)];
-		sz[1] = 0;
+        char sz[2];
+        sz[0] = szFrom[i - (i > 8)];
+        sz[1] = 0;
 
         if (i == 8)
             sz[0] = '.';
@@ -205,7 +206,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
         NODE node;
         BTHN bthn;
         int  lFirstCatBlock;
-		int  lBlockSize;
+        int  lBlockSize;
 
         if (szDir[0] != 0)
             goto Lfindit;
@@ -219,7 +220,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
 
         if (FRawDiskRWPdi(pdi, 0))
             {
-			lBlockSize = (rgb[22] << 8) + rgb[23];
+            lBlockSize = (rgb[22] << 8) + rgb[23];
 
             lFirstCatBlock = (rgb[150] << 8) + rgb[151];
             lFirstCatBlock *= lBlockSize / 512;
@@ -502,8 +503,8 @@ Lfindit:
         // 400K/800K Mac disk with flat file directory
 
         int  lFirstCatBlock;
-		int  lBlockSize;
-		int  cCatBlocks;
+        int  lBlockSize;
+        int  cCatBlocks;
 
         // this is flat directory!
 
@@ -519,7 +520,7 @@ Lfindit:
 
         if (FRawDiskRWPdi(pdi, 0))
             {
-			lBlockSize = (rgb[22] << 8) + rgb[23];
+            lBlockSize = (rgb[22] << 8) + rgb[23];
 
 #if 0
             lFirstCatBlock = (rgb[150] << 8) + rgb[151];
@@ -527,7 +528,7 @@ Lfindit:
 #endif
             lFirstCatBlock = rgb[15];
 
-			cCatBlocks = (rgb[16] << 8) + rgb[17];
+            cCatBlocks = (rgb[16] << 8) + rgb[17];
 
 #if TRACEDISK
             printf("Block size = %d\n", lBlockSize);
@@ -625,7 +626,7 @@ Lfindit:
         int cbSector = 128;
         //int vtocSec  = 360;
         int rootSec  = 361;
-		BYTE rgbA[8 * 256];
+        BYTE rgbA[8 * 256];
 
         if (lSize >= (180*1024))
             cbSector = 256;
@@ -795,7 +796,7 @@ Lnextdir:
 
     strcpy(pdi->szCwd, szDir);
 
-	return count;
+    return count;
 }
 
 
@@ -811,7 +812,7 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
     if (pdi->fst == FS_HFS)
         {
         int  lFirstBlock;
-		int  lBlockSize;
+        int  lBlockSize;
 
         // Read the Master Directory Block to find the start of
         // the Catalog file.
@@ -822,7 +823,7 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
 
         if (FRawDiskRWPdi(pdi, 0))
             {
-			lBlockSize = (rgb[22] << 8) + rgb[23];
+            lBlockSize = (rgb[22] << 8) + rgb[23];
             lFirstBlock = rgb[29];
 
 #if TRACEDISK
@@ -853,37 +854,37 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
         }
     else if (pdi->fst == FS_ATARIDOS || pdi->fst == FS_MYDOS)
     {
-		ULONG count = pfd->nFileSizeHigh * 4 / pdi->cbSector;	// # of sectors in this file
-		WORD sec = *(WORD *)(pfd->cAlternateFileName);	// starting sector, 1 based
+        ULONG count = pfd->nFileSizeHigh * 4 / pdi->cbSector;    // # of sectors in this file
+        WORD sec = *(WORD *)(pfd->cAlternateFileName);    // starting sector, 1 based
 
-		for (unsigned int j = 0; j < count; j++)
-		{
-			pdi->count = 1;
-			pdi->sec = (sec - 1) * 128 / pdi->cbSector;	// which 512 byte sector number would this be found in?
-			pdi->lpBuf = rgb;
+        for (unsigned int j = 0; j < count; j++)
+        {
+            pdi->count = 1;
+            pdi->sec = (sec - 1) * 128 / pdi->cbSector;    // which 512 byte sector number would this be found in?
+            pdi->lpBuf = rgb;
 
-			if (!FRawDiskRWPdi(pdi, 0))
-			{
-				cb = 0;
-				break;
-			}
+            if (!FRawDiskRWPdi(pdi, 0))
+            {
+                cb = 0;
+                break;
+            }
 
-			int pos = ((sec - 1) % 4) << 7;	// where in the buffer did the 128 bytes we're interested in go?
+            int pos = ((sec - 1) % 4) << 7;    // where in the buffer did the 128 bytes we're interested in go?
 
-			unsigned int cbT = rgb[pos + 127];
-			if (cbT != 125 && j != count - 1)	// only the last sector should be short, this is a corrupted file
-				return 0;
+            unsigned int cbT = rgb[pos + 127];
+            if (cbT != 125 && j != count - 1)    // only the last sector should be short, this is a corrupted file
+                return 0;
 
-			// just provide the memory requirement if NULL
-			if (pb)
-			{
-				memcpy(pb, &rgb[pos], cbT);	// copy the 125 bytes actually used
-				pb += cbT;
-			}
-			cb += cbT;
+            // just provide the memory requirement if NULL
+            if (pb)
+            {
+                memcpy(pb, &rgb[pos], cbT);    // copy the 125 bytes actually used
+                pb += cbT;
+            }
+            cb += cbT;
 
-			sec = rgb[pos + 126] | ((rgb[pos + 125] & 3) << 8);	// next sector
-		}
+            sec = rgb[pos + 126] | ((rgb[pos + 125] & 3) << 8);    // next sector
+        }
     }
     else if (pdi->fst == FS_FAT12 || pdi->fst == FS_FAT16)
         {
@@ -1009,7 +1010,7 @@ ULONG CbReadFileContents(DISKINFO *pdi, unsigned char *pb, WIN32_FIND_DATA *pfd)
             }
         }
 
-	return cb;
+    return cb;
 }
 
 
