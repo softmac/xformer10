@@ -70,7 +70,9 @@
 #include <ddraw.h>
 #include "shlobj.h"     // from the Platform SDK, defines for SHFOLDER.DLL
 
+#pragma warning (disable:4206) // nonstandard extension: translation unit empty
 #pragma warning (disable:4214) // nonstandard extension: bitfield types
+#pragma warning (disable:4220) // varargs matches remaining paramaters
 
 // each type of VM installed into Gem has a function table we can call
 
@@ -102,32 +104,32 @@ typedef void *(__fastcall *PHNDLR)(void *, long);
 //
 #define MAX_VM 1584 // 99 or 396
 
-#define wJoySens  3			// set higher for smaller dead zone, no lower than 3
+#define wJoySens  3            // set higher for smaller dead zone, no lower than 3
 
 // I assume this is acceptable to all VM types
 #define SAMPLE_RATE 48000
-#define SNDBUFS     6		// we fill and send two right away to keep from starving, a 1/30s latency
-#define SAMPLES_PER_VOICE SAMPLE_RATE / 60	// 1/60th of a second, one buffer per VBI
+#define SNDBUFS     6        // we fill and send two right away to keep from starving, a 1/30s latency
+#define SAMPLES_PER_VOICE SAMPLE_RATE / 60    // 1/60th of a second, one buffer per VBI
 
 //
 // globals used by the app and not persisted, extern ones are visible from other files
 //
 
-static int sWheelOffset;	// for scrolling tiles using the pad or touchscreen
-extern int sVM;				// which tile you're hovering over, -1 means none so this must be signed
-WORD fBrakes;				// run at full speed or emulated speed?
-ULONGLONG cEmulationSpeed;	// each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
+static int sWheelOffset;    // for scrolling tiles using the pad or touchscreen
+extern int sVM;                // which tile you're hovering over, -1 means none so this must be signed
+WORD fBrakes;                // run at full speed or emulated speed?
+ULONGLONG cEmulationSpeed;    // each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
 
-extern BOOL fDebug;			// enables DEBUG output
-extern void ODS(char *, ...);	// my printf to send to the output window, since the normal printf just goes to the ether
+extern BOOL fDebug;            // enables DEBUG output
+extern void ODS(char *, ...);    // my printf to send to the output window, since the normal printf just goes to the ether
 
 // 
 // We will make one thread per VM 
 //
-HANDLE hGoEvent[MAX_VM];	// please execute
-HANDLE hDoneEvent[MAX_VM];	// I'm done executing
-BOOL fKillThread[MAX_VM];	// time to die
-int iThreadVM[MAX_VM];		// which VM a thread is
+HANDLE hGoEvent[MAX_VM];    // please execute
+HANDLE hDoneEvent[MAX_VM];    // I'm done executing
+BOOL fKillThread[MAX_VM];    // time to die
+int iThreadVM[MAX_VM];        // which VM a thread is
 DWORD WINAPI VMThread(LPVOID l); // thread proc
 
 
@@ -168,58 +170,58 @@ typedef struct
 //
 typedef struct _vminfo
 {
-	PFNL pfnVm;             // function to handle VM operations
-	ULONG ver;              // version
-	char *pchModel;         // default verbose name for this VM
-	ULONG wfHW;             // bit vector of supported hardware models
-	ULONG wfCPU;            // bit vector of supported CPUs
-	ULONG wfRAM;            // bit vector of supported RAM sizes
-	ULONG wfROM;            // bit vector of supported ROM chips
-	ULONG wfMon;            // bit vector of supported monitors
-	
-	// new things added to capabilities to avoid hacky "if (FIs...)" and #ifdef
-	UINT uScreenX;			// how wide is this machine's screen?
-	UINT uScreenY;			// how tall is this machine's screen?
-	int  planes;			// how many colours we support (this power of 2)
-	BYTE *rgbRainbow;		// the 256 colour palette for planes == 8
-	BOOL fUsesCart;			// can you plug cartridges into this machine? (ATARI 800 only)
-	BOOL fUsesMouse;		// does this VM type support a mouse?
-	BOOL fUsesJoystick;		// does this VM type support joysticks?
-	char szFilter[120];		// string of extensions supported for OpenFile dlg
-	char szCartFilter[120]; // if you support a cartridge, their extensions
+    PFNL pfnVm;             // function to handle VM operations
+    ULONG ver;              // version
+    char *pchModel;         // default verbose name for this VM
+    ULONG wfHW;             // bit vector of supported hardware models
+    ULONG wfCPU;            // bit vector of supported CPUs
+    ULONG wfRAM;            // bit vector of supported RAM sizes
+    ULONG wfROM;            // bit vector of supported ROM chips
+    ULONG wfMon;            // bit vector of supported monitors
+    
+    // new things added to capabilities to avoid hacky "if (FIs...)" and #ifdef
+    UINT uScreenX;            // how wide is this machine's screen?
+    UINT uScreenY;            // how tall is this machine's screen?
+    int  planes;            // how many colours we support (this power of 2)
+    BYTE *rgbRainbow;        // the 256 colour palette for planes == 8
+    BOOL fUsesCart;            // can you plug cartridges into this machine? (ATARI 800 only)
+    BOOL fUsesMouse;        // does this VM type support a mouse?
+    BOOL fUsesJoystick;        // does this VM type support joysticks?
+    char szFilter[120];        // string of extensions supported for OpenFile dlg
+    char szCartFilter[120]; // if you support a cartridge, their extensions
 
-	PFNL pfnInstall;        // VM installation (init to say what VM type it is going to be)
-	PFNL pfnUnInstall;      // VM de-installation
-	PFNL pfnInit;           // VM initialization (load any cartridge data, etc.)
-	PFNL pfnUnInit;         // VM uninit
-	PFNL pfnInitDisks;      // VM disk initialization
-	PFNL pfnMountDisk;      // VM disk initialization
-	PFNL pfnUnInitDisks;    // VM disk uninitialization
-	PFNL pfnUnmountDisk;    // VM disk uninitialization
-	PFNL pfnColdboot;       // VM resets hardware (coldboot)
-	PFNL pfnWarmboot;       // VM resets hardware (warmboot)
-	PFNL pfnExec;           // VM execute code
-	PFNL pfnTrace;          // Execute one single instruction in the VM
-	PFNL pfnWinMsg;         // handles Windows messages
-	BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
-	PFNL pfnDumpHW;         // dumps hardware state
-	PFNL pfnMon;			// A debuggin monitor - someday maybe it can only be the Disassemble code part
-	
-	// these are probably unnecessary - it's between you and your CPU, not the VM manager
-	PFNB pfnReadHWByte;     // reads a byte from the VM
-	PFNW pfnReadHWWord;     // reads a word from the VM
-	PFNLL pfnReadHWLong;     // reads a long from the VM
-	PFNL pfnWriteHWByte;    // writes a byte to the VM
-	PFNL pfnWriteHWWord;    // writes a word to the VM
-	PFNL pfnWriteHWLong;    // writes a long to the VM
-	PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
-	PFNL pfnUnlockBlock;    // release memory block in VM
-	PFNP pfnMapAddress;     // convert virtual machine address to flat address
-	PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
+    PFNL pfnInstall;        // VM installation (init to say what VM type it is going to be)
+    PFNL pfnUnInstall;      // VM de-installation
+    PFNL pfnInit;           // VM initialization (load any cartridge data, etc.)
+    PFNL pfnUnInit;         // VM uninit
+    PFNL pfnInitDisks;      // VM disk initialization
+    PFNL pfnMountDisk;      // VM disk initialization
+    PFNL pfnUnInitDisks;    // VM disk uninitialization
+    PFNL pfnUnmountDisk;    // VM disk uninitialization
+    PFNL pfnColdboot;       // VM resets hardware (coldboot)
+    PFNL pfnWarmboot;       // VM resets hardware (warmboot)
+    PFNL pfnExec;           // VM execute code
+    PFNL pfnTrace;          // Execute one single instruction in the VM
+    PFNL pfnWinMsg;         // handles Windows messages
+    BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
+    PFNL pfnDumpHW;         // dumps hardware state
+    PFNL pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
+    
+    // these are probably unnecessary - it's between you and your CPU, not the VM manager
+    PFNB pfnReadHWByte;     // reads a byte from the VM
+    PFNW pfnReadHWWord;     // reads a word from the VM
+    PFNLL pfnReadHWLong;     // reads a long from the VM
+    PFNL pfnWriteHWByte;    // writes a byte to the VM
+    PFNL pfnWriteHWWord;    // writes a word to the VM
+    PFNL pfnWriteHWLong;    // writes a long to the VM
+    PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
+    PFNL pfnUnlockBlock;    // release memory block in VM
+    PFNP pfnMapAddress;     // convert virtual machine address to flat address
+    PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
 
-	// back to being necessary
-	PFNL pfnSaveState;      // save snapshot to disk
-	PFNL pfnLoadState;      // load snapshot from disk and resume
+    // back to being necessary
+    PFNL pfnSaveState;      // save snapshot to disk
+    PFNL pfnLoadState;      // load snapshot from disk and resume
 } VMINFO, *PVMINFO;
 
 // and here are the structures used by each VM type
@@ -270,10 +272,10 @@ extern _declspec(dllimport) ICpuExec cpi68K;
 //
 typedef struct _cart
 {
-	char szName[MAX_PATH];
-	int  cbData;        // actual amount of data on the cart
-	BYTE fCartIn;		// there is a cartridge plugged in
-	char temp;			// make it the same size as a VD structure
+    char szName[MAX_PATH];
+    int  cbData;        // actual amount of data on the cart
+    BYTE fCartIn;        // there is a cartridge plugged in
+    char temp;            // make it the same size as a VD structure
 } CART, *PCART;
 
 
@@ -282,7 +284,7 @@ typedef struct _cart
 //
 typedef struct
 {
-	int		cbSize;			// verify version is correct
+    int        cbSize;            // verify version is correct
 
     char     szModel[28];  // verbose name of current VM model
 
@@ -310,11 +312,11 @@ typedef struct
     int      fSwapKeys:1;   // use alternate keyboard layout
     int      xQuickBaud:1;  // Acceleration: activate fast baud rates
     
-	// UNUSED
-	int      fWarmReset:1;  // UNUSED if set, this VM needs a warm boot
+    // UNUSED
+    int      fWarmReset:1;  // UNUSED if set, this VM needs a warm boot
     int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
     
-	int      fValidVM:1;    // if set, this VM is initialized
+    int      fValidVM:1;    // if set, this VM is initialized
 
     int      res83:8;
 
@@ -327,29 +329,29 @@ typedef struct
     int      ivdMac;        // maximum index into rgvd
 
 #ifdef XFORMER
-	VD		 rgvd[8];		// disk descriptors
-	CART	 rgcart;		// 8 disks and a cartridge for 8 bit
+    VD         rgvd[8];        // disk descriptors
+    CART     rgcart;        // 8 disks and a cartridge for 8 bit
 #else
-	VD		 rgvd[9];		// disk descriptors
+    VD         rgvd[9];        // disk descriptors
 #endif
 } VM, *PVM;
 
 // each one is marked fValidVM or not. PROPS.cVM says how many of these are valid. PROPS.iVM is the current active one
-extern VM	rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
+extern VM    rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
 
 //
 // Per-VM instance data (not persistable)
 //
 typedef struct VMINST
 {
-    int	  iVM;             // index into rgvm, which instance this is
+    int      iVM;             // index into rgvm, which instance this is
 
     void *pvBits;           // pointer to current bitmap
     HBITMAP hbm;            // handle of bitmap
     HBITMAP hbmOld;         // handle of previous bitmap
     HDC  hdcMem;            // hdc of memory context
 
-    BOOL fWantDebugger;		// EXEC failed, time to debug it
+    BOOL fWantDebugger;        // EXEC failed, time to debug it
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer
@@ -376,11 +378,11 @@ typedef struct
     unsigned ioBaseAddr;    // base i/o port address of ROM card(s)
     unsigned cCards;        // number of ROM cards
     
-	// to big for general properties, the appropriate VM must persist this as part of its data
-	//OSINFO   rgosinfo[MAXOS];
+    // to big for general properties, the appropriate VM must persist this as part of its data
+    //OSINFO   rgosinfo[MAXOS];
     //unsigned cOS;           // count of valid OSes, or 0
 
-	// VMs
+    // VMs
 
     int iVM;           // our current instance, which must be valid, or -1
     int cVM;           // total number of valid VM entries
@@ -425,10 +427,10 @@ typedef struct
     BOOL             :1;    // reserved (deprecated)
     BOOL     fSaveOnExit:1; // 0 = normal, 1 = save INI file on exit
     BOOL     fHibrOnExit:1; // 0 = normal, 1 = hibernate on exit
-	BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
+    BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
     BOOL     fZoomColor:1;  // 0 = normal, 1 = zoom low rez and medium rez
     BOOL     fFullScreen:1; // 0 = normal, 1 = display in full screen mode
-	BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
+    BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
     BOOL     fDebugMode:8;  // NOT USED: 1 = put CPU into debug mode
@@ -441,14 +443,14 @@ typedef struct
     BOOL     fNoWW:8;       // 1 = disables Windows 98 write watch
     BOOL     fNoJit:8;      // 1 = disable jitter
 
-	int		 swWindowState;	// were we restored? maximized? minimized?
+    int         swWindowState;    // were we restored? maximized? minimized?
     RECT     rectWinPos;    // saved window pos (want top left corner only)
 
 } PROPS;
 
 extern PROPS v;
 
-#include "vm.h"	// after definition of PROPS
+#include "vm.h"    // after definition of PROPS
 
 //
 // INST - This is our global non-persistable data (only 1 copy)
@@ -487,8 +489,8 @@ typedef struct
         ULONG rglTicks[2];
         };
 
-	ULONGLONG qpcCold;
-	ULONGLONG qpfCold;
+    ULONGLONG qpcCold;
+    ULONGLONG qpfCold;
 
     ULONG lms;          // 32-bit millisecond counter
     ULONG lEclk;        // 32-bit E clock counter
@@ -505,7 +507,7 @@ typedef struct
     BYTE *pbROM[4];     // host pointer to first guest byte of RAM block
     BYTE *pbRAM[4];     // host pointer to first guest byte of RAM block
 
-	// there is no longer a concept of "current" except to the main window
+    // there is no longer a concept of "current" except to the main window
     //PVM  pvmCur;        // pointer to rgvm[v.iVM]
     //PVMINST pvmiCur;    // UNUSED pointer to vrgvmi[v.iVM]
 
@@ -534,11 +536,11 @@ typedef struct
 
     int  cPrintTimeout; // counts down to 0, when 0, closes LPT port
 
-	WAVEOUTCAPS woc;    // wave output capabilities structure
-	int  fWaveOutput;   // true if suitable wave output device found
-	int  iWaveOutput;   // if fWaveOutput, the identifier of the device
-	WAVEHDR rgwhdr[SNDBUFS]; // sound buffers
-	char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2];// MONO sound buffer data
+    WAVEOUTCAPS woc;    // wave output capabilities structure
+    int  fWaveOutput;   // true if suitable wave output device found
+    int  iWaveOutput;   // if fWaveOutput, the identifier of the device
+    WAVEHDR rgwhdr[SNDBUFS]; // sound buffers
+    char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2];// MONO sound buffer data
 
     HANDLE hROMCard;    // on NT, the handle to the Gemulator device
     unsigned ioPort;    // current port being scanned
@@ -558,8 +560,8 @@ typedef struct
 #define NUM_JOYDEVS 16
     JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
     JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
-	int rgjn[NUM_JOYDEVS];	// which handle we use to use that joystick
-	int njc;			// # of joysticks
+    int rgjn[NUM_JOYDEVS];    // which handle we use to use that joystick
+    int njc;            // # of joysticks
 
     PDI  rgpdi[10];     // pointers to DISKINFO structures for disks
 
@@ -600,20 +602,20 @@ extern INST vi;
 //
 typedef struct _vmhw
 {
-	// current graphics mode settings (this is not in vi. since it must be restorable)
+    // current graphics mode settings (this is not in vi. since it must be restorable)
 
-	int   xpix;         // horizontal resolution (ST pixels)
-	int   ypix;         // vertical resolution (ST pixels)
-	int   planes;       // number of bit planes (ST mode)
-	BOOL fMono;         // true if emulating mono (using the mono bitmap)
+    int   xpix;         // horizontal resolution (ST pixels)
+    int   ypix;         // vertical resolution (ST pixels)
+    int   planes;       // number of bit planes (ST mode)
+    BOOL fMono;         // true if emulating mono (using the mono bitmap)
 
-	BITMAPINFOHEADER bmiHeader;
-	union
-	{
-		RGBQUAD rgrgb[256];
-		//PALETTEENTRY rgpe[256];
-		ULONG    lrgb[256];
-	};
+    BITMAPINFOHEADER bmiHeader;
+    union
+    {
+        RGBQUAD rgrgb[256];
+        //PALETTEENTRY rgpe[256];
+        ULONG    lrgb[256];
+    };
 
 } VMHW;
 
@@ -626,33 +628,33 @@ VMHW vvmhw[MAX_VM];
 
 enum
 {
-	monNone = 0x00000000,
-	monMono = 0x00000001,         // generic monochrome monitor
-	monColor = 0x00000002,         // generic color monitor
-	monGreyTV = 0x00000004,         // B&W TV (grey scales in color)
-	monColrTV = 0x00000008,         // Color TV (256 GTIA colors)
-	monSTMono = 0x00000010,         // Atari ST monochrome monitor
-	monSTColor = 0x00000020,        // Atari ST color monitor
+    monNone = 0x00000000,
+    monMono = 0x00000001,         // generic monochrome monitor
+    monColor = 0x00000002,         // generic color monitor
+    monGreyTV = 0x00000004,         // B&W TV (grey scales in color)
+    monColrTV = 0x00000008,         // Color TV (256 GTIA colors)
+    monSTMono = 0x00000010,         // Atari ST monochrome monitor
+    monSTColor = 0x00000020,        // Atari ST color monitor
 
-	monMacMon = 0x00000080,         // Macintosh 9" (512x342)
-	monMac12C = 0x00000100,         // Macintosh 12" (640x480)
-	monMac13F = 0x00000200,         // Flat Panel (800x512)
-	monMac13C = 0x00000400,         // Macintosh 13" (800x600)
-	monMac14W2 = 0x00000800,         // Macintosh 14" (832x624)
-	monMac14W = 0x00001000,         // Macintosh 14" (864x600)
-	monMacVPB = 0x00002000,         // VAIO Picturebook (1024x480)
-	monMac14F = 0x00004000,         // Flat Panel 14" (1024x600)
-	monMac15C = 0x00008000,         // Macintosh 15" (1024x768)
-	monMac16C = 0x00010000,         // Macintosh 16" (1152x864)
-	monMac16X = 0x00020000,         // Macintosh 16" (1280x960)
-	monMac17C = 0x00040000,         // Macintosh 17" (1280x1024)
-	monMac18F = 0x00080000,         // Flat Panel 18" (1600x1024)
-	monMac19C = 0x00100000,         // Macintosh 19" (1600x1200)
-	monMac20C = 0x00200000,         // Macintosh 20" (1600x1280)
-	monMac21C = 0x00400000,         // Macintosh 21" (1900x1080)
-	monMac26C = 0x00800000,         // Macintosh 26" (1900x1200)
-	monMac28C = 0x01000000,         // Macintosh 28" (1900x1440)
-	monMacMax = 0x02000000,         // Full Windows Desktop Resolution
+    monMacMon = 0x00000080,         // Macintosh 9" (512x342)
+    monMac12C = 0x00000100,         // Macintosh 12" (640x480)
+    monMac13F = 0x00000200,         // Flat Panel (800x512)
+    monMac13C = 0x00000400,         // Macintosh 13" (800x600)
+    monMac14W2 = 0x00000800,         // Macintosh 14" (832x624)
+    monMac14W = 0x00001000,         // Macintosh 14" (864x600)
+    monMacVPB = 0x00002000,         // VAIO Picturebook (1024x480)
+    monMac14F = 0x00004000,         // Flat Panel 14" (1024x600)
+    monMac15C = 0x00008000,         // Macintosh 15" (1024x768)
+    monMac16C = 0x00010000,         // Macintosh 16" (1152x864)
+    monMac16X = 0x00020000,         // Macintosh 16" (1280x960)
+    monMac17C = 0x00040000,         // Macintosh 17" (1280x1024)
+    monMac18F = 0x00080000,         // Flat Panel 18" (1600x1024)
+    monMac19C = 0x00100000,         // Macintosh 19" (1600x1200)
+    monMac20C = 0x00200000,         // Macintosh 20" (1600x1280)
+    monMac21C = 0x00400000,         // Macintosh 21" (1900x1080)
+    monMac26C = 0x00800000,         // Macintosh 26" (1900x1200)
+    monMac28C = 0x01000000,         // Macintosh 28" (1900x1440)
+    monMacMax = 0x02000000,         // Full Windows Desktop Resolution
 };
 
 extern char const * const rgszMon[];
@@ -663,39 +665,39 @@ extern char const * const rgszMon[];
 
 enum
 {
-	ramNone = 0x00000000,
-	ram8K = 0x00000001,
-	ram16K = 0x00000002,
-	ram24K = 0x00000004,
-	ram32K = 0x00000008,
-	ram40K = 0x00000010,
-	ram48K = 0x00000020,
-	ram64K = 0x00000040,
-	ram128K = 0x00000080,
-	ram256K = 0x00000100,
-	ram320K = 0x00000200,
-	ram512K = 0x00000400,
-	ram1M = 0x00000800,
-	ram2M = 0x00001000,
-	ram2_5M = 0x00002000,
-	ram4M = 0x00004000,
-	ram8M = 0x00008000,
-	ram10M = 0x00010000,
-	ram12M = 0x00020000,
-	ram14M = 0x00040000,
-	ram16M = 0x00080000,
-	ram20M = 0x00100000,
-	ram24M = 0x00200000,
-	ram32M = 0x00400000,
-	ram48M = 0x00800000,
-	ram64M = 0x01000000,
-	ram128M = 0x02000000,
-	ram192M = 0x04000000,
-	ram256M = 0x08000000,
-	ram384M = 0x10000000,
-	ram512M = 0x20000000,
-	ram768M = 0x40000000,
-	ram1G = 0x80000000,
+    ramNone = 0x00000000,
+    ram8K = 0x00000001,
+    ram16K = 0x00000002,
+    ram24K = 0x00000004,
+    ram32K = 0x00000008,
+    ram40K = 0x00000010,
+    ram48K = 0x00000020,
+    ram64K = 0x00000040,
+    ram128K = 0x00000080,
+    ram256K = 0x00000100,
+    ram320K = 0x00000200,
+    ram512K = 0x00000400,
+    ram1M = 0x00000800,
+    ram2M = 0x00001000,
+    ram2_5M = 0x00002000,
+    ram4M = 0x00004000,
+    ram8M = 0x00008000,
+    ram10M = 0x00010000,
+    ram12M = 0x00020000,
+    ram14M = 0x00040000,
+    ram16M = 0x00080000,
+    ram20M = 0x00100000,
+    ram24M = 0x00200000,
+    ram32M = 0x00400000,
+    ram48M = 0x00800000,
+    ram64M = 0x01000000,
+    ram128M = 0x02000000,
+    ram192M = 0x04000000,
+    ram256M = 0x08000000,
+    ram384M = 0x10000000,
+    ram512M = 0x20000000,
+    ram768M = 0x40000000,
+    ram1G = 0x80000000,
 };
 
 extern char const * const rgszRAM[];
@@ -706,44 +708,44 @@ extern char const * const rgszRAM[];
 
 enum
 {
-	osNone = 0x00000000,
-	osDiskImg = 0x80000000, // VM will load disk image
+    osNone = 0x00000000,
+    osDiskImg = 0x80000000, // VM will load disk image
 
-	// Atari 8-bit ROMs
+    // Atari 8-bit ROMs
 
-	osAtari48 = 0x00000001, // Atari 400/800
-	osAtariXL = 0x00000002, // Atari 800XL
-	osAtariXE = 0x00000004, // Atari 130XE
+    osAtari48 = 0x00000001, // Atari 400/800
+    osAtariXL = 0x00000002, // Atari 800XL
+    osAtariXE = 0x00000004, // Atari 130XE
 
-	// Atari ST/STE/TT ROMs
+    // Atari ST/STE/TT ROMs
 
-	osTOS1X_2 = 0x00000010, // 2-chip TOS 1.x ($FC0000)
-	osTOS1X_6 = 0x00000020, // 6-chip TOS 1.x ($FC0000)
-	osTOS2X_2 = 0x00000040, // 2-chip TOS 2.x ($E00000)
-	osTOS3X_4 = 0x00000080, // 4-chip TOS 3.x ($E00000)
-	osTOS4X_1 = 0x00000100, // 1-chip TOS 4.x ($E00000)
-	osTOS1X_D = 0x00000200, // TOS 1.x boot disk (in RAM)
-	osMagic_2 = 0x00000400, // Magic 2.x (in RAM)
-	osMagic_4 = 0x00000800, // Magic 4.x
-	osMagicPC = 0x00001000, // MagicPC (must decrypt)
-	osTOS2X_D = 0x00002000, // TOS 2.x ROM image file
-	osTOS3X_D = 0x00004000, // TOS 3.x ROM image file
-	osTOS4X_D = 0x00008000, // TOS 4.x ROM image file
+    osTOS1X_2 = 0x00000010, // 2-chip TOS 1.x ($FC0000)
+    osTOS1X_6 = 0x00000020, // 6-chip TOS 1.x ($FC0000)
+    osTOS2X_2 = 0x00000040, // 2-chip TOS 2.x ($E00000)
+    osTOS3X_4 = 0x00000080, // 4-chip TOS 3.x ($E00000)
+    osTOS4X_1 = 0x00000100, // 1-chip TOS 4.x ($E00000)
+    osTOS1X_D = 0x00000200, // TOS 1.x boot disk (in RAM)
+    osMagic_2 = 0x00000400, // Magic 2.x (in RAM)
+    osMagic_4 = 0x00000800, // Magic 4.x
+    osMagicPC = 0x00001000, // MagicPC (must decrypt)
+    osTOS2X_D = 0x00002000, // TOS 2.x ROM image file
+    osTOS3X_D = 0x00004000, // TOS 3.x ROM image file
+    osTOS4X_D = 0x00008000, // TOS 4.x ROM image file
 
-	// Macintosh ROMs
+    // Macintosh ROMs
 
-	osMac_64 = 0x00010000, // 64K  68000 Mac 128
-	osMac_128 = 0x00020000, // 128K 68000 Mac Plus
-	osMac_256 = 0x00040000, // 256K 68000 Mac SE
-	osMac_512 = 0x00080000, // 512K 68000 Mac Classic
-	osMac_II = 0x00100000, // 256K 68020 Mac II 32-bit dirty (Mac II/IIx/IIcx)
-	osMac_IIi = 0x00200000, // 512K 68030 Mac II 32-bit clean (IIci/IIsi/LC)
-	osMac_1M = 0x00400000, // 1M   68040 Mac Quadra 32-bit clean
-	osMac_2M = 0x00800000, // 2M   68040 Mac Quadra 32-bit clean
-	osMac_G1 = 0x01000000, // 4M   NuBus PowerMac (6100/7100/8100)
-	osMac_G2 = 0x02000000, // 4M   PCI   PowerMac (6400)
-	osMac_G3 = 0x04000000, // 4M   USB   PowerMac G3 / iMac
-	osMac_G4 = 0x08000000, // 4M   USB   PowerMac G4
+    osMac_64 = 0x00010000, // 64K  68000 Mac 128
+    osMac_128 = 0x00020000, // 128K 68000 Mac Plus
+    osMac_256 = 0x00040000, // 256K 68000 Mac SE
+    osMac_512 = 0x00080000, // 512K 68000 Mac Classic
+    osMac_II = 0x00100000, // 256K 68020 Mac II 32-bit dirty (Mac II/IIx/IIcx)
+    osMac_IIi = 0x00200000, // 512K 68030 Mac II 32-bit clean (IIci/IIsi/LC)
+    osMac_1M = 0x00400000, // 1M   68040 Mac Quadra 32-bit clean
+    osMac_2M = 0x00800000, // 2M   68040 Mac Quadra 32-bit clean
+    osMac_G1 = 0x01000000, // 4M   NuBus PowerMac (6100/7100/8100)
+    osMac_G2 = 0x02000000, // 4M   PCI   PowerMac (6400)
+    osMac_G3 = 0x04000000, // 4M   USB   PowerMac G3 / iMac
+    osMac_G4 = 0x08000000, // 4M   USB   PowerMac G4
 
 };
 
@@ -758,70 +760,70 @@ extern char const * const rgszROM[];
 //
 enum
 {
-	// Atari 8-bit machines without cartridge
+    // Atari 8-bit machines without cartridge
 
-	vmAtari48 = 0x00000001,
-	vmAtariXL = 0x00000002,
-	vmAtariXE = 0x00000004,
+    vmAtari48 = 0x00000001,
+    vmAtariXL = 0x00000002,
+    vmAtariXE = 0x00000004,
 
-	// Atari 8-bit machines with cartridge - no longer used
+    // Atari 8-bit machines with cartridge - no longer used
 
-	//vmAtari48C = 0x00000080,
-	//vmAtariXLC = 0x00000100,
-	//vmAtariXEC = 0x00000800,
+    //vmAtari48C = 0x00000080,
+    //vmAtariXLC = 0x00000100,
+    //vmAtariXEC = 0x00000800,
 
-	// Tutor 68000 simulators
+    // Tutor 68000 simulators
 
-	vmTutor = 0x00000008,
+    vmTutor = 0x00000008,
 
-	// Atari ST/STE/TT 680x0 machines
+    // Atari ST/STE/TT 680x0 machines
 
-	vmAtariST = 0x00000010,
-	vmAtariSTE = 0x00000020,
-	vmAtariTT = 0x00000040,
+    vmAtariST = 0x00000010,
+    vmAtariSTE = 0x00000020,
+    vmAtariTT = 0x00000040,
 
-	// 68000 based Macs (64K 128K 256K 512K ROMs)
+    // 68000 based Macs (64K 128K 256K 512K ROMs)
 
-	vmMacPlus = 0x00000200,
-	vmMacSE = 0x00000400,
+    vmMacPlus = 0x00000200,
+    vmMacSE = 0x00000400,
 
-	// 68020/68030 based 32-bit dirty Macs (256K ROMs)
+    // 68020/68030 based 32-bit dirty Macs (256K ROMs)
 
-	vmMacII = 0x00001000, // needs to match old value
-	vmMacIIcx = 0x00004000, // needs to match old value
+    vmMacII = 0x00001000, // needs to match old value
+    vmMacIIcx = 0x00004000, // needs to match old value
 
-	// 68020/68030 based 32-bit clean Macs (512K ROMs)
+    // 68020/68030 based 32-bit clean Macs (512K ROMs)
 
-	vmMacIIci = 0x00010000, // needs to match old value
-	vmMacIIsi = 0x00020000,
-	vmMacLC = 0x00040000,
+    vmMacIIci = 0x00010000, // needs to match old value
+    vmMacIIsi = 0x00020000,
+    vmMacLC = 0x00040000,
 
-	// 68030/68040 based 32-bit clean Macs (1M ROMs)
+    // 68030/68040 based 32-bit clean Macs (1M ROMs)
 
-	vmMacQdra = 0x00080000, // fake Quadra, really a IIci with a 68040
-	vmMacQ605 = 0x00100000, // a.k.a. LC 475
-	vmMacQ700 = 0x00200000,
-	vmMacQ610 = 0x00400000,
-	vmMacQ650 = 0x00800000,
-	vmMacQ900 = 0x01000000,
+    vmMacQdra = 0x00080000, // fake Quadra, really a IIci with a 68040
+    vmMacQ605 = 0x00100000, // a.k.a. LC 475
+    vmMacQ700 = 0x00200000,
+    vmMacQ610 = 0x00400000,
+    vmMacQ650 = 0x00800000,
+    vmMacQ900 = 0x01000000,
 
-	// PowerPC 601 upgraded Macs (4M ROMs)
+    // PowerPC 601 upgraded Macs (4M ROMs)
 
-	vmMacP900 = 0x02000000,
-	vmMacP700 = 0x04000000,
-	vmMacP610 = 0x08000000,
-	vmMacP650 = 0x10000000,
+    vmMacP900 = 0x02000000,
+    vmMacP700 = 0x04000000,
+    vmMacP610 = 0x08000000,
+    vmMacP650 = 0x10000000,
 
-	// PowerPC 601/603/604 based Power Macs (4M ROMs)
+    // PowerPC 601/603/604 based Power Macs (4M ROMs)
 
-	vmMac6100 = 0x00002000,
-	vmMac7100 = 0x00008000,
-	vmMac6400 = 0x20000000,
+    vmMac6100 = 0x00002000,
+    vmMac7100 = 0x00008000,
+    vmMac6400 = 0x20000000,
 
-	// PowerPC G3/G4 based New World ROM Macs (4M ROMs)
+    // PowerPC G3/G4 based New World ROM Macs (4M ROMs)
 
-	vmMac_iMac = 0x40000000,
-	vmMac_G4 = 0x80000000,
+    vmMac_iMac = 0x40000000,
+    vmMac_G4 = 0x80000000,
 };
 
 extern char const * const rgszVM[];
@@ -1020,24 +1022,24 @@ void ForceRedraw(int iVM);
 
 __inline void _assert(int f, char *file, int line)
 {
-	char sz[99];
+    char sz[99];
 
-	if (!f)
-	{
-		int ret;
+    if (!f)
+    {
+        int ret;
 
-		wsprintf(sz, "%s: line #%d", file, line);
-		ret = MessageBox(GetFocus(), sz, "Assert failed", MB_APPLMODAL | MB_ABORTRETRYIGNORE);
+        wsprintf(sz, "%s: line #%d", file, line);
+        ret = MessageBox(GetFocus(), sz, "Assert failed", MB_APPLMODAL | MB_ABORTRETRYIGNORE);
 
-		if (ret == 3)
-		{
-			exit(0);
-		}
-		else if (ret == 4)
-		{
-			__debugbreak();
-		}
-	}
+        if (ret == 3)
+        {
+            exit(0);
+        }
+        else if (ret == 4)
+        {
+            __debugbreak();
+        }
+    }
 }
 
 #define DebugStr printf
@@ -1063,264 +1065,264 @@ __inline void _assert(int f, char *file, int line)
 //
 typedef struct _sthw
 {
-	ULONG lAddrMask;    // current address bus mask for 24- or 32-bit addressing
+    ULONG lAddrMask;    // current address bus mask for 24- or 32-bit addressing
 
-						// the BIOS video mode for 16 color modes ($0D = 320x200, $12 = 640x480)
+                        // the BIOS video mode for 16 color modes ($0D = 320x200, $12 = 640x480)
 
-	int     VESAmode;
+    int     VESAmode;
 
-	VMHW	vmhw;		// the stuff common to all VMs
+    VMHW    vmhw;        // the stuff common to all VMs
 
-	union
-	{
-		ULONG    dbase; // start address of video memory
+    union
+    {
+        ULONG    dbase; // start address of video memory
 
-		struct
-		{
-			BYTE dbase0; // dbase0 is STE specific
-			BYTE dbasel;
-			BYTE dbaseh;
-		};
-	};
+        struct
+        {
+            BYTE dbase0; // dbase0 is STE specific
+            BYTE dbasel;
+            BYTE dbaseh;
+        };
+    };
 
-	BYTE    scanskip;   // STE specific
-	BYTE    horscroll;  // STE specific
-	BYTE    pad3;
-	BYTE    pad4;
+    BYTE    scanskip;   // STE specific
+    BYTE    horscroll;  // STE specific
+    BYTE    pad3;
+    BYTE    pad4;
 
-	// read only
+    // read only
 
-	union
-	{
-		ULONG    vcount; // current address being read
+    union
+    {
+        ULONG    vcount; // current address being read
 
-		struct
-		{
-			BYTE vcountlo;
-			BYTE vcountmid;
-			BYTE vcounthi;
-		};
-	};
+        struct
+        {
+            BYTE vcountlo;
+            BYTE vcountmid;
+            BYTE vcounthi;
+        };
+    };
 
-	// read/write
+    // read/write
 
-	int     shiftmd;
+    int     shiftmd;
 
-	union
-	{
-		WORD    wcolor[16];  // ST color registers
-		BYTE    bColor[32];
-	};
-
-
-	// FDC registers
-
-	union
-	{
-		WORD    rgwFDC[5];
-
-		struct
-		{
-			WORD cmdreg;   // R/W command/status register
-			WORD trackreg; // R/W track register
-			WORD secreg;   // R/W sector register
-			WORD datareg;  // R/W data register
-			WORD countreg; // R/W count of sectors register
-		};
-	};
-
-	int  idiskreg; // index into FDC registers (0..4)
-	WORD sidereg;  // R/W side selection (not an FDC register!)
-	WORD disksel;  // drive select, 0 = A:, 1 = B:
-
-	union
-	{
-		BYTE    rgbHDC[12];
-
-		struct
-		{
-			BYTE fHDC;     // non-zero when in hard disk operation
-			BYTE byte0;
-			BYTE byte1;
-			BYTE byte2;
-			BYTE byte3;
-			BYTE byte4;
-			BYTE byte5;
-			BYTE byte6;
-			BYTE byte7;
-			BYTE byte8;
-			BYTE byte9;
-			BYTE diskctrl;  // data written to FDC
-		};
-	};
-
-	// _DMAms    LABEL DWORD
-
-	WORD    dmacmd;  // DMA command (write)
-	WORD    dmastat; // DMA status  (read)
-
-	union
-	{
-		ULONG    DMAbasis;
-
-		struct
-		{
-			BYTE dmalo;
-			BYTE dmamid;
-			BYTE dmahi;
-		};
-	};
-
-	BOOL    fMediaChange;
+    union
+    {
+        WORD    wcolor[16];  // ST color registers
+        BYTE    bColor[32];
+    };
 
 
-	// Yamaha sound chip
+    // FDC registers
 
-	union
-	{
-		BYTE    rgbYamaha[16];
+    union
+    {
+        WORD    rgwFDC[5];
 
-		struct
-		{
-			WORD    periodA;
-			WORD    periodB;
-			WORD    periodC;
-			BYTE    pernoise;
-			BYTE    rgfSound;
-			BYTE    volA;
-			BYTE    volB;
-			BYTE    volC;
-			BYTE    sustainL;
-			BYTE    sustainH;
-			BYTE    envelope;
-			BYTE    portA;
-			BYTE    portB;
-		};
-	};
+        struct
+        {
+            WORD cmdreg;   // R/W command/status register
+            WORD trackreg; // R/W track register
+            WORD secreg;   // R/W sector register
+            WORD datareg;  // R/W data register
+            WORD countreg; // R/W count of sectors register
+        };
+    };
 
-	// we create these 3 decay registers that go from 15 to 0
+    int  idiskreg; // index into FDC registers (0..4)
+    WORD sidereg;  // R/W side selection (not an FDC register!)
+    WORD disksel;  // drive select, 0 = A:, 1 = B:
 
-	BYTE rgbDecay[3];
-	BYTE iRegSelect;     // 0..15 - Yamaha register select
+    union
+    {
+        BYTE    rgbHDC[12];
 
+        struct
+        {
+            BYTE fHDC;     // non-zero when in hard disk operation
+            BYTE byte0;
+            BYTE byte1;
+            BYTE byte2;
+            BYTE byte3;
+            BYTE byte4;
+            BYTE byte5;
+            BYTE byte6;
+            BYTE byte7;
+            BYTE byte8;
+            BYTE byte9;
+            BYTE diskctrl;  // data written to FDC
+        };
+    };
 
-						 // BLiTter
+    // _DMAms    LABEL DWORD
 
-	union
-	{
-		BYTE    rgbBlitter[64];
-		WORD    rgwBlitter[32];
+    WORD    dmacmd;  // DMA command (write)
+    WORD    dmastat; // DMA status  (read)
 
-		struct
-		{
-			WORD    rgwFill[16];
-			WORD    sxinc;
-			WORD    syinc;
-			ULONG   saddr;
-			WORD    endm1;
-			WORD    endm2;
-			WORD    endm3;
-			WORD    dxinc;
-			WORD    dyinc;
-			ULONG   daddr;
-			WORD    xcount;
-			WORD    ycount;
-			BYTE    hop;
-			BYTE    op;
-			BYTE    reg1;
-			BYTE    skew;
-		};
-	} blitter;
+    union
+    {
+        ULONG    DMAbasis;
 
+        struct
+        {
+            BYTE dmalo;
+            BYTE dmamid;
+            BYTE dmahi;
+        };
+    };
 
-	// STEreo sound chip
-
-	union
-	{
-		BYTE    rgbSTESound[64];
-		WORD    rgwSTESound[32];
-	};
+    BOOL    fMediaChange;
 
 
-	// MFP
+    // Yamaha sound chip
 
-	union
-	{
-		BYTE    rgbMFP[32];
+    union
+    {
+        BYTE    rgbYamaha[16];
 
-		struct
-		{
-			BYTE gpip;  // 8-bit I/O port
-			BYTE aer;   // active edge register
-			BYTE ddr;   // data direction register
-			BYTE iera;  // interrupt enable A
-			BYTE ierb;  // interrupt enable B
-			BYTE ipra;  // interrupt pending A
-			BYTE iprb;  // interrupt pending B
-			BYTE isra;  // in-service bit A
-			BYTE isrb;  // in-service bit B
-			BYTE imra;  // interrupt mask register A
-			BYTE imrb;  // interrupt mask register B
-			BYTE vr;    // interrupt vector register
-			BYTE tacr;  // timer A control register
-			BYTE tbcr;  // timer B control register
-			BYTE tcdcr; // timer C/D control register
-			BYTE tadr;  // timer A data register
-			BYTE tbdr;  // timer B data register
-			BYTE tcdr;  // timer C data register
-			BYTE tddr;  // timer D data register
-			BYTE scr;
-			BYTE ucr;
-			BYTE rsr;
-			BYTE tsr;
-			BYTE udr;
-		};
-	};
+        struct
+        {
+            WORD    periodA;
+            WORD    periodB;
+            WORD    periodC;
+            BYTE    pernoise;
+            BYTE    rgfSound;
+            BYTE    volA;
+            BYTE    volB;
+            BYTE    volC;
+            BYTE    sustainL;
+            BYTE    sustainH;
+            BYTE    envelope;
+            BYTE    portA;
+            BYTE    portB;
+        };
+    };
 
-	// tbcnt is used as a counter to determine the value of _tbdr. In order
-	// to detect a vertical blank period, TOS looks at timer B. It will first
-	// decrement in value from about 255 to 1, and then stay at 0 for at least
-	// 616 reads. So we count back from 1024 and subract 620. If the result is
-	// negative, we'll read a zero, othersize we divide by 2 and that's read.
+    // we create these 3 decay registers that go from 15 to 0
 
-	int     tbcnt;
-
-	// timer C needs to count down 1 every 2 reads
-
-	int     tccnt;
+    BYTE rgbDecay[3];
+    BYTE iRegSelect;     // 0..15 - Yamaha register select
 
 
-	// ACIA
+                         // BLiTter
 
-	BYTE    KeyCtrl;
-	BYTE    KeyData;
-	BYTE    MIDICtrl;
-	BYTE    MIDIData;
+    union
+    {
+        BYTE    rgbBlitter[64];
+        WORD    rgwBlitter[32];
+
+        struct
+        {
+            WORD    rgwFill[16];
+            WORD    sxinc;
+            WORD    syinc;
+            ULONG   saddr;
+            WORD    endm1;
+            WORD    endm2;
+            WORD    endm3;
+            WORD    dxinc;
+            WORD    dyinc;
+            ULONG   daddr;
+            WORD    xcount;
+            WORD    ycount;
+            BYTE    hop;
+            BYTE    op;
+            BYTE    reg1;
+            BYTE    skew;
+        };
+    } blitter;
 
 
-	// IKBD
+    // STEreo sound chip
 
-	int     mdMouse;        // mouse reading state - off, absolute, relative
-	int     mdJoys;         // joystick reading state - 0=manual 1=automatic
+    union
+    {
+        BYTE    rgbSTESound[64];
+        WORD    rgwSTESound[32];
+    };
 
-	int     xMouse, yMouse; // mouse position when in ABS mode
-	int     fLeft, fRight;  // mouse button positions in ABS mode
-	int     wJoy1, wJoy2;
 
-	BYTE    mdIKBD;         // IKBD state
-	BYTE    cbToIKBD;       // total # bytes being received in command
-	BYTE    cbInIKBD;       // total # byets received so far
-	BYTE    res3;
+    // MFP
 
-	ULONG   lTickSec;       // tick value of last 1 second interrupt
-	ULONG   lTickVBI;       // tick value of last VBI
-	ULONG   lTick200;       // tick value of last 200 Hz interrupt
+    union
+    {
+        BYTE    rgbMFP[32];
 
-	BYTE    rgbIKBD[256];   // IKBD command buffer
+        struct
+        {
+            BYTE gpip;  // 8-bit I/O port
+            BYTE aer;   // active edge register
+            BYTE ddr;   // data direction register
+            BYTE iera;  // interrupt enable A
+            BYTE ierb;  // interrupt enable B
+            BYTE ipra;  // interrupt pending A
+            BYTE iprb;  // interrupt pending B
+            BYTE isra;  // in-service bit A
+            BYTE isrb;  // in-service bit B
+            BYTE imra;  // interrupt mask register A
+            BYTE imrb;  // interrupt mask register B
+            BYTE vr;    // interrupt vector register
+            BYTE tacr;  // timer A control register
+            BYTE tbcr;  // timer B control register
+            BYTE tcdcr; // timer C/D control register
+            BYTE tadr;  // timer A data register
+            BYTE tbdr;  // timer B data register
+            BYTE tcdr;  // timer C data register
+            BYTE tddr;  // timer D data register
+            BYTE scr;
+            BYTE ucr;
+            BYTE rsr;
+            BYTE tsr;
+            BYTE udr;
+        };
+    };
 
-							// large buffers
+    // tbcnt is used as a counter to determine the value of _tbdr. In order
+    // to detect a vertical blank period, TOS looks at timer B. It will first
+    // decrement in value from about 255 to 1, and then stay at 0 for at least
+    // 616 reads. So we count back from 1024 and subract 620. If the result is
+    // negative, we'll read a zero, othersize we divide by 2 and that's read.
 
-	BYTE    rgbDiskBuffer[16384];
+    int     tbcnt;
+
+    // timer C needs to count down 1 every 2 reads
+
+    int     tccnt;
+
+
+    // ACIA
+
+    BYTE    KeyCtrl;
+    BYTE    KeyData;
+    BYTE    MIDICtrl;
+    BYTE    MIDIData;
+
+
+    // IKBD
+
+    int     mdMouse;        // mouse reading state - off, absolute, relative
+    int     mdJoys;         // joystick reading state - 0=manual 1=automatic
+
+    int     xMouse, yMouse; // mouse position when in ABS mode
+    int     fLeft, fRight;  // mouse button positions in ABS mode
+    int     wJoy1, wJoy2;
+
+    BYTE    mdIKBD;         // IKBD state
+    BYTE    cbToIKBD;       // total # bytes being received in command
+    BYTE    cbInIKBD;       // total # byets received so far
+    BYTE    res3;
+
+    ULONG   lTickSec;       // tick value of last 1 second interrupt
+    ULONG   lTickVBI;       // tick value of last VBI
+    ULONG   lTick200;       // tick value of last 200 Hz interrupt
+
+    BYTE    rgbIKBD[256];   // IKBD command buffer
+
+                            // large buffers
+
+    BYTE    rgbDiskBuffer[16384];
 
 } STHW;
 
@@ -1343,31 +1345,31 @@ void MarkAllPagesClean(void);
 
 typedef struct _osinfo
 {
-	ULONG    osType;        // one of the above
-	ULONG    eaOS;          // load address of the OS
-	ULONG    cbOS;          // size of the OS
-	ULONG    version;       // OS specific version
-	ULONG    date;          // OS specific date
-	ULONG    country;       // OS specific country info
+    ULONG    osType;        // one of the above
+    ULONG    eaOS;          // load address of the OS
+    ULONG    cbOS;          // size of the OS
+    ULONG    version;       // OS specific version
+    ULONG    date;          // OS specific date
+    ULONG    country;       // OS specific country info
 
-	union
-	{
-		struct
-		{
-			// Disk image settings when fDiskImage
+    union
+    {
+        struct
+        {
+            // Disk image settings when fDiskImage
 
-			char        szImg[24];  // disk image file name (X:\8\8.3)
-		};
-		struct
-		{
-			// ROM settings when !fDiskImage
-			short   ioPort;         // i/o port
-			int     iChip;          // starting socket number
-			int     cChip;          // number of sockets used
-			int     cbSocket;       // size of each socket
-			int     cSockets;       // number of sockets on the card
-		};
-	};
+            char        szImg[24];  // disk image file name (X:\8\8.3)
+        };
+        struct
+        {
+            // ROM settings when !fDiskImage
+            short   ioPort;         // i/o port
+            int     iChip;          // starting socket number
+            int     cChip;          // number of sockets used
+            int     cbSocket;       // size of each socket
+            int     cSockets;       // number of sockets on the card
+        };
+    };
 
 } OSINFO;
 
@@ -1431,12 +1433,12 @@ REGS vregs;             // 680x0 commonly used registers and TLB structures
 //
 
 typedef struct  _GENPORT_WRITE_INPUT {
-	ULONG   PortNumber;     // Port # to write to
-	union {               // Data to be output to port
-		ULONG   LongData;
-		USHORT  ShortData;
-		UCHAR   CharData;
-	};
+    ULONG   PortNumber;     // Port # to write to
+    union {               // Data to be output to port
+        ULONG   LongData;
+        USHORT  ShortData;
+        UCHAR   CharData;
+    };
 }   GENPORT_WRITE_INPUT;
 
 
@@ -1459,12 +1461,12 @@ typedef struct  _GENPORT_WRITE_INPUT {
 unsigned long __inline
 (unsigned long w)
 {
-	return (((w) & 0xFF00) >> 8) | (((w) & 0x00FF) << 8);
+    return (((w) & 0xFF00) >> 8) | (((w) & 0x00FF) << 8);
 }
 
 unsigned long __inline SwapL(unsigned long l)
 {
-	return SwapW(((l) & 0xFFFF0000) >> 16) | (SwapW((l) & 0x0000FFFF) << 16);
+    return SwapW(((l) & 0xFFFF0000) >> 16) | (SwapW((l) & 0x0000FFFF) << 16);
 }
 
 
@@ -1908,8 +1910,8 @@ MACHW vmachw;
 
 typedef struct _ep
 {
-	EXCEPTION_RECORD *per;
-	CONTEXT *pctx;
+    EXCEPTION_RECORD *per;
+    CONTEXT *pctx;
 } EP, *PEP;
 
 int OurXcptFilter(DWORD code, PEP pep);
