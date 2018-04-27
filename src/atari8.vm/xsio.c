@@ -975,6 +975,8 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
+    rgbMem[0x42] = 0;   // SIO turns CRITIC off so entire VBI can run next time (Shamus loaded from Preppie II disk needs this)
+
     //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
     //regSP = (regSP + 2) & 255 | 256;
 
