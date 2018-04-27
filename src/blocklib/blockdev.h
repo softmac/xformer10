@@ -110,7 +110,7 @@ BOOL FReadWriteSec9x(DISKINFO *pdi, BOOL fWrite);
 BOOL FReadWriteImage(DISKINFO *pdi, BOOL fWrite);
 
 BOOL __stdcall FInitBlockDevLib(void);
-DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags);
+DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, LONG_PTR l, long flags);
 BOOL __stdcall FRawDiskRWPdi(DISKINFO *pdi, BOOL fWrite);
 BOOL __stdcall FlushCachePdi(DISKINFO *pdi);
 BOOL __stdcall CloseDiskPdi(DISKINFO *pdi);
