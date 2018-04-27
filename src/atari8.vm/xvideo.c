@@ -535,11 +535,11 @@ Ldm:
 
         if (fFifth && pmg.fGTIA)
         {
-            if ((sl.prior & 0xc0) == 0x40)
+            if (pmg.fGTIA == 0x40)
                 c = sl.colpf3 & 0x0f;    // use the correct P5 luma, it may or may not be the right chroma
-            else if ((sl.prior & 0xc0) == 0x80)
+            else if (pmg.fGTIA == 0x80)
                 c = 7;    // colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
-            else if ((sl.prior & 0xc0) == 0xc0)
+            else if (pmg.fGTIA == 0xc0)
                 c = (sl.colpf3 & 0xf0) >> 4;    // use the correct P5 chroma, but the luminence may be off
         }
 
@@ -885,7 +885,7 @@ void PSLPrepare(int iVM)
 
         // If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
         // Be brave, and if GTIA is turned off halfway down the screen, turn back!
-        if (sl.prior & 0xC0)
+        if (sl.prior & 0xC0)    // pmg.fGTIA is not set up yet
         {
             if (sl.modelo == 15)
             {
@@ -946,9 +946,13 @@ void PSLReadRegs(int iVM, short start, short stop)
     // update the colour registers
 
     // GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
-    sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
+    sl.colbk = (pmg.fGTIA == 0x80) ? COLPM0 : COLBK;
     sl.colpfX = COLPFX;
     pmg.colpmX = COLPMX;
+
+    // if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
+    if (pmg.fHiRes)
+        sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
 
     // !!! VDELAY NYI
 
@@ -1130,7 +1134,7 @@ BOOL ProcessScanLine(int iVM)
 
             // GTIA modes 9, 10 & 11 don't use the PF registers since they can have 16 colours instead of 4
             // so we CANNOT do a special bitfield mode. See the PRIOR code
-            if (!(sl.prior & 0xc0))
+            if (!pmg.fGTIA)
             {
                 sl.colbk = bfBK;
                 sl.colpf0 = bfPF0;
@@ -1149,10 +1153,10 @@ BOOL ProcessScanLine(int iVM)
         // Unless we're in GR.9 or GR.11, in which case we're still using sl.colbk, but in the case of pmg, a 4-bit version
         // We've already accounted above for GR.10 having a different register for its background colour.
         BYTE bkbk = sl.fpmg ? 0 : sl.colbk;
-        if (sl.prior & 0x40)    // GR.9 or 11
+        if (pmg.fGTIA & 0x40)    // GR.9 or 11
         {
             bkbk = sl.colbk;
-            if (sl.fpmg && (sl.prior & 0xc0) == 0xc0) // GR.11 the interesting part is the high nibble
+            if (sl.fpmg && (pmg.fGTIA == 0xc0)) // GR.11 the interesting part is the high nibble
                 bkbk = sl.colbk >> 4;
             if (sl.fpmg)
                 bkbk = bkbk & 0x0f;
@@ -1209,10 +1213,11 @@ BOOL ProcessScanLine(int iVM)
             BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
             BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
-            // just for fun, don't interlace in B&W
-            BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV);
+            // just for fun, don't interlace in B&W.
+            // !!! It actually won't work in PMG mode right now
+            BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
 
-            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+            col1 = sl.colpf1;
             col2 = sl.colpf2;
 
             if ((sl.chactl & 4) && sl.modelo == 2)    // vertical reflect bit
@@ -1347,7 +1352,7 @@ BOOL ProcessScanLine(int iVM)
 
                 // undocumented GR.9 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
                 // but treat them as GR.9 luminences
-                if ((sl.prior & 0xC0) == 0x40)
+                if (pmg.fGTIA == 0x40)
                 {
                     col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
                     col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
@@ -1372,9 +1377,8 @@ BOOL ProcessScanLine(int iVM)
 
                 // undocumented GR.10 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
                 // but treat them as GR.10 indexes
-                else if ((sl.prior & 0xC0) == 0x80)
+                else if (pmg.fGTIA == 0x80)
                 {
-
                     col1 = (b2 >> 4);
                     col2 = (b2 & 15);
 
@@ -1428,7 +1432,7 @@ BOOL ProcessScanLine(int iVM)
 
                 // undocumented GR.11 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
                 // but treat them as GR.11 chromas
-                else if ((sl.prior & 0xC0) == 0xC0)
+                else if (pmg.fGTIA == 0xC0)
                 {
                     col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);    // lum comes from 712
                     col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
@@ -1970,7 +1974,7 @@ BOOL ProcessScanLine(int iVM)
             break;
 
         case 15:
-            col1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);    // like GR.0, the colour is just a luminence of the background colour
+            col1 = sl.colpf1;
             col2 = sl.colpf2;
 
             // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
@@ -1978,8 +1982,9 @@ BOOL ProcessScanLine(int iVM)
             yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
             // just for fun, don't interlace in B&W
-            fArtifacting = (rgvm[iVM].bfMon == monColrTV);
-
+            // !!! It actually won't work in PMG mode right now
+            fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
+            
             for (; i < iTop; i++)
             {
                 b2 = sl.rgb[i];
@@ -2242,10 +2247,12 @@ BOOL ProcessScanLine(int iVM)
     }
 
     // may have been altered if we were in BITFIELD mode b/c PMG are active. Put them back to what they were
-    if (sl.fpmg && !(sl.prior & 0xc0))
+    if (sl.fpmg && !pmg.fGTIA)
     {
-        sl.colbk = ((sl.prior & 0xC0) == 0x80) ? COLPM0 : COLBK;
+        sl.colbk = (pmg.fGTIA == 0x80) ? COLPM0 : COLBK;
         sl.colpfX = COLPFX;
+        if (pmg.fHiRes)
+            sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
     }
 
    // even with Fetch DMA off, PMG DMA might be on
@@ -2283,121 +2290,170 @@ BOOL ProcessScanLine(int iVM)
         // EXCEPT for GR.9, 10 & 11, which does not have playfield bitfield data. There are 16 colours in those modes and only 4 regsiters.
         // So don't try to look at PF bits. In GR.9 & 11, all playfield is underneath all players.
 
+        // precompute some thing so our loop can be fast. It's one of the slowest parts of the code right now
+        BYTE colpf3Norm = sl.colpf3;
+        BYTE colpf3Spec = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
+        DWORD colpmXNorm = pmg.colpmX;
+        pmg.colpm0 = (pmg.colpm0 & 0xf0) | (sl.colpf1 & 0x0f);
+        pmg.colpm1 = (pmg.colpm1 & 0xf0) | (sl.colpf1 & 0x0f);
+        pmg.colpm2 = (pmg.colpm2 & 0xf0) | (sl.colpf1 & 0x0f);
+        pmg.colpm3 = (pmg.colpm3 & 0xf0) | (sl.colpf1 & 0x0f);
+        DWORD colpmXSpec = pmg.colpmX;
+        BYTE PRI0 = (sl.prior & 1) ? 0xff : 0;
+        BYTE PRI1 = (sl.prior & 2) ? 0xff : 0;
+        BYTE PRI2 = (sl.prior & 4) ? 0xff : 0;
+        BYTE PRI3 = (sl.prior & 8) ? 0xff : 0;
+        BYTE PRI01 = PRI0 | PRI1;
+        BYTE PRI12 = PRI1 | PRI2;
+        BYTE PRI23 = PRI2 | PRI3;
+        BYTE PRI03 = PRI0 | PRI3;
+        BYTE MULTI = (sl.prior & 32) ? 0xff : 0;
+        BYTE P0 = 0, P1 = 0, P2 = 0, P3 = 0, P01 = 0, P23 = 0;
+        BYTE *pb = &rgpix[cclockPrev + ((NTSCx - X8) >> 1)];
+        BYTE b = *pb;
+        if (!pmg.fHiRes && (i & 1))
+        {
+            P0 = (b & bfPM0) ? pmg.colpm0 : 0;
+            P1 = (b & bfPM1) ? pmg.colpm1 : 0;
+            P2 = (b & bfPM2) ? pmg.colpm2 : 0;
+            P3 = (b & bfPM3) ? pmg.colpm3 : 0;
+
+            P01 = (P0 | P1) ? 0xff : 0;
+            P23 = (P2 | P3) ? 0xff : 0;
+        }
+
         for (i = cclockPrev; i < cclock; i++)
         {
-            BYTE b = rgpix[i+((NTSCx - X8)>>1)];
-
-            // if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
-            if (pmg.fHiRes && (b & bfPF1))
-                sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+            b = *pb++;
 
             // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
-            // (so that text shows up on top of a fifth player using its chroma). Put it back later.
-            BYTE colpf3Sav = sl.colpf3;
-            if (pmg.fHiRes && (b & bfPF3) && (b & bfPF1))
-                sl.colpf3 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
-
-            BYTE colpm0 = pmg.colpm0;
-            BYTE colpm1 = pmg.colpm1;
-            BYTE colpm2 = pmg.colpm2;
-            BYTE colpm3 = pmg.colpm3;
+            // (so that text shows up on top of a fifth player using its chroma).
+            if (pmg.fHiRes && (b & bfPF1))
+                sl.colpf3 = colpf3Spec;
+            else
+                sl.colpf3 = colpf3Norm;
 
             // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
+            // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
             if (pmg.fHiRes && (b & bfPF1))
+                pmg.colpmX = colpmXSpec;
+            else
+                pmg.colpmX = colpmXNorm;
+
+            // !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI in DrawMissiles
+
+            // Thank you Altirra for help with the priority logic
+
+            // Be careful with this logic, many flags have to be either 0xff or 0 for the trick of using the colour as a mask
+
+            // PMG data changes at most every other pixel. If hi-res PF1 is peeking through, that could change every pixel
+            if (pmg.fHiRes || !(i & 1))
             {
-                colpm0 = (colpm0 & 0xf0) | (sl.colpf1 & 0x0f);
-                colpm1 = (colpm1 & 0xf0) | (sl.colpf1 & 0x0f);
-                colpm2 = (colpm2 & 0xf0) | (sl.colpf1 & 0x0f);
-                colpm3 = (colpm3 & 0xf0) | (sl.colpf1 & 0x0f);
+                P0 = (b & bfPM0) ? pmg.colpm0 : 0;
+                P1 = (b & bfPM1) ? pmg.colpm1 : 0;
+                P2 = (b & bfPM2) ? pmg.colpm2 : 0;
+                P3 = (b & bfPM3) ? pmg.colpm3 : 0;
+            }
+            if (!(i & 1))
+            {
+                // assumes knowledge of where the bfPM's are
+                P01 = (b & 0x30) ? 0xff : 0;
+                P23 = (b & 0xc0) ? 0xff : 0;
             }
 
-            // !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI
-
-            // Thank you Altirra
-            BYTE PRI0 = (sl.prior & 1) ? 0xff : 0;
-            BYTE PRI1 = (sl.prior & 2) ? 0xff : 0;
-            BYTE PRI2 = (sl.prior & 4) ? 0xff : 0;
-            BYTE PRI3 = (sl.prior & 8) ? 0xff : 0;
-            BYTE P0 = (b & bfPM0) ? 0xff : 0;
-            BYTE P1 = (b & bfPM1) ? 0xff : 0;
-            BYTE P2 = (b & bfPM2) ? 0xff : 0;
-            BYTE P3 = (b & bfPM3) ? 0xff : 0;
-
-            BYTE MULTI = (sl.prior & 32) ? 0xff : 0;
-
-            BYTE PRI01 = PRI0 | PRI1;
-            BYTE PRI12 = PRI1 | PRI2;
-            BYTE PRI23 = PRI2 | PRI3;
-            BYTE PRI03 = PRI0 | PRI3;
-            BYTE P01 = P0 | P1;
-            BYTE P23 = P2 | P3;
-
-            // the rest of these values will be meaningless in GR. 9-11
-            BYTE PF0 = (b & bfPF0) ? 0xff : 0;
-            BYTE PF1 = (b & bfPF1) ? 0xff : 0;
-            BYTE PF2 = (b & bfPF2) ? 0xff : 0;
-            BYTE PF3 = (b & bfPF3) ? 0xff : 0;
-            BYTE PF01 = PF0 | PF1;
-            BYTE PF23 = PF2 | PF3;
-
-            // OK, based on priority, which of the elements do we show? It could be more than one thing
-            // (overlap mode ORs the colours together). Any or all of the players might be in the same spot.
-            // Normally only one playfield colour is in any one spot, but a fifth player is like PF3 so there
-            // could be two playfields set here. Player 5 (PF3) gets priority unless its a hi-res mode
-            // where PF1 text goes on top
-
-            BYTE SP0 = P0 & ~(PF01 & PRI23) & ~(PRI2 & PF23);
-            BYTE SP1 = P1 & ~(PF01 & PRI23) & ~(PRI2 & PF23) & (~P0 | MULTI);
-            BYTE SP2 = P2 & ~P01 &  ~(PF23 & PRI12) &  ~(PF01 & ~PRI0);
-            BYTE SP3 = P3 & ~P01 & ~(PF23 & PRI12) & ~(PF01 & ~PRI0) & (~P2 | MULTI);
-
-            // usually, the fifth player is above all playfields, even with priority 8
-            // !!! NYI quirk where fifth player is below players in prior 8 if PF0 and PF1 not present
-
-            BYTE SF3 = PF3 & ~(P23 & PRI03) & ~(P01 & ~PRI2);
-            BYTE SF0 = PF0 & ~(P23 & PRI0) &  ~(P01 & PRI01) & ~SF3;
-            BYTE SF1 = PF1 &  ~(P23 & PRI0) & ~(P01 & PRI01) & ~SF3;
-            BYTE SF2 = PF2 &  ~(P23 & PRI03) & ~(P01 & ~PRI2) & ~SF3;
-            BYTE SB = ~P01 & ~P23 & ~PF01 & ~PF23;
-
-            // GR. 9 - low nibble is the important LUM value. Now add back to chroma value
-            // Remember, GR.0 can be a secret GTIA mode
-            if ((sl.prior & 0xc0) == 0x40)
-                if (P01 || P23)    // all players visible over all playfields
-                    b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
-                else
-                    b = (b & 0x0f) | sl.colbk;
-
-            // GR. 10 - low nibble is an index into the colour to use
-            // Remember, GR.0 can be a secret GTIA mode
-            else if ((sl.prior & 0xc0) == 0x80)
-                if (P01 || P23)    // !!! not proper, but I'm making all players overtop all playfields
-                    b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
-                else
-                    b = *(&COLPM0 + b);
-
-            // GR. 11 - low nibble is the important CHROM value. We'll shift it back to the high nibble and add the LUM value later
-            // Remember, GR.0 can be a secret GTIA mode
-            else if ((sl.prior & 0xc0) == 0xC0)
-                if (P01 || P23)    // all players above all playfields
-                    b = (P0 & pmg.colpm0) | (P1 & pmg.colpm1) | (P2 & pmg.colpm2) | (P3 & pmg.colpm3);
-                else
-                    b = (b << 4) | sl.colbk;
-
-            else
+            // no worrying about playfield priorities in GR. 9-11
+            if (!pmg.fGTIA)
             {
+                BYTE NOTP0 = P0 ? 0 : 0xff;
+                BYTE NOTP2 = P2 ? 0 : 0xff;
+                
+                BYTE PF0 = (b & bfPF0) ? sl.colpf0 : 0;
+                BYTE PF1 = (b & bfPF1) ? sl.colpf1 : 0;
+                BYTE PF2 = (b & bfPF2) ? sl.colpf2 : 0;
+                BYTE PF3 = (b & bfPF3) ? sl.colpf3 : 0;
+                
+                // assumes knowledge of where the bfPM's are
+                BYTE PF01 = (b & 0x03) ? 0xff : 0;
+                BYTE PF23 = (b & 0x0c) ? 0xff : 0;
+                
+                BYTE NOTPF01PRI23 = (PF01 & PRI23) ? 0 : 0xff;
+                BYTE NOTPF23PRI2 = (PF23 & PRI2) ? 0 : 0xff;
+                BYTE NOTPF23PRI12 = (PF23 & PRI12) ? 0 : 0xff;
+                BYTE NOTPF01NOTPRI0 = (PF01 & ~PRI0) ? 0 : 0xff;
+                BYTE NOTP23PRI03 = (P23 & PRI03) ? 0 : 0xff;
+                BYTE NOTP01NOTPRI2 = (P01 & ~PRI2) ? 0 : 0xff;
+                BYTE NOTP23PRI0 = (P23 & PRI0) ? 0 : 0xff;
+                BYTE NOTP01PRI01 = (P01 & PRI01) ? 0 : 0xff;
+
+                // OK, based on priority, which of the elements do we show? It could be more than one thing
+                // (overlap mode ORs the colours together). Any or all of the players might be in the same spot.
+                // Normally only one playfield colour is in any one spot, but a fifth player is like PF3 so there
+                // could be two playfields set here. Player 5 (PF3) gets priority unless its a hi-res mode
+                // where PF1 text goes on top
+
+                BYTE SP0 = P0 & NOTPF01PRI23 & NOTPF23PRI2;
+                BYTE SP1 = P1 & NOTPF01PRI23 & NOTPF23PRI2 & (NOTP0 | MULTI);
+                BYTE SP2 = P2 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0;
+                BYTE SP3 = P3 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0 & (NOTP2 | MULTI);
+                
+                // usually, the fifth player is above all playfields, even with priority 8
+                // !!! NYI quirk where fifth player is below players in prior 8 if PF0 and PF1 not present
+
+                BYTE SF3 = PF3 & NOTP23PRI03 & NOTP01NOTPRI2;
+                BYTE NOTSF3 = SF3 ? 0 : 0xff;
+                BYTE SF0 = PF0 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
+                BYTE SF1 = PF1 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
+                BYTE SF2 = PF2 & NOTP23PRI03 & NOTP01NOTPRI2 & NOTSF3;
+                BYTE SB = sl.colbk & ~P01 & ~P23 & ~PF01 & ~PF23;
+
                 // OR together all the colours of all the visible things (ovelap mode support)
 
                 // In hi-res modes (GR.0 & 8) each player colour is given the luminence of PF1 whenever they overlap
                 // even if the playfields are all behind the players. In other words, all text is readable on top of
                 // player missile graphics, and if we don't do this, all text disappears
 
-                b = (SP0 & colpm0) | (SP1 & colpm1) | (SP2 & colpm2) | (SP3 & colpm3);
-                b = b | (SF0 & sl.colpf0) | (SF1 & sl.colpf1) | (SF2 & sl.colpf2) | (SF3 & sl.colpf3) | (SB & sl.colbk);
+                b = SP0 | SP1 | SP2 | SP3 | SF0 | SF1 | SF2 | SF3 | SB;
             }
 
-            // put this back if we temporarily changed it to support text visible through the fifth player
-            sl.colpf3 = colpf3Sav;
+            else
+            {
+                BYTE NOTP0 = P0 ? 0 : 0xff;
+                BYTE NOTP2 = P2 ? 0 : 0xff;
+
+                BYTE SP1 = P1 & (NOTP0 | MULTI);
+                BYTE SP2 = P2 & ~P01;
+                BYTE SP3 = P3 & ~P01 & (NOTP2 | MULTI);
+
+                // GR. 9 - low nibble is the important LUM value. Now add back to chroma value
+                // Remember, GR.0 can be a secret GTIA mode
+                if (pmg.fGTIA == 0x40)
+                {
+                    if (P01 || P23)    // all players visible over all playfields
+                        b = P0 | SP1 | SP2 | SP3;
+                    else
+                        b = (b & 0x0f) | sl.colbk;
+
+                }
+                // GR. 10 - low nibble is an index into the colour to use
+                // Remember, GR.0 can be a secret GTIA mode
+                else if (pmg.fGTIA == 0x80)
+                {
+                    if (P01 || P23)    // !!! not proper in GR.10, but I'm making all players overtop all playfields
+                        b = P0 | SP1 | SP2 | SP3;
+                    else
+                        b = *(&COLPM0 + b);
+
+                }
+                // GR. 11 - low nibble is the important CHROM value. We'll shift it back to the high nibble and add the LUM value later
+                // Remember, GR.0 can be a secret GTIA mode
+                else if (pmg.fGTIA == 0xC0)
+                {
+                    if (P01 || P23)    // all players above all playfields
+                        b = P0 | SP1 | SP2 | SP3;
+                    else
+                        b = (b << 4) | sl.colbk;
+                }
+            }
 
             qch[i] = b;
         }
