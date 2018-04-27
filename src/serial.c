@@ -84,8 +84,8 @@ BOOL CchSerialRead(char *rgb, int cchRead)
 {
     int    cch = 0;
     BOOL f = ReadFile(hComm, rgb, cchRead, (LPDWORD)&cch, NULL);
-	if (!f)
-		return 0;
+    if (!f)
+        return 0;
     DebugStr("CchSerialRead returning %d %02X\n", cch, rgb[0]);
     return cch;
 }
@@ -107,7 +107,7 @@ void __inline CheckError(BOOL f, int iCOM, HANDLE hComm2, char *pch)
 #elif
 #error
 #endif
-    sprintf(rgch, "%s\nh = %08X\nerror = %08X", pch, (unsigned)hComm2, GetLastError());
+    sprintf(rgch, "%s\nh = %p\nerror = %08X", pch, hComm2, GetLastError());
     if (!f)
         MessageBox(GetFocus(), rgch, rgchErr, MB_OK|MB_ICONHAND);
 }
