@@ -298,7 +298,7 @@ typedef struct
 
     WORD m_wFrame, m_wScan;
     short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
-    short pad2s;          // keeps track of how many 6502 cycles we're executing this scan line
+    short m_wLastSIOSector; // which sector we read last time
     BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
     BYTE m_WSYNC_on_RTI;  // restore the state of m_WSYNC_Waiting after a DLI
 
@@ -423,6 +423,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define bias          CANDY_STATE(bias)
 #define iSwapCart     CANDY_STATE(iSwapCart)
 #define fCartNeedsSwap CANDY_STATE(fCartNeedsSwap)
+#define wLastSIOSector CANDY_STATE(wLastSIOSector)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp            CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
