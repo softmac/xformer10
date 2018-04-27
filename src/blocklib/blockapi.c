@@ -205,7 +205,7 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
 BOOL __stdcall FInitBlockDevLib(void)
 {
     HANDLE hLib;
-    DWORD  ASPIStatus;
+    INT_PTR ASPIStatus;
 
     hLib = LoadLibrary ("WNASPI32.DLL");
     pfnGetASPI32SupportInfo = GetProcAddress (hLib, "GetASPI32SupportInfo");
@@ -244,7 +244,7 @@ Lfail:
 }
 
 
-DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, long l, long flags)
+DISKINFO * __stdcall PdiOpenDisk(enum disktype dt, LONG_PTR l, long flags)
 {
     DISKINFO *pdi;
     ULONG lSize;

@@ -854,7 +854,8 @@ int CALLBACK WinMain(
     if (lpCmdLine && lpCmdLine[0])
     {
         char sFile[MAX_PATH];
-        int iVM, len, VMtype, MEDIAtype;
+        int iVM, VMtype, MEDIAtype;
+        size_t len;
         BOOL f;
 
         while (lpCmdLine && strlen(lpCmdLine) > 4)
@@ -2426,7 +2427,7 @@ BOOL SaveATARIDOS(int inst, int drive)
 
     char szDir[MAX_PATH];
     szDir[0] = 0;
-    DISKINFO *pdi = PdiOpenDisk(rgvm[inst].rgvd[drive].dt, (long)rgvm[inst].rgvd[drive].sz, DI_READONLY);
+    DISKINFO *pdi = PdiOpenDisk(rgvm[inst].rgvd[drive].dt, (LONG_PTR)rgvm[inst].rgvd[drive].sz, DI_READONLY);
 
     // oops, something wrong with the disk image file
     if (!pdi)
@@ -2577,7 +2578,7 @@ void ShowAbout()
     sprintf(rgch, "%s Community Release\n"
         "Darek's Classic Computer Emulator.\n"
         "Version 9.95 - built on %s\n"
-        "%2d-bit %s release.\n\n"
+        "%2Id-bit %s release.\n\n"
         "Copyright (C) 1986-2018 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
 
@@ -6336,10 +6337,12 @@ LRESULT CALLBACK About(
                 "x64",
 #elif defined(_M_IX86)
                 "x86",
-#elif defined(_M_IX86)
+#elif defined(_M_ARM)
                 "ARM",
+#elif defined(_M_ARM64)
+                "ARM64",
 #else
-                "",
+                "",        // !!! unknown
 #endif
                 oi.dwMajorVersion, oi.dwMinorVersion,
                 oi.dwBuildNumber & 65535,
