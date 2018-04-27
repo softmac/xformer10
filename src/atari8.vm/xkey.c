@@ -374,7 +374,7 @@ lookit2:
 // Decide whether or not to pass the key to ATARI
 // RETURN TRUE to hide the key from Windows, FALSE to let Windows see it
 
-BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
+BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 {
     message;
 
@@ -383,7 +383,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, DWORD uParam, DWORD lParam)
     BOOL fDown =  (lParam & 0x80000000) == 0;
 
     scan = (lParam >> 16) & 0xFF;
-    ch = uParam;
+    ch = uParam & 0xFF;
 
     // the VK codes for volume and brightness, etc. happen to have the same scan codes as ordinary letters
     // and the ATARI will type them, so return early
