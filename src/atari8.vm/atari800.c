@@ -1503,7 +1503,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     // we want to remove BASIC, on an XL the only way is to fake OPTION being held down.
     // but now it will get stuck down! ExecuteAtari will fix that
     CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7;
-    PAL = 14;
+    PAL = 15;   // should be 14, but some apps need to see 15
     TRIG0 = 1;
     TRIG1 = 1;
     TRIG2 = 1;
@@ -2078,6 +2078,9 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     // we have 3 cycles we can spend and still see the old VCOUNT. Any less than that, it's the new VCOUNT.
     else if (addr == 0xD40B)
     {
+        // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
+        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 4)
+            return 0;
         if (wLeft < DMAMAP[115] + 1 - 3)
             return (BYTE)((wScan + 1) >> 1);
         else
