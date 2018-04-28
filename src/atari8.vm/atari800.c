@@ -2072,11 +2072,13 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         rgbMem[addr] = poly17[random17pos];
     }
 
-    // VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 110 VCOUNT increments
-    // !!! This is not quite right, it's a few cycles later than the WSYNC point which is 105
+    // VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 111 VCOUNT increments
+    // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
+    // That should leave 2 but the CPU does the first cycle of its next instruction before WSYNC is released so
+    // we have 3 cycles we can spend and still see the old VCOUNT. Any less than that, it's the new VCOUNT.
     else if (addr == 0xD40B)
     {
-        if (wLeft < DMAMAP[115])
+        if (wLeft < DMAMAP[115] + 1 - 3)
             return (BYTE)((wScan + 1) >> 1);
         else
             return (BYTE)(wScan >> 1);
@@ -2465,8 +2467,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // its last ~8 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
 
             // the index is 0-based and wLeft should be set one higher
-            if (wLeft > DMAMAP[115])
-                wLeft = DMAMAP[115] + 1;
+            if (wLeft > DMAMAP[115] + 1)
+                wLeft = DMAMAP[115] + 1 + 4;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
             else
             {
                 wLeft = 0;                // stop right now and wait till next line's WSYNC
