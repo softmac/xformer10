@@ -249,6 +249,11 @@ typedef struct
     short hpospPixStop[4];
     short hposmPixStart[4];
     short hposmPixStop[4];
+    
+    // of all the PMs, what is the earliest and latest pixel they can be found at? (optimize areas we know to be empty of PMG)
+    short hposPixEarliest;
+    short hposPixLatest;
+
     BYTE cwp[4];    // size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
     BYTE cwm[4];
 
