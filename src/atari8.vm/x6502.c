@@ -2715,7 +2715,6 @@ void __cdecl Go6502(int iVM)
                 // clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
                 NMIST = (NMIST & 0x20) | 0x5F;
 
-                // !!! A WSYNC set wLeft very low, and it should be set back to cycle 10 here
                 // VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
                 if (NMIEN & 0x40) {
                     PackP(iVM);    // we're inside Go6502 so we need to pack our flags to push them on the stack

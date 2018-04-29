@@ -1829,10 +1829,14 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             // We're supposed to start executing at the WSYNC release point (cycle 105) not the beginning of the scan line
             // That point is stored in index 115 of this array, and +1 because the index is 0-based
+            // I also subtract 4 (the # of cycles of a LDA abs or STA abs, because technically the command is executed AFTER those
+            // cycles have elapsed, but I will do them BEFORE (otherwise I have to stop Go6502 when wLeft == # of cycles the next instruction
+            // will take instead of at 0 and save it for the next scan line after PSL has fetched the new scan line)
+            // So this way, a LDA VCOUNT will increment at the proper spot
             if (WSYNC_Waiting)
             {
                 //ODS("WAITING\n");
-                wLeft = DMAMAP[115] + 1;    // the stored WSYNC point
+                wLeft = DMAMAP[115] + 1 - 4;
                 WSYNC_Waiting = FALSE;
 
                 // Uh oh, an NMI should happen in the mean time, so better do that now and delay the wait for WSYNC until the RTI
@@ -2072,16 +2076,19 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         rgbMem[addr] = poly17[random17pos];
     }
 
-    // VCOUNT - see THEORY OF OPERATION for WSYNC, by clock 111 VCOUNT increments
+    // VCOUNT - by clock 111 VCOUNT increments
     // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
     // That should leave 2 but the CPU does the first cycle of its next instruction before WSYNC is released so
     // we have 3 cycles we can spend and still see the old VCOUNT. Any less than that, it's the new VCOUNT.
+    // Then I subtract 4 because the LDA VCOUNT technically happens after those 4 cycles are done, but I get called before 
+    // LDA has decremented the cycle count by 4. I can't do it differently because I'd have to stop Go6502 before any
+    // instruction that would only partially complete, to give PSL a chance to read the new scan line data in first.
     else if (addr == 0xD40B)
     {
         // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
-        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 4)
+        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 4 - 4)
             return 0;
-        if (wLeft < DMAMAP[115] + 1 - 3)
+        if (wLeft < DMAMAP[115] + 1 - 3 - 4)
             return (BYTE)((wScan + 1) >> 1);
         else
             return (BYTE)(wScan >> 1);
@@ -2454,24 +2461,20 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         {
             // WSYNC - THEORY OF OPERATION - see also code to read VCOUNT
             //
-            // We run a scan line's worth of 6502 code at once.. I consider it to be from horiz clock 10 to
-            // the next scan line's clock 10. That is where ANTIC triggers a DLI, so it makes sense to exit and let
-            // ANTIC draw the next scan line and trigger a DLI at that point.
-            //
-            // A call to WSYNC halts until about clock 105, and we have saved how many CPU instructions can still execute before
-            // the next line's clock 10.
+            // We run a scan line's worth of 6502 code at once..  A call to WSYNC halts until about clock 105, and we have
+            // saved how many CPU cycles can still execute on this scan line after the WSYNC is released.
             // A call to WSYNC with fewer (not less) than that number of cycles has already missed that scan lines' WSYNC,
             // so we need to stop executing, and start up the next scan line with only so many cycles allowed.
             //
-            // VCOUNT is updated just after WSYNC is released. !!! I assume nobody will read it so quickly that it won't have updated!
-            // The code to read VCOUNT reports one higher if the read comes with after the WSYNC point.
+            // VCOUNT is updated 6 cycles after WSYNC is released. VCOUNT reports one higher if the read comes after that.
             //
-            // Since a VBI is triggered on line 248, line 247's code will notice, briefly, VCOUNT go up to 124 (248 / 2) during
-            // its last ~8 cycles, so apps should be able to see VCOUNT get that high before the VBI, like on the real H/W (MULE).
+            // Since a VBI is triggered on line 248 at clock 10, that gives us about 13 cycles at most of reporting
+            // VCOUNT == 124 before the VBI (MULE).
 
-            // the index is 0-based and wLeft should be set one higher
-            if (wLeft > DMAMAP[115] + 1)
-                wLeft = DMAMAP[115] + 1 + 4;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
+            // the index is 0-based and wLeft should be set one higher. I also subtract 4, the # of cycles it takes to STA abs.
+            // The moment we return after setting wLeft to something new, wLeft will decrement by 4.
+            if (wLeft > DMAMAP[115] + 1 - 4)
+                wLeft = DMAMAP[115] + 1;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
             else
             {
                 wLeft = 0;                // stop right now and wait till next line's WSYNC
