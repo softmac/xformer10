@@ -2386,7 +2386,7 @@ void ScrollTiles()
     GetClientRect(vi.hWnd, &rect);
 
     int iVM = v.iVM;
-    while (iVM <= 0 || rgvm[iVM].fValidVM == FALSE)
+    while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
         iVM++;
 
     int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
