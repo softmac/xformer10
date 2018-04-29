@@ -2473,11 +2473,16 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
             // the index is 0-based and wLeft should be set one higher. I also subtract 4, the # of cycles it takes to STA abs.
             // The moment we return after setting wLeft to something new, wLeft will decrement by 4.
+            // !!! ACID test CPU timing LDA zp,x fails because it does INC WSYNC, which awakens at cycle 107, not 104
+            // because it does not start the next instruction early plus it is 6 cycles not 4, with the LDA WSYNC happening
+            // at cycle 4, which might trigger the wait in the middle of the instruction, which would be extremely hard to
+            // emulate. The test takes 1 cycle more than a multiple of 105, so that's enough to push it over the edge to the next
+            // VCOUNT, I think.
             if (wLeft > DMAMAP[115] + 1 - 4)
                 wLeft = DMAMAP[115] + 1;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
             else
             {
-                wLeft = 0;                // stop right now and wait till next line's WSYNC
+                wLeft = 0;               // stop right now and wait till next line's WSYNC
                 WSYNC_Waiting = TRUE;    // next scan line only gets a few cycles
             }
         }

@@ -926,30 +926,6 @@ void PSLPrepare(int iVM)
             if (pmg.hposPixLatest > X8)
                 pmg.hposPixLatest = X8;
         }
-
-        // If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
-        // Be brave, and if GTIA is turned off halfway down the screen, turn back!
-        if (sl.prior & 0xC0)    // pmg.fGTIA is not set up yet
-        {
-            if (sl.modelo == 15)
-            {
-                sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
-            }
-            else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
-                ;    // little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
-            else
-            {
-                // !!! ANTIC does something strange, but I don't emulate it right now!
-            }
-        }
-        else
-        {
-            if (sl.modelo > 15)
-                sl.modelo = 15;
-        }
-
-        // are we in a hi-res mono mode that has special collision detection rules?
-        pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
     }
 }
 
@@ -983,6 +959,30 @@ void PSLReadRegs(int iVM, short start, short stop)
 
     // note if GTIA modes enabled... no collisions to playfield in GTIA
     pmg.fGTIA = sl.prior & 0xc0;
+
+    // If GTIA is enabled, change mode 15 into 16, 17 or 18 for GR. 9, 10 or 11
+    // Be brave, and if GTIA is turned off halfway down the screen, turn back!
+    if (sl.prior & 0xC0)    // pmg.fGTIA is not set up yet
+    {
+        if (sl.modelo == 15)
+        {
+            sl.modelo = 15 + (sl.prior >> 6); // (we'll call 16, 17 and 18 GR. 9, 10 and 11)
+        }
+        else if (sl.modelo == 2 || sl.modelo == 3 || sl.modelo > 15)
+            ;    // little known fact, you can go into GTIA modes based on GR.0, dereferencing a char set to get the bytes to draw
+        else
+        {
+            // !!! ANTIC does something strange, but I don't emulate it right now!
+        }
+    }
+    else
+    {
+        if (sl.modelo > 15)
+            sl.modelo = 15;
+    }
+
+    // are we in a hi-res mono mode that has special collision detection rules?
+    pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
     // update the colour registers
 
@@ -2546,9 +2546,6 @@ BOOL ProcessScanLine(int iVM)
     // what part of the scan line were we on last time?
     short cclockPrev = PSL;
 
-    if (cclock <= PSL)
-        return TRUE;    // nothing to do
-
     PSL = cclock;    // next time we're called, start from here
 
     // We may need to draw more than asked for, to draw an integer # of bytes of a scan mode at a time (!!! current limitation)
@@ -2595,6 +2592,9 @@ BOOL ProcessScanLine(int iVM)
     // now we are responsible for drawing starting from location cclockPrev up to but not including cclock
 
     PSLReadRegs(iVM, cclockPrev, cclock);    // read our hardware registers to find brand-new values to use starting this cycle
+
+    if (cclock <= cclockPrev)
+        return TRUE;    // nothing to do except read new values into the registers
 
     // Be efficient. Split this section into 3 pieces... before PMG appear, with PMG, and after PMG so the slow algorithm
     // runs as little as possible
