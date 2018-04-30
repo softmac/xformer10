@@ -284,7 +284,7 @@ void CreateDMATables()
     //
     // rgDMAMap index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
     // Index 115 will tell you what wLeft should be set to after WSYNC is released (cycle 105)
-    // Index 116 will tell you what wLeft will be on cycle 10, when it's time for an NMI (DLI/VBI)
+    // Index 116 will tell you what wLeft will be on cycle 17, when it's time for an NMI (DLI/VBI)
     //
 
     for (mode = 0; mode < 20; mode++)
@@ -347,10 +347,13 @@ void CreateDMATables()
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle - 1;
 
                                     // index 116 - remember what wLeft will be when it's time for a DLI/VBI NMI (cycle 10)
-                                    if (index == 10)
+                                    // but it takes 7 cycles for the CPU to process the NMI and start executing code, so
+                                    // we don't get to run until cycle 17. (Decathalon glitches if we start the DLI earlier).
+                                    // !!! I don't halt the processor between 10 and 17, should I?
+                                    if (index == 17)
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle;
                                     // oops, 10 was busy
-                                    else if (index < 10 && rgDMAMap[mode][pf][width][first][player][missile][lms][116] == 0)
+                                    else if (index < 17 && rgDMAMap[mode][pf][width][first][player][missile][lms][116] == 0)
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle - 1;
                                 }
 
@@ -643,7 +646,7 @@ void PSLPrepare(int iVM)
 
             fFetch = FALSE;
 
-            // vertical scroll bit enabled - you can only start vscrolling on a real mode
+                        // vertical scroll bit enabled - you can only start vscrolling on a real mode
             if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
             {
                 sl.fVscrol = TRUE;
@@ -715,16 +718,54 @@ void PSLPrepare(int iVM)
                 break;
             }
 
-            // time to stop vscrol, this line doesn't use it.
-            // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
-            // allow blank mode lines to mean duplicates of previous lines (GR.9++)
-            if (sl.fVscrol && (!(sl.modehi & 2)))
+            // Check playfield width and set cbWidth (number of bytes read by Antic)
+            // and the smaller cbDisp (number of bytes actually visible)
+            // This only happens every time a new mode is fetched, not every scan line
+            switch (DMACTL & 3)
             {
-                sl.fVscrol = FALSE;
-                // why is somebody setting the high bits of this sometimes?
-                scans = VSCROL & 0x0f;    // the first mode line after a VSCROL area is truncated, ending at VSCROL
-                //ODS("%d FINISH: scans=%d\n", wScan, scans);
+            default:
+                Assert(FALSE);
+                break;
+
+                // cbDisp - actual number of bytes per line of this graphics mode visible
+                // cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
+
+            case 0:    // playfield off
+                sl.modelo = 0;
+                cbWidth = 0;
+                cbDisp = cbWidth;
+                break;
+            case 1: // narrow playfield
+                cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
+                cbDisp = cbWidth;
+                if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
+                    cbWidth |= (cbWidth >> 2);
+                break;
+            case 2: // normal playfield
+                cbWidth = mpMdBytes[sl.modelo];        // bytes in NARROW mode, eg. 32
+                cbDisp = cbWidth | (cbWidth >> 2);    // cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
+                if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
+                    cbWidth |= (cbWidth >> 1);            // boost cbWidth to mimic wide playfield, eg. 48
+                else
+                    cbWidth |= (cbWidth >> 2);            // otherwise same as cbDisp
+                break;
+            case 3: // wide playfield
+                cbWidth = mpMdBytes[sl.modelo];        // NARROW width
+                cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);    // visible area is half way between NORMAL and WIDE
+                cbWidth |= (cbWidth >> 1);            // WIDE width
+                break;
             }
+        }
+
+        // time to stop vscrol, this line doesn't use it.
+        // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
+        // allow blank mode lines to mean duplicates of previous lines (GR.9++)
+        if (sl.fVscrol && (!(sl.modehi & 2)))
+        {
+            sl.fVscrol = FALSE;
+            // why is somebody setting the high bits of this sometimes?
+            scans = VSCROL & 0x0f;    // the first mode line after a VSCROL area is truncated, ending at VSCROL
+            //ODS("%d FINISH: scans=%d\n", wScan, scans);
         }
 
         // DMA is off, and we're wanting to fetch because we finished the last thing it was doing when it was turned off
@@ -738,7 +779,7 @@ void PSLPrepare(int iVM)
             scans = 0;        // pretend it's a 1-line blank mode
         }
 
-// DLI now happens inside of Go6502 at the proper cycle (10)
+        // DLI now happens inside of Go6502 at the proper cycle (17)
 #if 0
         // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
         // a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
@@ -768,44 +809,6 @@ void PSLPrepare(int iVM)
             }
         }
 #endif
-
-        // Check playfield width and set cbWidth (number of bytes read by Antic)
-        // and the smaller cbDisp (number of bytes actually visible)
-
-        switch (DMACTL & 3)
-        {
-        default:
-            Assert(FALSE);
-            break;
-
-            // cbDisp - actual number of bytes per line of this graphics mode visible
-            // cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
-
-        case 0:    // playfield off
-            sl.modelo = 0;
-            cbWidth = 0;
-            cbDisp = cbWidth;
-            break;
-        case 1: // narrow playfield
-            cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
-            cbDisp = cbWidth;
-            if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
-                cbWidth |= (cbWidth >> 2);
-            break;
-        case 2: // normal playfield
-            cbWidth = mpMdBytes[sl.modelo];        // bytes in NARROW mode, eg. 32
-            cbDisp = cbWidth | (cbWidth >> 2);    // cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
-            if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
-                cbWidth |= (cbWidth >> 1);            // boost cbWidth to mimic wide playfield, eg. 48
-            else
-                cbWidth |= (cbWidth >> 2);            // otherwise same as cbDisp
-            break;
-        case 3: // wide playfield
-            cbWidth = mpMdBytes[sl.modelo];        // NARROW width
-            cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);    // visible area is half way between NORMAL and WIDE
-            cbWidth |= (cbWidth >> 1);            // WIDE width
-            break;
-        }
 
         // we do not support changing HSCROL in the middle of a scan line. I doubt it's necessary, it would slow things down,
         // and it's complicated anyway
@@ -904,21 +907,27 @@ void PSLPrepare(int iVM)
             // also keep track of the overall range of VISIBLE PMs on this scan line
             for (int i = 0; i < 4; i++)
             {
-                // keep track of left-most P pixel
-                if (pmg.hpospPixStart[i] < pmg.hposPixEarliest)
-                    pmg.hposPixEarliest = pmg.hpospPixStart[i];
+                if (pmg.grafp[i]) // player visible
+                {
+                    // keep track of left-most P pixel
+                    if (pmg.hpospPixStart[i] < pmg.hposPixEarliest)
+                        pmg.hposPixEarliest = pmg.hpospPixStart[i];
 
-                // keep track of right-most P pixel
-                if (pmg.hpospPixStop[i] > pmg.hposPixLatest)
-                    pmg.hposPixLatest = pmg.hpospPixStop[i];
+                    // keep track of right-most P pixel
+                    if (pmg.hpospPixStop[i] > pmg.hposPixLatest)
+                        pmg.hposPixLatest = pmg.hpospPixStop[i];
+                }
 
-                // keep track of left-most M pixel
-                if (pmg.hposmPixStart[i] < pmg.hposPixEarliest)
-                    pmg.hposPixEarliest = pmg.hposmPixStart[i];
+                if (pmg.grafm & (0x03 << (i << 1))) // missile visible
+                {
+                    // keep track of left-most M pixel
+                    if (pmg.hposmPixStart[i] < pmg.hposPixEarliest)
+                        pmg.hposPixEarliest = pmg.hposmPixStart[i];
 
-                // keep track of right-most M pixel
-                if (pmg.hposmPixStop[i] > pmg.hposPixLatest)
-                    pmg.hposPixLatest = pmg.hposmPixStop[i];
+                    // keep track of right-most M pixel
+                    if (pmg.hposmPixStop[i] > pmg.hposPixLatest)
+                        pmg.hposPixLatest = pmg.hposmPixStop[i];
+                }
             }
 
             if (pmg.hposPixEarliest < 0)
@@ -928,7 +937,6 @@ void PSLPrepare(int iVM)
         }
     }
 }
-
 
 // WHEN DONE, MOVE ON TO THE NEXT SCAN LINE NEXT TIME WE'RE CALLED
 //
@@ -2539,9 +2547,11 @@ BOOL ProcessScanLine(int iVM)
     // what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
     // so the index into the DMA array, which is 0-based, is (wLeft - 1). That tells us the horizontal clock cycle we're on,
     // which is an index into the PIXEL array to tell us the pixel we're drawing at this moment.
-    // Finally, once the whole scan line executes, we will be called with wLeft == 0 to finish things up
-    // if wLeft < 0, we're hopefully not in the visible part of the screen (that doesn't happen til at least -5) so it's OK to just use 0.
-    short cclock = rgPIXELMap[DMAMAP[wLeft > 0 ? wLeft - 1 : 0]];
+    // Finally, once the whole scan line executes, we will be called with wLeft <= 0 to finish things up
+    // !!! When wLeft <= 4 we'll wish we had started the next scan line already for things that have scan line granularity,
+    // like VSCROL (bump pong)
+    // Technically, we execute at the start of the STA GTIA, but it shouldn't happen until the end of that 4 cycle instruction, so I subtract 4 more.
+    short cclock = rgPIXELMap[DMAMAP[wLeft > 5 ? (wLeft - 1 - 4) : 0]];
 
     // what part of the scan line were we on last time?
     short cclockPrev = PSL;

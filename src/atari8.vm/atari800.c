@@ -1829,14 +1829,10 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             // We're supposed to start executing at the WSYNC release point (cycle 105) not the beginning of the scan line
             // That point is stored in index 115 of this array, and +1 because the index is 0-based
-            // I also subtract 4 (the # of cycles of a LDA abs or STA abs, because technically the command is executed AFTER those
-            // cycles have elapsed, but I will do them BEFORE (otherwise I have to stop Go6502 when wLeft == # of cycles the next instruction
-            // will take instead of at 0 and save it for the next scan line after PSL has fetched the new scan line)
-            // So this way, a LDA VCOUNT will increment at the proper spot
             if (WSYNC_Waiting)
             {
                 //ODS("WAITING\n");
-                wLeft = DMAMAP[115] + 1 - 4;
+                wLeft = DMAMAP[115] + 1;
                 WSYNC_Waiting = FALSE;
 
                 // Uh oh, an NMI should happen in the mean time, so better do that now and delay the wait for WSYNC until the RTI
@@ -2078,17 +2074,12 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 
     // VCOUNT - by clock 111 VCOUNT increments
     // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
-    // That should leave 2 but the CPU does the first cycle of its next instruction before WSYNC is released so
-    // we have 3 cycles we can spend and still see the old VCOUNT. Any less than that, it's the new VCOUNT.
-    // Then I subtract 4 because the LDA VCOUNT technically happens after those 4 cycles are done, but I get called before 
-    // LDA has decremented the cycle count by 4. I can't do it differently because I'd have to stop Go6502 before any
-    // instruction that would only partially complete, to give PSL a chance to read the new scan line data in first.
     else if (addr == 0xD40B)
     {
         // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
-        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 4 - 4)
+        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 6 + 4 - 1)
             return 0;
-        if (wLeft < DMAMAP[115] + 1 - 3 - 4)
+        if (wLeft < DMAMAP[115] + 1 - 6 + 4)
             return (BYTE)((wScan + 1) >> 1);
         else
             return (BYTE)(wScan >> 1);
@@ -2446,6 +2437,16 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xD4:      // ANTIC
         addr &= 15;
 
+        // Uh-oh, we're changing something with scan line granularity that shouldn't happen until after the next scan line is set up
+        // since the STA abs won't have finished by the end of this line (4 cycle instruction) and we execute at the beginning of the
+        // instruction instead of the end like we're supposed to. Skip doing it now and back up to do it again.
+        // Without this Bump Pong is 2x too tall
+        if (addr < 10 && wLeft < 4)
+        {
+            regPC -= 3; // !!! dangerous, a STA (zp) would be only 2 bytes
+            break;
+        }
+
         rgbMem[writeANTIC+addr] = b;
 
         // the display list pointer is the only ANTIC register that is R/W
@@ -2454,32 +2455,24 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
         if (addr == 14 && b != 0)
             addr = addr;
-
+        
         // Do NOT reload the DL to the top when DMA fetch is turned on, that turned out to be disastrous
 
         if (addr == 10)
         {
-            // WSYNC - THEORY OF OPERATION - see also code to read VCOUNT
-            //
-            // We run a scan line's worth of 6502 code at once..  A call to WSYNC halts until about clock 105, and we have
-            // saved how many CPU cycles can still execute on this scan line after the WSYNC is released.
-            // A call to WSYNC with fewer (not less) than that number of cycles has already missed that scan lines' WSYNC,
-            // so we need to stop executing, and start up the next scan line with only so many cycles allowed.
-            //
-            // VCOUNT is updated 6 cycles after WSYNC is released. VCOUNT reports one higher if the read comes after that.
-            //
-            // Since a VBI is triggered on line 248 at clock 10, that gives us about 13 cycles at most of reporting
-            // VCOUNT == 124 before the VBI (MULE).
-
-            // the index is 0-based and wLeft should be set one higher. I also subtract 4, the # of cycles it takes to STA abs.
-            // The moment we return after setting wLeft to something new, wLeft will decrement by 4.
-            // !!! ACID test CPU timing LDA zp,x fails because it does INC WSYNC, which awakens at cycle 107, not 104
-            // because it does not start the next instruction early plus it is 6 cycles not 4, with the LDA WSYNC happening
-            // at cycle 4, which might trigger the wait in the middle of the instruction, which would be extremely hard to
-            // emulate. The test takes 1 cycle more than a multiple of 105, so that's enough to push it over the edge to the next
-            // VCOUNT, I think.
-            if (wLeft > DMAMAP[115] + 1 - 4)
-                wLeft = DMAMAP[115] + 1;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
+            // WSYNC
+            // If wLeft is <= index 115 (+1 because that is 0-based and wLeft is 1-based), we missed this WSYNC point and have to wait
+            // an entire other scan line. We add 4 because we are executing at the beginning of the STA WSYNC, 4 cycles long, and the
+            // store won't actually happen until those 4 cycles have elapsed. So a STA WSYNC that begins 4 cycles before the WSYNC point will
+            // end at the WSYNC point, which is just past the deadline.
+            // We're about to decrement those 4 cycles as soon as we return, so we add 4 so that wLeft will immediately go to the 
+            // right value
+            // !!! WSYNC releases at 104, not 105, but if we do that, some Worm War blocks become thin
+            // !!! But we fail the ACID VCOUNT test since we don't do that
+            // Decathlon's line 41 DLI spends enough time before its STA WSYNC that it needs to miss the line 41 WSYNC point
+            // Pitfall 2 needs enough time after a STA WSYNC before the next one that we can't set wLeft to anything smaller
+            if (wLeft > DMAMAP[115] + 1 + 4)
+                wLeft = DMAMAP[115] + 1 + 4;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
             else
             {
                 wLeft = 0;               // stop right now and wait till next line's WSYNC
