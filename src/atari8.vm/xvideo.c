@@ -864,6 +864,7 @@ void PSLPrepare(int iVM)
             pmg.pmbase = PMBASE & 0xFC;
 
         // enable PLAYER DMA and enable players?
+        // !!! GRACTL ON but DMA OFF seems to produce randomly changing PMG data, so I'll just use the value of GRAFPx
         if (sl.dmactl & 0x08 && GRACTL & 2)
         {
             // single line resolution

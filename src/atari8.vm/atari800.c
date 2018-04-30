@@ -2265,8 +2265,15 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
 
-        if (addr == 30)
-            {
+        if (addr == 0x1d)   // GRACTL
+        {
+            if (!(b & 1))   // turn off missiles needs to clear GRAFM (Decathlon blue bar glitch)
+                GRAFM = 0;
+            if (!(b & 2))   // turn off players needs to clear GRAFPx
+                GRAFPX = 0;
+        }
+        else if (addr == 30)
+        {
             // HITCLR
 
             *(ULONG *)MXPF = 0;
