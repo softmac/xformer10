@@ -1815,6 +1815,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             // table element HCLOCKS has the starting value of wLeft for this kind of scan line (0-based)
             wLeft = DMAMAP[HCLOCKS] + 1;
+            
+            // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
+            // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
+            // <114 as soon as the POKE happens.
+            if (fRedoPoke)
+            {
+                wLeft += 4;
+                fRedoPoke = FALSE;
+            }
 
             // Scan line 0-7 are not visible
             // Scan lines 8-247 are 240 visible lines, ANTIC DMA is possible, depending on a lot of things
@@ -2339,6 +2348,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
             //ODS("IRQEN: 0x%02x %d %d\n", b, wFrame, wScan);
 
+            // !!! All of the bits they poke ON have to show up instantly OFF in IRQST, but that's not how I do it right now.
+            // I don't reset the bit until the interrupt is ready to fire, I treat it as meaning it's triggered not just enabled.
+
         }
         else if (addr <= 8)
         {
@@ -2448,9 +2460,10 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         // since the STA abs won't have finished by the end of this line (4 cycle instruction) and we execute at the beginning of the
         // instruction instead of the end like we're supposed to. Skip doing it now and back up to do it again.
         // Without this Bump Pong is 2x too tall
-        if (addr < 10 && wLeft < 4)
+        if (addr < 10 && rgbMem[regPC - 1] == 0xd4 && wLeft < 4)
         {
-            regPC -= 3; // !!! dangerous, a STA (zp) would be only 2 bytes
+            regPC -= 3; // !!! Support indirect and 2-byte instructions that access ANTIC too
+            fRedoPoke = TRUE;   // add 4 cycles to the next scan line so the timing isn't changed
             break;
         }
 
@@ -2472,9 +2485,11 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // an entire other scan line. We add 4 because we are executing at the beginning of the STA WSYNC, 4 cycles long, and the
             // store won't actually happen until those 4 cycles have elapsed. So a STA WSYNC that begins 4 cycles before the WSYNC point will
             // end at the WSYNC point, which is just past the deadline.
+            // If they do INC WSYNC or some such, that's 6 cycles, but I think it also triggers the WSYNC on cycle 4. 
+            // !!! But we should delay 2 cycles in waking up from WSYNC in such a case
             // We're about to decrement those 4 cycles as soon as we return, so we add 4 so that wLeft will immediately go to the 
             // right value
-            // !!! WSYNC releases at 104, not 105, but if we do that, some Worm War blocks become thin
+            // !!! WSYNC often releases at 104, not 105, but if we do that, some Worm War blocks become thin
             // !!! But we fail the ACID VCOUNT test since we don't do that
             // Decathlon's line 41 DLI spends enough time before its STA WSYNC that it needs to miss the line 41 WSYNC point
             // Pitfall 2 needs enough time after a STA WSYNC before the next one that we can't set wLeft to anything smaller

@@ -149,6 +149,7 @@ void CreateDMATables()
                                     rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
 
                                     // this cycle is for missile DMA? Then all the tables with missile DMA on have it blocked
+                                    // in double line resolution, there is still a DMA fetch every line - one was unnecessary
                                     if (rgDMA[cycle] == DMA_M)
                                     {
                                         if (missile)
@@ -2592,11 +2593,14 @@ BOOL ProcessScanLine(int iVM)
         }
 
         // We kind of have to draw more than asked to, so increment our bounds
-        short newTop = iTop * BitsAtATime(iVM) + bbars;
-        if (newTop > cclock)
+        if (iTop > 0)
         {
-            cclock = newTop;
-            PSL = cclock;
+            short newTop = iTop * BitsAtATime(iVM) + bbars;
+            if (newTop > cclock)
+            {
+                cclock = newTop;
+                PSL = cclock;
+            }
         }
     }
 

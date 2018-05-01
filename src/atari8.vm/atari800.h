@@ -75,7 +75,7 @@ char rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
 short rgPIXELMap[HCLOCKS];
 
 // this mess is how we properly index all of those arrays
-#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][(DMACTL & 4) >> 2][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
+#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 
@@ -328,7 +328,9 @@ typedef struct
 
     WORD m_fStop;
     WORD m_wStartScan;
-    WORD pad3W, pad4W;
+    BYTE m_fRedoPoke;
+    BYTE pad3B;
+    WORD pad4W;
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
@@ -428,6 +430,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define bias          CANDY_STATE(bias)
 #define iSwapCart     CANDY_STATE(iSwapCart)
 #define fCartNeedsSwap CANDY_STATE(fCartNeedsSwap)
+#define fRedoPoke     CANDY_STATE(fRedoPoke)
 #define wLastSIOSector CANDY_STATE(wLastSIOSector)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp            CANDY_STATE(bp)
