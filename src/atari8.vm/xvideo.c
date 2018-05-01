@@ -306,13 +306,15 @@ void CreateDMATables()
                                 {
                                     for (int xx = 0; xx < 4; xx++)
                                     {
-                                        if (rgDMAMap[mode][pf][width][first][player][missile][lms][25 + 4 * cycle] == 0)
+                                        if (rgDMAMap[mode][pf][width][first][player][missile][lms][25 + xx + 4 * cycle] == 0)
                                         {
-                                            rgDMAMap[mode][pf][width][first][player][missile][lms][25 + 4 * cycle] = 1;
+                                            rgDMAMap[mode][pf][width][first][player][missile][lms][25 + xx + 4 * cycle] = 1;
                                             break;
                                         }
                                         if (cycle == 8 && xx == 3)
-                                            rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1; // !!! assumes it's the first free one
+                                            // !!! not true, WIDE fetches the offscreen bytes, and 105 might be the first free one
+                                            // but we can't handle interfering with anything after WSYNC right now
+                                            rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1;
                                     }
                                 }
 
@@ -2665,7 +2667,10 @@ BOOL ProcessScanLine(int iVM)
         PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars);
     }
     else
+    {
+        //ODS("%d-%d (%d-%d)\n", cclockPrev, cclock, i, iTop);
         PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars);
+    }
 
     PSLPostpare(iVM);    // see if we're done this scan line and be ready to do the next one
 
