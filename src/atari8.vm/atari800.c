@@ -1827,7 +1827,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             PSLPrepare(iVM);
 
             // table element HCLOCKS has the starting value of wLeft for this kind of scan line (0-based)
-            wLeft = DMAMAP[HCLOCKS] + 1;
+            // subtract any extra cycles we spent last time finishing an instruction
+            wLeft += (DMAMAP[HCLOCKS] + 1);
             
             // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
             // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
