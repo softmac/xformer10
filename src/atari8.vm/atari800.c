@@ -2505,8 +2505,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // We're about to decrement those 4 cycles as soon as we return, so we add 4 so that wLeft will immediately go to the 
             // right value
             // !!! WSYNC often releases at 104, not 105, but if we do that, some Worm War blocks become thin
-            // (Worm War is the most cycle precise app I know, one cycle too early and it doesn't draw properly)
             // !!! But we fail the ACID VCOUNT test since we don't do that
+            //
+            // Worm War is one of the most cycle precise apps I know, one cycle too early and it doesn't draw properly, which is odd
+            // since it has the condition where WSYNC should release one cycle early yet I can't do that. Perhaps a change to a PMG
+            // register is not supposed to affect the 2nd half of a PMG object currently being drawn?
+            // The snow near the beginning of HARDA is also one of the best cycle precise tests I know of. I finally got that right today.
+            //
             // Decathlon's line 41 DLI spends enough time before its STA WSYNC that it needs to miss the line 41 WSYNC point
             // Pitfall 2 needs enough time after a STA WSYNC before the next one that we can't set wLeft to anything smaller
             if (wLeft > DMAMAP[115] + 1 + 4)
