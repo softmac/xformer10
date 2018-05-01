@@ -1313,7 +1313,7 @@ int CALLBACK WinMain(
             {
                 // user wants the "current" inst broken into, or a VM wants itself broken into
                 // !!! You can probably quickly change "current" VMs before this code executes
-                if ((vi.fDebugBreak && iVM == v.iVM) || rgvm[iVM].fValidVM && vrgvmi[iVM].fWantDebugger)
+                if ((vi.fDebugBreak && iVM == v.iVM) || (rgvm[iVM].fValidVM && vrgvmi[iVM].fWantDebugger))
                     if (!FMonVM(iVM)) // somebody wants to quit
                         break;
             }

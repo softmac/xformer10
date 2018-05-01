@@ -42,7 +42,8 @@ BYTE const * const rgszModes[6] =
 
 #define vcbScan X8
 #define wcScans Y8    // # of valid scan lines
-#define NTSCx 512
+#define NTSCx 512       // TRIVIA: only 456 pixels take time to draw, the other 56 are instantaneous and no CPU time elapses.
+                        // see ATARI800.c rgDMA[] comment for explanation
 #define NARROWx 256
 #define NORMALx 320
 #define WIDEx 384
@@ -377,7 +378,7 @@ void CreateDMATables()
         else if (cycle >= 101)
             rgPIXELMap[cycle] = X8;
         else
-            rgPIXELMap[cycle] = (cycle - 13) << 2;
+            rgPIXELMap[cycle] = (cycle - 12) << 2;
     }
 }
 
