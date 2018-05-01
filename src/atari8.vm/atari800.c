@@ -346,6 +346,19 @@ CANDYHW *vrgcandy[MAX_VM];
 // This map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
 // 0 means it never steals the cycle, but somebody else might (RAM refresh)
 //
+// THEORY OF OPERATION - there are 456 pixels on an NTSC scan line, 4 pixels can get drawn in the time it takes for 1 CPU cycle
+// (and there are 114 CPU cycles per scan line) 114 x 4 = 456. Even though for a wide playfield ANTIC starts fetching data after 9
+// cycles, the first are off screen, and it's not until after 13 cycles have elapsed that you start to see data on the screen
+// You'll see 4 extra cycles worth of pixels (16) out of the 8 cycles extra that ANTIC fetches for WIDE.
+// So WIDE looks like this: 9 cycles. 4 invisible cycles. 4 visible wide cycles (that would be black bars in NORMAL width).
+// Then 80 cycles of NORMAL width pixels (320 pixels) then 8 more wide cycles (4 of which are visible).
+// That's the WSYNC point. The end of the invisible extra wide pixels. Then 9 cycles after WSYNC to balance out the first 9.
+// 
+// PMG HPOS = 40 is where you start to be able to see a PMG. Which as explained above is cycle 13. PMG are 1/2 resolution
+// of a hi-res playfield, so 40 PMG pixels is like 80 pixels which means it's 20 CPU cycles. Which means PMG HPOS = 0
+// is at cycle -7, or 28 pixels before CPU cycle 0. 28 pixels on either side would add 56 pixels to the 456 pixel scan line,
+// which is, surprise, surprise, 512. Haven't you always wondered about that?
+//
 const BYTE rgDMA[HCLOCKS] =
 {
     /*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
@@ -2088,6 +2101,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
         if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 6 + 4 - 1)
             return 0;
+        // if the instruction ends AT the point where VCOUNT is incremented, it still sees the old value, thus < not <=
         if (wLeft < DMAMAP[115] + 1 - 6 + 4)
             return (BYTE)((wScan + 1) >> 1);
         else
@@ -2490,6 +2504,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // We're about to decrement those 4 cycles as soon as we return, so we add 4 so that wLeft will immediately go to the 
             // right value
             // !!! WSYNC often releases at 104, not 105, but if we do that, some Worm War blocks become thin
+            // (Worm War is the most cycle precise app I know, one cycle too early and it doesn't draw properly)
             // !!! But we fail the ACID VCOUNT test since we don't do that
             // Decathlon's line 41 DLI spends enough time before its STA WSYNC that it needs to miss the line 41 WSYNC point
             // Pitfall 2 needs enough time after a STA WSYNC before the next one that we can't set wLeft to anything smaller

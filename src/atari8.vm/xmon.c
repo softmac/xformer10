@@ -292,7 +292,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
 	while (1)
 	{
-		printf("\nPC Xformer debugger - VM #%d - %s \n", iVM, pInst);
+        // !!! Why does this printf hang waiting for a RETURN key press if I press BREAK w/o focus then again with focus?
+        // or I get two BREAK keys in a row and a mysterious break.
+        printf("\nPC Xformer debugger - VM #%d - %s \n", iVM, pInst);
 		Cconws("Commands:\n\n");
 		Cconws(" A [addr]          - trAce until addr (END to brk)\n");
 		Cconws(" B [addr]          - Breakpoint at addr\n");
