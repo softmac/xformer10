@@ -1144,6 +1144,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
     if (!fInited) // static, only 1 instance needs to do this
     {
         CreateDMATables();    // maps of where the electron beam is on each CPU cycle
+        CreatePMGTable();     // priorities of PMG
 
         int j;
 
