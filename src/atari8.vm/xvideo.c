@@ -497,7 +497,7 @@ void CreatePMGTable()
                 if (P01 || P23)    // all players above all playfields
                     rgPMGMap[z] = P0 | SP1 | SP2 | SP3;
                 else
-                    rgPMGMap[z] = (b << 4); // | sl.colbk will come later when we know it to get luminence
+                    rgPMGMap[z] = (b << 4); // | sl.colbk or COLBK will come later when we know it to get luminence
             }
         }
     }
@@ -662,9 +662,9 @@ Ldm:
         if (fFifth && pmg.fGTIA)
         {
             if (pmg.fGTIA == 0x40)
-                c = sl.colpf3 & 0x0f;    // use the correct P5 luma, it may or may not be the right chroma
+                c = sl.colpf3 & 0x0f;           // use the correct P5 luma, it may or may not be the right chroma
             else if (pmg.fGTIA == 0x80)
-                c = 7;    // colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
+                c = 7;                          // colour PF3 is always an option in Gr. 10! Lucky us! It's index 7
             else if (pmg.fGTIA == 0xc0)
                 c = (sl.colpf3 & 0xf0) >> 4;    // use the correct P5 chroma, but the luminence may be off
         }
@@ -1081,6 +1081,30 @@ void PSLPostpare(int iVM)
     }
 }
 
+// we call this from a couple places, so make sure we do the same thing every time
+// fGTIA and fHiRes must be set first
+//
+void UpdateColourRegisters(int iVM)
+{
+    // update the colour registers
+
+    // GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
+    sl.colbk = (pmg.fGTIA == 0x80) ? COLPM0 : COLBK;
+    
+    // GTIA mode GR.11 uses the low nibble of the background colour for the luminence for all colours,
+    // but forces the actual background colour to dark.
+    if (pmg.fGTIA == 0xc0)
+        sl.colbk = COLBK & 0xf0;
+    
+    sl.colpfX = COLPFX;
+    pmg.colpmX = COLPMX;
+
+    // if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
+    if (pmg.fHiRes)
+        sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+}
+
+
 // RE-READ ALL THE H/W REGISTERS TO ALLOW THINGS TO CHANGE MID-SCAN LINE
 //
 void PSLReadRegs(int iVM, short start, short stop)
@@ -1116,16 +1140,8 @@ void PSLReadRegs(int iVM, short start, short stop)
     // are we in a hi-res mono mode that has special collision detection rules?
     pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
-    // update the colour registers
-
-    // GTIA mode GR.10 uses 704 as background colour, enforced in all scan lines of any antic mode
-    sl.colbk = (pmg.fGTIA == 0x80) ? COLPM0 : COLBK;
-    sl.colpfX = COLPFX;
-    pmg.colpmX = COLPMX;
-
-    // if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
-    if (pmg.fHiRes)
-        sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+    // fGTIA and fHiRes must be set first
+    UpdateColourRegisters(iVM);
 
     // !!! VDELAY NYI
 
@@ -1322,7 +1338,9 @@ if (sl.modelo < 2 || iTop > i)
     case 0:
     case 1:
         // just fill in whatever we need to indicate background colour for our portion if there is no mode
-        _fmemset(qch, bkbk, stop - start);
+        // the one twist is that in PMG GR.11 we need to know if C.0 is being used to force it to be the darkest lum,
+        // so we write 0 as background instead of the actual colour
+        _fmemset(qch, (sl.fpmg && pmg.fGTIA == 0xc0) ? 0 : bkbk, stop - start);
         break;
 
         // GR.0 and descended character GR.0
@@ -2345,17 +2363,26 @@ if (sl.modelo < 2 || iTop > i)
                 b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
             }
 
-            // !!! restrict all drawing in ProcessScanLine of the background to lum=0 in ANTIC mode 18 (GR.11)!
+            col1 = ((b2 >> 4) << 4);
+            col2 = ((b2 & 15) << 4);
 
-            col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);    // lum comes from 712
-            col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
-
-                                                            // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
-                                                            // we'll shift it back up and put the luma value back in later
+            // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
+            // we'll shift it back up and put the luma value back in later
             if (sl.fpmg)
             {
                 col1 = col1 >> 4;
                 col2 = col2 >> 4;
+            }
+            else
+            {
+                if (col1)
+                    col1 |= COLBK; /* & 15*/    // C.1-15 lum comes from COLBK, sl.colbk has luminence stripped out of it
+                else
+                    col1 |= sl.colbk;           // C.0 is forced dark, strip out lum
+                if (col2)
+                    col2 |= COLBK; /* & 15*/    // you better keep COLBK <16, if not, it deliberately screws up like the real hw
+                else
+                    col2 |= sl.colbk;
             }
 
             *qch++ = col1;
@@ -2369,22 +2396,18 @@ if (sl.modelo < 2 || iTop > i)
             *qch++ = col2;
         }
         break;
-
     }
 
     // may have been altered if we were in BITFIELD mode b/c PMG are active. Put them back to what they were
     if (sl.fpmg && !pmg.fGTIA)
     {
-        sl.colbk = (pmg.fGTIA == 0x80) ? COLPM0 : COLBK;
-        sl.colpfX = COLPFX;
-        if (pmg.fHiRes)
-            sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+        UpdateColourRegisters(iVM);
     }
 
     // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
-        BYTE rgColour[128]; // quick access to necessary colour
+        BYTE rgColour[129]; // quick access to necessary colour
 
         qch = vrgvmi[iVM].pvBits;
 
@@ -2481,9 +2504,24 @@ if (sl.modelo < 2 || iTop > i)
 
             else
             {
-                // GR. 10 - low nibble is an index into the colour to use
-                // Remember, GR.0 & 8 can be a secret GTIA modes
-                if (pmg.fGTIA == 0x80)
+                // Remember, GR.0 & 8 can be secret GTIA modes
+                // GR. 9 - use the background colour for the chroma and the pixel value as luma
+                if (pmg.fGTIA == 0x40)
+                {
+                    if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
+                    {
+                        b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
+                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+                    }
+                    else
+                    {
+                        // no PMG present, do normal thing of using background as CHROMA and pixel value as LUMA
+                        b = rgPMGMap[(sl.prior << 8) + b];
+                        b |= sl.colbk;
+                    }
+                }
+            // GR. 10 - low nibble is an index into the colour to use
+            else if (pmg.fGTIA == 0x80)
                 {
                     if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
                     {
@@ -2497,7 +2535,7 @@ if (sl.modelo < 2 || iTop > i)
                     }
                 }
                 
-                // GR. 9 or 11 - use the background colour for the chrom/lum and the pixel value (which might have been shifted) as lum/chrom
+                // GR. 11 - use COLBK for the lum and the pixel value (which has already been shifted up in the table) as chroma
                 else
                 {
                     if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
@@ -2507,9 +2545,13 @@ if (sl.modelo < 2 || iTop > i)
                     }
                     else
                     {
-                        // no PMG present, do normal thing of using background as CHROM/LUM and pixel value as the other one
+                        // no PMG present, do normal thing of using COLBK as LUMA and pixel value as chroma
+                        // sl.colbk has had the luminence stripped, so use COLBK
                         b = rgPMGMap[(sl.prior << 8) + b];
-                        b |= sl.colbk;
+                        if (b)
+                            b |= (COLBK /* & 15*/);    // C. 1-15 use luminence of background, which is only found in COLBK
+                        else
+                            b |= (sl.colbk /* & 15*/);  // C. 0 is always forced dark, use sl.colbk which has lum stripped out
                     }
                 }
             }
