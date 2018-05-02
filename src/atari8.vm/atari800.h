@@ -74,6 +74,9 @@ char rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
 // for clock cycle number 0-113 (0 based), what pixel is being drawn when wLeft is from 1-114).
 short rgPIXELMap[HCLOCKS];
 
+// precompute PMG priorities
+char rgPMGMap[65536];
+
 // this mess is how we properly index all of those arrays
 #define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
@@ -737,6 +740,7 @@ BYTE SIOReadSector(int);
 void DeleteDrive(int, int);
 BOOL AddDrive(int, int, BYTE *);
 void CreateDMATables();
+void CreatePMGTable();
 void PSLPrepare(int);    // call at the beginning of the scan line to get the mode
 BOOL ProcessScanLine(int);
 void ForceRedraw(int);

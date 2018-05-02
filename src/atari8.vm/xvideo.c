@@ -385,6 +385,125 @@ void CreateDMATables()
 }
 
 
+// make the tables of what is visible based on PMG priorities
+
+void CreatePMGTable()
+{
+    for (int z = 0; z < 65536; z++)
+    {
+        // cycle through all possible bitfields of which PM/PF's are present (low byte) and what the priority is set to (high byte)
+        BYTE b = z & 0xff;
+        BYTE prior = (BYTE)(z >> 8);
+
+        // This table will effectively remove all the PM/PF's from the bitfield that will not be visible, based on priority
+
+        BYTE PRI0 = (prior & 1) ? 0xff : 0;
+        BYTE PRI1 = (prior & 2) ? 0xff : 0;
+        BYTE PRI2 = (prior & 4) ? 0xff : 0;
+        BYTE PRI3 = (prior & 8) ? 0xff : 0;
+        BYTE PRI01 = PRI0 | PRI1;
+        BYTE PRI12 = PRI1 | PRI2;
+        BYTE PRI23 = PRI2 | PRI3;
+        BYTE PRI03 = PRI0 | PRI3;
+        BYTE MULTI = (prior & 32) ? 0xff : 0;
+        
+        BYTE P0 = (b & bfPM0);
+        BYTE P1 = (b & bfPM1);
+        BYTE P2 = (b & bfPM2);
+        BYTE P3 = (b & bfPM3);
+        BYTE P01 = (b & (bfPM0 | bfPM1)) ? 0xff : 0;
+        BYTE P23 = (b & (bfPM2 | bfPM3)) ? 0xff : 0;
+    
+        // no worrying about playfield priorities in GR. 9-11
+        if (!(prior & 0xc0))
+        {
+            BYTE NOTP0 = (b & bfPM0) ? 0 : 0xff;
+            BYTE NOTP2 = (b & bfPM2) ? 0 : 0xff;
+
+            BYTE PF0 = (b & bfPF0);
+            BYTE PF1 = (b & bfPF1);
+            BYTE PF2 = (b & bfPF2);
+            BYTE PF3 = (b & bfPF3);
+
+            BYTE PF01 = (b & (bfPF0 | bfPF1)) ? 0xff : 0;
+            BYTE PF23 = (b & (bfPF2 | bfPF3)) ? 0xff : 0;
+
+            BYTE NOTPF01PRI23 = (PF01 & PRI23) ? 0 : 0xff;
+            BYTE NOTPF23PRI2 = (PF23 & PRI2) ? 0 : 0xff;
+            BYTE NOTPF23PRI12 = (PF23 & PRI12) ? 0 : 0xff;
+            BYTE NOTPF01NOTPRI0 = (PF01 & ~PRI0) ? 0 : 0xff;
+            BYTE NOTP23PRI03 = (P23 & PRI03) ? 0 : 0xff;
+            BYTE NOTP01NOTPRI2 = (P01 & ~PRI2) ? 0 : 0xff;
+            BYTE NOTP23PRI0 = (P23 & PRI0) ? 0 : 0xff;
+            BYTE NOTP01PRI01 = (P01 & PRI01) ? 0 : 0xff;
+
+            // OK, based on priority, which of the elements do we show? It could be more than one thing
+            // (overlap mode ORs the colours together). Any or all of the players might be in the same spot.
+            // Normally only one playfield colour is in any one spot, but a fifth player is like PF3 so there
+            // could be two playfields set here. Player 5 (PF3) gets priority unless its a hi-res mode
+            // where PF1 text goes on top
+
+            BYTE SP0 = P0 & NOTPF01PRI23 & NOTPF23PRI2;
+            BYTE SP1 = P1 & NOTPF01PRI23 & NOTPF23PRI2 & (NOTP0 | MULTI);
+            BYTE SP2 = P2 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0;
+            BYTE SP3 = P3 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0 & (NOTP2 | MULTI);
+
+            // usually, the fifth player is above all playfields, even with priority 8
+            // !!! NYI quirk where fifth player is below players in prior 8 if PF0 and PF1 not present
+
+            BYTE SF3 = PF3 & NOTP23PRI03 & NOTP01NOTPRI2;
+            BYTE NOTSF3 = (b & bfPF3) ? 0 : 0xff;
+            BYTE SF0 = PF0 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
+            BYTE SF1 = PF1 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
+            BYTE SF2 = PF2 & NOTP23PRI03 & NOTP01NOTPRI2 & NOTSF3;
+            //BYTE SB = 0xff & ~P01 & ~P23 & ~PF01 & ~PF23;
+
+            // OR together all the colours of all the visible things (ovelap mode support)
+            // to create a bitfield of just what is visible instead of all the things that were present at that pixel
+            rgPMGMap[z] = SP0 | SP1 | SP2 | SP3 | SF0 | SF1 | SF2 | SF3;
+        }
+
+        else
+        {
+            BYTE NOTP0 = (b & bfPM0) ? 0 : 0xff;
+            BYTE NOTP2 = (b & bfPM2) ? 0 : 0xff;
+
+            BYTE SP1 = P1 & (NOTP0 | MULTI);
+            BYTE SP2 = P2 & ~P01;
+            BYTE SP3 = P3 & ~P01 & (NOTP2 | MULTI);
+
+            // GR. 9 - low nibble is the important LUM value.
+            // Remember, GR.0 & 8 can be secret GTIA modes
+            if ((prior & 0xc0) == 0x40)
+            {
+                if (P01 || P23)    // all players visible over all playfields
+                    rgPMGMap[z] = P0 | SP1 | SP2 | SP3;
+                else
+                    rgPMGMap[z] = (b & 0x0f); // | sl.colbk will come later once we know it to get chroma
+            }
+
+            // GR. 10 - low nibble is an index into the colour to use
+            else if ((prior & 0xc0) == 0x80)
+            {
+                if (P01 || P23)    // !!! not proper in GR.10, but I'm making all players overtop all playfields
+                    rgPMGMap[z] = P0 | SP1 | SP2 | SP3;
+                else
+                    rgPMGMap[z] = b; // = *(&COLPM0 + b) will come later once we know them
+            }
+
+            // GR. 11 - low nibble is the important CHROM value.
+            else if ((prior & 0xc0) == 0xC0)
+            {
+                if (P01 || P23)    // all players above all playfields
+                    rgPMGMap[z] = P0 | SP1 | SP2 | SP3;
+                else
+                    rgPMGMap[z] = (b << 4); // | sl.colbk will come later when we know it to get luminence
+            }
+        }
+    }
+}
+
+
 void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 {
     BYTE b2;
@@ -2265,6 +2384,8 @@ if (sl.modelo < 2 || iTop > i)
     // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
+        BYTE rgColour[128]; // quick access to necessary colour
+
         qch = vrgvmi[iVM].pvBits;
 
         // !!! VDELAY NYI
@@ -2297,7 +2418,7 @@ if (sl.modelo < 2 || iTop > i)
         // EXCEPT for GR.9, 10 & 11, which does not have playfield bitfield data. There are 16 colours in those modes and only 4 regsiters.
         // So don't try to look at PF bits. In GR.9 & 11, all playfield is underneath all players.
 
-        // precompute some thing so our loop can be fast. It's one of the slowest parts of the code right now
+        // precompute some thing so our loop can be fast. It was the slowest part of the code
         BYTE colpf3Norm = sl.colpf3;
         BYTE colpf3Spec = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
         DWORD colpmXNorm = pmg.colpmX;
@@ -2306,28 +2427,14 @@ if (sl.modelo < 2 || iTop > i)
         pmg.colpm2 = (pmg.colpm2 & 0xf0) | (sl.colpf1 & 0x0f);
         pmg.colpm3 = (pmg.colpm3 & 0xf0) | (sl.colpf1 & 0x0f);
         DWORD colpmXSpec = pmg.colpmX;
-        BYTE PRI0 = (sl.prior & 1) ? 0xff : 0;
-        BYTE PRI1 = (sl.prior & 2) ? 0xff : 0;
-        BYTE PRI2 = (sl.prior & 4) ? 0xff : 0;
-        BYTE PRI3 = (sl.prior & 8) ? 0xff : 0;
-        BYTE PRI01 = PRI0 | PRI1;
-        BYTE PRI12 = PRI1 | PRI2;
-        BYTE PRI23 = PRI2 | PRI3;
-        BYTE PRI03 = PRI0 | PRI3;
-        BYTE MULTI = (sl.prior & 32) ? 0xff : 0;
-        BYTE P0 = 0, P1 = 0, P2 = 0, P3 = 0, P01 = 0, P23 = 0;
+        
         BYTE *pb = &rgpix[start + ((NTSCx - X8) >> 1)];
         BYTE b = *pb;
-        if (!pmg.fHiRes && (i & 1))
-        {
-            P0 = (b & bfPM0) ? pmg.colpm0 : 0;
-            P1 = (b & bfPM1) ? pmg.colpm1 : 0;
-            P2 = (b & bfPM2) ? pmg.colpm2 : 0;
-            P3 = (b & bfPM3) ? pmg.colpm3 : 0;
 
-            P01 = (b & (bfPM0 | bfPM1)) ? 0xff : 0;
-            P23 = (b & (bfPM2 | bfPM3)) ? 0xff : 0;
-        }
+        rgColour[0] = 0;
+        rgColour[bfPF0] = sl.colpf0;
+        rgColour[bfPF1] = sl.colpf1;
+        rgColour[bfPF2] = sl.colpf2;
 
         for (i = start; i < stop; i++)
         {
@@ -2339,6 +2446,7 @@ if (sl.modelo < 2 || iTop > i)
                 sl.colpf3 = colpf3Spec;
             else
                 sl.colpf3 = colpf3Norm;
+            rgColour[bfPF3] = sl.colpf3;
 
             // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
             // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
@@ -2346,118 +2454,63 @@ if (sl.modelo < 2 || iTop > i)
                 pmg.colpmX = colpmXSpec;    // put it back later
             else
                 pmg.colpmX = colpmXNorm;
+            rgColour[bfPM0] = pmg.colpm0;
+            rgColour[bfPM1] = pmg.colpm1;
+            rgColour[bfPM2] = pmg.colpm2;
+            rgColour[bfPM3] = pmg.colpm3;
 
             // !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI in DrawMissiles
 
-            // Thank you Altirra for help with the priority logic
-
-            // Be careful with this logic, many flags have to be either 0xff or 0 for the trick of using the colour as a mask
-
-            // PMG data changes at most every other pixel. If hi-res PF1 is peeking through, that could change every pixel
-            if (pmg.fHiRes || !(i & 1))
-            {
-                P0 = (b & bfPM0) ? pmg.colpm0 : 0;
-                P1 = (b & bfPM1) ? pmg.colpm1 : 0;
-                P2 = (b & bfPM2) ? pmg.colpm2 : 0;
-                P3 = (b & bfPM3) ? pmg.colpm3 : 0;
-            }
-            if (!(i & 1))
-            {
-                P01 = (b & (bfPM0 | bfPM1)) ? 0xff : 0;
-                P23 = (b & (bfPM2 | bfPM3)) ? 0xff : 0;
-            }
-
-            // no worrying about playfield priorities in GR. 9-11
             if (!pmg.fGTIA)
             {
-                BYTE NOTP0 = (b & bfPM0) ? 0 : 0xff;
-                BYTE NOTP2 = (b & bfPM2) ? 0 : 0xff;
+                if (b)
+                {
+                    // convert bitfield of what is present to bitfield of what wins and is visible
+                    b = rgPMGMap[(sl.prior << 8) + b];
 
-                BYTE PF0 = (b & bfPF0) ? sl.colpf0 : 0;
-                BYTE PF1 = (b & bfPF1) ? sl.colpf1 : 0;
-                BYTE PF2 = (b & bfPF2) ? sl.colpf2 : 0;
-                BYTE PF3 = (b & bfPF3) ? sl.colpf3 : 0;
-
-                // assumes knowledge of where the bfPM's are
-                BYTE PF01 = (b & (bfPF0 | bfPF1)) ? 0xff : 0;
-                BYTE PF23 = (b & (bfPF2 | bfPF3)) ? 0xff : 0;
-
-                BYTE NOTPF01PRI23 = (PF01 & PRI23) ? 0 : 0xff;
-                BYTE NOTPF23PRI2 = (PF23 & PRI2) ? 0 : 0xff;
-                BYTE NOTPF23PRI12 = (PF23 & PRI12) ? 0 : 0xff;
-                BYTE NOTPF01NOTPRI0 = (PF01 & ~PRI0) ? 0 : 0xff;
-                BYTE NOTP23PRI03 = (P23 & PRI03) ? 0 : 0xff;
-                BYTE NOTP01NOTPRI2 = (P01 & ~PRI2) ? 0 : 0xff;
-                BYTE NOTP23PRI0 = (P23 & PRI0) ? 0 : 0xff;
-                BYTE NOTP01PRI01 = (P01 & PRI01) ? 0 : 0xff;
-
-                // OK, based on priority, which of the elements do we show? It could be more than one thing
-                // (overlap mode ORs the colours together). Any or all of the players might be in the same spot.
-                // Normally only one playfield colour is in any one spot, but a fifth player is like PF3 so there
-                // could be two playfields set here. Player 5 (PF3) gets priority unless its a hi-res mode
-                // where PF1 text goes on top
-
-                BYTE SP0 = P0 & NOTPF01PRI23 & NOTPF23PRI2;
-                BYTE SP1 = P1 & NOTPF01PRI23 & NOTPF23PRI2 & (NOTP0 | MULTI);
-                BYTE SP2 = P2 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0;
-                BYTE SP3 = P3 & ~P01 & NOTPF23PRI12 & NOTPF01NOTPRI0 & (NOTP2 | MULTI);
-
-                // usually, the fifth player is above all playfields, even with priority 8
-                // !!! NYI quirk where fifth player is below players in prior 8 if PF0 and PF1 not present
-
-                BYTE SF3 = PF3 & NOTP23PRI03 & NOTP01NOTPRI2;
-                BYTE NOTSF3 = (b & bfPF3) ? 0 : 0xff;
-                BYTE SF0 = PF0 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
-                BYTE SF1 = PF1 & NOTP23PRI0 & NOTP01PRI01 & NOTSF3;
-                BYTE SF2 = PF2 & NOTP23PRI03 & NOTP01NOTPRI2 & NOTSF3;
-                BYTE SB = sl.colbk & ~P01 & ~P23 & ~PF01 & ~PF23;
-
-                // OR together all the colours of all the visible things (ovelap mode support)
-
-                // In hi-res modes (GR.0 & 8) each player colour is given the luminence of PF1 whenever they overlap
-                // even if the playfields are all behind the players. In other words, all text is readable on top of
-                // player missile graphics, and if we don't do this, all text disappears
-
-                b = SP0 | SP1 | SP2 | SP3 | SF0 | SF1 | SF2 | SF3 | SB;
+                    // use sparse array to quickly get proper colour for bits that are present and visible, mix them with OR
+                    b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0] |
+                        rgColour[b & bfPF3] | rgColour[b & bfPF2] | rgColour[b & bfPF1] | rgColour[b & bfPF0];
+                }
+                else
+                {
+                    // nothing present in this bit, so use background colour
+                    b = sl.colbk;
+                }
             }
 
             else
             {
-                BYTE NOTP0 = (b & bfPM0) ? 0 : 0xff;
-                BYTE NOTP2 = (b & bfPM2) ? 0 : 0xff;
-
-                BYTE SP1 = P1 & (NOTP0 | MULTI);
-                BYTE SP2 = P2 & ~P01;
-                BYTE SP3 = P3 & ~P01 & (NOTP2 | MULTI);
-
-                // GR. 9 - low nibble is the important LUM value. Now add back to chroma value
-                // Remember, GR.0 can be a secret GTIA mode
-                if (pmg.fGTIA == 0x40)
-                {
-                    if (P01 || P23)    // all players visible over all playfields
-                        b = P0 | SP1 | SP2 | SP3;
-                    else
-                        b = (b & 0x0f) | sl.colbk;
-
-                }
                 // GR. 10 - low nibble is an index into the colour to use
-                // Remember, GR.0 can be a secret GTIA mode
-                else if (pmg.fGTIA == 0x80)
+                // Remember, GR.0 & 8 can be a secret GTIA modes
+                if (pmg.fGTIA == 0x80)
                 {
-                    if (P01 || P23)    // !!! not proper in GR.10, but I'm making all players overtop all playfields
-                        b = P0 | SP1 | SP2 | SP3;
+                    if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
+                    {
+                        b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
+                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+                    }
                     else
+                    {
+                        // no PMG present, so do the normal GR.10 thing of using an index to 9 colours
                         b = *(&COLPM0 + b);
-
+                    }
                 }
-                // GR. 11 - low nibble is the important CHROM value. We'll shift it back to the high nibble and add the LUM value later
-                // Remember, GR.0 can be a secret GTIA mode
-                else if (pmg.fGTIA == 0xC0)
+                
+                // GR. 9 or 11 - use the background colour for the chrom/lum and the pixel value (which might have been shifted) as lum/chrom
+                else
                 {
-                    if (P01 || P23)    // all players above all playfields
-                        b = P0 | SP1 | SP2 | SP3;
+                    if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
+                    {
+                        b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
+                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+                    }
                     else
-                        b = (b << 4) | sl.colbk;
+                    {
+                        // no PMG present, do normal thing of using background as CHROM/LUM and pixel value as the other one
+                        b = rgPMGMap[(sl.prior << 8) + b];
+                        b |= sl.colbk;
+                    }
                 }
             }
 
