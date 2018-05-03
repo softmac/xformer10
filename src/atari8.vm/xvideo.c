@@ -2655,11 +2655,14 @@ BOOL ProcessScanLine(int iVM)
     // the position of the beginning of the 4th cycle, and add 1 to it when indexing rgPIXELMap to see when the 4th cycle ended.
     // DMAMAP[0] will be the maximum we can index rgPIXELMap, so don't go lower than 1, so we can +1 and still be in a valid
     // index for rgPIXELMap
-    // I believe the beam is 20 pixels behind ANTIC (see WSYNC)
-    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
+    // I believe the beam is 20 pixels behind ANTIC (see WSYNC).
+    // !!! Hack, 6 or 14 fixes Worm War by changing on a PMG pixel boundary, but anything over 18 makes things worse.
+    // !!! 6 also fixes HARDB/CHESS. I don't know how the lag really works. If I try to finish all the PMG started in this range now,
+    // that messes up WormWar's display quite badly, so that doesn't seem to be the solution like it appeared.
+    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 6;
     if (cclock < 0)
         cclock = 0;
-    if (cclock == 352 - 20)
+    if (cclock == 352 - 6)
         cclock = 352;
 
     // what part of the scan line were we on last time?

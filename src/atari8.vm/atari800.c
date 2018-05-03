@@ -359,17 +359,23 @@ CANDYHW *vrgcandy[MAX_VM];
 // is at cycle -7, or 28 pixels before CPU cycle 0. 28 pixels on either side would add 56 pixels to the 456 pixel scan line,
 // which is, surprise, surprise, 512. Haven't you always wondered about that?
 //
+// In keeping with my theory that ANTIC lags behind GTIA, the real ANTIC starts PF DMA late, not at 9, meaning
+// that although I am cycle accurate in how many cycles I give to the CPU, I'm supposed to give it one earlier in the scan
+// line and take it away later in the scan line. This actually breaks HARDB/CHESS, so I jigger an A8 and A2 cycle from 
+// early to late to avoid having to implement the complexity of exactly how it happens
 const BYTE rgDMA[HCLOCKS] =
 {
     /*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
-    /*  9 - 16 */ W8, 0, W2, 0, W4, WC4, W2, WC2,    // extreme of wide playfield is overscan and never fetches characters
+    /*  9 - 16 */ W8, WC4, W2, WC2, W4, WC4, W2, WC2,    // ANTIC fetches the overscan early WIDE pixels it never uses :-(
     /* 17 - 24 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
-    /* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+//  /* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+    /* 25 - 88 */  0, AC4,  0, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
     /* 89 - 96 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
-    /* 97- 104 */ W8, WC4, W2, WC2, W4, 0, W2, 0,
+//  /* 97- 104 */ W8, WC4, W2, WC2, W4,  0, W2,  0,   // ANTIC fetches some useless overscan data, but not all of it.
+    /* 97- 104 */ W8, WC4, W2, WC2, W4, A8, W2, A2,   // ANTIC fetches some useless overscan data, but not all of it.
     /* 105-113 */ 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
@@ -2506,10 +2512,21 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // WSYNC
             // !!! I assume STA WSYNC. INC WSYNC is 6 cycles, and it triggers the WSYNC on cycle 5, not 4.
             //
-            // Worm War and the HARDB Chess board are two of the most cycle precise apps I know and don't work yet
-            // Worm War changes HPOSP3 while it's being drawn. I surmise I need to continue with the old values.
-            // HARDB/CHESS changes HPOSP3 after it's completed drawing in the wrong place! I surmise that if I back
-            // up 20 pixels (see below) which would be before it started being drawn, I would do the right thing.
+            // I wonder if the beam is 5 cycles behind ANTIC. It fetchs the first NARROW non-character byte at 28.
+            // It fetches the first character at 26, and the first char lookup at 29. Subsequent lines only do the
+            // char lookup starting at 29. So it doesn't have the data it needs to draw at 25 until 30. 5 behind.
+            // Also, ANTIC stop fetching at 106. 5 before that is 101, the end of the visibile screen. Coincidence?
+            // 5 cycles is 20 pixels.
+            //
+            // Worm War and the HARDB Chess board are two of the most cycle precise apps I know of.
+            // Worm War changes HPOSP3 while it's being drawn. I implement a lag of 6 pixels in ProcessScanLine
+            // so that the change happens on a PMG pixel boundary, and that fixes WW for now. Even Altirra shows
+            // corruption in the level select text at top that I do not! (At least last I looked).
+            // HARDB/CHESS changes HPOSP3 after it's completed drawing in the wrong place! If I lag 6 pixels, this also
+            // is corrected.
+            // I thought that the solution was to finish every PMG that begins in the range being drawn (drawing with a lag of
+            // 20 pixels) so that changes mid-draw will not take effect yet, but that seemed to mess up WW pretty badly. So
+            // I do not understand the GTIA lag and when to make a change take effect yet.
             //
             // The snow near the beginning of HARDB is a great cycle precision test, but doesn't use WSYNC/VCOUNT.
             //
@@ -2518,12 +2535,6 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // Pitfall 2 scan line $6d needs to start early (104) on line $6c, and it writes to WSYNC again barely in time
             // to make the deadline.
             //
-            // I wonder if the beam is 5 cycles behind ANTIC. It fetchs the first NARROW non-character byte at 28.
-            // It fetches the first character at 26, and the first char lookup at 29. Subsequent lines only do the
-            // char lookup starting at 29. So it doesn't have the data it needs to draw at 25 until 30. 5 behind.
-            // Also, ANTIC stop fetching at 106. 5 before that is 101, the end of the visibile screen. Coincidence?
-            // 5 cycles is 20 pixels.
-
             // -1 to make it 0 based. Look at last cycle of this 4 cycle instruction (3 fewer). One cycle later is where the
             // store will actually be complete. (If the cycle after it finished is blocked, the next instruction won't start
             // for a while, so where the next instruction starts is irrelevant). The WSYNC is in time if it's complete
