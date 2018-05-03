@@ -505,8 +505,12 @@ BYTE SIOReadSector(int iVM)
 
     md = pdrive->mode;
 
+    // At least for Eidolon V1, just treating DD disks as SD seems to work!
     if (md != MD_SD)
-        return 0;
+    {
+//        ODS("Bare bones SIO not supported on DD Drive\n");
+//        return 0;
+    }
 
     if (pdrive->h == -1)
         return 0;
