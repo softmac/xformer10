@@ -353,7 +353,7 @@ void CreateDMATables()
                                     // index 116 - remember what wLeft will be when it's time for a DLI/VBI NMI (cycle 10)
                                     // but it takes 7 cycles for the CPU to process the NMI and start executing code, so
                                     // we don't get to run until cycle 17. (Decathalon glitches if we start the DLI earlier).
-                                    // !!! I don't halt the processor between 10 and 17, should I?
+                                    // !!! I don't halt the processor between 10 and 17, I think I should.
                                     if (index == 17)
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle;
                                     // oops, 10 was busy
@@ -2650,8 +2650,17 @@ BOOL ProcessScanLine(int iVM)
     // Finally, once the whole scan line executes, we will be called with wLeft <= 0 to finish things up
     // !!! When wLeft <= 4 we'll wish we had started the next scan line already for things that have scan line granularity,
     // like VSCROL (bump pong)
-    // Technically, we execute at the start of the STA GTIA, but it shouldn't happen until the end of that 4 cycle instruction, so I subtract 4 more.
-    short cclock = rgPIXELMap[DMAMAP[wLeft > 5 ? (wLeft - 1 - 4) : 0]];
+    // Technically, we execute at the start of the STA GTIA, but it shouldn't happen until after the 4 cycle instruction.
+    // We may have been blocked after the 4th cycle of the store until the next instruction could being, so take
+    // the position of the beginning of the 4th cycle, and add 1 to it when indexing rgPIXELMap to see when the 4th cycle ended.
+    // DMAMAP[0] will be the maximum we can index rgPIXELMap, so don't go lower than 1, so we can +1 and still be in a valid
+    // index for rgPIXELMap
+    // I believe the beam is 20 pixels behind ANTIC (see WSYNC)
+    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
+    if (cclock < 0)
+        cclock = 0;
+    if (cclock == 352 - 20)
+        cclock = 352;
 
     // what part of the scan line were we on last time?
     short cclockPrev = PSL;

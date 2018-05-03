@@ -78,7 +78,7 @@ short rgPIXELMap[HCLOCKS];
 char rgPMGMap[65536];
 
 // this mess is how we properly index all of those arrays
-#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) >> 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
+#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 

@@ -991,7 +991,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         }
     }
 
-    // Address is bank #, 8K that goes into $A000. Bank top+1 is RAM
+    // Address is bank #, 8K that goes into $A000. Bank top + 1 is RAM
     else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
     {
         int mask;
@@ -1830,6 +1830,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // table element HCLOCKS has the starting value of wLeft for this kind of scan line (0-based)
             // subtract any extra cycles we spent last time finishing an instruction
             wLeft += (DMAMAP[HCLOCKS] + 1);
+
             
             // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
             // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
@@ -1852,11 +1853,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             }
 
             // We're supposed to start executing at the WSYNC release point (cycle 105) not the beginning of the scan line
-            // That point is stored in index 115 of this array, and +1 because the index is 0-based
+            // That point is stored in index 115 of this array, and + 1 because the index is 0-based
             if (WSYNC_Waiting)
             {
                 //ODS("WAITING\n");
-                wLeft = DMAMAP[115] + 1;
+                
+                // + 1 to make it 1-based
+                // +1 is to start early at cycle 104 !!! not always true, but usually?
+                wLeft = DMAMAP[115] + 1 +1;
+                
                 WSYNC_Waiting = FALSE;
 
                 // Uh oh, an NMI should happen in the mean time, so better do that now and delay the wait for WSYNC until the RTI
@@ -1910,7 +1915,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         // if we just hit a breakpoint at the IRQ vector above, then don't do anything
         if (!fHitBP)
         {
-            // If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+1 since it's 0-based)
+            // If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+ 1 since it's 0-based)
             wNMI = (((sl.modehi & 8) && (iscan == scans || (fWait & 0x08))) || (wScan == STARTSCAN + Y8)) ? DMAMAP[116] + 1 : 0;
             Go6502(iVM);
         }
@@ -2100,14 +2105,16 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
     else if (addr == 0xD40B)
     {
-        // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
-        if (wScan == 261 && wLeft < DMAMAP[115] + 1 - 6 + 4 - 1)
-            return 0;
-        // if the instruction ends AT the point where VCOUNT is incremented, it still sees the old value, thus < not <=
-        if (wLeft < DMAMAP[115] + 1 - 6 + 4)
-            return (BYTE)((wScan + 1) >> 1);
-        else
+        // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
+        // - 1 for 0-based. - 3 for the last cycle. + 1 to see what the next cycle is (which might be blocked, so the next instruction
+        // could start arbitrarily further than the end of the last instruction).
+        if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 111)
             return (BYTE)(wScan >> 1);
+        // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
+        else if (wScan == 261 && wLeft <= 5)
+            return 0;
+        else
+            return (BYTE)((wScan + 1) >> 1);
     }
 
     else if (addr == 0xd20d)
@@ -2193,7 +2200,7 @@ BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
     assert(FALSE);    // I'm curious if this ever happens
 
     PokeBAtari(iVM, addr, w & 255);
-    PokeBAtari(iVM, addr+1, w >> 8);
+    PokeBAtari(iVM, addr + 1, w >> 8);
 
     return TRUE;
 }
@@ -2497,26 +2504,35 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         if (addr == 10)
         {
             // WSYNC
-            // If wLeft is <= index 115 (+1 because that is 0-based and wLeft is 1-based), we missed this WSYNC point and have to wait
-            // an entire other scan line. We add 4 because we are executing at the beginning of the STA WSYNC, 4 cycles long, and the
-            // store won't actually happen until those 4 cycles have elapsed. So a STA WSYNC that begins 4 cycles before the WSYNC point will
-            // end at the WSYNC point, which is just past the deadline.
-            // If they do INC WSYNC or some such, that's 6 cycles, but I think it also triggers the WSYNC on cycle 4. 
-            // !!! But we should delay 2 cycles in waking up from WSYNC in such a case
-            // We're about to decrement those 4 cycles as soon as we return, so we add 4 so that wLeft will immediately go to the 
-            // right value
-            // !!! WSYNC often releases at 104, not 105, but if we do that, some Worm War blocks become thin
-            // !!! But we fail the ACID VCOUNT test since we don't do that
+            // !!! I assume STA WSYNC. INC WSYNC is 6 cycles, and it triggers the WSYNC on cycle 5, not 4.
             //
-            // Worm War is one of the most cycle precise apps I know, one cycle too early and it doesn't draw properly, which is odd
-            // since it has the condition where WSYNC should release one cycle early yet I can't do that. Perhaps a change to a PMG
-            // register is not supposed to affect the 2nd half of a PMG object currently being drawn?
-            // The snow near the beginning of HARDA is also one of the best cycle precise tests I know of. I finally got that right today.
+            // Worm War and the HARDB Chess board are two of the most cycle precise apps I know and don't work yet
+            // Worm War changes HPOSP3 while it's being drawn. I surmise I need to continue with the old values.
+            // HARDB/CHESS changes HPOSP3 after it's completed drawing in the wrong place! I surmise that if I back
+            // up 20 pixels (see below) which would be before it started being drawn, I would do the right thing.
+            //
+            // The snow near the beginning of HARDB is a great cycle precision test, but doesn't use WSYNC/VCOUNT.
             //
             // Decathlon's line 41 DLI spends enough time before its STA WSYNC that it needs to miss the line 41 WSYNC point
-            // Pitfall 2 needs enough time after a STA WSYNC before the next one that we can't set wLeft to anything smaller
-            if (wLeft > DMAMAP[115] + 1 + 4)
-                wLeft = DMAMAP[115] + 1 + 4;    // assume we're doing STA abs which is 4 cycles about to be decremented from us
+            //
+            // Pitfall 2 scan line $6d needs to start early (104) on line $6c, and it writes to WSYNC again barely in time
+            // to make the deadline.
+            //
+            // I wonder if the beam is 5 cycles behind ANTIC. It fetchs the first NARROW non-character byte at 28.
+            // It fetches the first character at 26, and the first char lookup at 29. Subsequent lines only do the
+            // char lookup starting at 29. So it doesn't have the data it needs to draw at 25 until 30. 5 behind.
+            // Also, ANTIC stop fetching at 106. 5 before that is 101, the end of the visibile screen. Coincidence?
+            // 5 cycles is 20 pixels.
+
+            // -1 to make it 0 based. Look at last cycle of this 4 cycle instruction (3 fewer). One cycle later is where the
+            // store will actually be complete. (If the cycle after it finished is blocked, the next instruction won't start
+            // for a while, so where the next instruction starts is irrelevant). The WSYNC is in time if it's complete
+            // by the start of 104 (not being complete until the start of 105, the WSYNC point itself, it too late).
+            if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 104)
+                // + 1 to make it 1-based
+                // assume we're doing STA abs which is 4 cycles about to be decremented from us when we return
+                // + 1 is to start early at cycle 104 !!! not always true, but usually?
+                wLeft = DMAMAP[115] + 1 + 4 + 1;
             else
             {
                 wLeft = 0;               // stop right now and wait till next line's WSYNC
