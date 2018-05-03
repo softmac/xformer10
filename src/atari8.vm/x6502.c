@@ -878,7 +878,7 @@ HANDLER(op21)
 {
     EA_zpXindR(iVM);
     AND_com(iVM);
-    wLeft -= 4;
+    wLeft -= 6;
     HANDLER_END();
 }
 
@@ -1296,7 +1296,7 @@ HANDLER(op61)
 {
     EA_zpXindR(iVM);
     ADC_com(iVM);
-    wLeft -= 4;
+    wLeft -= 6;
     HANDLER_END();
 }
 
@@ -1659,7 +1659,7 @@ HANDLER(op95)
 {
     EA_zpXW(iVM);
     ST_com(iVM, regA);
-    wLeft -= 6;
+    wLeft -= 4;
     HANDLER_END();
 }
 
