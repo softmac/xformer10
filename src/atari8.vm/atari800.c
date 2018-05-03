@@ -1810,7 +1810,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                             isectorPos = 0;
                             if (rgSIO[0] == 0x31 && rgSIO[1] == 0x52)
                             {
-                                //ODS("DISK READ REQUEST\n");
+                                //ODS("DISK READ REQUEST sector %d\n", rgSIO[2] | ((int)rgSIO[3] << 8));
                                 bSERIN = 0x41;    // start with ack
                                 fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                                 if (fSERIN >= NTSCY)
