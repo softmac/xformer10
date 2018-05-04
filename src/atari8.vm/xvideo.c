@@ -579,7 +579,7 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 #pragma optimize("",off)
 #endif
 
-void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop)
+void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop, BYTE *rgFifth)
 {
     BYTE b2;
     BYTE c;
@@ -647,18 +647,16 @@ Ldm:
 
         // In GTIA modes, however, we aren't using a bitmask to show which playfields are present, we're storing a luminence,
         // so remembering the fact that the fifth player is here corrupts the data and gives the wrong colour. We don't have
-        // any free bits to store anything about the fifth player unless we do something big and hacky which I'm not inclined to
-        // do right now, so we have 2 choices: 1) make the fifth player invisible or 2) make it visible but the wrong colour
-        // Neither is a good option. In games where it's supposed to be invisible, showing it at the wrong colour sticks out
+        // any free bits to store anything about the fifth player, so we'll have to store that somewhere else.
+        //
+        //  Previously: we had 2 choices: 1) make the fifth player invisible or 2) make it visible but the wrong colour
+        // Neither was a good option. In games where it's supposed to be invisible, showing it at the wrong colour sticks out
         // like a sore thumb. But in games where it's supposed to be visible, making in invisible loses part of the actual game
-        // graphics when it being the wrong colour would not have been a big deal. So the ideal compromise is to figure out
+        // graphics when it being the wrong colour would not have been a big deal. So the compromise was to figure out
         // if this mode supports the colour they want, and make it that correct colour. That way it will be invisible if they
         // want. If we don't have a way of providing the right colour but we know it's supposed to be visible, make it "close"
-        // to the colour they want by matching the chroma or luma at least. This is rather clever, it's too bad only the silly
-        // game "Battle Eagles" runs into this issue.
-
-        // !!! The wrong colours may show up here
-
+        // to the colour they want by matching the chroma or luma at least
+#if 0
         if (fFifth && pmg.fGTIA)
         {
             if (pmg.fGTIA == 0x40)
@@ -668,12 +666,17 @@ Ldm:
             else if (pmg.fGTIA == 0xc0)
                 c = (sl.colpf3 & 0xf0) >> 4;    // use the correct P5 chroma, but the luminence may be off
         }
+#endif
 
         for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
         {
-            BYTE *pq = qb + z;
             if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
-                *pq |= c;
+            {
+                if (fFifth && pmg.fGTIA)
+                    rgFifth[z] = TRUE;
+                else
+                    *(qb + z) |= c;
+            }
         }
     }
 }
@@ -1247,6 +1250,8 @@ void PSLReadRegs(int iVM, short start, short stop)
 
 void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars)
 {
+    BYTE rgFifth[X8] = { 0 };   // is fifth player colour present in GTIA modes?
+
     if (start >= stop)
         return;
 
@@ -2416,7 +2421,7 @@ if (sl.modelo < 2 || iTop > i)
         // now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
         // tell them what range they are to fill in data for (start to stop)
         DrawPlayers(iVM, (rgpix + ((NTSCx - X8) >> 1)), start, stop);
-        DrawMissiles(iVM, (rgpix + ((NTSCx - X8) >> 1)), sl.prior & 16, start, stop);    // 5th player?
+        DrawMissiles(iVM, (rgpix + ((NTSCx - X8) >> 1)), sl.prior & 16, start, stop, rgFifth);    // 5th player?
 
     #ifndef NDEBUG
         if (0)
@@ -2513,6 +2518,11 @@ if (sl.modelo < 2 || iTop > i)
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
                         b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
                     }
+                    else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
+                    {
+                        b = sl.colpf3;
+                        rgFifth[i] = 0;
+                    }
                     else
                     {
                         // no PMG present, do normal thing of using background as CHROMA and pixel value as LUMA
@@ -2528,6 +2538,11 @@ if (sl.modelo < 2 || iTop > i)
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
                         b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
                     }
+                    else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
+                    {
+                        b = sl.colpf3;
+                        rgFifth[i] = 0;
+                    }
                     else
                     {
                         // no PMG present, so do the normal GR.10 thing of using an index to 9 colours
@@ -2542,6 +2557,11 @@ if (sl.modelo < 2 || iTop > i)
                     {
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
                         b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+                    }
+                    else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
+                    {
+                        b = sl.colpf3;
+                        rgFifth[i] = 0;
                     }
                     else
                     {
