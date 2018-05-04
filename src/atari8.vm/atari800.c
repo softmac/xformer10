@@ -1815,14 +1815,18 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                                 fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                                 if (fSERIN >= NTSCY)
                                     fSERIN -= (NTSCY - 1);    // never be 0, that means stop
-#if 0
-                                // hopefully this means it's OK to start now
-                                if (IRQEN & 0x20)
-                                {
-                                    IRQST &= ~0x20;
-                                    //ODS("TRIGGER SERIN\n");
-                                }
-#endif
+                            }
+                            else if (rgSIO[0] == 0x31 && rgSIO[1] == 0x53)
+                            {
+                                //ODS("DISK STATUS %02x %02x\n", rgSIO[2], rgSIO[3]);
+                                bSERIN = 0x41;    // start with ack
+                                fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
+                                if (fSERIN >= NTSCY)
+                                    fSERIN -= (NTSCY - 1);    // never be 0, that means stop
+                            }
+                            else if (rgSIO[0] == 0x31)
+                            {
+                                ODS("UNSUPPORTED SIO command %02x\n", rgSIO[1]);
                             }
                         }
                     }
@@ -2127,7 +2131,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     {
         if (!fSERIN)
         {
-            //ODS("UNEXPECTED SERIN\n");
+            ODS("UNEXPECTED SERIN\n");
             return 0;
         }
 
@@ -2136,20 +2140,23 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         BYTE rv = bSERIN;
 
         // remember, the data in the sector can be the same as the ack, complete or checksum
-
-        if (isectorPos > 0 && isectorPos < 128)
+        
+        // status responses are 4 bytes long, sector reads are 128
+        BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
+        
+        if (isectorPos > 0 && isectorPos < iLastSector)
         {
             //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
             bSERIN = sectorSIO[iVM][isectorPos];
             isectorPos++;
         }
-        else if (isectorPos == 128)
+        else if (isectorPos == iLastSector)
         {
             //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
             bSERIN = checksum;
             isectorPos++;
         }
-        else if (isectorPos == 129)
+        else if (isectorPos > iLastSector)
         {
             //ODS("CHECKSUM = 0x%02x\n", bSERIN);
             fSERIN = FALSE;    // all done
@@ -2163,7 +2170,19 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         else if (bSERIN == 0x43)
         {
             //ODS("COMPLETE\n");
-            checksum = SIOReadSector(iVM);
+            if (rgSIO[1] == 0x52)
+            {
+                checksum = SIOReadSector(iVM);
+            }
+            // this is how I think you properly respond to a status request, I hope
+            else if (rgSIO[1] == 0x53)
+            {
+                checksum = 0xe0;
+                sectorSIO[iVM][0] = 0x0;
+                sectorSIO[iVM][1] = 0xff;
+                sectorSIO[iVM][2] = 0xe0;
+                sectorSIO[iVM][3] = 0x00;
+            }
             bSERIN = sectorSIO[iVM][0];
             isectorPos = 1;    // next byte will be this one
         }

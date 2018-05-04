@@ -593,7 +593,15 @@ void SIOV(int iVM)
     bAux2 = cpuPeekB(iVM, 0x30B);
 
     if (wDev == 0x31)       /* disk drives */
-        {
+    {
+#if 0
+        // SIO is supposed to copy the drive and aux bytes of the last command into CDEVIC (Alternate Reality - Dungeon)
+        rgbMem[0x23a] = wDev + wDrive;
+        rgbMem[0x23b] = wCom;
+        rgbMem[0x23c] = bAux1;
+        rgbMem[0x23d] = bAux2;
+#endif
+
         if ((wDrive < 0) || (wDrive >= MAX_DRIVES))
             goto lCable;
 
@@ -625,7 +633,7 @@ lNAK:
         /* the disk # is valid, the sector # is valid, # bytes is valid */
 
         switch(wCom)
-            {
+        {
         default:
          /*   printf("SIO command %c\n", wCom); */
             wRetStat = SIO_NAK;
@@ -878,8 +886,8 @@ lNAK:
                 }
             break;
             }
-            }
         }
+    }
 
     else if (!fXFCable && wDev == 0x40)      /* printer */
         {
