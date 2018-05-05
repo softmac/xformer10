@@ -2347,6 +2347,15 @@ HANDLER(opF3)
     HANDLER_END();
 }
 
+// NOP zp,X
+
+HANDLER(opF4)
+{
+    regPC++;
+    wLeft -= 4;
+    HANDLER_END();
+}
+
 // SBC zp,X
 
 HANDLER(opF5)
@@ -2406,6 +2415,7 @@ HANDLER(opFE)
     HANDLER_END();
 }
 
+// !!! Implement the rest of these, already!
 HANDLER(unused)
 {
     regPC--;
@@ -2660,7 +2670,7 @@ PFNOP jump_tab[256] =
     opF1,
     unused,
     opF3,
-    unused,
+    opF4,
     opF5,
     opF6,
     unused,
