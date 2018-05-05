@@ -589,7 +589,8 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop, BYTE *
     if (pmg.fHitclr)
         goto Ldm;
 
-    // first loop, fill the bit array with all the players located at each spot
+    // first loop, do missile collisions with playfield and with players (after we add missile data to the bitfield we'll no longer
+    // be able to tell a player apart from its missile)
     for (i = 0; i < 4; i++)
     {
         b2 = (pmg.grafm >> (i + i)) & 3;
@@ -602,7 +603,6 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop, BYTE *
 
         c = mppmbw[i];
 
-        // first loop, fill in where each player is
         for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
@@ -886,7 +886,7 @@ void PSLPrepare(int iVM)
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
         // allow blank mode lines to mean duplicates of previous lines (GR.9++)
-        if (sl.fVscrol && (!(sl.modehi & 2)))
+        if (sl.fVscrol && (!(sl.modehi & 2) || sl.modelo < 2))
         {
             sl.fVscrol = FALSE;
             // why is somebody setting the high bits of this sometimes?
