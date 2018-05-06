@@ -2164,9 +2164,13 @@ void SelectInstance(int iVM)
     if (iVM == -1)
     {
         dir = -1;
+        // start looking here when going backwards
         iVM = v.iVM - 1;
+        if (iVM < 0)
+            iVM = MAX_VM - 1;
     }
 
+    // when told to advance to the next VM, we're given one more than the current one to start looking at, which may be too big
     if (iVM >= MAX_VM)
         iVM = 0;
 
@@ -2174,7 +2178,11 @@ void SelectInstance(int iVM)
 
     while (!rgvm[iVM].fValidVM)
     {
-        iVM = (iVM + dir) % MAX_VM;
+        iVM = (iVM + dir);
+        if (iVM < 0)
+            iVM = MAX_VM - 1;
+        if (iVM >= MAX_VM)
+            iVM = 0;
         if (iVM == old) break;
     }
 
