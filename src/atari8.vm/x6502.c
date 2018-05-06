@@ -1037,6 +1037,18 @@ HANDLER(op31)
     HANDLER_END();
 }
 
+// RLA (zp),Y
+
+HANDLER(op33)
+{
+    EA_zpYindW(iVM);
+    ROL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
+    wLeft -= 6; // best guess
+    HANDLER_END();
+}
+
 // NOP zp,X
 
 HANDLER(op34)
@@ -1118,6 +1130,18 @@ HANDLER(op3E)
 {
     EA_absXW(iVM);
     ROL_mem(iVM);
+    wLeft -= 7;
+    HANDLER_END();
+}
+
+// RLA abs,X
+
+HANDLER(op3F)
+{
+    EA_absXW(iVM);
+    ROL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1293,6 +1317,18 @@ HANDLER(op56)
     HANDLER_END();
 }
 
+// SRE zp,X
+
+HANDLER(op57)
+{
+    EA_zpXW(iVM);
+    LSR_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // CLI
 
 HANDLER(op58)
@@ -1420,6 +1456,18 @@ HANDLER(op66)
 {
     EA_zpW(iVM);
     ROR_zp(iVM);
+    wLeft -= 5;
+    HANDLER_END();
+}
+
+// RRA zp
+
+HANDLER(op67)
+{
+    EA_zpW(iVM);
+    ROR_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ADC_com(iVM);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1687,6 +1735,16 @@ HANDLER(op86)
     HANDLER_END();
 }
 
+// SAX zp
+
+HANDLER(op87)
+{
+    EA_zpW(iVM);
+    ST_zp(iVM, regA & regX);
+    wLeft -= 3;
+    HANDLER_END();
+}
+
 // DEY
 
 HANDLER(op88)
@@ -1808,6 +1866,16 @@ HANDLER(op96)
 {
     EA_zpYW(iVM);
     ST_com(iVM, regX);
+    wLeft -= 4;
+    HANDLER_END();
+}
+
+// SAX zp,X
+
+HANDLER(op97)
+{
+    EA_zpXW(iVM);
+    ST_com(iVM, regA & regX);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2691,7 +2759,7 @@ PFNOP jump_tab[256] =
     op30,
     op31,
     unused,
-    unused,
+    op33,
     op34,
     op35,
     op36,
@@ -2703,7 +2771,7 @@ PFNOP jump_tab[256] =
     op3C,
     op3D,
     op3E,
-    unused,
+    op3F,
     op40,
     op41,
     unused,
@@ -2727,7 +2795,7 @@ PFNOP jump_tab[256] =
     op54,
     op55,
     op56,
-    unused,
+    op57,
     op58,
     op59,
     op5A,
@@ -2743,7 +2811,7 @@ PFNOP jump_tab[256] =
     op64,
     op65,
     op66,
-    unused,
+    op67,
     op68,
     op69,
     op6A,
@@ -2775,7 +2843,7 @@ PFNOP jump_tab[256] =
     op84,
     op85,
     op86,
-    unused,
+    op87,
     op88,
     op89,
     op8A,
@@ -2791,7 +2859,7 @@ PFNOP jump_tab[256] =
     op94,
     op95,
     op96,
-    unused,
+    op97,
     op98,
     op99,
     op9A,
