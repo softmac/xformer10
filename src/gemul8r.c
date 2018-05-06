@@ -2585,7 +2585,7 @@ void ShowAbout()
 
     sprintf(rgch, "%s Community Release\n"
         "Darek's Classic Computer Emulator.\n"
-        "Version 9.95 - built on %s\n"
+        "Version 9.96 - built on %s\n"
         "%2Id-bit %s release.\n\n"
         "Copyright (C) 1986-2018 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
@@ -6949,7 +6949,3 @@ BOOL TrayMessage(HWND hDlg, DWORD dwMessage, UINT uID, HICON hIcon, PSTR pszTip)
 
 #endif
 
-#pragma comment(linker, "/version:9.21")
-#pragma comment(linker, "/defaultlib:comdlg32")
-#pragma comment(linker, "/defaultlib:gdi32")
-#pragma comment(linker, "/defaultlib:shell32")
