@@ -2793,6 +2793,19 @@ void __cdecl Go6502(int iVM)
     //ODS("Scan %04x : %02x %02x\n", wScan, wLeft, wNMI);
     if (wLeft <= wNMI)    // we're starting past the NMI point, so just do the rest of the line
         wNMI = 0;
+    
+    // we need to set NMIST to what interrupt is theoretically coming up, even if it's not enabled
+    // This should happen on cycle 7, but let's do it now, some apps will hang looking for it and need
+    // to see it before the interrupt fires (Tank Arkade)
+    else if (wNMI > 0)
+    {
+        if (wScan == STARTSCAN + Y8)
+            // clear DLI, set VBI, leave RST alone
+            NMIST = (NMIST & 0x20) | 0x5F;
+        else
+            // set DLI, clear VBI leave RST alone
+            NMIST = (NMIST & 0x20) | 0x9F;
+    }
 
     // do not check your breakpoint here, you'll keep hitting it every time you try and execute and never get anywhere
 
@@ -2822,7 +2835,7 @@ void __cdecl Go6502(int iVM)
             if (wScan == STARTSCAN + Y8)
             {
                 // clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
-                NMIST = (NMIST & 0x20) | 0x5F;
+                //NMIST = (NMIST & 0x20) | 0x5F;
 
                 // VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
                 if (NMIEN & 0x40) {
@@ -2838,7 +2851,8 @@ void __cdecl Go6502(int iVM)
             else
             {
                 // set DLI, clear VBI leave RST alone - even if we don't take the interrupt
-                NMIST = (NMIST & 0x20) | 0x9F;
+                //NMIST = (NMIST & 0x20) | 0x9F;
+                
                 if (NMIEN & 0x80)    // DLI enabled
                 {
                     PackP(iVM);
