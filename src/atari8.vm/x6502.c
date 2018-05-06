@@ -1331,6 +1331,18 @@ HANDLER(op61)
     HANDLER_END();
 }
 
+// RRA (zp,x)
+
+HANDLER(op63)
+{
+    EA_zpXindW(iVM);
+    ROR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ADC_com(iVM);
+    wLeft -= 6; // best guess
+    HANDLER_END();
+}
+
 // NOP zp
 
 HANDLER(op64)
@@ -2612,7 +2624,7 @@ PFNOP jump_tab[256] =
     op60,
     op61,
     unused,
-    unused,
+    op63,
     op64,
     op65,
     op66,
