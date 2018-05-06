@@ -852,9 +852,18 @@ HANDLER(op19)
 
 // NOP
 
-HANDLER(op1a)
+HANDLER(op1A)
 {
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// NOP abs,X
+
+HANDLER(op1C)
+{
+    regPC += 2;
+    wLeft -= 4;
     HANDLER_END();
 }
 
@@ -1028,6 +1037,15 @@ HANDLER(op31)
     HANDLER_END();
 }
 
+// NOP zp,X
+
+HANDLER(op34)
+{
+    regPC++;
+    wLeft -= 4;
+    HANDLER_END();
+}
+
 // AND zp,X
 
 HANDLER(op35)
@@ -1064,6 +1082,14 @@ HANDLER(op39)
     EA_absYR(iVM);
     AND_com(iVM);
     wLeft -= 4;
+    HANDLER_END();
+}
+
+// NOP
+
+HANDLER(op3A)
+{
+    wLeft -= 2;
     HANDLER_END();
 }
 
@@ -1122,6 +1148,15 @@ HANDLER(op41)
     EA_zpXindR(iVM);
     EOR_com(iVM);
     wLeft -= 6;
+    HANDLER_END();
+}
+
+// NOP zp
+
+HANDLER(op44)
+{
+    regPC++;
+    wLeft -= 3;
     HANDLER_END();
 }
 
@@ -1273,6 +1308,23 @@ HANDLER(op59)
 {
     EA_absYR(iVM);
     EOR_com(iVM);
+    wLeft -= 4;
+    HANDLER_END();
+}
+
+// NOP
+
+HANDLER(op5A)
+{
+    wLeft -= 2;
+    HANDLER_END();
+}
+
+// NOP abs,X
+
+HANDLER(op5C)
+{
+    regPC += 2;
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1525,6 +1577,14 @@ HANDLER(op79)
     EA_absYR(iVM);
     ADC_com(iVM);
     wLeft -= 4;
+    HANDLER_END();
+}
+
+// NOP
+
+HANDLER(op7A)
+{
+    wLeft -= 2;
     HANDLER_END();
 }
 
@@ -2069,6 +2129,15 @@ HANDLER(opC1)
     HANDLER_END();
 }
 
+// NOP #
+
+HANDLER(opC2)
+{
+    regPC++;
+    wLeft -= 2;
+    HANDLER_END();
+}
+
 // CPY zp
 
 HANDLER(opC4)
@@ -2243,6 +2312,23 @@ HANDLER(opD9)
 {
     EA_absYR(iVM);
     CMP_com(iVM, regA);
+    wLeft -= 4;
+    HANDLER_END();
+}
+
+// NOP
+
+HANDLER(opDA)
+{
+    wLeft -= 2;
+    HANDLER_END();
+}
+
+// NOP abs,X
+
+HANDLER(opDC)
+{
+    regPC += 2;
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2494,6 +2580,23 @@ HANDLER(opF9)
     HANDLER_END();
 }
 
+// NOP
+
+HANDLER(opFA)
+{
+    wLeft -= 2;
+    HANDLER_END();
+}
+
+// NOP abs,X
+
+HANDLER(opFC)
+{
+    regPC += 2;
+    wLeft -= 4;
+    HANDLER_END();
+}
+
 // SBC abs,X
 
 HANDLER(opFD)
@@ -2551,9 +2654,9 @@ PFNOP jump_tab[256] =
     op17,
     op18,
     op19,
-    op1a,
+    op1A,
     unused,
-    unused,
+    op1C,
     op1D,
     op1E,
     unused,
@@ -2577,13 +2680,13 @@ PFNOP jump_tab[256] =
     op31,
     unused,
     unused,
-    unused,
+    op34,
     op35,
     op36,
     unused,
     op38,
     op39,
-    unused,
+    op3A,
     unused,
     op3C,
     op3D,
@@ -2593,7 +2696,7 @@ PFNOP jump_tab[256] =
     op41,
     unused,
     unused,
-    unused,
+    op44,
     op45,
     op46,
     unused,
@@ -2615,9 +2718,9 @@ PFNOP jump_tab[256] =
     unused,
     op58,
     op59,
+    op5A,
     unused,
-    unused,
-    unused,
+    op5C,
     op5D,
     op5E,
     op5F,
@@ -2647,7 +2750,7 @@ PFNOP jump_tab[256] =
     op77,
     op78,
     op79,
-    unused,
+    op7A,
     unused,
     op7C,
     op7D,
@@ -2719,7 +2822,7 @@ PFNOP jump_tab[256] =
     unused,
     opC0,
     opC1,
-    unused,
+    opC2,
     unused,
     opC4,
     opC5,
@@ -2743,9 +2846,9 @@ PFNOP jump_tab[256] =
     unused,
     opD8,
     opD9,
+    opDA,
     unused,
-    unused,
-    unused,
+    opDC,
     opDD,
     opDE,
     opDF,
@@ -2775,9 +2878,9 @@ PFNOP jump_tab[256] =
     unused,
     opF8,
     opF9,
+    opFA,
     unused,
-    unused,
-    unused,
+    opFC,
     opFD,
     opFE,
     unused,
