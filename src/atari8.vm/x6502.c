@@ -2324,6 +2324,18 @@ HANDLER(opDA)
     HANDLER_END();
 }
 
+// DCP abs,Y
+
+HANDLER(opDB)
+{
+    EA_absYW(iVM);
+    DEC_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    CMP_com(iVM, regA);
+    wLeft -= 7; // best guess
+    HANDLER_END();
+}
+
 // NOP abs,X
 
 HANDLER(opDC)
@@ -2847,7 +2859,7 @@ PFNOP jump_tab[256] =
     opD8,
     opD9,
     opDA,
-    unused,
+    opDB,
     opDC,
     opDD,
     opDE,
