@@ -611,6 +611,22 @@ __inline void SIOCheck(int iVM)
         PackP(iVM);
         SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
         UnpackP(iVM);
+
+        // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
+        // a little bit of time (but not nearly as much as it would really take)
+        rgbMem[0xd180] = 0xa0;
+        rgbMem[0xd181] = 0x08;  // change this to vary the delay
+        rgbMem[0xd182] = 0xa2;
+        rgbMem[0xd183] = 0x00;
+        rgbMem[0xd184] = 0xca;
+        rgbMem[0xd185] = 0xd0;
+        rgbMem[0xd186] = 0xfd;
+        rgbMem[0xd187] = 0x88;
+        rgbMem[0xd188] = 0xd0;
+        rgbMem[0xd189] = 0xfa;
+        rgbMem[0xd18a] = 0x60;
+        PushWord(iVM, regPC - 1);
+        regPC = 0xd180;
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
