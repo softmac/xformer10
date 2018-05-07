@@ -82,6 +82,8 @@ __inline uint8_t READ_BYTE(int iVM, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
+    Assert(pfnPeekB == PeekBAtari);
+
     if (ea >= ramtop)
         return (*pfnPeekB)(iVM, ea);
     else
@@ -90,6 +92,8 @@ __inline uint8_t READ_BYTE(int iVM, uint32_t ea)
 
 __inline uint16_t READ_WORD(int iVM, uint32_t ea)
 {
+    Assert(pfnPeekB == PeekBAtari);
+
     if (ea >= ramtop)
         return (*pfnPeekB)(iVM, ea) | ((*pfnPeekB)(iVM, ea + 1) << 8);
     else
@@ -100,6 +104,8 @@ __inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
+    Assert(pfnPokeB == PokeBAtari);
+
     if (ea >= ramtop)
         (*pfnPokeB)(iVM, ea, val);
     else
@@ -109,6 +115,8 @@ __inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 // we only call this if we know it's < ramtop
 __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 {
+    Assert(pfnPokeB == PokeBAtari);
+
     if (ea >= ramtop)
     {
         (*pfnPokeB)(iVM, ea, val & 255);
@@ -121,6 +129,13 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
     }
 }
 
+// dummy opcode handler to force stop emulating 6502
+
+void __fastcall Stop6502(int iVM)
+{
+    (void)iVM;
+}
+
 //////////////////////////////////////////////////////////////////
 //
 // Macro definitions
@@ -131,7 +146,7 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 #ifndef NDEBUG
 #define HANDLER_END() if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM); }
 #else
-#define HANDLER_END() if (wLeft > wNMI) (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM); }
+#define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[READ_BYTE(iVM, regPC++)]; (*p)(iVM); } }
 #endif
 
 // this used to not let a scan line end until there's an instruction that affects the PC
