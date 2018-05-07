@@ -24,7 +24,7 @@ PFNB pfnPeekB;
 PFNL pfnPokeB;
 
 // jump tables
-typedef void (__fastcall * PFNOP)(int iVM);
+typedef void (__fastcall * PFNOP)(const int iVM);
 PFNOP jump_tab[256];
 
 #if 0
@@ -131,7 +131,7 @@ __inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
 
 // dummy opcode handler to force stop emulating 6502
 
-void __fastcall Stop6502(int iVM)
+void __fastcall Stop6502(const int iVM)
 {
     (void)iVM;
 }
@@ -152,7 +152,7 @@ void __fastcall Stop6502(int iVM)
 // this used to not let a scan line end until there's an instruction that affects the PC
 #define HANDLER_END_FLOW() HANDLER_END()
 
-#define HANDLER(opcode) void __fastcall opcode (int iVM) {
+#define HANDLER(opcode) void __fastcall opcode (const int iVM) {
 
 #if 0
     xprintf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X  ", \
