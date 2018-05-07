@@ -285,7 +285,6 @@ typedef struct
     WORD m_regPC, m_regSP;
     BYTE m_regA, m_regY, m_regX, m_regP;
     WORD m_regEA;
-    BYTE m_mdEA;
 
     WORD m_fKeyPressed;     // xkey.c
     WORD m_bp;             // breakpoint
@@ -407,7 +406,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define regX          CANDY_STATE(regX)
 #define regP          CANDY_STATE(regP)
 #define regEA         CANDY_STATE(regEA)
-#define mdEA          CANDY_STATE(mdEA)
 #define srN           CANDY_STATE(srN)
 #define srV           CANDY_STATE(srV)
 #define srB           CANDY_STATE(srB)
