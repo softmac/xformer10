@@ -627,6 +627,7 @@ __inline void SIOCheck(int iVM)
         SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
         UnpackP(iVM);
 
+#if 0   // breaks XL or XE, duh
         // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
         // a little bit of time (but not nearly as much as it would really take)
         rgbMem[0xd180] = 0xa0;
@@ -642,6 +643,7 @@ __inline void SIOCheck(int iVM)
         rgbMem[0xd18a] = 0x60;
         PushWord(iVM, regPC - 1);
         regPC = 0xd180;
+#endif
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
