@@ -74,6 +74,9 @@
 #pragma warning (disable:4214) // nonstandard extension: bitfield types
 #pragma warning (disable:4220) // varargs matches remaining paramaters
 
+#pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
+
 // each type of VM installed into Gem has a function table we can call
 
 typedef void(__cdecl *PFN) (int x, ...);

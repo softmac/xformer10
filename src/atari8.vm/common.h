@@ -38,9 +38,22 @@
 
 #define H32BIT
 
-#ifdef H32BIT
+#if defined(_M_IX86) || defined(_M_AMD64)
+
+#pragma intrinsic(__stosb)
+#pragma intrinsic(__movsb)
+
+#define _fmemset(d,s,c) __stosb((unsigned char *)(d),(unsigned char)(s),(size_t)(c))
+#define _fmemcpy(d,s,c) __movsb((unsigned char *)(d),(unsigned const char *)(s),(size_t)(c))
+
+#define memset __stosb
+#define memcpy __movsb
+
+#else
+
 #define _fmemset memset
 #define _fmemcpy memcpy
+
 #endif
 
 
