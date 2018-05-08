@@ -26,6 +26,7 @@ void CheckKey(int iVM, BOOL fDoShift, WORD myShift)
     BYTE scan = 0;
     BYTE ch = 0;
     WORD shift = 0;
+    int sh;
     //BOOL fForceCtrl = FALSE;
 
     extern BYTE rgbMapScans[1024];
@@ -342,7 +343,7 @@ void CheckKey(int iVM, BOOL fDoShift, WORD myShift)
 
 lookitup:
 
-    int sh = shift;
+    sh = shift;
 
     //if (fForceCtrl) sh = shift | 4;
 
@@ -528,7 +529,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
     case 0x14B:
     case 0x14D:
     case 0x150:
-
+        {
         // plus joystick emulation
 
         static BYTE mpJoyBit[9] = { 1, 1, 1, 4, 4, 8, 8, 8, 2 };
@@ -553,7 +554,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 
         return FALSE;    // exit early so the ATARI doesn't see keystrokes when cursor used as joystick.
                         // some games pause or react badly.
-
+        }
     case 0x147:
         ch = 0xE0;      // Home
         break;

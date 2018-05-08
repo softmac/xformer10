@@ -1354,6 +1354,7 @@ if (sl.modelo < 2 || iTop > i)
         // GR.0 and descended character GR.0
     case 2:
     case 3:
+        {
         BYTE vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
 
         // mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
@@ -1628,6 +1629,7 @@ if (sl.modelo < 2 || iTop > i)
                         break;
 
                     case 0x80:
+                        {
                         // don't walk off the beginning of the array
                         BYTE last = col2, last2 = col2;
 
@@ -1652,6 +1654,7 @@ if (sl.modelo < 2 || iTop > i)
                                                    //*(qch - 1) = yellow;
                             }
                         }
+                        }
                     }
 
                     // ODD
@@ -1667,6 +1670,7 @@ if (sl.modelo < 2 || iTop > i)
                         break;
 
                     case 0x40:
+                        {
                         // don't walk off the beginning of the array later on
                         BYTE last, last2 = col2;
 
@@ -1688,6 +1692,7 @@ if (sl.modelo < 2 || iTop > i)
                             if (last == red)
                                 *(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
                         }
+                        }
                     }
 
                     b2 <<= 2;
@@ -1696,6 +1701,7 @@ if (sl.modelo < 2 || iTop > i)
             //                _fmemcpy(qch,rgch,8);
         }
         break;
+        }
 
     case 5:
         vpix = iscan >> 1;    // extra thick, use screen data twice for 2 output lines
@@ -2155,16 +2161,17 @@ if (sl.modelo < 2 || iTop > i)
         break;
 
     case 15:
+        {
         col1 = sl.colpf1;
         col2 = sl.colpf2;
 
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-        red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
-        yellow = 0xe0 | (sl.colpf1 & 0x0F);
+        BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
+        BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
 
         // just for fun, don't interlace in B&W
         // !!! It actually won't work in PMG mode right now
-        fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
+        BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
 
         for (; i < iTop; i++)
         {
@@ -2288,7 +2295,7 @@ if (sl.modelo < 2 || iTop > i)
             }
         }
         break;
-
+        }
     case 16:
         // GTIA 16 grey mode
 
