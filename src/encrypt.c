@@ -18,6 +18,10 @@
 #include "encrypt.h"
 #endif
 
+#ifdef __MINGW32__
+#define __inline inline __attribute__((always_inline))
+#endif
+
 const unsigned long raw_keys[4][8] = {
 	/* Emulator */
 	{ 0x76543245, 0x17426d11, 0x37752116, 0x6c227110,

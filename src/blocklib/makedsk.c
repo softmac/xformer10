@@ -33,18 +33,18 @@
 #include <time.h>
 #include <assert.h>
 
-void __inline PutByte(BYTE *pb, ULONG ofs, BYTE b)
+static void __inline PutByte(BYTE *pb, ULONG ofs, BYTE b)
 {
     pb[ofs] = b;
 }
 
-void __inline PutWord(BYTE *pb, ULONG ofs, WORD w)
+static void __inline PutWord(BYTE *pb, ULONG ofs, WORD w)
 {
     PutByte(pb, ofs, (BYTE)(w >> 8));
     PutByte(pb, ofs+1, (BYTE)w);
 }
 
-void __inline PutLong(BYTE *pb, ULONG ofs, ULONG l)
+static void __inline PutLong(BYTE *pb, ULONG ofs, ULONG l)
 {
     PutByte(pb, ofs,   (BYTE)(l >> 24));
     PutByte(pb, ofs+1, (BYTE)(l >> 16));

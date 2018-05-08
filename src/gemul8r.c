@@ -2914,6 +2914,7 @@ LRESULT CALLBACK WndProc(
 
         // MOVE comes before the SIZE so we don't know we're being maximized, so make sure we are >(0,0)
         // remembers our last restored size
+        {
         RECT rect;
         GetWindowRect(hWnd, &rect);
         if (!v.fFullScreen)
@@ -2927,6 +2928,7 @@ LRESULT CALLBACK WndProc(
 #endif
 
         break;
+        }
 
     case WM_SIZE:
 
@@ -3126,6 +3128,7 @@ break;
         return TRUE; // indicates that background erased
 
     case WM_PAINT:
+        {
 #if 0
         // if there is a video thread, don't do redraw here
 
@@ -3178,7 +3181,7 @@ break;
             }
         }
         break;
-
+        }
 //     case WM_ACTIVATEAPP:
        case WM_ACTIVATE:
         //DebugStr("WM_ACTIVATE %d\n", LOWORD(uParam));
@@ -3295,7 +3298,7 @@ break;
 #endif
 
     case WM_COMMAND:  // message: command from application menu
-
+        {
         int wmId    = LOWORD(uParam);
 
         switch (wmId)
@@ -3979,7 +3982,7 @@ break;
 
         return 0;
         break;
-
+        }
 // !!! this didn't work so we poll now inside the VM who is responsible for their own joystick
 // We do give hot key joystick button support, though... numeric keypad, page down, mouse button and control keys
 #if 0
@@ -4047,6 +4050,7 @@ break;
         break;
 
     case WM_MOUSEWHEEL:
+        {
         short int offset = GET_WHEEL_DELTA_WPARAM(uParam) * (v.fWheelSensitive ? 8 : 1); // must be short to catch the sign
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
@@ -4080,8 +4084,9 @@ break;
             ScrollTiles();
         }
         break;
-
+        }
     case WM_GESTURENOTIFY:
+        {
         // !!! why is pan with intertia broken, as well as the GID_PAN and GC_PAN combination?
         GESTURECONFIG gc;
         gc.dwID = 0;
@@ -4090,8 +4095,9 @@ break;
 
         BOOL bResult = SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
         break;    // MUST break
-
+        }
     case WM_GESTURE:
+        {
         GESTUREINFO gi;
         ZeroMemory(&gi, sizeof(GESTUREINFO));
         gi.cbSize = sizeof(GESTUREINFO);
@@ -4099,7 +4105,7 @@ break;
         static int iPanBegin; // where we first touched the screen
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
 
-        bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
+        BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
         if (bResult)
         {
             if (gi.dwID == GID_PAN)
@@ -4153,7 +4159,7 @@ break;
         }
 
         break;    // must break
-
+        }
     case WM_RBUTTONDOWN:
         vi.fHaveFocus = TRUE;  // HACK again
 

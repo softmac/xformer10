@@ -295,5 +295,5 @@ __inline BYTE * MapWritableAddressVM(int iVM, ULONG ea)
 }
 #endif
 
-#endif __VM_INCLUDED__
+#endif // __VM_INCLUDED__
 

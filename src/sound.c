@@ -330,7 +330,8 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
                 bLeft = (bLeft >> 2);        // we won't let you clip, unlike the real POKEY
                 //bRight = bLeft;    // mono for now
-                *((WORD *)pb)++ = (bLeft & 0xffff);
+                *((WORD *)pb) = (bLeft & 0xffff);
+                pb += 2;
                 //*pb++ = (char)(bRight & 0xff);
                 //*pb++ = (char)((bRight >> 8) & 0xff);
 

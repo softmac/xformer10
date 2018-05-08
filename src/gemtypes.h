@@ -25,6 +25,10 @@
 // #define _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE 1
 // #define WindowsSDKDesktopARM64Support 1
 
+#if defined(__MINGW32__)
+#define __inline inline __attribute__((always_inline))
+#endif
+
 #define STRICT
 #define VC_EXTRALEAN
 #define WIN32_LEAN_AND_MEAN
@@ -37,7 +41,6 @@
 #define NODRAWTEXT
 #define NONLS
 #define NOMETAFILE
-#define NOMINMAX
 #define NOSCROLL
 #define NOSERVICE
 #define NOTEXTMETRIC
@@ -1028,9 +1031,9 @@ void ForceRedraw(int iVM);
 //
 
 #ifndef NDEBUG
-#define Assert(f) _assert((f), __FILE__, __LINE__)
+#define Assert(f) _gem_assert((f), __FILE__, __LINE__)
 
-__inline void _assert(int f, char *file, int line)
+__inline void _gem_assert(int f, char *file, int line)
 {
     char sz[99];
 
@@ -1055,6 +1058,14 @@ __inline void _assert(int f, char *file, int line)
 #define DebugStr printf
 
 #else  // NDEBUG
+
+#ifdef __GNUC__
+inline int __noop(const char *format, ...)
+{
+	return 0;
+}
+inline void __assume(BOOL condition) {}
+#endif
 
 #define DebugStr __noop
 #define Assert(f) (__assume(f))

@@ -9,6 +9,10 @@
 
 // #define WindowsSDKDesktopARM64Support 1
 
+#ifdef __MINGW32__
+#define __inline inline __attribute__((always_inline))
+#endif
+
 #define STRICT
 #define VC_EXTRALEAN
 #define WIN32_LEAN_AND_MEAN
@@ -21,7 +25,6 @@
 #define NODRAWTEXT
 #define NONLS
 #define NOMETAFILE
-#define NOMINMAX
 #define NOSCROLL
 #define NOSERVICE
 #define NOTEXTMETRIC
@@ -86,7 +89,7 @@ __inline void _assert(int f, char *file, int line)
             }
         else if (ret == 4)
             {
-#if _MSC_VER >= 1300
+#if (_MSC_VER >= 1300) || defined(__MINGW32__)
             __debugbreak();
 #else
             __asm { int 3 };

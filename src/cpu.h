@@ -208,5 +208,5 @@ HRESULT PokeL(ULONG addr, ULONG l)
 }
 #endif
 
-#endif __CPU_INCLUDED__
+#endif // __CPU_INCLUDED__
 
