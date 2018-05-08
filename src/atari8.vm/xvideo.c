@@ -1250,7 +1250,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 
 void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars)
 {
-    BYTE rgFifth[X8] = { 0 };   // is fifth player colour present in GTIA modes?
+    BYTE rgFifth[X8];     // is fifth player colour present in GTIA modes?
 
     if (start >= stop)
         return;
