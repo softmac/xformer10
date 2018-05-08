@@ -1339,6 +1339,9 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
 if (sl.modelo < 2 || iTop > i)
     switch (sl.modelo)
     {
+    default:
+        Assert(FALSE);
+        break;
 
     case 0:
     case 1:
@@ -1616,6 +1619,10 @@ if (sl.modelo < 2 || iTop > i)
 
                     switch (b2 & 0x80)
                     {
+                    default:
+                        Assert(FALSE);
+                        break;
+
                     case 0x00:
                         *qch++ = col2;
                         break;
@@ -1651,6 +1658,10 @@ if (sl.modelo < 2 || iTop > i)
 
                     switch (b2 & 0x40)
                     {
+                    default:
+                        Assert(FALSE);
+                        break;
+
                     case 0x00:
                         *qch++ = col2;
                         break;
@@ -1882,6 +1893,10 @@ if (sl.modelo < 2 || iTop > i)
 
                 switch (b2 & 0x03)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col0;
                     *qch++ = col0;
@@ -1939,6 +1954,10 @@ if (sl.modelo < 2 || iTop > i)
 
                 switch (b2 & 0x01)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col0;
                     *qch++ = col0;
@@ -1990,6 +2009,10 @@ if (sl.modelo < 2 || iTop > i)
 
                 switch (b2 & 0x03)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col0;
                     *qch++ = col0;
@@ -2049,6 +2072,10 @@ if (sl.modelo < 2 || iTop > i)
 
                 switch (b2 & 0x01)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col0;
                     *qch++ = col0;
@@ -2099,6 +2126,10 @@ if (sl.modelo < 2 || iTop > i)
 
                 switch (b2 & 0x03)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col0;
                     *qch++ = col0;
@@ -2186,6 +2217,10 @@ if (sl.modelo < 2 || iTop > i)
                 // supports artifacting
                 switch (b2 & 0x01)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col2;
                     break;
@@ -2227,6 +2262,10 @@ if (sl.modelo < 2 || iTop > i)
                 // supports artifacting
                 switch (b2 & 0x01)
                 {
+                default:
+                    Assert(FALSE);
+                    break;
+
                 case 0x00:
                     *qch++ = col2;
                     break;
