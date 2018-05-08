@@ -19,16 +19,16 @@
 // !!! It shouldn't be ATARI specific, get rid of every reference to CANDY, keep it's own thread-safe state
 
 // !!! don't call this directly
-void __cdecl Go6502(int);
+void __cdecl Go6502(const int);
 
-__inline BOOL cpuExec(int iVM)
+__inline BOOL cpuExec(const int iVM)
 {
     Go6502(iVM);
     return TRUE;
 }
 
 // !!! The monitor should use this
-__inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
+__inline BOOL cpuDisasm(const int iVM, char *pch, ADDR *pPC)
 {
     // stub out for now
 
@@ -37,14 +37,14 @@ __inline BOOL cpuDisasm(int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
-__inline BYTE cpuPeekB(int iVM, ADDR addr)
+__inline BYTE cpuPeekB(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     return rgbMem[addr];
 }
 
-__inline BOOL cpuPokeB(int iVM, ADDR addr, BYTE b)
+__inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -52,14 +52,14 @@ __inline BOOL cpuPokeB(int iVM, ADDR addr, BYTE b)
     return TRUE;
 }
 
-__inline WORD cpuPeekW(int iVM, ADDR addr)
+__inline WORD cpuPeekW(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
 }
 
-__inline BOOL cpuPokeW(int iVM, ADDR addr, WORD w)
+__inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -80,7 +80,7 @@ __inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
     return TRUE;
 }
 
-__inline BOOL cpuReset(int iVM)
+__inline BOOL cpuReset(const int iVM)
 {
 
     // clear all registers
