@@ -2069,6 +2069,7 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 
 // only called for addr >= ramtop
 //
+__declspec(noinline)
 BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 {
     // This is how Bounty Bob bank selects
@@ -2233,8 +2234,8 @@ BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 // Be efficient! This is one of the most executed functions!
 // Only call this is addr >= ramtop
 // regPC is probably one too high at this moment
-// !!! Too big to __inline?
 //
+__declspec(noinline)
 BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
@@ -2290,7 +2291,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             {
                 // swap out XE BUS device 1 (R: handler)
 
-                memcpy(&rgbMem[0xD800], rgbXLXED800, sizeof(rgbSIOR));
+                memcpy(&rgbMem[0xD800], (unsigned char const *)rgbXLXED800, sizeof(rgbSIOR));
             }
         }
 

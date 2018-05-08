@@ -78,7 +78,7 @@ int __cdecl xprintf(const char *format, ...)
 
 // these private macros decide which needs to be called - special peek/poke above ramtop, or not
 
-__inline uint8_t READ_BYTE(int iVM, uint32_t ea)
+__inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
@@ -90,7 +90,7 @@ __inline uint8_t READ_BYTE(int iVM, uint32_t ea)
         return cpuPeekB(iVM, ea);
 }
 
-__inline uint16_t READ_WORD(int iVM, uint32_t ea)
+__inline uint16_t READ_WORD(const int iVM, uint32_t ea)
 {
     Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
@@ -100,7 +100,7 @@ __inline uint16_t READ_WORD(int iVM, uint32_t ea)
         return cpuPeekB(iVM, ea) | (cpuPeekB(iVM, ea + 1) << 8);
 }
 
-__inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
+__inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
@@ -113,7 +113,7 @@ __inline void WRITE_BYTE(int iVM, uint32_t ea, uint8_t val)
 }
 
 // we only call this if we know it's < ramtop
-__inline void WRITE_WORD(int iVM, uint32_t ea, uint16_t val)
+__inline void WRITE_WORD(const int iVM, uint32_t ea, uint16_t val)
 {
     Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
@@ -174,13 +174,13 @@ void __fastcall Stop6502(const int iVM)
     xprintf("\n");
 #endif
 
-#define HELPER(opcode) __forceinline __fastcall opcode (int iVM) {
+#define HELPER(opcode) __forceinline __fastcall opcode (const int iVM) {
 
-#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (int iVM, arg1) {
+#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (const int iVM, arg1) {
 
-#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (int iVM, arg1, arg2) {
+#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (const int iVM, arg1, arg2) {
 
-#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode ( int iVM, arg1, arg2, arg3) {
+#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode (const int iVM, arg1, arg2, arg3) {
 
 // For addressing modes where we know we won't be above ramtop and needing special register values, we can directly do a CPU read.
 // Otherwise, our READ_ WRITE_ helper functions will check ramtop, but be one comparison/potential branch slower
@@ -620,7 +620,7 @@ WORD HELPER(PopWord)
     return w;
 } }
 
-__inline void SIOCheck(int iVM)
+__inline void SIOCheck(const int iVM)
 {
     // !!! This executes instantly, messing with cycle accuracy
     // !!! You can't set a bp on $e459, $e959 or anything inside SIO
