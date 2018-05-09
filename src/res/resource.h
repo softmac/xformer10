@@ -10,13 +10,13 @@
 #define IDM_ADDVM1                      40150 // and leave room for all the different possible VM types
 
 #define IDM_DELVM                       40202
-#define IDM_CHANGEVM					40225
-#define IDM_NEW							40203
+#define IDM_CHANGEVM                    40225
+#define IDM_NEW                         40203
 #define IDM_COLDSTART                   40204
-#define IDM_WARMSTART					40221
+#define IDM_WARMSTART                   40221
 #define IDM_TOGGLEBASIC                 40222
-#define IDM_NEXTVM						40223
-#define IDM_PREVVM						40224
+#define IDM_NEXTVM                      40223
+#define IDM_PREVVM                      40224
 
 #define IDM_LOAD                        40206
 #define IDM_SAVEAS                      40207
@@ -25,15 +25,15 @@
 #define IDM_DEBUGGER                    40210
 #define IDM_EXIT                        40220
 
-#define IDM_VM1							41999	// leave lots of room for many more before this one (thousands)
+#define IDM_VM1                         41999    // leave lots of room for many more before this one (thousands)
 
 #define IDM_FULLSCREEN                  40231
 #define IDM_STRETCH                     40232
 #define IDM_TILE                        40237
-#define IDM_TURBO	                    40033
+#define IDM_TURBO                       40033
 #define IDM_COLORMONO                   40032
 #define IDM_TIMETRAVEL                  40034
-#define IDM_AUTOLOAD					40035
+#define IDM_AUTOLOAD                    40035
 #define IDM_D1                          40238
 #define IDM_D2                          40239
 #define IDM_D3                          40242
@@ -43,8 +43,8 @@
 #define IDM_D3U                         40246
 #define IDM_D4U                         40247
 #define IDM_CART                        40248
-#define IDM_NOCART						40249
-#define IDM_WHEELSENS					40250
+#define IDM_NOCART                      40249
+#define IDM_WHEELSENS                   40250
 #define IDM_PASTEASCII                  40251
 #define IDM_PASTEATASCII                40252
 

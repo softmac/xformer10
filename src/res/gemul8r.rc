@@ -43,104 +43,104 @@ IDR_GEMMENU MENU PRELOAD DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
-		POPUP "New &VM"
-		BEGIN
-			MENUITEM "ATARI 800", IDM_ADDVM1	// 32 possible VM types
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 1
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 2
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 3
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 4
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 5
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 6
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 7
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 8
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 9
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 10
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 11
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 12
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 13
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 14
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 15
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 16
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 17
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 18
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 19
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 20
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 21
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 22
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 23
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 24
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 25
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 26
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 27
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 28
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 29
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 30
-			MENUITEM "ATARI 800", IDM_ADDVM1 + 31
-		END
-	
-		MENUITEM "&Delete Current VM", IDM_DELVM
-		MENUITEM "Change VM &Type\tAlt+F10", IDM_CHANGEVM
-		MENUITEM SEPARATOR
-		MENUITEM "&Warm Start VM\tF10", IDM_WARMSTART
-		MENUITEM "&Cold Start VM\tCtrl+F10", IDM_COLDSTART
-		// this is VM specific and handled magically, there is no actual IDM_TOGGLEBASIC message handler
-		MENUITEM "Toggle &BASIC\tShift+F10", IDM_TOGGLEBASIC
-		MENUITEM "Debug &Monitor\tPause", IDM_DEBUGGER
-		MENUITEM SEPARATOR
-		MENUITEM "&New Session", IDM_NEW
-		MENUITEM "&Load Session...", IDM_LOAD
-		MENUITEM "&Save Session As...", IDM_SAVEAS
-		MENUITEM SEPARATOR
-		MENUITEM "E&xit", IDM_EXIT
-		MENUITEM SEPARATOR
-		MENUITEM "M.U.L.E.", IDM_VM1
-	// next populate with a separator and all open instances
+        POPUP "New &VM"
+        BEGIN
+            MENUITEM "ATARI 800", IDM_ADDVM1    // 32 possible VM types
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 1
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 2
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 3
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 4
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 5
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 6
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 7
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 8
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 9
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 10
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 11
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 12
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 13
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 14
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 15
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 16
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 17
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 18
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 19
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 20
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 21
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 22
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 23
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 24
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 25
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 26
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 27
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 28
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 29
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 30
+            MENUITEM "ATARI 800", IDM_ADDVM1 + 31
+        END
+    
+        MENUITEM "&Delete Current VM", IDM_DELVM
+        MENUITEM "Change VM &Type\tAlt+F10", IDM_CHANGEVM
+        MENUITEM SEPARATOR
+        MENUITEM "&Warm Start VM\tF10", IDM_WARMSTART
+        MENUITEM "&Cold Start VM\tCtrl+F10", IDM_COLDSTART
+        // this is VM specific and handled magically, there is no actual IDM_TOGGLEBASIC message handler
+        MENUITEM "Toggle &BASIC\tShift+F10", IDM_TOGGLEBASIC
+        MENUITEM "Debug &Monitor\tPause", IDM_DEBUGGER
+        MENUITEM SEPARATOR
+        MENUITEM "&New Session", IDM_NEW
+        MENUITEM "&Load Session...", IDM_LOAD
+        MENUITEM "&Save Session As...", IDM_SAVEAS
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", IDM_EXIT
+        MENUITEM SEPARATOR
+        MENUITEM "M.U.L.E.", IDM_VM1
+    // next populate with a separator and all open instances
 
-		//MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
+        //MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
         //MENUITEM "&Save VM Profiles",           IDM_SAVE
         //MENUITEM SEPARATOR
         //MENUITEM "Restart &Next VM\tAlt+F12",   IDM_TOGGLEHW
         //MENUITEM SEPARATOR
         //MENUITEM "&Hibernate",                  IDM_HYBERNATE
-	END
-	POPUP "&Window"
-	BEGIN
-		MENUITEM "&Full Screen\tAlt+Enter", IDM_FULLSCREEN
-		MENUITEM "&Stretch Mode\tF5", IDM_STRETCH
-		MENUITEM "&Tile All VMs\tF11", IDM_TILE
-		MENUITEM SEPARATOR
-		MENUITEM "Tur&bo Mode\tCtrl+F12", IDM_TURBO
-		MENUITEM SEPARATOR
-		MENUITEM "Time Tra&vel VM (13s)\tPg Up", IDM_TIMETRAVEL
-		MENUITEM SEPARATOR
-		MENUITEM "Switch VM &Monitor\tShift+F12", IDM_COLORMONO
-		MENUITEM SEPARATOR
+    END
+    POPUP "&Window"
+    BEGIN
+        MENUITEM "&Full Screen\tAlt+Enter", IDM_FULLSCREEN
+        MENUITEM "&Stretch Mode\tF5", IDM_STRETCH
+        MENUITEM "&Tile All VMs\tF11", IDM_TILE
+        MENUITEM SEPARATOR
+        MENUITEM "Tur&bo Mode\tCtrl+F12", IDM_TURBO
+        MENUITEM SEPARATOR
+        MENUITEM "Time Tra&vel VM (13s)\tPg Up", IDM_TIMETRAVEL
+        MENUITEM SEPARATOR
+        MENUITEM "Switch VM &Monitor\tShift+F12", IDM_COLORMONO
+        MENUITEM SEPARATOR
         MENUITEM "Mouse &Wheel Sensitivity High\tAlt+F12", IDM_WHEELSENS
         MENUITEM SEPARATOR
         MENUITEM "&Restore Last Session on Startup", IDM_AUTOLOAD
 
-	END
-	POPUP "&Disk/Cartridge"
-		BEGIN
-		MENUITEM "D&1:...", IDM_D1
-		MENUITEM "D&2:...", IDM_D2
-		MENUITEM SEPARATOR
-	    MENUITEM "&Unmount D1:", IDM_D1U
-		MENUITEM "&Unmount D2:", IDM_D2U
-		MENUITEM SEPARATOR
-	    MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
-	    MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
-	    //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
-	    MENUITEM SEPARATOR
+    END
+    POPUP "&Disk/Cartridge"
+        BEGIN
+        MENUITEM "D&1:...", IDM_D1
+        MENUITEM "D&2:...", IDM_D2
+        MENUITEM SEPARATOR
+        MENUITEM "&Unmount D1:", IDM_D1U
+        MENUITEM "&Unmount D2:", IDM_D2U
+        MENUITEM SEPARATOR
+        MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
+        MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
+        //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
+        MENUITEM SEPARATOR
         MENUITEM "&Paste ASCII to Keyboard Buffer", IDM_PASTEASCII
         MENUITEM "&Paste ATASCII to Keyboard Buffer", IDM_PASTEATASCII
         MENUITEM SEPARATOR
         MENUITEM "&Cartridge...", IDM_CART
-		MENUITEM "&Remove Cartridge" IDM_NOCART
-	END
+        MENUITEM "&Remove Cartridge" IDM_NOCART
+    END
 
-	//POPUP "&Options"
+    //POPUP "&Options"
     //BEGIN
     //    MENUITEM "&VM Properties...\tAlt+F11",  IDM_PROPERTIES
     //    MENUITEM "&Disk Properties...\tShift+F11", IDM_DISKPROPS
@@ -213,19 +213,19 @@ END
 IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
 BEGIN
     VK_F5,          IDM_STRETCH,            VIRTKEY, NOINVERT
-    VK_RETURN,		IDM_FULLSCREEN,			VIRTKEY, CONTROL, NOINVERT
-	VK_F11,			IDM_TILE,				VIRTKEY, NOINVERT
-	VK_F11,			IDM_NEXTVM,				VIRTKEY, CONTROL, NOINVERT
-	VK_F11,			IDM_PREVVM,				VIRTKEY, SHIFT, CONTROL, NOINVERT
-	VK_F10,			IDM_WARMSTART,			VIRTKEY, NOINVERT
-	VK_F10,			IDM_TOGGLEBASIC,		VIRTKEY, SHIFT, NOINVERT
-	VK_F10,			IDM_COLDSTART,			VIRTKEY, CONTROL, NOINVERT
-	VK_F10,			IDM_CHANGEVM,			VIRTKEY, ALT, NOINVERT
-	VK_F12,			IDM_TURBO,				VIRTKEY, CONTROL, NOINVERT
-	VK_F12,			IDM_COLORMONO,			VIRTKEY, SHIFT, NOINVERT
-	VK_PAUSE,		IDM_DEBUGGER,			VIRTKEY, NOINVERT
+    VK_RETURN,        IDM_FULLSCREEN,            VIRTKEY, CONTROL, NOINVERT
+    VK_F11,            IDM_TILE,                VIRTKEY, NOINVERT
+    VK_F11,            IDM_NEXTVM,                VIRTKEY, CONTROL, NOINVERT
+    VK_F11,            IDM_PREVVM,                VIRTKEY, SHIFT, CONTROL, NOINVERT
+    VK_F10,            IDM_WARMSTART,            VIRTKEY, NOINVERT
+    VK_F10,            IDM_TOGGLEBASIC,        VIRTKEY, SHIFT, NOINVERT
+    VK_F10,            IDM_COLDSTART,            VIRTKEY, CONTROL, NOINVERT
+    VK_F10,            IDM_CHANGEVM,            VIRTKEY, ALT, NOINVERT
+    VK_F12,            IDM_TURBO,                VIRTKEY, CONTROL, NOINVERT
+    VK_F12,            IDM_COLORMONO,            VIRTKEY, SHIFT, NOINVERT
+    VK_PAUSE,        IDM_DEBUGGER,            VIRTKEY, NOINVERT
 
-	// legacy
+    // legacy
     //VK_F11,         IDM_F11,                VIRTKEY, NOINVERT
     //VK_F11,         IDM_CTRLF11,            VIRTKEY, CONTROL, NOINVERT
     //VK_F11,         IDM_PROPERTIES,         VIRTKEY, ALT, NOINVERT
@@ -437,7 +437,7 @@ BEGIN
                     WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,72,32,50,14
 END
-#endif	// #if 0
+#endif    // #if 0
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////

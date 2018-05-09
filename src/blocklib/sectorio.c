@@ -113,8 +113,8 @@ BOOL FReadWriteSecNT(DISKINFO *pdi, BOOL fWrite)
 
         LPVOID IoBuffer;
         BOOL b;
-		DWORD BytesRead;
-		//DWORD BytesWritten;
+        DWORD BytesRead;
+        //DWORD BytesWritten;
         //DWORD FileSize;
         DWORD VirtBufSize;
         //DWORD NumBufs;
