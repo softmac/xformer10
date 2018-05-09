@@ -1060,7 +1060,7 @@ __inline void _gem_assert(int f, char *file, int line)
 #else  // NDEBUG
 
 #ifdef __GNUC__
-inline int __noop(const char *format, ...)
+static inline int __noop(const char *format, ...)
 {
 	return 0;
 }
