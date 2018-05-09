@@ -45,6 +45,8 @@
 #define IDM_CART                        40248
 #define IDM_NOCART						40249
 #define IDM_WHEELSENS					40250
+#define IDM_PASTEASCII                  40251
+#define IDM_PASTEATASCII                40252
 
 #define IDM_ABOUT                       40260
 
