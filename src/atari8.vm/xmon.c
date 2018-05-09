@@ -279,7 +279,7 @@ void BtoPch(char *pch, unsigned b)
 BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 {
     char chCom;                 /* command character */
-    char ch;
+    unsigned char ch;
     int cNum, cLines;
     unsigned u1, u2;
     char *pch;
