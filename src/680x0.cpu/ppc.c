@@ -43,35 +43,35 @@ void mppc_ReverseMemory(lAddr, cb)
 ULONG lAddr;
 ULONG cb;
 {
-	BYTE t;
-	BYTE *pbSrc = vpbRAM - lAddr - cb + 2;
-	BYTE *pbDst = vpbRAM - lAddr + 1;
+    BYTE t;
+    BYTE *pbSrc = vpbRAM - lAddr - cb + 2;
+    BYTE *pbDst = vpbRAM - lAddr + 1;
 
-	cb >>= 1;
+    cb >>= 1;
 
-	while (cb--)
-		{
-		t        = *pbSrc;
-		*pbSrc++ = *pbDst;
-		*pbDst-- = t;
-		}
-	}
+    while (cb--)
+        {
+        t        = *pbSrc;
+        *pbSrc++ = *pbDst;
+        *pbDst-- = t;
+        }
+    }
 
 
 BOOL __cdecl mppc_DumpRegs(void)
 {
 #if defined(BETA) || (!defined(DEMO) && !defined(SOFTMAC))
-	if ((vpregs == 0) || (vi.cbRAM == 0))
-		return 0;
+    if ((vpregs == 0) || (vi.cbRAM == 0))
+        return 0;
 
-	printf("DATA %08X %08X ", vpregs->D0, vpregs->D1); 
-	printf("%08X %08X ", vpregs->D2, vpregs->D3); 
-	printf("%08X %08X ", vpregs->D4, vpregs->D5); 
-	printf("%08X %08X\n", vpregs->D6, vpregs->D7); 
-	printf("ADDR %08X %08X ",  vpregs->A0, vpregs->A1); 
-	printf("%08X %08X ",  vpregs->A2, vpregs->A3); 
-	printf("%08X %08X ",  vpregs->A4, vpregs->A5); 
-	printf("%08X %08X\n", vpregs->A6, vpregs->A7); 
+    printf("DATA %08X %08X ", vpregs->D0, vpregs->D1); 
+    printf("%08X %08X ", vpregs->D2, vpregs->D3); 
+    printf("%08X %08X ", vpregs->D4, vpregs->D5); 
+    printf("%08X %08X\n", vpregs->D6, vpregs->D7); 
+    printf("ADDR %08X %08X ",  vpregs->A0, vpregs->A1); 
+    printf("%08X %08X ",  vpregs->A2, vpregs->A3); 
+    printf("%08X %08X ",  vpregs->A4, vpregs->A5); 
+    printf("%08X %08X\n", vpregs->A6, vpregs->A7); 
 
 #ifdef GEMPRO
     if (vmCur.bfCPU > cpu68000)
@@ -128,21 +128,21 @@ BOOL __cdecl mppc_DumpRegs(void)
         }
 #endif
 
-	printf("PC %08X:%04X  ", vpregs->PC, PeekW(vpregs->PC));
-	if (vpregs->rgfsr.bitSuper)
-		printf("USP %08X  ", vpregs->USP); 
-	else
-		printf("SSP %08X  ", vpregs->SSP); 
-//	printf("count: %09d  ", vpregs->count);
-	printf("Flags: T%d S%d I%d %c %c %c %c %c  ",
-	                                  vpregs->rgfsr.bitTrace,
-	                                  vpregs->rgfsr.bitSuper,
-	                                  vpregs->rgfsr.bitsI,
-	                                  vpregs->rgfsr.bitX ? 'X' : '_',
-	                                  vpregs->rgfsr.bitN ? 'N' : '_',
-	                                  vpregs->rgfsr.bitZ ? 'Z' : '_',
-	                                  vpregs->rgfsr.bitV ? 'V' : '_',
-	                                  vpregs->rgfsr.bitC ? 'C' : '_');
+    printf("PC %08X:%04X  ", vpregs->PC, PeekW(vpregs->PC));
+    if (vpregs->rgfsr.bitSuper)
+        printf("USP %08X  ", vpregs->USP); 
+    else
+        printf("SSP %08X  ", vpregs->SSP); 
+//    printf("count: %09d  ", vpregs->count);
+    printf("Flags: T%d S%d I%d %c %c %c %c %c  ",
+                                      vpregs->rgfsr.bitTrace,
+                                      vpregs->rgfsr.bitSuper,
+                                      vpregs->rgfsr.bitsI,
+                                      vpregs->rgfsr.bitX ? 'X' : '_',
+                                      vpregs->rgfsr.bitN ? 'N' : '_',
+                                      vpregs->rgfsr.bitZ ? 'Z' : '_',
+                                      vpregs->rgfsr.bitV ? 'V' : '_',
+                                      vpregs->rgfsr.bitC ? 'C' : '_');
 
     {
     int i;
@@ -158,14 +158,14 @@ BOOL __cdecl mppc_DumpRegs(void)
     }
 
 #ifndef DEMO
-	CDis(vpregs->PC, TRUE);
+    CDis(vpregs->PC, TRUE);
 #endif
 
 #if 0
-	printf("\n");
-	printf("countR: %09d  countW: %09d\n", vi.countR, vi.countW);
+    printf("\n");
+    printf("countR: %09d  countW: %09d\n", vi.countR, vi.countW);
 #endif
-	printf("\n");
+    printf("\n");
 #endif
 
     return TRUE;
@@ -175,47 +175,47 @@ BOOL __cdecl mppc_DumpRegs(void)
 void mppc_DumpProfile()
 {
 #ifndef NDEBUG
-	ULONG i;
-	ULONG cops = 0;
-	ULONG iMax = 0;    // offset of most used opcode
-	ULONG copsMax = 0; // count of occurances of iMax
-	ULONG cexec = 0;
-	ULONG rgcnib[16];
+    ULONG i;
+    ULONG cops = 0;
+    ULONG iMax = 0;    // offset of most used opcode
+    ULONG copsMax = 0; // count of occurances of iMax
+    ULONG cexec = 0;
+    ULONG rgcnib[16];
 
-	for (i=0; i < 16; i++)
-		rgcnib[i] = 0;
+    for (i=0; i < 16; i++)
+        rgcnib[i] = 0;
 
     printf("\nDumping profile...\n");
 
-	for (i=0; i < 65536; i++)
-		{
-		if (vi.pProfile[i] != 0)
-			{
-			cexec += vi.pProfile[i];
-			rgcnib[i>>12] += vi.pProfile[i];
+    for (i=0; i < 65536; i++)
+        {
+        if (vi.pProfile[i] != 0)
+            {
+            cexec += vi.pProfile[i];
+            rgcnib[i>>12] += vi.pProfile[i];
 
-			if (vi.pProfile[i] > copsMax)
-				{
-				copsMax = vi.pProfile[i];
-				iMax = i;
-				}
+            if (vi.pProfile[i] > copsMax)
+                {
+                copsMax = vi.pProfile[i];
+                iMax = i;
+                }
 
-			printf("opcode %04X: %08X\n", i, vi.pProfile[i]);
-			cops++;
-			}
-		}
+            printf("opcode %04X: %08X\n", i, vi.pProfile[i]);
+            cops++;
+            }
+        }
 
-	printf("\nTotal # of instructions executed = %d\n", cexec);
-	printf("Total # of unique opcodes executed = %d\n", cops);
-	printf("Most used opcode = $%04X, used %d times\n", iMax, copsMax);
-	for (i=0; i < 16; i++)
-		printf("Count of all $%X000 opcodes = %d\n", i, rgcnib[i]);
+    printf("\nTotal # of instructions executed = %d\n", cexec);
+    printf("Total # of unique opcodes executed = %d\n", cops);
+    printf("Most used opcode = $%04X, used %d times\n", iMax, copsMax);
+    for (i=0; i < 16; i++)
+        printf("Count of all $%X000 opcodes = %d\n", i, rgcnib[i]);
 #endif
 }
 
 void mppc_DumpHistory(int c)
 {
-	int i = vi.iHistory - c - 1;
+    int i = vi.iHistory - c - 1;
     ULONG lAddrMaskSav = vpregs->lAddrMask;
 
 #if defined(BETA) || (!defined(DEMO) && !defined(SOFTMAC))
@@ -226,14 +226,14 @@ void mppc_DumpHistory(int c)
 
     vpregs->lAddrMask = 0x00FFFFFF;
 
-	while (c-- > 0)
-		{
+    while (c-- > 0)
+        {
         ULONG lad, ladSav, PC;
 
         ladSav = vpregs->lAddrMask;
 
 // DebugStr("dump history: c = %d\n", c);
-		i = (i+1) & (MAX_HIST-1);
+        i = (i+1) & (MAX_HIST-1);
 // DebugStr("dump history: i = %d\n", i);
 // DebugStr("dump history: pHistory = %08X\n", vi.pHistory);
 // DebugStr("dump history: pHistory[i] = %08X\n", vi.pHistory[i]);
@@ -241,8 +241,8 @@ void mppc_DumpHistory(int c)
         PC = vi.pHistory[i++];
         lad = (PC & 1) ? 0xFFFFFFFF : 0x00FFFFFF;
         PC &= ~1;
-		printf("%d-bit - ", (lad & 0xFF000000) ? 32 : 24);
-		printf("%04X - ", c);
+        printf("%d-bit - ", (lad & 0xFF000000) ? 32 : 24);
+        printf("%04X - ", c);
         printf("D0=%08X ", vi.pHistory[i++]);
         printf("D1=%08X ", vi.pHistory[i++]);
         printf("D2=%08X ", vi.pHistory[i++]);
@@ -261,9 +261,9 @@ void mppc_DumpHistory(int c)
         c -= 15;
 
         vpregs->lAddrMask = lad;
-		CDis(PC, TRUE);
+        CDis(PC, TRUE);
         vpregs->lAddrMask = ladSav;
-		}
+        }
 
     vpregs->lAddrMask = lAddrMaskSav;
 #endif // BETA || (!DEMO && !SOFTMAC)

@@ -42,7 +42,7 @@ int  cchIn,           /* cch of buffer */
      ichIn,           /* index into buffer character */
      cchOut;          /* size of output string */
 
-char chLast;			// the last command
+char chLast;            // the last command
 
 //int fMON;       /* TRUE if we are in 6502 monitor */
 
@@ -128,7 +128,7 @@ char* Blitcz(char ch, char *pchTo, int cch)
 
 void Bconout(int dev, int ch)
 {
-	dev;
+    dev;
 
     printf("%c",ch);
 }
@@ -150,7 +150,7 @@ void outchar(char ch)
         }
     else
 #endif
-	    Bconout (5,ch);
+        Bconout (5,ch);
 
 #ifdef LATER
 
@@ -175,7 +175,7 @@ void GetLine()
     cchIn = 0;      /* initialize input line cchIngth to 0 */
     Bconout(2,'>');
 
-	ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), (LPDWORD)&cchIn, NULL);
+    ReadConsole(GetStdHandle(STD_INPUT_HANDLE), rgchIn, sizeof(rgchIn), (LPDWORD)&cchIn, NULL);
 
     if (cchIn && rgchIn[cchIn-1] == 0x0D)
         cchIn--;
@@ -190,15 +190,15 @@ void GetLine()
 /* advance ichIn to point to non-space, return -1 if it runs out of characters, or FALSE if no skipping necessary */
 int FSkipSpace()
 {
-	char ch;
-	BOOL f = FALSE;
+    char ch;
+    BOOL f = FALSE;
 
-	while ((ichIn < cchIn) && (ch = rgchIn[ichIn]) == ' ')
-	{
-		ichIn++;
-		f = TRUE;
-	}
-	return (ichIn < cchIn) ? f : -1;
+    while ((ichIn < cchIn) && (ch = rgchIn[ichIn]) == ' ')
+    {
+        ichIn++;
+        f = TRUE;
+    }
+    return (ichIn < cchIn) ? f : -1;
 }
 
 
@@ -217,8 +217,8 @@ int NextHexChar()
     if (ch>='a' && ch<='f')
         return ch-'a'+10;
 
-	// un-eat the non-hex char
-	ichIn--;
+    // un-eat the non-hex char
+    ichIn--;
 
     return ((ch == ' ' || ch == 0x0d || ch == 0x0a) ? -2 : -1);
 }
@@ -239,7 +239,7 @@ unsigned int FGetByte(unsigned *pu)
         w += x;
     }
     *pu = w;
-	return (x != -1 && digit > 0);
+    return (x != -1 && digit > 0);
 }
 
 
@@ -286,271 +286,271 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
     //fMON=TRUE;
 
-	char pInst[MAX_PATH];
-	pInst[0] = 0;
-	CreateInstanceName(iVM, pInst);
+    char pInst[MAX_PATH];
+    pInst[0] = 0;
+    CreateInstanceName(iVM, pInst);
 
-	while (1)
-	{
+    while (1)
+    {
         // !!! Why does this printf hang waiting for a RETURN key press if I press BREAK w/o focus then again with focus?
         // or I get two BREAK keys in a row and a mysterious break.
         printf("\nPC Xformer debugger - VM #%d - %s \n", iVM, pInst);
-		Cconws("Commands:\n\n");
-		Cconws(" A [addr]          - trAce until addr (END to brk)\n");
-		Cconws(" B [addr]          - Breakpoint at addr\n");
-		Cconws(" C                 - Cold start the Atari 800\n");
-		Cconws(" D [addr]          - Disassemble at addr\n");
-		Cconws(" G [addr]          - Go from address\n");
-		Cconws(" M [addr1] [addr2] - Memory dump at addr\n");
-		Cconws(" S [addr]          - Single step from addr\n");
-		Cconws(" T [addr]          - Trace one page from addr\n");
-		Cconws(" P [addr] [val]    - Poke\n");
-		Cconws(" .                 - show registers\n");
-		Cconws(" X                 - exit\n");
-		Cconws(" ?                 - repeat this menu\n");
-		Cconws("\n");
-		Cconws(" When in Atari mode press PAUSE to get back to the debugger");
-		Cconws("\n");
+        Cconws("Commands:\n\n");
+        Cconws(" A [addr]          - trAce until addr (END to brk)\n");
+        Cconws(" B [addr]          - Breakpoint at addr\n");
+        Cconws(" C                 - Cold start the Atari 800\n");
+        Cconws(" D [addr]          - Disassemble at addr\n");
+        Cconws(" G [addr]          - Go from address\n");
+        Cconws(" M [addr1] [addr2] - Memory dump at addr\n");
+        Cconws(" S [addr]          - Single step from addr\n");
+        Cconws(" T [addr]          - Trace one page from addr\n");
+        Cconws(" P [addr] [val]    - Poke\n");
+        Cconws(" .                 - show registers\n");
+        Cconws(" X                 - exit\n");
+        Cconws(" ?                 - repeat this menu\n");
+        Cconws("\n");
+        Cconws(" When in Atari mode press PAUSE to get back to the debugger");
+        Cconws("\n");
 
-		CchShowRegs(iVM);
-		uMemDasm = regPC;	// 'd' and 'm' dumps will start here
-		uMemDump = regPC;
-		chLast = 0;			// forget whatever the last cmd was
+        CchShowRegs(iVM);
+        uMemDasm = regPC;    // 'd' and 'm' dumps will start here
+        uMemDump = regPC;
+        chLast = 0;            // forget whatever the last cmd was
 
-		while (1)
-		{
-			FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
-			GetLine();
-			if (FSkipSpace() == -1)             /* skip any leading spaces */
-				continue;
+        while (1)
+        {
+            FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+            GetLine();
+            if (FSkipSpace() == -1)             /* skip any leading spaces */
+                continue;
 
-			chCom = rgchIn[ichIn++];      /* get command character */
-			
-			// blank means repeat the last command letter
-			if (chCom == 0x0d && chLast && chLast != 0x0d)
-				chCom = chLast;
-			chLast = chCom;
-				
-			if ((chCom >= 'a') && (chCom <= 'z'))
-				chCom -= 32;
+            chCom = rgchIn[ichIn++];      /* get command character */
+            
+            // blank means repeat the last command letter
+            if (chCom == 0x0d && chLast && chLast != 0x0d)
+                chCom = chLast;
+            chLast = chCom;
+                
+            if ((chCom >= 'a') && (chCom <= 'z'))
+                chCom -= 32;
 
-			pch = rgchOut;
+            pch = rgchOut;
 
-			// all done debugging (for now)
-			if (chCom == 'X')
-			{
-				// clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
-				for (int i = 0; i < MAX_VM; i++)
-					if (vrgcandy[i])
-						vrgcandy[i]->m_bp = 0;
+            // all done debugging (for now)
+            if (chCom == 'X')
+            {
+                // clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
+                for (int i = 0; i < MAX_VM; i++)
+                    if (vrgcandy[i])
+                        vrgcandy[i]->m_bp = 0;
 
-				fTrace = FALSE;
-				vi.fInDebugger = FALSE;
-				return FALSE;	// all done
-			}
-			
-			else if (chCom == '?')
-			{
-				break;
-			}
+                fTrace = FALSE;
+                vi.fInDebugger = FALSE;
+                return FALSE;    // all done
+            }
+            
+            else if (chCom == '?')
+            {
+                break;
+            }
 
-			/* Can't use a switch statement because that calls Binsrch */
-			else if (chCom == 'M')
-			{
-				if (FGetWord(&u1))
-				{
-					uMemDump = u1 & 0xffff;
-					// there was space in between then a valid 2nd number
-					if (FSkipSpace() == TRUE && FGetWord(&u2))
-					{
-						u2 = (u2 & 0xffff);
-						if (u2 < uMemDump)
-							u2 = uMemDump;
-					}
-					else
-					{
-						u2 = uMemDump + 16 * HEXCOLS;
-						if (u2 > 0xffff)
-							u2 = 0xffff;
-					}
-				}
-				else
-				{
-					// continue where we left off last time
-					u2 = uMemDump + 16 * HEXCOLS;
-					if (u2 > 0xffff)
-						u2 = 0xffff;
-				}
+            /* Can't use a switch statement because that calls Binsrch */
+            else if (chCom == 'M')
+            {
+                if (FGetWord(&u1))
+                {
+                    uMemDump = u1 & 0xffff;
+                    // there was space in between then a valid 2nd number
+                    if (FSkipSpace() == TRUE && FGetWord(&u2))
+                    {
+                        u2 = (u2 & 0xffff);
+                        if (u2 < uMemDump)
+                            u2 = uMemDump;
+                    }
+                    else
+                    {
+                        u2 = uMemDump + 16 * HEXCOLS;
+                        if (u2 > 0xffff)
+                            u2 = 0xffff;
+                    }
+                }
+                else
+                {
+                    // continue where we left off last time
+                    u2 = uMemDump + 16 * HEXCOLS;
+                    if (u2 > 0xffff)
+                        u2 = 0xffff;
+                }
 
-				do
-				{
-					Blitcz(' ', rgchOut, XCOMAX);
-					rgchOut[0] = ':';
-					rgchOut[57] = '\'';
-					XtoPch((char *)&rgchOut[1], uMemDump);
+                do
+                {
+                    Blitcz(' ', rgchOut, XCOMAX);
+                    rgchOut[0] = ':';
+                    rgchOut[57] = '\'';
+                    XtoPch((char *)&rgchOut[1], uMemDump);
 
-					// !!! always start a row divisible by $10
-					for (cNum = 0; cNum < HEXCOLS; cNum++)
-					{
-						if (uMemDump <= 0xffff)
-						{
-							BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtari(iVM, uMemDump));
-							rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
-						}
+                    // !!! always start a row divisible by $10
+                    for (cNum = 0; cNum < HEXCOLS; cNum++)
+                    {
+                        if (uMemDump <= 0xffff)
+                        {
+                            BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtari(iVM, uMemDump));
+                            rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
+                        }
 
-						if (uMemDump >= u2 || (GetAsyncKeyState(VK_END) & 0x8000))
-							break;
-						uMemDump++;
-					}
-					if (GetAsyncKeyState(VK_END) & 0x8000)
-						break;
-					OutPchCch(rgchOut, 74);
-					Cconws((char *)szCR);
-				} while (uMemDump < u2);
-			}
-			
-			else if (chCom == 'D')
-			{
-				if (FGetWord(&u1))
-					uMemDasm = u1 & 0xffff;
+                        if (uMemDump >= u2 || (GetAsyncKeyState(VK_END) & 0x8000))
+                            break;
+                        uMemDump++;
+                    }
+                    if (GetAsyncKeyState(VK_END) & 0x8000)
+                        break;
+                    OutPchCch(rgchOut, 74);
+                    Cconws((char *)szCR);
+                } while (uMemDump < u2);
+            }
+            
+            else if (chCom == 'D')
+            {
+                if (FGetWord(&u1))
+                    uMemDasm = u1 & 0xffff;
 
-				for (cNum = 0; cNum < 20; cNum++)
-				{
-					if (uMemDasm <= 0xffff)
-					{
-						CchDisAsm(iVM, &uMemDasm);
-						Cconws((char *)szCR);
-					}
-					else
-						break;
-				}
-			}
+                for (cNum = 0; cNum < 20; cNum++)
+                {
+                    if (uMemDasm <= 0xffff)
+                    {
+                        CchDisAsm(iVM, &uMemDasm);
+                        Cconws((char *)szCR);
+                    }
+                    else
+                        break;
+                }
+            }
 
-			// set breakpoint - no arguments will remind you what it is
-			else if (chCom == 'B')
-			{
-				if (FGetWord(&u1))
-					bp = (WORD)u1;
-				printf("Breakpoint set at %04x\n", bp);
-			}
-			
-			else if (chCom == '.')
-			{
-				/* dump/modify registers */
+            // set breakpoint - no arguments will remind you what it is
+            else if (chCom == 'B')
+            {
+                if (FGetWord(&u1))
+                    bp = (WORD)u1;
+                printf("Breakpoint set at %04x\n", bp);
+            }
+            
+            else if (chCom == '.')
+            {
+                /* dump/modify registers */
 
-				CchShowRegs(iVM);
-			}
+                CchShowRegs(iVM);
+            }
 
-			else if (chCom == 'C')
-			{
-				ColdStart(v.iVM);
-				CchShowRegs(iVM);
-				uMemDasm = regPC; // is this handy or mean?
-			}
-			else if (chCom == 'P')
-			{
-				/* modify memory */
-				if (FGetWord(&u1))
-				{
-					// if space was next, then another good number
-					while (FSkipSpace() == TRUE && FGetByte(&u2) && u1 < 0x10000)
-						PokeBAtari(iVM, u1++, (BYTE)u2);
-				}
-			}
+            else if (chCom == 'C')
+            {
+                ColdStart(v.iVM);
+                CchShowRegs(iVM);
+                uMemDasm = regPC; // is this handy or mean?
+            }
+            else if (chCom == 'P')
+            {
+                /* modify memory */
+                if (FGetWord(&u1))
+                {
+                    // if space was next, then another good number
+                    while (FSkipSpace() == TRUE && FGetByte(&u2) && u1 < 0x10000)
+                        PokeBAtari(iVM, u1++, (BYTE)u2);
+                }
+            }
 
-			else if ((chCom == 'G') || (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
-			{
-				unsigned int u;
-				int bpT = bp;	
+            else if ((chCom == 'G') || (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
+            {
+                unsigned int u;
+                int bpT = bp;    
 
-				cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
-				fTrace = (chCom != 'G');
+                cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
+                fTrace = (chCom != 'G');
 
-				if (FGetWord(&u1))
-				{
-					if (chCom == 'A')
-						bpT = (WORD)u1; // this is a second breakpoint
-					else
-						regPC = (WORD)u1;
-				}
+                if (FGetWord(&u1))
+                {
+                    if (chCom == 'A')
+                        bpT = (WORD)u1; // this is a second breakpoint
+                    else
+                        regPC = (WORD)u1;
+                }
 
-				if (!fTrace)
-				{
-					break;
-				}
+                if (!fTrace)
+                {
+                    break;
+                }
 
-				// auto-brk if we jump to 0 (MULE actually does legit jmp to z-page)
-				do { // do at least 1 thing, don't get stuck at the breakpoint
-					u = regPC;
-					CchDisAsm(iVM, &u);			// what's about to execute
-					FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
-					CchShowRegs(iVM);			// !!! when interrupted, this will show the results of the first interrupt instruction!
-					if (GetAsyncKeyState(VK_END) & 0x8000)
-						break;
-				} while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
-				
-				uMemDasm = regPC;	// future dasms start from here by default
-			}
+                // auto-brk if we jump to 0 (MULE actually does legit jmp to z-page)
+                do { // do at least 1 thing, don't get stuck at the breakpoint
+                    u = regPC;
+                    CchDisAsm(iVM, &u);            // what's about to execute
+                    FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+                    CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
+                    if (GetAsyncKeyState(VK_END) & 0x8000)
+                        break;
+                } while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
+                
+                uMemDasm = regPC;    // future dasms start from here by default
+            }
 
 #ifdef NEVER
-			else if (chCom == 'H')
-			{
-				/* set hardcopy on/off flag */
-				if (FGetByte(&u1))
-					fHardCopy = (char)u1;
-			}
+            else if (chCom == 'H')
+            {
+                /* set hardcopy on/off flag */
+                if (FGetByte(&u1))
+                    fHardCopy = (char)u1;
+            }
 
-			else if (chCom == 'M1') // duplicate
-			{
-				pc = addr1;          /* block memory move */
-				addr2 = get_addr();
-				addr3 = get_addr();
-				while (addr1 <= addr2) *(mem + addr3++) = *(mem + addr1++);
-			}
+            else if (chCom == 'M1') // duplicate
+            {
+                pc = addr1;          /* block memory move */
+                addr2 = get_addr();
+                addr3 = get_addr();
+                while (addr1 <= addr2) *(mem + addr3++) = *(mem + addr1++);
+            }
 
-			else if (chCom == 'C1')
-			{
-				pc = addr1;          /* block memory compare */
-				addr2 = get_addr();
-				addr3 = get_addr();
-				while (addr1 <= addr2)
-				{
-					if (*(mem + addr3++) != *(mem + addr1++))
-					{
-						print(" (");
-						showaddr(addr1 - 1);
-						print(") ");
-						showhex(addr1 - 1);
-						print("   (");
-						showaddr(addr3 - 1);
-						print(") ");
-						showhex(addr3 - 1);
-						Cconws(szCR);
-					}
-				}
-			}
+            else if (chCom == 'C1')
+            {
+                pc = addr1;          /* block memory compare */
+                addr2 = get_addr();
+                addr3 = get_addr();
+                while (addr1 <= addr2)
+                {
+                    if (*(mem + addr3++) != *(mem + addr1++))
+                    {
+                        print(" (");
+                        showaddr(addr1 - 1);
+                        print(") ");
+                        showhex(addr1 - 1);
+                        print("   (");
+                        showaddr(addr3 - 1);
+                        print(") ");
+                        showhex(addr3 - 1);
+                        Cconws(szCR);
+                    }
+                }
+            }
 
-			else if (chCom == 'C2')
-			{
-				show_emul();       /* view virtual machine screen */
-				getchar();
-				show_scr();
-			}
+            else if (chCom == 'C2')
+            {
+                show_emul();       /* view virtual machine screen */
+                getchar();
+                show_scr();
+            }
 #endif
-			else
-				Cconws("what??\007\n"); // chime
-		}
-	
-		// show menu again
-		if (chCom == '?')
-			continue;
+            else
+                Cconws("what??\007\n"); // chime
+        }
+    
+        // show menu again
+        if (chCom == '?')
+            continue;
 
-		break;
+        break;
 
-	}
+    }
 
     //fMON=FALSE;
-	return TRUE;
+    return TRUE;
 }
 
 void CchShowRegs(int iVM)
@@ -585,8 +585,8 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     long lPackedOp;
     int md;
 
-	if ((*puMem) > 0xffff)
-		return;
+    if ((*puMem) > 0xffff)
+        return;
 
     _fmemset(rgch, ' ', sizeof(rgch)-1);
     rgch[sizeof(rgch)-1] = 0;
@@ -613,12 +613,12 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x08:
     case 0x09:
     case 0x0C:
-		if ((*puMem) > 0xfffd)
-		{
-			(*puMem) += 3;
-			return;
-		}
-		BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
+        if ((*puMem) > 0xfffd)
+        {
+            (*puMem) += 3;
+            return;
+        }
+        BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
 
     /* one operand */
     case 0x01:
@@ -628,12 +628,12 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     case 0x05:
     case 0x06:
     case 0x0B:
-		if ((*puMem) > 0xfffe)
-		{
-			(*puMem) += 2;
-			return;
-		}
-		BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
+        if ((*puMem) > 0xfffe)
+        {
+            (*puMem) += 2;
+            return;
+        }
+        BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
 
     /* no operands */
     case 0x00:

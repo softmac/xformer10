@@ -1,11 +1,11 @@
 
 /***************************************************************************
 
-	MACRTC.C
+    MACRTC.C
 
-	- emulation of the Mac's parameter RAM and real time clock
+    - emulation of the Mac's parameter RAM and real time clock
 
-	08/24/2001
+    08/24/2001
 
 ***************************************************************************/
 

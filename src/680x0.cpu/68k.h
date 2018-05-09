@@ -55,55 +55,55 @@
 //
 
 typedef struct _sregs
-	{
+    {
     // Byte offset $00
 
-	ULONG res;  // used to cache N flag
-	ULONG USP;
-	ULONG SSP;
+    ULONG res;  // used to cache N flag
+    ULONG USP;
+    ULONG SSP;
     ULONG VBR;
 
     // Byte offset $10
 
     ULONG PC;
-	WORD xword;
+    WORD xword;
 
-	union
-		{
-		WORD SR;
-		BYTE CCR;
-		struct
-			{
-			unsigned short bitC:1;
-			unsigned short bitV:1;
-			unsigned short bitZ:1;
-			unsigned short bitN:1;
-			unsigned short bitX:1;
-			unsigned short unused3:3;
-			unsigned short bitsI:3;
-			unsigned short unused2:2;
-			unsigned short bitSuper:1;
-			unsigned short bitT0:1;
-			unsigned short bitTrace:1;
-			} rgfsr;
-		};
+    union
+        {
+        WORD SR;
+        BYTE CCR;
+        struct
+            {
+            unsigned short bitC:1;
+            unsigned short bitV:1;
+            unsigned short bitZ:1;
+            unsigned short bitN:1;
+            unsigned short bitX:1;
+            unsigned short unused3:3;
+            unsigned short bitsI:3;
+            unsigned short unused2:2;
+            unsigned short bitSuper:1;
+            unsigned short bitT0:1;
+            unsigned short bitTrace:1;
+            } rgfsr;
+        };
 
     BYTE    fpSrc;
     BYTE    fpDst;
     BYTE    fpOp;
     BYTE    fpMode;
 
-	ULONG FPIAR;    // Floating Point Instruction Address Register
+    ULONG FPIAR;    // Floating Point Instruction Address Register
 
     // Byte offset $20
 
-	union
-		{
+    union
+        {
         ULONG rgregRn[16]; // use index 8..15 for An registers
         ULONG rgregDn[8];  // use index 0..7 for Dn registers
 
-		struct
-			{
+        struct
+            {
             ULONG D0;
             ULONG D1;
             ULONG D2;
@@ -167,88 +167,88 @@ typedef struct _sregs
     BYTE SFC;
     BYTE DFC;
 
-	ULONG MSP;      // 68020 MSP
+    ULONG MSP;      // 68020 MSP
 
     union
         {
         WORD  FPCR;     // Floating Point Condition Register
-		struct _fpcr
-			{
-			unsigned short :4;
-			unsigned short rnd:2;
-			unsigned short prec:2;
-			unsigned short inex1:1;
-			unsigned short inex2:1;
-			unsigned short dz:1;
-			unsigned short unfl:1;
-			unsigned short ovfl:1;
-			unsigned short operr:1;
-			unsigned short snan:1;
-			unsigned short bsun:1;
+        struct _fpcr
+            {
+            unsigned short :4;
+            unsigned short rnd:2;
+            unsigned short prec:2;
+            unsigned short inex1:1;
+            unsigned short inex2:1;
+            unsigned short dz:1;
+            unsigned short unfl:1;
+            unsigned short ovfl:1;
+            unsigned short operr:1;
+            unsigned short snan:1;
+            unsigned short bsun:1;
             } rgffpcr;
         };
 
     union
         {
         ULONG FPSR;     // Floating Point Status Register
-		struct _fpsr
-			{
-			unsigned :3;
-			unsigned aeinex:1;
-			unsigned aedz:1;
-			unsigned aeunfl:1;
-			unsigned aeovfl:1;
-			unsigned aeiop:1;
+        struct _fpsr
+            {
+            unsigned :3;
+            unsigned aeinex:1;
+            unsigned aedz:1;
+            unsigned aeunfl:1;
+            unsigned aeovfl:1;
+            unsigned aeiop:1;
 
-			unsigned esinex1:1;
-			unsigned esinex2:1;
-			unsigned esdz:1;
-			unsigned esunfl:1;
-			unsigned esovfl:1;
-			unsigned esoperr:1;
-			unsigned esnan:1;
-			unsigned esbsun:1;
+            unsigned esinex1:1;
+            unsigned esinex2:1;
+            unsigned esdz:1;
+            unsigned esunfl:1;
+            unsigned esovfl:1;
+            unsigned esoperr:1;
+            unsigned esnan:1;
+            unsigned esbsun:1;
 
-			unsigned quotient:7;
-			unsigned S:1;
+            unsigned quotient:7;
+            unsigned S:1;
 
-			unsigned ccnan:1;
-			unsigned ccI:1;
-			unsigned ccZ:1;
-			unsigned ccN:1;
+            unsigned ccnan:1;
+            unsigned ccI:1;
+            unsigned ccZ:1;
+            unsigned ccN:1;
             } rgffpsr;
         };
 
 #ifdef POWERMAC
-	union
-		{
-		ULONG rggpr[32];	    // PPC general purpose registers
-		struct _gpr
-			{
-			ULONG GPR0;
-			ULONG GPR1;
-			ULONG GPR2;
-			ULONG GPR3;
+    union
+        {
+        ULONG rggpr[32];        // PPC general purpose registers
+        struct _gpr
+            {
+            ULONG GPR0;
+            ULONG GPR1;
+            ULONG GPR2;
+            ULONG GPR3;
             };
         };
 
-	union
-		{
-		double rgfpr[32];	// PPC floating point registers
-		struct _fpr
-			{
-			double FPR0;
-			double FPR1;
-			double FPR2;
-			double FPR3;
+    union
+        {
+        double rgfpr[32];    // PPC floating point registers
+        struct _fpr
+            {
+            double FPR0;
+            double FPR1;
+            double FPR2;
+            double FPR3;
             };
         };
 
-	union
-		{
-		ULONG rgspr[1024];   // PPC special purpose registers
-		struct _spr
-			{
+    union
+        {
+        ULONG rgspr[1024];   // PPC special purpose registers
+        struct _spr
+            {
             ULONG regMQ;
             ULONG regXER;
             ULONG spr2;
@@ -285,11 +285,11 @@ typedef struct _sregs
             };
         };
 
-	union
-		{
-		ULONG rgsgr[16];     // PPC segment registers
-		struct _sgr
-			{
+    union
+        {
+        ULONG rgsgr[16];     // PPC segment registers
+        struct _sgr
+            {
             ULONG SR0;
             };
         };
@@ -316,10 +316,10 @@ typedef struct _sregs
 
     LONG  resppc[1024-128]; // to 4K align the PPC portion
 #endif // POWERMAC
-	} REGS;
+    } REGS;
 
 typedef struct _sregs2
-	{
+    {
     ULONG TCR;              // 68030/68040 MMU Translation Control Register
     ULONG MMUSR;            // 68030/68040 MMU Status Register
     ULONG CACR;             // 68030/68040 Cache Control Register
@@ -352,7 +352,7 @@ typedef struct _sregs2
 
     char rgbFPx[8*16]; // 8 10-byte floating point registers
 
-	} REGS2;
+    } REGS2;
 
 
 

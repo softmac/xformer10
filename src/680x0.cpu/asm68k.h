@@ -163,68 +163,68 @@ typedef enum
 
 BOOL __inline FAny(ULONG mode, ULONG reg, ULONG size)
 {
-	if ((mode == 1) && (size == 0))
-		return 0;
+    if ((mode == 1) && (size == 0))
+        return 0;
 
-	if ((mode >= 7) && (reg >= 5))
-		return 0;
+    if ((mode >= 7) && (reg >= 5))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 BOOL __inline FAlt(ULONG mode, ULONG reg, ULONG size)
 {
-	if ((mode == 1) && (size == 0))
-		return 0;
+    if ((mode == 1) && (size == 0))
+        return 0;
 
-	if ((mode >= 7) && (reg >= 2))
-		return 0;
+    if ((mode >= 7) && (reg >= 2))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 BOOL __inline FData(ULONG mode, ULONG reg, ULONG size)
 {
-	if (mode == 1)
-		return 0;
+    if (mode == 1)
+        return 0;
 
-	if ((mode >= 7) && (reg >= 4))
-		return 0;
+    if ((mode >= 7) && (reg >= 4))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 BOOL __inline FDataAlt(ULONG mode, ULONG reg, ULONG size)
 {
-	if (mode == 1)
-		return 0;
+    if (mode == 1)
+        return 0;
 
-	if ((mode >= 7) && (reg >= 2))
-		return 0;
+    if ((mode >= 7) && (reg >= 2))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 BOOL __inline FMem(ULONG mode, ULONG reg, ULONG size)
 {
-	if (mode < 2)
-		return 0;
+    if (mode < 2)
+        return 0;
 
-	if ((mode >= 7) && (reg >= 5))
-		return 0;
+    if ((mode >= 7) && (reg >= 5))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 BOOL __inline FControl(ULONG mode, ULONG reg, ULONG size)
 {
-	if ((mode < 2) || (mode == 3) || (mode == 4))
-		return 0;
+    if ((mode < 2) || (mode == 3) || (mode == 4))
+        return 0;
 
-	if ((mode >= 7) && (reg >= 5))
-		return 0;
+    if ((mode >= 7) && (reg >= 5))
+        return 0;
 
-	return 1;
+    return 1;
 }
 
 

@@ -5357,12 +5357,12 @@ ULONG __cdecl StepHook(ULONG esi)
 void DumpRTE(ULONG ea, ULONG val)
 {
 #if TRACETRAP
-//	if (!fDebug)
-//		return;
+//    if (!fDebug)
+//        return;
 
 #if 0
-	if (ea >= 0xE00000)
-		return;
+    if (ea >= 0xE00000)
+        return;
 #endif
 
     if ((PeekW(ea-2) & 0xFFF0) != 0x4E40)
@@ -5376,40 +5376,40 @@ void DumpRTE(ULONG ea, ULONG val)
     if (ea == 0xE071AE)
         return;
 
-	DebugStr("RTE to location %08X returning %08X, SSP = %08X, USP = %08X, D0 = %08X\n",
-		ea, val, vpregs->SSP, vpregs->USP, vpregs->D0);
+    DebugStr("RTE to location %08X returning %08X, SSP = %08X, USP = %08X, D0 = %08X\n",
+        ea, val, vpregs->SSP, vpregs->USP, vpregs->D0);
 #endif
 }
 
 
 void m68k_ClearProfile()
 {
-	ULONG *pl = vi.pProfile;
-	int cl = 65536;
+    ULONG *pl = vi.pProfile;
+    int cl = 65536;
 
-	while (cl--)
-		*pl++ = 0x00;
+    while (cl--)
+        *pl++ = 0x00;
 }
 
 
 BOOL __cdecl m68k_DumpRegs(void)
 {
-	if ((vpregs == 0) || (vi.cbRAM[0] == 0))
-		return 0;
+    if ((vpregs == 0) || (vi.cbRAM[0] == 0))
+        return 0;
 
 #ifdef POWERMAC
     if (vmCur.bfCPU >= cpu601)
         return mppc_DumpRegs();
 #endif
 
-	printf("DATA %08X %08X ", vpregs->D0, vpregs->D1);
-	printf("%08X %08X ", vpregs->D2, vpregs->D3);
-	printf("%08X %08X ", vpregs->D4, vpregs->D5);
-	printf("%08X %08X\n", vpregs->D6, vpregs->D7);
-	printf("ADDR %08X %08X ",  vpregs->A0, vpregs->A1);
-	printf("%08X %08X ",  vpregs->A2, vpregs->A3);
-	printf("%08X %08X ",  vpregs->A4, vpregs->A5);
-	printf("%08X %08X\n", vpregs->A6, vpregs->A7);
+    printf("DATA %08X %08X ", vpregs->D0, vpregs->D1);
+    printf("%08X %08X ", vpregs->D2, vpregs->D3);
+    printf("%08X %08X ", vpregs->D4, vpregs->D5);
+    printf("%08X %08X\n", vpregs->D6, vpregs->D7);
+    printf("ADDR %08X %08X ",  vpregs->A0, vpregs->A1);
+    printf("%08X %08X ",  vpregs->A2, vpregs->A3);
+    printf("%08X %08X ",  vpregs->A4, vpregs->A5);
+    printf("%08X %08X\n", vpregs->A6, vpregs->A7);
 
     if (vmCur.bfCPU > cpu68000)
         {
@@ -5504,31 +5504,31 @@ BOOL __cdecl m68k_DumpRegs(void)
     printf("\n");
     }
 
-	printf("PC   %08X:%04X     ", vpregs->PC, PeekW(vpregs->PC));
-	if (vpregs->rgfsr.bitSuper)
-		printf("USP %08X      ", vpregs->USP);
-	else
-		printf("SSP %08X      ", vpregs->SSP);
-//	printf("count: %09d  ", vpregs->count);
-	printf("Flags: T%d S%d I%d %c %c %c %c %c  ",
-	                                  vpregs->rgfsr.bitTrace,
-	                                  vpregs->rgfsr.bitSuper,
-	                                  vpregs->rgfsr.bitsI,
-	                                  vpregs->rgfsr.bitX ? 'X' : '_',
-	                                  vpregs->rgfsr.bitN ? 'N' : '_',
-	                                  vpregs->rgfsr.bitZ ? 'Z' : '_',
-	                                  vpregs->rgfsr.bitV ? 'V' : '_',
-	                                  vpregs->rgfsr.bitC ? 'C' : '_');
+    printf("PC   %08X:%04X     ", vpregs->PC, PeekW(vpregs->PC));
+    if (vpregs->rgfsr.bitSuper)
+        printf("USP %08X      ", vpregs->USP);
+    else
+        printf("SSP %08X      ", vpregs->SSP);
+//    printf("count: %09d  ", vpregs->count);
+    printf("Flags: T%d S%d I%d %c %c %c %c %c  ",
+                                      vpregs->rgfsr.bitTrace,
+                                      vpregs->rgfsr.bitSuper,
+                                      vpregs->rgfsr.bitsI,
+                                      vpregs->rgfsr.bitX ? 'X' : '_',
+                                      vpregs->rgfsr.bitN ? 'N' : '_',
+                                      vpregs->rgfsr.bitZ ? 'Z' : '_',
+                                      vpregs->rgfsr.bitV ? 'V' : '_',
+                                      vpregs->rgfsr.bitC ? 'C' : '_');
 
     printf("\n");
 
-	CDis(vpregs->PC, TRUE);
+    CDis(vpregs->PC, TRUE);
 
 #if 0
-	printf("\n");
-	printf("countR: %09d  countW: %09d\n", vi.countR, vi.countW);
+    printf("\n");
+    printf("countR: %09d  countW: %09d\n", vi.countR, vi.countW);
 #endif
-	printf("\n");
+    printf("\n");
 
     return TRUE;
 }
@@ -5542,50 +5542,50 @@ ULONG cnt;
 
 BOOL __cdecl mppc_DumpRegs(void)
 {
-	if ((vpregs == 0) || (vi.cbRAM[0] == 0))
-		return 0;
+    if ((vpregs == 0) || (vi.cbRAM[0] == 0))
+        return 0;
 
 #if TRACEPPC
     printf("cnt = %d\n", cnt);
 #endif
 
-	printf("R0  %08X %08X ", vpregs->rggpr[0], vpregs->rggpr[1]);
-	printf("%08X %08X ", vpregs->rggpr[2], vpregs->rggpr[3]);
-	printf("%08X %08X ", vpregs->rggpr[4], vpregs->rggpr[5]);
-	printf("%08X %08X ", vpregs->rggpr[6], vpregs->rggpr[7]);
+    printf("R0  %08X %08X ", vpregs->rggpr[0], vpregs->rggpr[1]);
+    printf("%08X %08X ", vpregs->rggpr[2], vpregs->rggpr[3]);
+    printf("%08X %08X ", vpregs->rggpr[4], vpregs->rggpr[5]);
+    printf("%08X %08X ", vpregs->rggpr[6], vpregs->rggpr[7]);
 #if TRACEPPC
 #else
     printf("\n");
 #endif
-	printf("R8  %08X %08X ", vpregs->rggpr[8], vpregs->rggpr[9]);
-	printf("%08X %08X ", vpregs->rggpr[10], vpregs->rggpr[11]);
-	printf("%08X %08X ", vpregs->rggpr[12], vpregs->rggpr[13]);
-	printf("%08X %08X\n", vpregs->rggpr[14], vpregs->rggpr[15]);
-	printf("R16 %08X %08X ", vpregs->rggpr[16], vpregs->rggpr[17]);
-	printf("%08X %08X ", vpregs->rggpr[18], vpregs->rggpr[19]);
-	printf("%08X %08X ", vpregs->rggpr[20], vpregs->rggpr[21]);
-	printf("%08X %08X ", vpregs->rggpr[22], vpregs->rggpr[23]);
+    printf("R8  %08X %08X ", vpregs->rggpr[8], vpregs->rggpr[9]);
+    printf("%08X %08X ", vpregs->rggpr[10], vpregs->rggpr[11]);
+    printf("%08X %08X ", vpregs->rggpr[12], vpregs->rggpr[13]);
+    printf("%08X %08X\n", vpregs->rggpr[14], vpregs->rggpr[15]);
+    printf("R16 %08X %08X ", vpregs->rggpr[16], vpregs->rggpr[17]);
+    printf("%08X %08X ", vpregs->rggpr[18], vpregs->rggpr[19]);
+    printf("%08X %08X ", vpregs->rggpr[20], vpregs->rggpr[21]);
+    printf("%08X %08X ", vpregs->rggpr[22], vpregs->rggpr[23]);
 #if TRACEPPC
 #else
     printf("\n");
 #endif
-	printf("R24 %08X %08X ", vpregs->rggpr[24], vpregs->rggpr[25]);
-	printf("%08X %08X ", vpregs->rggpr[26], vpregs->rggpr[27]);
-	printf("%08X %08X ", vpregs->rggpr[28], vpregs->rggpr[29]);
-	printf("%08X %08X\n", vpregs->rggpr[30], vpregs->rggpr[31]);
+    printf("R24 %08X %08X ", vpregs->rggpr[24], vpregs->rggpr[25]);
+    printf("%08X %08X ", vpregs->rggpr[26], vpregs->rggpr[27]);
+    printf("%08X %08X ", vpregs->rggpr[28], vpregs->rggpr[29]);
+    printf("%08X %08X\n", vpregs->rggpr[30], vpregs->rggpr[31]);
 
-	printf("SR0 %08X %08X ", vpregs->rgsgr[0], vpregs->rggpr[1]);
-	printf("%08X %08X ", vpregs->rgsgr[2], vpregs->rgsgr[3]);
-	printf("%08X %08X ", vpregs->rgsgr[4], vpregs->rgsgr[5]);
-	printf("%08X %08X ", vpregs->rgsgr[6], vpregs->rgsgr[7]);
+    printf("SR0 %08X %08X ", vpregs->rgsgr[0], vpregs->rggpr[1]);
+    printf("%08X %08X ", vpregs->rgsgr[2], vpregs->rgsgr[3]);
+    printf("%08X %08X ", vpregs->rgsgr[4], vpregs->rgsgr[5]);
+    printf("%08X %08X ", vpregs->rgsgr[6], vpregs->rgsgr[7]);
 #if TRACEPPC
 #else
     printf("\n");
 #endif
-	printf("SR8 %08X %08X ", vpregs->rgsgr[8], vpregs->rggpr[9]);
-	printf("%08X %08X ", vpregs->rgsgr[10], vpregs->rgsgr[11]);
-	printf("%08X %08X ", vpregs->rgsgr[12], vpregs->rgsgr[13]);
-	printf("%08X %08X\n", vpregs->rgsgr[14], vpregs->rgsgr[15]);
+    printf("SR8 %08X %08X ", vpregs->rgsgr[8], vpregs->rggpr[9]);
+    printf("%08X %08X ", vpregs->rgsgr[10], vpregs->rgsgr[11]);
+    printf("%08X %08X ", vpregs->rgsgr[12], vpregs->rgsgr[13]);
+    printf("%08X %08X\n", vpregs->rgsgr[14], vpregs->rgsgr[15]);
 
 #if TRACEFPU
     if (vmCur.bfCPU >= cpu601)
@@ -5617,11 +5617,11 @@ BOOL __cdecl mppc_DumpRegs(void)
         }
 #endif
 
-	printf("MQ  %08X ", vpregs->regMQ);
-	printf("     DEC %08X ", vpregs->regDEC);
-	printf("     XER %08X ", vpregs->regXER);
-	printf("     LR  %08X ", vpregs->regLR);
-	printf("     CTR %08X ", vpregs->regCTR);
+    printf("MQ  %08X ", vpregs->regMQ);
+    printf("     DEC %08X ", vpregs->regDEC);
+    printf("     XER %08X ", vpregs->regXER);
+    printf("     LR  %08X ", vpregs->regLR);
+    printf("     CTR %08X ", vpregs->regCTR);
 
 #if TRACEPPC
     printf("");
@@ -5629,9 +5629,9 @@ BOOL __cdecl mppc_DumpRegs(void)
     printf("\n");
 #endif
 
-	printf("CR  %08X ", vpregs->regCR);
+    printf("CR  %08X ", vpregs->regCR);
 
-	printf(" %c %c %c %c  %c %c %c %c ",
+    printf(" %c %c %c %c  %c %c %c %c ",
           (vpregs->regCR & 0x80000000) ? 'L' : '_',
           (vpregs->regCR & 0x40000000) ? 'G' : '_',
           (vpregs->regCR & 0x20000000) ? 'Z' : '_',
@@ -5641,7 +5641,7 @@ BOOL __cdecl mppc_DumpRegs(void)
           (vpregs->regCR & 0x02000000) ? 'V' : '_',
           (vpregs->regCR & 0x01000000) ? 'O' : '_');
 
-	printf(" %c %c %c %c  %c %c %c %c ",
+    printf(" %c %c %c %c  %c %c %c %c ",
           (vpregs->regCR & 0x00800000) ? 'L' : '_',
           (vpregs->regCR & 0x00400000) ? 'G' : '_',
           (vpregs->regCR & 0x00200000) ? 'Z' : '_',
@@ -5651,7 +5651,7 @@ BOOL __cdecl mppc_DumpRegs(void)
           (vpregs->regCR & 0x00020000) ? 'Z' : '_',
           (vpregs->regCR & 0x00010000) ? 'O' : '_');
 
-	printf(" %c %c %c %c  %c %c %c %c ",
+    printf(" %c %c %c %c  %c %c %c %c ",
           (vpregs->regCR & 0x00008000) ? 'L' : '_',
           (vpregs->regCR & 0x00004000) ? 'G' : '_',
           (vpregs->regCR & 0x00002000) ? 'Z' : '_',
@@ -5661,7 +5661,7 @@ BOOL __cdecl mppc_DumpRegs(void)
           (vpregs->regCR & 0x00000200) ? 'Z' : '_',
           (vpregs->regCR & 0x00000100) ? 'O' : '_');
 
-	printf(" %c %c %c %c  %c %c %c %c\n",
+    printf(" %c %c %c %c  %c %c %c %c\n",
           (vpregs->regCR & 0x00000080) ? 'L' : '_',
           (vpregs->regCR & 0x00000040) ? 'G' : '_',
           (vpregs->regCR & 0x00000020) ? 'Z' : '_',
@@ -5672,7 +5672,7 @@ BOOL __cdecl mppc_DumpRegs(void)
           (vpregs->regCR & 0x00000001) ? 'O' : '_');
 
 #if 0
-	printf("PC %08X:%08X  ", vpregs->PC, PeekL(vpregs->PC));
+    printf("PC %08X:%08X  ", vpregs->PC, PeekL(vpregs->PC));
 
     {
     int i;
@@ -5688,9 +5688,9 @@ BOOL __cdecl mppc_DumpRegs(void)
     }
 #endif
 
-	CDis(vpregs->PC, TRUE);
+    CDis(vpregs->PC, TRUE);
 
-	printf("\n");
+    printf("\n");
 
     return TRUE;
 }
@@ -6892,46 +6892,46 @@ ICpuExec cpiPPC =
 
 void m68k_DumpProfile()
 {
-	ULONG i;
-	ULONG cops = 0;
-	ULONG iMax = 0;    // offset of most used opcode
-	ULONG copsMax = 0; // count of occurances of iMax
-	ULONG cexec = 0;
-	ULONG rgcnib[16];
+    ULONG i;
+    ULONG cops = 0;
+    ULONG iMax = 0;    // offset of most used opcode
+    ULONG copsMax = 0; // count of occurances of iMax
+    ULONG cexec = 0;
+    ULONG rgcnib[16];
 
-	for (i=0; i < 16; i++)
-		rgcnib[i] = 0;
+    for (i=0; i < 16; i++)
+        rgcnib[i] = 0;
 
     printf("\nDumping profile...\n");
 
-	for (i=0; i < 65536; i++)
-		{
-		if (vi.pProfile[i] != 0)
-			{
-			cexec += vi.pProfile[i];
-			rgcnib[i>>12] += vi.pProfile[i];
+    for (i=0; i < 65536; i++)
+        {
+        if (vi.pProfile[i] != 0)
+            {
+            cexec += vi.pProfile[i];
+            rgcnib[i>>12] += vi.pProfile[i];
 
-			if (vi.pProfile[i] > copsMax)
-				{
-				copsMax = vi.pProfile[i];
-				iMax = i;
-				}
+            if (vi.pProfile[i] > copsMax)
+                {
+                copsMax = vi.pProfile[i];
+                iMax = i;
+                }
 
-			printf("opcode %04X: %08X\n", i, vi.pProfile[i]);
-			cops++;
-			}
-		}
+            printf("opcode %04X: %08X\n", i, vi.pProfile[i]);
+            cops++;
+            }
+        }
 
-	printf("\nTotal # of instructions executed = %d\n", cexec);
-	printf("Total # of unique opcodes executed = %d\n", cops);
-	printf("Most used opcode = $%04X, used %d times\n", iMax, copsMax);
-	for (i=0; i < 16; i++)
-		printf("Count of all $%X000 opcodes = %d\n", i, rgcnib[i]);
+    printf("\nTotal # of instructions executed = %d\n", cexec);
+    printf("Total # of unique opcodes executed = %d\n", cops);
+    printf("Most used opcode = $%04X, used %d times\n", iMax, copsMax);
+    for (i=0; i < 16; i++)
+        printf("Count of all $%X000 opcodes = %d\n", i, rgcnib[i]);
 }
 
 void m68k_DumpHistory(int c)
 {
-	int i = vi.iHistory - c - 1;
+    int i = vi.iHistory - c - 1;
 
     if (vi.pHistory == NULL)
         return;
@@ -6944,14 +6944,14 @@ void m68k_DumpHistory(int c)
         return;
 #endif
 
-	while (c-- > 0)
-		{
+    while (c-- > 0)
+        {
         ULONG lad, ladSav, PC;
 
         ladSav = vsthw.lAddrMask;
 
 // DebugStr("dump history: c = %d\n", c);
-		i = (i+1) & (MAX_HIST-1);
+        i = (i+1) & (MAX_HIST-1);
 // DebugStr("dump history: i = %d\n", i);
 // DebugStr("dump history: pHistory = %08X\n", vi.pHistory);
 // DebugStr("dump history: pHistory[i] = %08X\n", vi.pHistory[i]);
@@ -6959,9 +6959,9 @@ void m68k_DumpHistory(int c)
         PC = vi.pHistory[i++];
         lad = (PC & 1) ? 0xFFFFFFFF : 0x00FFFFFF;
         PC &= ~1;
-		printf("%d%c-", (lad & 0xFF000000) ? 32 : 24,
+        printf("%d%c-", (lad & 0xFF000000) ? 32 : 24,
             (vi.pHistory[i + 12] & 1) ? 'S' : 'U');
-		printf("%04X- ", c);
+        printf("%04X- ", c);
         printf("D0=%08X ",  vi.pHistory[i++]);
         printf("D1=%08X ",  vi.pHistory[i++]);
         printf("D2=%08X ",  vi.pHistory[i++]);
@@ -6981,9 +6981,9 @@ void m68k_DumpHistory(int c)
         c -= 15;
 
         vsthw.lAddrMask = lad;
-		CDis(PC, TRUE);
+        CDis(PC, TRUE);
         vsthw.lAddrMask = ladSav;
-		}
+        }
 }
 
 
@@ -6995,17 +6995,17 @@ BOOL Str68ToStr(ULONG addr, unsigned char *pch)
     unsigned cch = 0;
 #endif
 
-	do
-		{
-		*pch++ = (unsigned char)PeekB(addr++);
+    do
+        {
+        *pch++ = (unsigned char)PeekB(addr++);
 #ifndef NDEBUG
         cch++;
         Assert(cch < 1024);
 #endif
-		} while (PeekB(addr));
+        } while (PeekB(addr));
 
-	*pch = '\0';
-	return TRUE;
+    *pch = '\0';
+    return TRUE;
 }
 
 
@@ -7015,17 +7015,17 @@ BOOL Str68ToStrN(ULONG addr, unsigned char *pch, unsigned cchMax)
 {
     unsigned cch = 0;
 
-	do
-		{
-		*pch++ = (unsigned char)PeekB(addr++);
+    do
+        {
+        *pch++ = (unsigned char)PeekB(addr++);
         cch++;
         if (cch >= cchMax)
             break;
 
-		} while (PeekB(addr));
+        } while (PeekB(addr));
 
-	*pch = '\0';
-	return TRUE;
+    *pch = '\0';
+    return TRUE;
 }
 
 
@@ -7037,17 +7037,17 @@ BOOL StrToStr68(unsigned char *pch, ULONG addr)
     unsigned cch = 0;
 #endif
 
-	do
-		{
-		vmPokeB(addr++, (BYTE)toupper(*pch++));
+    do
+        {
+        vmPokeB(addr++, (BYTE)toupper(*pch++));
 #ifndef NDEBUG
         cch++;
         Assert(cch < 1024);
 #endif
-		} while (*pch);
+        } while (*pch);
 
-	vmPokeB(addr, 0);
-	return TRUE;
+    vmPokeB(addr, 0);
+    return TRUE;
 }
 
 
@@ -7055,20 +7055,20 @@ MemorySnapShot()
 {
 #if 0
     HANDLE h;
-	OFSTRUCT ofs;
+    OFSTRUCT ofs;
     unsigned cb = 262144;
     unsigned buf = 0;
     int i;
-	static char sz[] = "GEMUL8R0.DMP";
+    static char sz[] = "GEMUL8R0.DMP";
 
-	return;
+    return;
 
     ReverseMemory(buf, cb);
     h = OpenFile(sz, &ofs, OF_CREATE);
     WriteFile(h, memPvGetHostAddress(buf, cb), cb, &i, NULL);
     CloseHandle(h);
     ReverseMemory(buf, cb);
-	sz[7]++;
+    sz[7]++;
 #endif
 }
 

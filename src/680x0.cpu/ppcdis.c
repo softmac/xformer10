@@ -2267,9 +2267,9 @@ __inline char *SetCase(char *p)
 #if 0
     if (UseUppercase)
     {
-	strcpy(Buf, p);
-	_strupr(Buf);
-	return Buf;
+        strcpy(Buf, p);
+        _strupr(Buf);
+        return Buf;
     }
 #endif
     return p;

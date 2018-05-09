@@ -1,12 +1,12 @@
 
 /***************************************************************************
 
-	MACDISK.C
+    MACDISK.C
 
-	- low level NCR 5380 SCSI interface emulation for Mac
-	- low level IWM floppy disk interface emulation for Mac
+    - low level NCR 5380 SCSI interface emulation for Mac
+    - low level IWM floppy disk interface emulation for Mac
 
-	04/16/2002
+    04/16/2002
 
 ***************************************************************************/
 
@@ -1963,7 +1963,7 @@ Lfileinfo:
                 ULONG lClusterSize, lSectorSize, lFreeClusters, lTotalClusters;
 
                 if (GetDiskFreeSpace(rgb, &lClusterSize, &lSectorSize,
-                                       	&lFreeClusters, &lTotalClusters))
+                                           &lFreeClusters, &lTotalClusters))
                     {
                     llFree = (__int64)lClusterSize * (__int64)lFreeClusters
                            * (__int64)lSectorSize;

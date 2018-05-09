@@ -87,13 +87,13 @@ BOOL InitProperties()
     memset(&v, 0, sizeof(v));
 
     v.fPrivate = fTrue;         // new style settings
-	v.wMagic      = 0x82201233; // some unique value
+    v.wMagic      = 0x82201233; // some unique value
 
     // all fields default to 0 or fFalse except for these...
 
-	v.cb          = sizeof(PROPS);
-	v.ioBaseAddr  = 0x240;
-	v.cCards      = 1;
+    v.cb          = sizeof(PROPS);
+    v.ioBaseAddr  = 0x240;
+    v.cCards      = 1;
 
     v.fNoDDraw    = 2;      // on NT 4.0 some users won't be able to load DirectX
     v.fZoomColor  = fTrue;  // make the window large
@@ -103,28 +103,28 @@ BOOL InitProperties()
     // check for original Windows 95 which had buggy ASPI drivers
 
     {
-	OSVERSIONINFO oi;
-	
-	oi.dwOSVersionInfoSize = sizeof(oi);
-	GetVersionEx(&oi);
+    OSVERSIONINFO oi;
+    
+    oi.dwOSVersionInfoSize = sizeof(oi);
+    GetVersionEx(&oi);
 
-	switch(oi.dwPlatformId)
-		{
-	default:
-//	case VER_PLATFORM_WIN32_WINDOWS:
+    switch(oi.dwPlatformId)
+        {
+    default:
+//    case VER_PLATFORM_WIN32_WINDOWS:
         if ((oi.dwBuildNumber & 0xFFFF) == 950)
             v.fNoSCSI = TRUE;   // Windows 95 has boned SCSI support
-		break;
+        break;
 
-	case VER_PLATFORM_WIN32s:
-	case VER_PLATFORM_WIN32_NT:
-   		break;
-		}
-	}
+    case VER_PLATFORM_WIN32s:
+    case VER_PLATFORM_WIN32_NT:
+           break;
+        }
+    }
 
     // Initialize default ROM directory to current directory
 
-	strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
+    strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
     // create a total of 5 virtual machines
 
@@ -210,16 +210,16 @@ BOOL InitProperties()
     WScanROMs(/* fScanROMs */ FALSE, /* fScanMagiC */ TRUE, FALSE, FALSE);
 #endif
 
-	return TRUE;
+    return TRUE;
 }
 
 
 BOOL OpenTheINI(HWND hWnd, char *psz)
 {
-	OPENFILENAME OpenFileName;
+    OPENFILENAME OpenFileName;
 
-	// Fill in the OPENFILENAME structure to support a template and hook.
-	OpenFileName.lStructSize       = sizeof(OPENFILENAME);
+    // Fill in the OPENFILENAME structure to support a template and hook.
+    OpenFileName.lStructSize       = sizeof(OPENFILENAME);
     OpenFileName.hwndOwner         = hWnd;
     OpenFileName.hInstance         = NULL;
     OpenFileName.lpstrFilter   =
@@ -237,16 +237,16 @@ BOOL OpenTheINI(HWND hWnd, char *psz)
     OpenFileName.nFileExtension    = 0;
     OpenFileName.lpstrDefExt       = NULL;
     OpenFileName.lCustData         = 0;
-	OpenFileName.lpfnHook 		   = NULL;
-	OpenFileName.lpTemplateName    = NULL;
+    OpenFileName.lpfnHook            = NULL;
+    OpenFileName.lpTemplateName    = NULL;
     OpenFileName.Flags             = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST \
                                                   | OFN_CREATEPROMPT;
 
-	// Call the common dialog function.
+    // Call the common dialog function.
     if (GetOpenFileName(&OpenFileName))
         {
         strcpy(psz, OpenFileName.lpstrFile);
-		return TRUE;
+        return TRUE;
         }
 
     return FALSE;
@@ -261,15 +261,15 @@ BOOL OpenTheINI(HWND hWnd, char *psz)
 
 BOOL LoadProperties(HWND hOwner)
 {
-	PROPS vTmp;
-	char rgch[MAX_PATH];
-	char sz[MAX_PATH];
+    PROPS vTmp;
+    char rgch[MAX_PATH];
+    char sz[MAX_PATH];
     BOOL f = fFalse;
     BOOL fTriedWindows = fFalse;
-		
-	sz[0] = 0;
+        
+    sz[0] = 0;
 
-	GetCurrentDirectory(sizeof(rgch), rgch);
+    GetCurrentDirectory(sizeof(rgch), rgch);
     SetCurrentDirectory(vi.szWindowsDir);
 
     if (hOwner != NULL)
@@ -279,7 +279,7 @@ BOOL LoadProperties(HWND hOwner)
         EnableWindow(hOwner,TRUE);
         }
 
-	vTmp.cb = 0;
+    vTmp.cb = 0;
 
 LTryAgain:
     f = sizeof(vTmp) == 
@@ -298,12 +298,12 @@ LTryAgain:
         goto LTryAgain;
         }
 
-	// if INI file contained valid data, use it
-	// otherwise make the user give you data
+    // if INI file contained valid data, use it
+    // otherwise make the user give you data
 
-	if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic))
+    if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic))
         {
-		v = vTmp;
+        v = vTmp;
         f = fTrue;
         }
 #if !defined(DEMO) && defined(GEMPRO) && !defined(XFORMER)
@@ -383,10 +383,10 @@ LTryAgain:
         }
     }
 
-	if (strlen((char *)&v.rgchGlobalPath) == 0)
+    if (strlen((char *)&v.rgchGlobalPath) == 0)
         strcpy((char *)&v.rgchGlobalPath, (char *)&vi.szDefaultDir);
 
-	SetCurrentDirectory(rgch);
+    SetCurrentDirectory(rgch);
 
     v.cVM = MAX_VM;
 
@@ -444,13 +444,13 @@ LTryAgain:
 
 BOOL SaveProperties(HWND hOwner)
 {
-	BOOL f;
-	char rgch[MAX_PATH];
-	char sz[MAX_PATH];
+    BOOL f;
+    char rgch[MAX_PATH];
+    char sz[MAX_PATH];
 
     sz[0] = '\0';
-		
-	GetCurrentDirectory(sizeof(rgch), rgch);
+        
+    GetCurrentDirectory(sizeof(rgch), rgch);
     SetCurrentDirectory(vi.szWindowsDir);
 
     if (hOwner != NULL)
@@ -462,23 +462,23 @@ BOOL SaveProperties(HWND hOwner)
 
     f = FWriteWholeFile((hOwner != NULL) ? sz : szIniFile, sizeof(v), &v);
 
-	SetCurrentDirectory(rgch);
-	return f;
+    SetCurrentDirectory(rgch);
+    return f;
 }
 
 
 void ListBootDrives(HWND hDlg)
 {
-	// Stuff description of all detected ROMs to given dialog box
+    // Stuff description of all detected ROMs to given dialog box
 
-	int i;
-	char rgch[8];
+    int i;
+    char rgch[8];
 
-	SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_RESETCONTENT, 0, 0);
+    SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_RESETCONTENT, 0, 0);
 
     if (FIsMac(vmCur.bfHW))
         {
-		SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_ADDSTRING, 0, (LPARAM)"Default");
+        SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_ADDSTRING, 0, (LPARAM)"Default");
 
         rgch[0] = 'S';
         rgch[1] = 'C';
@@ -495,14 +495,14 @@ void ListBootDrives(HWND hDlg)
         return;
         }
 
-	rgch[1] = ':';
-	rgch[2] = '\0';
+    rgch[1] = ':';
+    rgch[2] = '\0';
 
-	for (i = 0; i < 26; i++)
-		{
-		rgch[0] = 'A' + i;
-		SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_ADDSTRING, 0, (LPARAM)rgch);
-		}
+    for (i = 0; i < 26; i++)
+        {
+        rgch[0] = 'A' + i;
+        SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_ADDSTRING, 0, (LPARAM)rgch);
+        }
 }
 
 BOOL SaveState(BOOL fSave)
@@ -534,26 +534,26 @@ LRESULT CALLBACK Properties(
         WPARAM uParam,       // message-specific information
         LPARAM lParam)
 {
-	VM vmOld = vmCur;
-	BOOL fSaveSettings = FALSE;
+    VM vmOld = vmCur;
+    BOOL fSaveSettings = FALSE;
 
     vmOld.bfCPU = (vi.fFake040 ? cpu68040 : vmCur.bfCPU);
 
     switch (message)
-    	{
+        {
         case WM_INITDIALOG:
-        	// initialize dialog box
+            // initialize dialog box
 
             CenterWindow (hDlg, GetWindow (hDlg, GW_OWNER));
 
-			SetDlgItemText(hDlg, IDC_EDITNAME, vmCur.szModel);
+            SetDlgItemText(hDlg, IDC_EDITNAME, vmCur.szModel);
 
-			CheckDlgButton(hDlg, IDC_JOYSTICK,   vmCur.fJoystick);
+            CheckDlgButton(hDlg, IDC_JOYSTICK,   vmCur.fJoystick);
             EnableWindow(GetDlgItem(hDlg, IDC_JOYSTICK), !FIsMac(vmCur.bfHW));
 
-//			CheckDlgButton(hDlg, IDC_MIDI,       vmCur.fMIDI);
-			CheckDlgButton(hDlg, IDC_STSOUND,    vmCur.fSound);
-//			CheckDlgButton(hDlg, IDC_STESOUND,   vmCur.fSTESound);
+//            CheckDlgButton(hDlg, IDC_MIDI,       vmCur.fMIDI);
+            CheckDlgButton(hDlg, IDC_STSOUND,    vmCur.fSound);
+//            CheckDlgButton(hDlg, IDC_STESOUND,   vmCur.fSTESound);
 
 #ifdef DEMO
             EnableWindow(GetDlgItem(hDlg, IDC_STSOUND), 0);
@@ -561,18 +561,18 @@ LRESULT CALLBACK Properties(
 
             // initialize the chipset / model entry
 
-			SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_RESETCONTENT, 0, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_ADDSTRING, 0, (long)"Auto");
-			SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_SETCURSEL, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_ADDSTRING, 0, (long)"Auto");
+            SendDlgItemMessage(hDlg, IDC_COMBOCHIPSET, CB_SETCURSEL, 0, 0);
             EnableWindow(GetDlgItem(hDlg, IDC_COMBOCHIPSET), 0);
 
-			// initialize Memory
+            // initialize Memory
 
             {
             ULONG bf = 1;
             int i = 0, iSel = 0;
 
-			SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_RESETCONTENT, 0, 0);
 
             while (bf)
                 {
@@ -588,58 +588,58 @@ LRESULT CALLBACK Properties(
                 bf <<= 1;
                 }
 
-			SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_SETCURSEL, iSel, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_SETCURSEL, iSel, 0);
             EnableWindow(GetDlgItem(hDlg, IDC_COMBOMEM), !FIsAtari8bit(vmCur.bfHW));
             }
 
-			// initialize Hard Disk
+            // initialize Hard Disk
 
-			CheckDlgButton(hDlg, IDC_VHD,       !vmCur.fUseVHD);
+            CheckDlgButton(hDlg, IDC_VHD,       !vmCur.fUseVHD);
             EnableWindow(GetDlgItem(hDlg, IDC_VHD), !FIsAtari8bit(vmCur.bfHW));
 
-			ListBootDrives(hDlg);
-			SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_SETCURSEL, max(0,vmCur.iBootDisk), 0);
+            ListBootDrives(hDlg);
+            SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_SETCURSEL, max(0,vmCur.iBootDisk), 0);
             EnableWindow(GetDlgItem(hDlg, IDC_BOOTLIST), !FIsAtari8bit(vmCur.bfHW));
 
-			// initialize Serial and Parallel ports
+            // initialize Serial and Parallel ports
 
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_RESETCONTENT, 0, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"None");
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM1:");
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM2:");
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM3:");
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM4:");
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"None");
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM1:");
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM2:");
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM3:");
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_ADDSTRING, 0, (long)"COM4:");
 
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_RESETCONTENT, 0, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"None");
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT1:");
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT2:");
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT3:");
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"None");
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT1:");
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT2:");
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_ADDSTRING, 0, (long)"LPT3:");
 
 #ifndef DEMO
-			CheckDlgButton(hDlg, IDC_SHARE, vmCur.fShare);
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_SETCURSEL, vmCur.iCOM, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_SETCURSEL, vmCur.iLPT, 0);
+            CheckDlgButton(hDlg, IDC_SHARE, vmCur.fShare);
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_SETCURSEL, vmCur.iCOM, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_SETCURSEL, vmCur.iLPT, 0);
 #else
-			CheckDlgButton(hDlg, IDC_SHARE, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_SETCURSEL, 0, 0);
-			SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_SETCURSEL, 0, 0);
+            CheckDlgButton(hDlg, IDC_SHARE, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_SETCURSEL, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_SETCURSEL, 0, 0);
 
             EnableWindow(GetDlgItem(hDlg, IDC_SHARE), 0);
             EnableWindow(GetDlgItem(hDlg, IDC_COMBOCOM), 0);
             EnableWindow(GetDlgItem(hDlg, IDC_COMBOLPT), 0);
 #endif
 
-			CheckDlgButton(hDlg, IDC_SWAPUKUS,  vmCur.fSwapKeys);
+            CheckDlgButton(hDlg, IDC_SWAPUKUS,  vmCur.fSwapKeys);
             EnableWindow(GetDlgItem(hDlg, IDC_SWAPUKUS), FIsMac(vmCur.bfHW));
 
-			// initialize Monitor dropdown
+            // initialize Monitor dropdown
 
             {
             ULONG bf = 1;
             int i = 0, iSel = 0;
 
-			SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_RESETCONTENT, 0, 0);
 
             while (bf)
                 {
@@ -655,16 +655,16 @@ LRESULT CALLBACK Properties(
                 bf <<= 1;
                 }
 
-			SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_SETCURSEL, iSel, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_SETCURSEL, iSel, 0);
             }
 
-			// initialize CPU dropdown
+            // initialize CPU dropdown
 
             {
             ULONG bf = 1;
             int i = 0, iSel = 0;
 
-			SendDlgItemMessage(hDlg, IDC_COMBOCPU, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOCPU, CB_RESETCONTENT, 0, 0);
             SendDlgItemMessage(hDlg, IDC_COMBOCPU, CB_ADDSTRING, 0, (long)"Auto");
 
 #ifndef DEMO
@@ -697,7 +697,7 @@ LRESULT CALLBACK Properties(
 
             // initialize the OS dropdown listing only the OSes appropriate for this VM
 
-			ListROMs(hDlg, vmCur.pvmi->wfROM);
+            ListROMs(hDlg, vmCur.pvmi->wfROM);
             {
             int i, j = -1;
 
@@ -707,20 +707,20 @@ LRESULT CALLBACK Properties(
                     j++;
                 }
 
-			SendDlgItemMessage(hDlg, IDC_COMBOTOSLIST, CB_SETCURSEL, j, 0);
+            SendDlgItemMessage(hDlg, IDC_COMBOTOSLIST, CB_SETCURSEL, j, 0);
             }
 
             return (TRUE);
 
         case WM_COMMAND:
-			// item notifications
+            // item notifications
 
-			switch (LOWORD(uParam))
-				{
-			default:
-				break;
+            switch (LOWORD(uParam))
+                {
+            default:
+                break;
 
-			case IDDISKPROPS:
+            case IDDISKPROPS:
                 // disable the caller
 
                 EnableWindow(hDlg,FALSE);
@@ -736,39 +736,39 @@ LRESULT CALLBACK Properties(
                 return (TRUE);
                 break;
 
-			case IDSAVE:
+            case IDSAVE:
 
-				fSaveSettings = TRUE;
+                fSaveSettings = TRUE;
 
-				// fall through
+                // fall through
 
-			case IDOK:
-				DebugStr("ID_OK\n");
+            case IDOK:
+                DebugStr("ID_OK\n");
 
-				// Now read the status of the check boxes and radio buttons
+                // Now read the status of the check boxes and radio buttons
 
-				vmCur.fJoystick = IsDlgButtonChecked(hDlg, IDC_JOYSTICK);
-				vmCur.fMIDI     = 0; //IsDlgButtonChecked(hDlg, IDC_MIDI);
-//				v.fSTESound = 0; //IsDlgButtonChecked(hDlg, IDC_STESOUND);
+                vmCur.fJoystick = IsDlgButtonChecked(hDlg, IDC_JOYSTICK);
+                vmCur.fMIDI     = 0; //IsDlgButtonChecked(hDlg, IDC_MIDI);
+//                v.fSTESound = 0; //IsDlgButtonChecked(hDlg, IDC_STESOUND);
 
-				vmCur.bfMon = SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_GETCURSEL, 0, 0);
-				vmCur.bfMon = BfFromWfI(vmCur.pvmi->wfMon, vmCur.bfMon);
+                vmCur.bfMon = SendDlgItemMessage(hDlg, IDC_COMBOMONITOR, CB_GETCURSEL, 0, 0);
+                vmCur.bfMon = BfFromWfI(vmCur.pvmi->wfMon, vmCur.bfMon);
 
                 if (!FIsMac(vmCur.bfHW) || (vmCur.bfHW < vmMacII))
                     vsthw.fMono    = FMonoFromBf(vmCur.bfMon);
 
-				vmCur.bfRAM = SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_GETCURSEL, 0, 0);
+                vmCur.bfRAM = SendDlgItemMessage(hDlg, IDC_COMBOMEM, CB_GETCURSEL, 0, 0);
                 vmCur.bfRAM = BfFromWfI(vmCur.pvmi->wfRAM, vmCur.bfRAM);
                 vi.cbRAM[0] = CbRamFromBf(vmCur.bfRAM);
 
-				vmCur.fUseVHD = !IsDlgButtonChecked(hDlg, IDC_VHD);
+                vmCur.fUseVHD = !IsDlgButtonChecked(hDlg, IDC_VHD);
 
-				vmCur.iBootDisk = (BYTE)SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_GETCURSEL, 0, 0);
+                vmCur.iBootDisk = (BYTE)SendDlgItemMessage(hDlg, IDC_BOOTLIST, CB_GETCURSEL, 0, 0);
 
 #ifndef DEMO
-				vmCur.iCOM = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_GETCURSEL, 0, 0);
-				vmCur.iLPT = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_GETCURSEL, 0, 0);
-				vmCur.bfCPU = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOCPU, CB_GETCURSEL, 0, 0);
+                vmCur.iCOM = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOCOM, CB_GETCURSEL, 0, 0);
+                vmCur.iLPT = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOLPT, CB_GETCURSEL, 0, 0);
+                vmCur.bfCPU = (BYTE)SendDlgItemMessage(hDlg, IDC_COMBOCPU, CB_GETCURSEL, 0, 0);
 
                 vmCur.fCPUAuto = (vmCur.bfCPU == 0);
 
@@ -777,93 +777,93 @@ LRESULT CALLBACK Properties(
                 else
                     vmCur.bfCPU = BfFromWfI(vmCur.pvmi->wfCPU, vmCur.bfCPU - 1);
 
-				vmCur.fShare = IsDlgButtonChecked(hDlg, IDC_SHARE);
-				vmCur.fSound  = IsDlgButtonChecked(hDlg, IDC_STSOUND);
+                vmCur.fShare = IsDlgButtonChecked(hDlg, IDC_SHARE);
+                vmCur.fSound  = IsDlgButtonChecked(hDlg, IDC_STSOUND);
 #else
                 vmCur.fCPUAuto = fTrue;
                 vmCur.bfCPU = BfFromWfI(vmCur.pvmi->wfCPU, 0);
-				vmCur.iCOM = 0;
-				vmCur.iLPT = 0;
-				vmCur.fShare = 0;
-				vmCur.fSound = 0;
+                vmCur.iCOM = 0;
+                vmCur.iLPT = 0;
+                vmCur.fShare = 0;
+                vmCur.fSound = 0;
 #endif
 
-				vmCur.fSwapKeys = IsDlgButtonChecked(hDlg, IDC_SWAPUKUS);
+                vmCur.fSwapKeys = IsDlgButtonChecked(hDlg, IDC_SWAPUKUS);
 
-				vmCur.iOS = SendDlgItemMessage(hDlg, IDC_COMBOTOSLIST, CB_GETCURSEL, 0, 0);
-				if ((vmCur.iOS < 0) || (vmCur.iOS >= (int)v.cOS))
-					vmCur.iOS = -1;
-				else
-					{
-					// We do the opposite here of how we generated the dropdown of OSes.
-					// Walk rgosinfo and find the ith entry that is valid for this VM.
+                vmCur.iOS = SendDlgItemMessage(hDlg, IDC_COMBOTOSLIST, CB_GETCURSEL, 0, 0);
+                if ((vmCur.iOS < 0) || (vmCur.iOS >= (int)v.cOS))
+                    vmCur.iOS = -1;
+                else
+                    {
+                    // We do the opposite here of how we generated the dropdown of OSes.
+                    // Walk rgosinfo and find the ith entry that is valid for this VM.
 
-					unsigned i;
+                    unsigned i;
 
-					for (i = 0; i < v.cOS; i++)
-						{
-		                if (v.rgosinfo[i].osType & vmCur.pvmi->wfROM)
-							if (vmCur.iOS-- == 0)
-								{
-								vmCur.iOS = i;
-								break;
-								}
-						}
-					}
+                    for (i = 0; i < v.cOS; i++)
+                        {
+                        if (v.rgosinfo[i].osType & vmCur.pvmi->wfROM)
+                            if (vmCur.iOS-- == 0)
+                                {
+                                vmCur.iOS = i;
+                                break;
+                                }
+                        }
+                    }
 
-				GetDlgItemText(hDlg, IDC_EDITNAME, &vmCur.szModel,
+                GetDlgItemText(hDlg, IDC_EDITNAME, &vmCur.szModel,
                     sizeof(v.rgvm[0].szModel));
 
-				if (fSaveSettings)
-					SaveProperties(NULL);
+                if (fSaveSettings)
+                    SaveProperties(NULL);
 
-               	EndDialog(hDlg, TRUE);
+                   EndDialog(hDlg, TRUE);
 
-				// certain settings don't require rebooting, such as
-				// DirectX, Fast Refresh, and Zoom
+                // certain settings don't require rebooting, such as
+                // DirectX, Fast Refresh, and Zoom
 
                 vmOld.fSound    = vmCur.fSound;
-				vmOld.fJoystick = vmCur.fJoystick;
-				vmOld.fShare    = vmCur.fShare;
-				vmOld.iBootDisk = vmCur.iBootDisk;
-				vmOld.fSwapKeys = vmCur.fSwapKeys;
-				vmOld.fUseVHD   = vmCur.fUseVHD;
+                vmOld.fJoystick = vmCur.fJoystick;
+                vmOld.fShare    = vmCur.fShare;
+                vmOld.iBootDisk = vmCur.iBootDisk;
+                vmOld.fSwapKeys = vmCur.fSwapKeys;
+                vmOld.fUseVHD   = vmCur.fUseVHD;
 
-				memcpy(vmOld.szModel, vmCur.szModel, sizeof(vmOld.szModel));
+                memcpy(vmOld.szModel, vmCur.szModel, sizeof(vmOld.szModel));
 
-				if (memcmp(&vmCur, &vmOld, sizeof(VM)))
-					{
-					if (FVerifyMenuOption())
-						{
+                if (memcmp(&vmCur, &vmOld, sizeof(VM)))
+                    {
+                    if (FVerifyMenuOption())
+                        {
                         vmCur.fColdReset = TRUE;
-						}
-					else
-						{
-						vmCur = vmOld;
-						break;
-						}
-					}
+                        }
+                    else
+                        {
+                        vmCur = vmOld;
+                        break;
+                        }
+                    }
 
-				CreateNewBitmap();
+                CreateNewBitmap();
                 InitSound(0);
 
                 return (TRUE);
-				break;
+                break;
 
-			case IDCANCEL:
-				DebugStr("ID_CANCEL\n");
+            case IDCANCEL:
+                DebugStr("ID_CANCEL\n");
 
-				// restore global settings
+                // restore global settings
 
-				vmCur = vmOld;
+                vmCur = vmOld;
 
                 EndDialog(hDlg, TRUE);
                 return (TRUE);
-				break;
-				}
+                break;
+                }
 
-			break;
-    	}
+            break;
+        }
 
     return (FALSE); // Didn't process the message
 
@@ -882,16 +882,16 @@ void ListVirtualDrives(HWND hDlg)
         "is mapped to disk "
         };
 
-	// Stuff description of all detected ROMs to given dialog box
+    // Stuff description of all detected ROMs to given dialog box
 
-	int i;
-	char rgch[256];
+    int i;
+    char rgch[256];
     static PVD pvd;
 
-	SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_RESETCONTENT, 0, 0);
+    SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_RESETCONTENT, 0, 0);
 
-	for (i = 0; i < vmCur.ivdMac; i++)
-		{
+    for (i = 0; i < vmCur.ivdMac; i++)
+        {
         rgch[0] = 0;
 
         pvd = &vmCur.rgvd[i];
@@ -949,8 +949,8 @@ void ListVirtualDrives(HWND hDlg)
                 }
             }
 
-		SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_ADDSTRING, 0, (LPARAM)rgch);
-		}
+        SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_ADDSTRING, 0, (LPARAM)rgch);
+        }
 }
 
 
@@ -1093,7 +1093,7 @@ LRESULT CALLBACK DisksDlg(
         WPARAM uParam,       // message-specific information
         LPARAM lParam)
 {
-	int i;
+    int i;
     PVD pvd;
 #ifndef XFORMER
     PDI pdi;
@@ -1102,29 +1102,29 @@ LRESULT CALLBACK DisksDlg(
     char rgch[80];
 
     switch (message)
-    	{
+        {
         case WM_INITDIALOG:
-        	// initialize dialog box
+            // initialize dialog box
 
             CenterWindow (hDlg, GetWindow (hDlg, GW_OWNER));
 
-			// initialize drive list
+            // initialize drive list
 
             ListVirtualDrives(hDlg);
-			SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_SETCURSEL, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_SETCURSEL, 0, 0);
             RefreshDiskProps(hDlg, 0);
             return (TRUE);
 
         case WM_COMMAND:
-			// item notifications
+            // item notifications
 
             i = SendDlgItemMessage(hDlg, IDC_DISKLIST, LB_GETCURSEL, 0, 0);
             pvd = &vmCur.rgvd[i];
 
-			switch (LOWORD(uParam))
-				{
-			default:
-				break;
+            switch (LOWORD(uParam))
+                {
+            default:
+                break;
 
             case IDC_DISKLIST:
                 if (HIWORD(uParam) == LBN_DBLCLK)
@@ -1141,11 +1141,11 @@ LRESULT CALLBACK DisksDlg(
                 SetFocus(GetDlgItem(hDlg, IDC_DISKLIST));
                 break;
 
-			case IDBROWSEFLOPPY:
+            case IDBROWSEFLOPPY:
                 if (FIsAtari8bit(vmCur.bfHW))
                     break;
 
-				DebugStr("IDBROWSEFLOPPY\n");
+                DebugStr("IDBROWSEFLOPPY\n");
 
                 // force floppy to be selected
 
@@ -1181,11 +1181,11 @@ Lnextdrive:
                 goto Lupdlistbox;
 
 #ifndef XFORMER
-			case IDBROWSESCSI:
+            case IDBROWSESCSI:
                 if (!v.fNoSCSI && FIsAtari8bit(vmCur.bfHW))
                     break;
 
-				DebugStr("IDBROWSESCSI\n");
+                DebugStr("IDBROWSESCSI\n");
 
                 // force SCSI to be selected
 
@@ -1195,7 +1195,7 @@ Lnextdrive:
                 {
                 int ctl = pvd->ctl, id = pvd->id;
 
-				rgch2[0] = '\0';
+                rgch2[0] = '\0';
 
                 do
                     {
@@ -1211,14 +1211,14 @@ Lnextdrive:
                          LongFromScsi(ctl, id), DI_QUERY);
                     if (pdi)
                         {
-						strcpy(rgch2, pdi->szVolume);
+                        strcpy(rgch2, pdi->szVolume);
                         CloseDiskPdi(pdi);
-						pvd->ctl = ctl;
-						pvd->id = id;
+                        pvd->ctl = ctl;
+                        pvd->id = id;
                         break;
                         }
                     } while ((ctl != pvd->ctl) || (id != pvd->id));
-				}
+                }
 
                 sprintf(rgch, "Host %d Id %d %s", pvd->ctl, pvd->id, rgch2);
                 SetDlgItemText(hDlg, IDC_EDITSCSI, rgch);
@@ -1227,8 +1227,8 @@ Lnextdrive:
 
 #endif // XFORMER
 
-			case IDBROWSEDISK:
-				DebugStr("IDCHANGEDISK\n");
+            case IDBROWSEDISK:
+                DebugStr("IDCHANGEDISK\n");
 
 Ldiskimg:
                 // force disk image to be selected
@@ -1254,7 +1254,7 @@ Ldiskimg:
                 SetDlgItemText(hDlg, IDC_EDITIMAGEPATH, (void*)pvd->sz);
 
 Lupdlistbox:
-				if (IsDlgButtonChecked(hDlg, IDC_IMAGE))
+                if (IsDlgButtonChecked(hDlg, IDC_IMAGE))
                     pvd->dt = DISK_IMAGE;
                 else if (IsDlgButtonChecked(hDlg, IDC_FLOPPY))
                     pvd->dt = (pvd->id >= 2) ? DISK_WIN32 : DISK_FLOPPY;
@@ -1274,21 +1274,21 @@ Lupdlistbox:
                 }
                 break;
 
-			case IDC_DISABLED:
-			case IDC_FLOPPY:
-			case IDC_SCSI:
-			case IDC_IMAGE:
+            case IDC_DISABLED:
+            case IDC_FLOPPY:
+            case IDC_SCSI:
+            case IDC_IMAGE:
                 goto Lupdlistbox;
                 break;
 
-			case IDC_RADIO_DISKRW:      // read-write
-			case IDC_RADIO_DISKRW2:     // read-only
-			case IDC_RADIO_DISKRW3:     // CD-ROM
+            case IDC_RADIO_DISKRW:      // read-write
+            case IDC_RADIO_DISKRW2:     // read-only
+            case IDC_RADIO_DISKRW3:     // CD-ROM
                 pvd->mdWP = LOWORD(uParam) - IDC_RADIO_DISKRW;
                 break;
 
-			case IDOK:
-				DebugStr("ID_OK\n");
+            case IDOK:
+                DebugStr("ID_OK\n");
 
 #ifndef XFORMER
                 vmachw.fDisk1Dirty = fTrue;
@@ -1296,12 +1296,12 @@ Lupdlistbox:
                 // vsthw.fMediaChange = fTrue;
 #endif // !XFORMER
 
-               	EndDialog(hDlg, TRUE);
+                   EndDialog(hDlg, TRUE);
                 return (TRUE);
-				break;
+                break;
 
-			case IDCANCEL:
-				DebugStr("ID_CANCEL\n");
+            case IDCANCEL:
+                DebugStr("ID_CANCEL\n");
 
 #ifndef XFORMER
                 vmachw.fDisk1Dirty = fTrue;
@@ -1311,11 +1311,11 @@ Lupdlistbox:
 
                 EndDialog(hDlg, TRUE);
                 return (TRUE);
-				break;
-				}
+                break;
+                }
 
-			break;
-    	}
+            break;
+        }
 
     return (FALSE); // Didn't process the message
 
@@ -1351,12 +1351,12 @@ void HandleDiskEject(int i)
 
 int AutoConfigure(BOOL fShowDlg)
 {
-	PROPS vTmp = v;
-	char rgch[MAX_PATH];
-	char sz[MAX_PATH];
+    PROPS vTmp = v;
+    char rgch[MAX_PATH];
+    char sz[MAX_PATH];
     BOOL f = fFalse;
-		
-	sz[0] = 0;
+        
+    sz[0] = 0;
 
     if (fShowDlg)
     if (IDOK != MessageBox (GetFocus(),
@@ -1502,13 +1502,13 @@ LRESULT CALLBACK ChooseProc(
         LPARAM lParam)
 {
     switch (message)
-    	{
+        {
         case WM_INITDIALOG:
-        	// initialize dialog box
+            // initialize dialog box
 
             CenterWindow (hDlg, GetWindow (hDlg, GW_OWNER));
 
-			SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_RESETCONTENT, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_RESETCONTENT, 0, 0);
 
             switch(lParam)
                 {
@@ -1536,20 +1536,20 @@ LRESULT CALLBACK ChooseProc(
                 break;
                 }
 
-			SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_SETCURSEL, 0, 0);
+            SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_SETCURSEL, 0, 0);
 
             return (TRUE);
 
         case WM_COMMAND:
-			// item notifications
+            // item notifications
 
-			switch (LOWORD(uParam))
-				{
-			default:
-				break;
+            switch (LOWORD(uParam))
+                {
+            default:
+                break;
 
-			case IDOK:
-				switch(SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_GETCURSEL, 0, 0))
+            case IDOK:
+                switch(SendDlgItemMessage(hDlg, IDC_LBCHOOSE, CB_GETCURSEL, 0, 0))
                     {
                 default:
                 case 0:
@@ -1577,18 +1577,18 @@ LRESULT CALLBACK ChooseProc(
                     break;
                     }
 
-               	EndDialog(hDlg, lParam);
+                   EndDialog(hDlg, lParam);
                 return (TRUE);
-				break;
+                break;
 
-			case IDCANCEL:
+            case IDCANCEL:
                 EndDialog(hDlg, FALSE);
                 return (TRUE);
-				break;
-				}
+                break;
+                }
 
-			break;
-    	}
+            break;
+        }
 
     return (FALSE); // Didn't process the message
 }
