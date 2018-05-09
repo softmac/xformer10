@@ -633,23 +633,34 @@ __inline void SIOCheck(const int iVM)
         SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
         UnpackP(iVM);
 
-#if 0   // breaks XL or XE, duh
         // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
         // a little bit of time (but not nearly as much as it would really take)
-        rgbMem[0xd180] = 0xa0;
-        rgbMem[0xd181] = 0x08;  // change this to vary the delay
-        rgbMem[0xd182] = 0xa2;
-        rgbMem[0xd183] = 0x00;
-        rgbMem[0xd184] = 0xca;
-        rgbMem[0xd185] = 0xd0;
-        rgbMem[0xd186] = 0xfd;
-        rgbMem[0xd187] = 0x88;
-        rgbMem[0xd188] = 0xd0;
-        rgbMem[0xd189] = 0xfa;
-        rgbMem[0xd18a] = 0x60;
+        
+        rgbMem[0xd180] = 0x08;  // php
+        rgbMem[0xd181] = 0x48;  // pha
+        rgbMem[0xd182] = 0x8a;  // txa
+        rgbMem[0xd183] = 0x48;  // pha
+        rgbMem[0xd184] = 0x98;  // tya
+        rgbMem[0xd185] = 0x48;  // pha
+        rgbMem[0xd186] = 0xa0;
+        rgbMem[0xd187] = 0x08;  // change this to vary the delay
+        rgbMem[0xd188] = 0xa2;
+        rgbMem[0xd189] = 0x00;
+        rgbMem[0xd18a] = 0xca;
+        rgbMem[0xd18b] = 0xd0;
+        rgbMem[0xd18c] = 0xfd;
+        rgbMem[0xd18d] = 0x88;
+        rgbMem[0xd18e] = 0xd0;
+        rgbMem[0xd18f] = 0xfa;
+        rgbMem[0xd190] = 0x68;  // pla
+        rgbMem[0xd191] = 0xa8;  // tay
+        rgbMem[0xd192] = 0x68;  // pla
+        rgbMem[0xd193] = 0xaa;  // tax
+        rgbMem[0xd194] = 0x68;  // pla
+        rgbMem[0xd195] = 0x28;  // plp
+        rgbMem[0xd196] = 0x60;
         PushWord(iVM, regPC - 1);
         regPC = 0xd180;
-#endif
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
     {
