@@ -136,8 +136,8 @@ BEGIN
         MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
         //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
         MENUITEM SEPARATOR
-        MENUITEM "&Paste ASCII to Keyboard Buffer", IDM_PASTEASCII
-        MENUITEM "&Paste ATASCII to Keyboard Buffer", IDM_PASTEATASCII
+        MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
+        MENUITEM "&Paste Text as ATASCII", IDM_PASTEATASCII
         MENUITEM SEPARATOR
         MENUITEM "&Cartridge...", IDM_CART
         MENUITEM "&Remove Cartridge" IDM_NOCART
