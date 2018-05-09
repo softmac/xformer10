@@ -82,7 +82,7 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
-    Assert(pfnPeekB == PeekBAtari);  // compiler hint
+    Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
 
     if (ea >= ramtop)
         return (*pfnPeekB)(iVM, ea);
@@ -92,7 +92,7 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 
 __inline uint16_t READ_WORD(const int iVM, uint32_t ea)
 {
-    Assert(pfnPeekB == PeekBAtari);  // compiler hint
+    Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
 
     if (ea >= ramtop)
         return (*pfnPeekB)(iVM, ea) | ((*pfnPeekB)(iVM, ea + 1) << 8);
@@ -104,7 +104,7 @@ __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
-    Assert(pfnPokeB == PokeBAtari);  // compiler hint
+    Assert(pfnPokeB == (PFNL)PokeBAtari);  // compiler hint
 
     if (ea >= ramtop)
         (*pfnPokeB)(iVM, ea, val);
@@ -115,7 +115,7 @@ __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 // we only call this if we know it's < ramtop
 __inline void WRITE_WORD(const int iVM, uint32_t ea, uint16_t val)
 {
-    Assert(pfnPokeB == PokeBAtari);  // compiler hint
+    Assert(pfnPokeB == (PFNL)PokeBAtari);  // compiler hint
 
     if (ea >= ramtop)
     {
