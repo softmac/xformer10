@@ -90,6 +90,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU" OR
 	# instances of them, but this is just a language limitation
 	target_compile_options(GEMUL8R PRIVATE -Wno-incompatible-pointer-types)
 endif()
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+	# Stubbed out emulation functions have "unused values" that prevent MSVC
+	# from complaining, but cause Clang to complain.
+	target_compile_options(GEMUL8R PRIVATE -Wno-unused-value)
+endif()
 
 target_include_directories(GEMUL8R PRIVATE . res)
 set_property(TARGET GEMUL8R PROPERTY C_STANDARD 99)
