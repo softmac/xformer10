@@ -56,7 +56,11 @@ if(USE_LTO)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-	if(NOT MSVC_C_ARCHITECTURE_ID MATCHES ARM)
+	if(MSVC_C_ARCHITECTURE_ID MATCHES "ARMV7")
+		add_definitions(-D_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1)
+	endif()
+
+	if(NOT MSVC_C_ARCHITECTURE_ID MATCHES "ARM")
 		# use __fastcall by default
 		target_compile_options(GEMUL8R PRIVATE /Gr)
 
