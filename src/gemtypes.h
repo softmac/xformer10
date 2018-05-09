@@ -1064,11 +1064,17 @@ inline int __noop(const char *format, ...)
 {
 	return 0;
 }
+#ifdef __clang__
+#define __assume(x) __builtin_assume(x)
+#elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
+#define __assume(x) do { if (!(x)) __builtin_unreachable(); } while (0)
+#else
 inline void __assume(BOOL condition) {}
+#endif
 #endif
 
 #define DebugStr __noop
-#define Assert(f) (__assume(f))
+#define Assert(f) __assume(f)
 
 #endif // NDEBUG
 
