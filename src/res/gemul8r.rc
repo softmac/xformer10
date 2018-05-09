@@ -13,6 +13,9 @@
 //#undef APSTUDIO_HIDDEN_SYMBOLS
 #include "winver.h"
 
+#define RT_MANIFEST 24 
+#define APP_MANIFEST 1
+
 /////////////////////////////////////////////////////////////////////////////
 //#undef APSTUDIO_READONLY_SYMBOLS
 
@@ -234,6 +237,8 @@ BEGIN
     //VK_F12,         IDM_DEBUGGER,           VIRTKEY, NOINVERT
     //VK_F12,         IDM_SNAPSHOT,           VIRTKEY, CONTROL, ALT, NOINVERT
 END
+
+APP_MANIFEST RT_MANIFEST "gemul8r.exe.manifest"
 
 #if 0
 /////////////////////////////////////////////////////////////////////////////

@@ -30,6 +30,7 @@ set (GEMUL8R_SOURCES
 	romcard.c
 	serial.c
 	sound.c
+	res/gemul8r.exe.manifest
 )
 
 # Windows 7 API, needed for WM_GESTURE* events
