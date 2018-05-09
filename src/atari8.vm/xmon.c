@@ -760,7 +760,7 @@ void CchDisAsm(int iVM, unsigned int *puMem)
         break;
         }
 
-    printf(rgch);
+    puts(rgch);
     }
 
 /***********************************************************************/
