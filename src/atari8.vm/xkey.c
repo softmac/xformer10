@@ -19,12 +19,13 @@
 // CheckKey() is called during the vertical blank to process the keyboard buffer which is filled
 // by KeyAtari() in response to windows messages for keys, mouse, joystick
 //
-void CheckKey(int iVM)
+// fDoShift means look at the shift key, otherwise use the value in myShift
+//
+void CheckKey(int iVM, BOOL fDoShift, WORD myShift)
 {
     BYTE scan = 0;
     BYTE ch = 0;
     WORD shift = 0;
-    WORD dshift = 0;
     //BOOL fForceCtrl = FALSE;
 
     extern BYTE rgbMapScans[1024];
@@ -32,7 +33,7 @@ void CheckKey(int iVM)
 // printf("in CheckKey\n");
 
     if (vrgvmi[iVM].keyhead != vrgvmi[iVM].keytail)
-        {
+    {
         scan = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
         ch   = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
         vrgvmi[iVM].keytail &= 1023;
@@ -41,21 +42,25 @@ void CheckKey(int iVM)
 
         if ((vrgvmi[iVM].keytail & 1) || (vrgvmi[iVM].keyhead & 1))
             vrgvmi[iVM].keytail = vrgvmi[iVM].keyhead = 0;
-        }
+    }
 
     if (scan == 255)
-        {
+    {
         KBCODE = 255;
         fKeyPressed = 0;
         return;
-        }
+    }
 
-    shift = *pbshift & (wScrlLock | wCapsLock | wCtrl | wAnyShift);
+    if (fDoShift)
+        shift = *pbshift & (wScrlLock | wCapsLock | wCtrl | wAnyShift);
+    else
+        shift = myShift;
+    
     //fBrakes = (shift & wScrlLock);    // using PGUP since modern keyboards don't have scroll lock anymore
     shift &= ~wScrlLock;
 
     if (shift & wCapsLock)
-        {
+    {
         if (!scan && !ch)
             {
             // Caps Lock pressed, no other key pressed,
@@ -66,16 +71,16 @@ void CheckKey(int iVM)
             }
 
         shift &= ~wCapsLock;
-        }
+    }
 
-    if (dshift || scan || ch)
-        {
+    if (scan || ch)
+    {
         fKeyPressed = (scan << 8) | ch;
 
         //DebugStr("ch=%02X scan=%02X shift=%02X\n", ch, scan, shift);
-        }
+    }
     else
-        {
+    {
         if (!fKeyPressed)
             return;
 
@@ -83,17 +88,13 @@ void CheckKey(int iVM)
         fKeyPressed = 0;
         //DebugStr("upstroke!\n");
         return;
-        }
+    }
 
     if (shift & 3)
-        {
         SKSTAT &= ~0x08;  // shift key pressed
-        }
     else
-        {
         SKSTAT |= 0x08;      // shift key not pressed
-        }
-
+    
     shift &= 7;    // mask out Alt bit to not mess up table look up
 
     if (ch == 0xE0)
@@ -346,6 +347,7 @@ lookitup:
     //if (fForceCtrl) sh = shift | 4;
 
     KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
+    //ODS("KBCODE % 02x ", KBCODE);
 
     if (KBCODE == 255)
     {
@@ -376,6 +378,7 @@ lookit2:
 
 BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 {
+    //ODS("(KM %04x %04x) ", uParam, lParam);
     message;
 
     int ch, scan;

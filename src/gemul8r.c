@@ -64,6 +64,75 @@ BOOL fDebug;
 int nFirstTile; // at which instance does tiling start?
 int sVM = -1;    // the tile with focus
 
+// convert ASCII to ATARI keyboard scan codes
+// high byte is the second scan code to send, except for special cases:
+// 1 meaning SHIFT and 2 meaning CTRL need to be pressed (subtract these values to get real second scan code)
+WORD rgAsciiToScan[256] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0 - 31
+    0x39, 0x102, 0x128, 0x104, 0x105, 0x106, 0x108, 0x28,   // 32-39
+    0x10a, 0x10b, 0x109, 0x10d, 0x33, 0x0c, 0x34, 0x35,     // 40-47
+    0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,         // 48-55
+    0x09, 0x0a, 0x127, 0x27, 0x133, 0x0d, 0x134, 0x135,     // 56-63
+    0x103, 0x11e, 0x130, 0x12e, 0x120, 0x112, 0x121, 0x122, // 64-71
+    0x123, 0x117, 0x124, 0x125, 0x126, 0x132, 0x131, 0x118, // 72-79
+    0x119, 0x110, 0x113, 0x11f, 0x114, 0x116, 0x12f, 0x111, // 80-87
+    0x12d, 0x115, 0x12c, 0, 0x2b, 0, 0x107, 0x10c,          // 88-95
+    0x0, 0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,          // 96-103
+    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,         // 104-111
+    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,         // 112-119
+    0x2d, 0x15, 0x2c, 0, 0x12b, 0, 0, 0,                    // 120-127
+
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0 - 31
+    0x39, 0x102, 0x128, 0x104, 0x105, 0x106, 0x108, 0x28,   // 32-39
+    0x10a, 0x10b, 0x109, 0x10d, 0x33, 0x0c, 0x34, 0x35,     // 40-47
+    0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,         // 48-55
+    0x09, 0x0a, 0x127, 0x27, 0x133, 0x0d, 0x134, 0x135,     // 56-63
+    0x103, 0x11e, 0x130, 0x12e, 0x120, 0x112, 0x121, 0x122, // 64-71
+    0x123, 0x117, 0x124, 0x125, 0x126, 0x132, 0x131, 0x118, // 72-79
+    0x119, 0x110, 0x113, 0x11f, 0x114, 0x116, 0x12f, 0x111, // 80-87
+    0x12d, 0x115, 0x12c, 0, 0x2b, 0, 0x107, 0x10c,          // 88-95
+    0x0, 0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,          // 96-103
+    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,         // 104-111
+    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,         // 112-119
+    0x2d, 0x15, 0x2c, 0, 0x12b, 0, 0, 0                     // 120-127
+};
+
+WORD rgAtasciiToScan[256] = {
+    0x233, 0x21e, 0x230, 0x22e, 0x220, 0x212, 0x221, 0x222, // 0-7
+    0x223, 0x217, 0x224, 0x225, 0x226, 0x232, 0x231, 0x218, // 8-15
+    0x219, 0x210, 0x213, 0x21f, 0x214, 0x216, 0x22f, 0x211, // 16-23
+    0x22d, 0x215, 0x22c, 0x01, 0x298, 0x2a0, 0x29b, 0x29d,      // 24-31
+    0x39, 0x102, 0x128, 0x104, 0x105, 0x106, 0x108, 0x28,   // 32-39
+    0x10a, 0x10b, 0x109, 0x10d, 0x33, 0x0c, 0x34, 0x35,     // 40-47
+    0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,         // 48-55
+    0x09, 0x0a, 0x127, 0x27, 0x133, 0x0d, 0x134, 0x135,     // 56-63
+    0x103, 0x11e, 0x130, 0x12e, 0x120, 0x112, 0x121, 0x122, // 64-71
+    0x123, 0x117, 0x124, 0x125, 0x126, 0x132, 0x131, 0x118, // 72-79
+    0x119, 0x110, 0x113, 0x11f, 0x114, 0x116, 0x12f, 0x111, // 80-87
+    0x12d, 0x115, 0x12c, 0, 0x2b, 0, 0x107, 0x10c,          // 88-95
+    0x234, 0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,        // 96-103
+    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,         // 104-111
+    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,         // 112-119
+    0x2d, 0x15, 0x2c, 0x227, 0x12b, 0xe247, 0x0e, 0x0f,     // 120-127
+
+    0x233, 0x21e, 0x230, 0x22e, 0x220, 0x212, 0x221, 0x222, // 0-7
+    0x223, 0x217, 0x224, 0x225, 0x226, 0x232, 0x231, 0x218, // 8-15
+    0x219, 0x210, 0x213, 0x21f, 0x214, 0x216, 0x22f, 0x211, // 16-23
+    0x22d, 0x215, 0x22c, 0x72, 0xe153, 0xe152, 0x20f, 0x10f,// 24-31
+    0x39, 0x102, 0x128, 0x104, 0x105, 0x106, 0x108, 0x28,   // 32-39
+    0x10a, 0x10b, 0x109, 0x10d, 0x33, 0x0c, 0x34, 0x35,     // 40-47
+    0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,         // 48-55
+    0x09, 0x0a, 0x127, 0x27, 0x133, 0x0d, 0x134, 0x135,     // 56-63
+    0x103, 0x11e, 0x130, 0x12e, 0x120, 0x112, 0x121, 0x122, // 64-71
+    0x123, 0x117, 0x124, 0x125, 0x126, 0x132, 0x131, 0x118, // 72-79
+    0x119, 0x110, 0x113, 0x11f, 0x114, 0x116, 0x12f, 0x111, // 80-87
+    0x12d, 0x115, 0x12c, 0, 0x2b, 0, 0x107, 0x10c,          // 88-95
+    0x234, 0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,        // 96-103
+    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,         // 104-111
+    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,         // 112-119
+    0x2d, 0x15, 0x2c, 0x227, 0x12b, 0x203, 0xe053, 0xe052   // 120-127
+};
+
 #include "shellapi.h"
 
 // My printf that uses OutputDebugString to send to the VS output tab
@@ -2643,6 +2712,131 @@ void ShowAbout()
     MessageBox(GetFocus(), rgch, rgch2, MB_OK);
 }
 
+void PasteChar(WORD w, int i)
+{
+    rgPasteBuffer[i] = (w & 0xff);         // send the 2-byte scan code
+    rgPasteBuffer[i + 1] = (w >> 8);
+    rgPasteBuffer[i + 2] = 0x00;           // we need 5 empty pairs after each character pair to guarentee it will be ready for the next character
+    rgPasteBuffer[i + 3] = 0x00;
+    rgPasteBuffer[i + 4] = 0x00;
+    rgPasteBuffer[i + 5] = 0x00;
+    rgPasteBuffer[i + 6] = 0x00;
+    rgPasteBuffer[i + 7] = 0x00;
+    rgPasteBuffer[i + 8] = 0x00;
+    rgPasteBuffer[i + 9] = 0x00;
+    rgPasteBuffer[i + 10] = 0x00;
+    rgPasteBuffer[i + 11] = 0x00;
+}
+
+// Paste this string into the keyboard buffer. It is either ASCII or ATASCII
+//
+void PasteAsciiAtascii(LPSTR lpClip, BOOL fAtascii)
+{
+    int i;
+    BYTE b;
+    WORD w, wLast = 0;
+    BOOL fLastInverse = FALSE;
+
+    PasteChar(0x3a, 0);     // start with CAPS key to go into lower case mode so we can get both upper and lower case
+    i = 12;
+
+    while (1)
+    {
+        b = *lpClip++;
+
+        if (!b || i >= 65536 * 16 - 512)      // Our buffer is done, or we've run out of room
+        {
+            if (fLastInverse)
+            {
+                PasteChar(0x29, i);   // come out of inverse, if necessary
+                i += 12;
+            }
+            rgPasteBuffer[i + 0] = 0x2a;    // SHIFT-CAPS to return to regular typing mode
+            rgPasteBuffer[i + 1] = 0x0;
+            PasteChar(0x3a, i + 2);
+            rgPasteBuffer[i + 14] = 0x72;    // end with a RETURN to make sure the last line is entered
+            rgPasteBuffer[i + 15] = 0x00;    // this may cause a processing delay, so it has to be the very last thing
+            i += 16;
+            cPasteBuffer = i;
+            iPasteBuffer = 0;
+            return;
+        }
+
+        BOOL fInverse = (b > 127);      // inverse video character
+  
+        if (fAtascii)
+            w = rgAtasciiToScan[b];     // look up the ATARI scan code for this ASCII or ATASCII value
+        else
+            w = rgAsciiToScan[b];       // inverse characters differ from non-inverse characters sometimes, all 256 are important
+
+        if (w)  // some characters don't exist, so skip them
+        {
+            if (fInverse != fLastInverse)
+            {
+                PasteChar(0x29, i);             // press the ATARI LOGO key to go into/out of inverse
+                i += 12;                        // (paste only works if they're not in inverse mode when they paste)
+            }
+            fLastInverse = fInverse;
+
+            BYTE wb = w & 0xff;
+            
+            // repeat keys won't happen unless we leave 3 jiffies of time between them
+            if (wb == wLast)
+            {
+                PasteChar(0x00, i);
+                i += 12;
+            }
+
+            if ((b >= 27 && b <= 31) || (b >= 125 && b <= 127) || (b >= 156 && b <= 159) || (b >= 253 && b <= 255))
+            {
+                // If the last key was an ESC, doing an ESC now needs to wait
+                if (wLast == 1)
+                {
+                    PasteChar(0x00, i);
+                    i += 12;
+                }
+
+                rgPasteBuffer[i] = 0x01;            // press ESC so this character is captured instead of executed
+                rgPasteBuffer[i + 1] = 0x00;
+                i += 2;
+                if (b == 27)    // ESC ESC, so give time for the repeat key
+                {
+                    PasteChar(0x00, i);
+                    i += 12;
+                }
+            }
+
+            if (w & 0x100)                          // this scan code needs SHIFT pressed
+            {
+                rgPasteBuffer[i] = 0x2a;
+                rgPasteBuffer[i + 1] = 0x00;
+                i += 2;
+                w &= ~0x100;
+            }
+            else if (w & 0x200)                     // this scan code needs CTRL pressed
+            {
+                rgPasteBuffer[i] = 0x1d;
+                rgPasteBuffer[i + 1] = 0x00;
+                i += 2;
+                w &= ~0x200;
+            }
+
+            PasteChar(w, i);    // now send the character pair
+            i += 12;
+            wLast = w;
+
+            // RETURN may have to process or tokenize the input, which takes a long time until it can accept keystrokes again.
+            // Plus scrolling my happen, plus the tokenization may find an error and have to reprint the line
+            if (wb == 0x72)
+            {
+                int z;
+                for (z = 0; z < 256; z++)
+                    rgPasteBuffer[i+z] = 0;
+                i += z;
+            }
+        }
+    }
+}
 
 /****************************************************************************
 
@@ -3109,6 +3303,7 @@ break;
 
         //L_about:
 
+        // !!! THIS IS ATARI 800 SPECIFIC!
         case IDM_IMPORTDOS1:
         case IDM_IMPORTDOS2:
 
@@ -3119,6 +3314,29 @@ break;
 
             if (!SaveATARIDOS(v.iVM, drive))
                 MessageBox(vi.hWnd, "Not every file saved successfully", "Extract ATARI DOS Files", MB_OK);
+
+            break;
+
+        // !!! THIS IS ATARI 800 SPECIFIC!
+        case IDM_PASTEASCII:
+        case IDM_PASTEATASCII:
+            if (v.iVM >= 0)
+            {
+                if (IsClipboardFormatAvailable(CF_TEXT))
+                {
+                    if (OpenClipboard(vi.hWnd))
+                    {
+                        HANDLE hc = GetClipboardData(CF_TEXT);
+                        if (hc)
+                        {
+                            LPSTR lpClip = GlobalLock(hc);
+                            PasteAsciiAtascii(lpClip, wmId == IDM_PASTEATASCII);
+                            GlobalUnlock(hc);
+                        }
+                        CloseClipboard();
+                    }
+                }
+            }
 
             break;
 
@@ -4563,6 +4781,7 @@ ULONG BfFromWfI(ULONG wf, int i)
 
 void AddToPacket(int iVM, ULONG b)
 {
+    //ODS("%02x ", b);
     vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keyhead++] = (BYTE)b;
     vrgvmi[iVM].keyhead &= 1023;
 

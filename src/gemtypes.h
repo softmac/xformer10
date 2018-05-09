@@ -33,7 +33,7 @@
 #define NOICONS
 #define OEMRESOURCE
 #define NOATOM
-#define NOCLIPBOARD
+//#define NOCLIPBOARD
 #define NODRAWTEXT
 #define NONLS
 #define NOMETAFILE
@@ -119,12 +119,19 @@ typedef void *(__fastcall *PHNDLR)(void *, long);
 //
 
 static int sWheelOffset;    // for scrolling tiles using the pad or touchscreen
-extern int sVM;                // which tile you're hovering over, -1 means none so this must be signed
-WORD fBrakes;                // run at full speed or emulated speed?
-ULONGLONG cEmulationSpeed;    // each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
+extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
+WORD fBrakes;               // run at full speed or emulated speed?
+WORD fBrakesSave;           // remember last state when pasting
+ULONGLONG cEmulationSpeed;  // each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
 
 extern BOOL fDebug;            // enables DEBUG output
-extern void ODS(char *, ...);    // my printf to send to the output window, since the normal printf just goes to the ether
+extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
+
+// paste into keyboard buffer, can only do this through the menu to one VM at a time, NOT PERSISTABLE
+BYTE rgPasteBuffer[65536 * 16];  // a simple BASIC program listing might take half this because of all the delays after RETURN
+int cPasteBuffer, iPasteBuffer;
+extern WORD rgAsciiToScan[256];     // convert ASCII to ATARI keyboard scan codes
+extern WORD rgAtasciiToScan[256];   // convert ATASCII to ATARI keyboard scan codes
 
 // 
 // We will make one thread per VM 

@@ -15,7 +15,6 @@
 
 #include "atari800.h"
 
-
 //
 // Our VM's VMINFO structure
 //
@@ -584,7 +583,58 @@ void DoVBI(int iVM)
         }
     }
 
-    CheckKey(iVM);    // process the ATARI keyboard buffer
+    // are we pasting into the keyboard buffer? We can only do 1 character per 4 VBIs, because we have to notice the key is up
+    // to allow it to be repeated, otherwise 2 of the same key in a row will be ignored thinking it's still held down from last time.
+    // I'm not sure why it's every 4, but it is. Every 3 doesn't work.
+    // We have 2 bytes to add per character
+    WORD myShift = 0;
+    if (cPasteBuffer)
+    {
+        fBrakes = FALSE;    // this is SLOW so we definitely need turbo mode for this
+        
+        if (!(iPasteBuffer & 1))    // send both bytes on the EVEN count
+        {
+            BYTE b = rgPasteBuffer[iPasteBuffer];
+
+            if (b == 0x2a)    // SHIFT
+            {
+                myShift = wAnyShift;
+                iPasteBuffer += 2;
+            }
+            else if (b == 0x1d)   // CTRL
+            {
+                myShift = wCtrl;
+                iPasteBuffer += 2;
+            }
+            else
+            {
+                myShift = 0;
+            }
+
+            extern BYTE rgbMapScans[1024];
+
+            //ODS("%02x (%04x)\n", rgPasteBuffer[iPasteBuffer], wFrame);
+            AddToPacket(iVM, rgPasteBuffer[iPasteBuffer]);
+            AddToPacket(iVM, rgPasteBuffer[iPasteBuffer + 1]);
+            iPasteBuffer++;
+        }
+        else
+        {
+            iPasteBuffer++; // do nothing on the odd count to make sure the key is noticed, one key per jiffy sometimes misses keys
+        }
+    }
+    else
+        fBrakesSave = fBrakes;  // remember last state of fBrakes
+
+    // process the ATARI keyboard buffer. Don't look at the shift key if we're pasting, we're handling it
+    CheckKey(iVM, !(cPasteBuffer), myShift);
+
+    if (cPasteBuffer && iPasteBuffer >= cPasteBuffer)
+    {
+        Assert(iPasteBuffer == cPasteBuffer);
+        cPasteBuffer = 0;   // all done!
+        fBrakes = fBrakesSave;  // go back to old turbo mode
+    }
 
     if (fTrace)
         ForceRedraw(iVM);    // it might do this anyway
@@ -1427,6 +1477,9 @@ BOOL __cdecl WarmbootAtari(int iVM)
     //cpuInit(PeekBAtari, PokeBAtari);
 
     //ODS("\n\nWARM START\n\n");
+
+    cPasteBuffer = 0;   // stop pasting
+
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;    // delay for banner messages
@@ -1841,7 +1894,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // subtract any extra cycles we spent last time finishing an instruction
             wLeft += (DMAMAP[HCLOCKS] + 1);
 
-            
             // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
             // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
             // <114 as soon as the POKE happens.

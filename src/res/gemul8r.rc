@@ -129,16 +129,17 @@ BEGIN
 	    MENUITEM "&Unmount D1:", IDM_D1U
 		MENUITEM "&Unmount D2:", IDM_D2U
 		MENUITEM SEPARATOR
-	MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
-	MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
-	//MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
-	MENUITEM SEPARATOR
-	MENUITEM "&Cartridge...", IDM_CART
+	    MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
+	    MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
+	    //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
+	    MENUITEM SEPARATOR
+        MENUITEM "&Paste ASCII to Keyboard Buffer", IDM_PASTEASCII
+        MENUITEM "&Paste ATASCII to Keyboard Buffer", IDM_PASTEATASCII
+        MENUITEM SEPARATOR
+        MENUITEM "&Cartridge...", IDM_CART
 		MENUITEM "&Remove Cartridge" IDM_NOCART
 	END
-	
-	
-	
+
 	//POPUP "&Options"
     //BEGIN
     //    MENUITEM "&VM Properties...\tAlt+F11",  IDM_PROPERTIES

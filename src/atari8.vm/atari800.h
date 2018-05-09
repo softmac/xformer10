@@ -731,7 +731,7 @@ __inline BYTE *_pbshift(int iVM)
 //
 
 void Interrupt(int, BOOL);
-void CheckKey(int);
+void CheckKey(int, BOOL, WORD);
 void UpdatePorts(int);
 void SIOV(int);
 BYTE SIOReadSector(int);
