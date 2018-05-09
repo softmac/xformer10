@@ -9,6 +9,8 @@
  * (c) 1997-1999 Solution Tech Systems Inc.
  * Used with permission.
  */
+ 
+#define _CRT_SECURE_NO_WARNINGS
 
 #ifndef __ENCRYPT_H__
 #include <stdio.h>
