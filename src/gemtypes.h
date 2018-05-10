@@ -1034,7 +1034,7 @@ void ForceRedraw(int iVM);
 #ifndef NDEBUG
 #define Assert(f) _gem_assert((f), __FILE__, __LINE__)
 
-__inline void _gem_assert(int f, char *file, int line)
+static __inline void _gem_assert(int f, char *file, int line)
 {
     char sz[99];
 
