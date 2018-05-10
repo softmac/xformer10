@@ -86,6 +86,58 @@ void SetWriteProtectDrive(int iVM, int i, BOOL fWP)
         rgDrives[iVM][i].fWP = (WORD)fWP;
 }
 
+// make an ATARI compatible filename - 8.3 without the dot
+void AtariFNFromPath(int iVM, int i, BYTE *spec)
+{
+    // start with every filename character a space
+    int l, d, s, m;
+    for (l = 0; l < 11; l++)
+        rgDrives[iVM][i].name[l] = ' ';
+    rgDrives[iVM][i].name[11] = 0;
+
+    // look backwards for a '.' or '\'
+
+    d = lstrlen((LPCSTR)spec);  // if no . found, assume dot is after the end
+    l = d - 1;
+    m = d;
+
+    while (l > 0 && spec[l] != '.' && spec[l] != '\\')
+        l--;
+    
+    // . means we found an extension for positions 8-10
+    if (l > 0 && spec[l] == '.')
+    {
+        d = l;
+        for (s = 1; s < 4 && l + s < m; s++)
+        {
+            if (spec[l + s] >= 'a' && spec[l + s] <= 'z')
+                rgDrives[iVM][i].name[7 + s] = spec[l + s] - 'a' + 'A';    // only upper case allowed
+            else if ((spec[l + s] >= 'A' && spec[l + s] <= 'Z') || (spec[l + s] >= '0' && spec[l + s] <= '9'))
+                rgDrives[iVM][i].name[7 + s] = spec[l + s];
+            else
+                l++;    // illegal character, skip it
+        }
+    }
+
+    // if not already there, go backwards to '\' (start of filename)
+    while (l > 0 && spec[l] != '\\')
+        l--;
+
+    if (l > 0)
+    {
+        s = l + 1;
+        for (l++; l < d && l - s < 8; l++)
+        {
+            if (spec[l] >= 'a' && spec[l] <= 'z')
+                rgDrives[iVM][i].name[l - s] = spec[l] - 'a' + 'A';
+            else if ((spec[l] >= 'A' && spec[l] <= 'Z') || (spec[l] >= '0' && spec[l] <= '9' && s != l))
+                rgDrives[iVM][i].name[l - s] = spec[l];
+            else
+                s++;    // illegal character, or starts with number, skip it
+        }
+    }
+}
+
 void DeleteDrive(int iVM, int i)
 {
     if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
@@ -131,7 +183,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
     strcpy(rgDrives[iVM][i].path, (const char *)pchPath);
 
     if (_read(h,&sc,2) == 2)
-        {
+    {
         ULONG l;
 
         l = _lseek(h,0,SEEK_END);
@@ -185,39 +237,36 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             rgDrives[iVM][i].ofs = 0;
 
             if (l == 368640)
-                {
+            {
                 rgDrives[iVM][i].mode = MD_QD;
                 rgDrives[iVM][i].wSectorMac = 1440;
-                }
+            }
             else if (l == 184320)
-                {
+            {
                 rgDrives[iVM][i].mode = MD_DD;
                 rgDrives[iVM][i].wSectorMac = 720;
-                }
+            }
             else if (l == 133120)
-                {
+            {
                 rgDrives[iVM][i].mode = MD_ED;
                 rgDrives[iVM][i].wSectorMac = 1040;
-                }
+            }
             else if (l == 92160)
-                {
+            {
                 rgDrives[iVM][i].mode = MD_SD;
                 rgDrives[iVM][i].wSectorMac = 720;
-                }
-            else if ((i > 0) && (l <= 88375))
-                {
-                // it's just a file that we fake up as a virtual disk
+            }
+            
+            else if ((l > 0) && (l <= 92160 /* was 88375 */))
+            {
+                // it might be a BASIC or EXE file that we fake up as a virtual disk
 
                 rgDrives[iVM][i].mode = MD_FILE;
                 rgDrives[iVM][i].wSectorMac = 720;
                 rgDrives[iVM][i].fWP = 1;  // force read-only
                 rgDrives[iVM][i].cb = l;
 
-                {
-                int j;
-                char *pch = (char *)pchPath;
-
-                memset(rgDrives[iVM][i].name,' ',12);
+                AtariFNFromPath(iVM, i, pchPath);  // make an ATARI compatible filename
 
 #if 0
                 // REVIEW: why did I do this?
@@ -229,29 +278,15 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                     pch = pchT+1;
 #endif
 
-                for (j = 0; j < 12; j++, pch++)
-                    {
-                    if (*pch == 0)
-                        break;
-                    if (*pch != '.')
-                        {
-                        if ((*pch >= 'a') && (*pch <= 'z'))
-                            *pch &= ~0x20;
-                        rgDrives[iVM][i].name[j] = *pch;
-                        }
-                    else if (j < 9)
-                        j = 7;
-                    }
-                }
-                }
+            }
             else
-                {
+            {
                 // invalid disk image
 Lbadfile:
                 rgDrives[iVM][i].mode = MD_OFF;
-                }
             }
         }
+    }
     else
         rgDrives[iVM][i].ofs = 0;
 
@@ -817,12 +852,37 @@ lNAK:
                     {
                         // FAT sector
 
-                        rgbMem[wBuff + 0] = 0x02;
+                        // subtract size of our file to get free space
+                        BYTE bl = (BYTE)((pdrive->cb + 124L) / 125L);
+                        BYTE bh = (BYTE)((pdrive->cb + 124L) / 32000L);
+                        WORD wUsed = (bh << 8) | bl;
+                        WORD wUnused = (WORD)(707 - wUsed);
+
+                        rgbMem[wBuff + 0] = 0x02;       // VTOC
                         rgbMem[wBuff + 1] = 0xC3;
-                        rgbMem[wBuff + 2] = 0x02;
-                        rgbMem[wBuff + 3] = 0xC2;
-                        rgbMem[wBuff + 4] = 0x02;
-                        //                        memset(&rgbMem[wBuff+10],0x00,118);
+                        rgbMem[wBuff + 2] = 0x02;       // # of sectors on disk
+                        rgbMem[wBuff + 3] = wUnused & 0xff;
+                        rgbMem[wBuff + 4] = wUnused >> 8;     // # of free sectors
+
+                        _fmemset(&rgbMem[wBuff + 10], 0xff, 90);   // 1 = unused sector (90 * 8 = 720)
+                        rgbMem[wBuff + 10] = (BYTE)~0x70;   // mark first 3 sectors used
+                        rgbMem[wBuff + 10 + 45] = 0;        // mark VTOC etc used
+                        rgbMem[wBuff + 10 + 46] = 0x7f;        // mark VTOC etc used
+
+                        // mark all the right sectors as used
+                        for (int ss = 0; ss < wUsed; ss++)
+                        {
+                            int sec = ss + 4;   // file starts at sector 4
+                            if (sec >= 360)     // file skips sectors 360-368
+                                sec += 9;
+                            if (sec > 719)
+                                sec = 719;      // max. possible DOS sector
+
+                            int s1 = sec & 7;
+                            int s2 = sec >> 3;
+                            
+                            rgbMem[wBuff + 10 + s2] &= ~(0x80 >> s1);   // mark sector used (0)
+                        }
                     }
                     else if (wSector == 361)
                     {
