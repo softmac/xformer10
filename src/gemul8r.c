@@ -542,14 +542,27 @@ void FixAllMenus()
         sprintf(mNew, "&D1: %s ...", rgvm[inst].rgvd[0].sz);
         SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D1, 0);    // might be grey from before
+        EnableMenuItem(vi.hMenu, IDM_D1BLANKSD, 0);
+        EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, 0);
         EnableMenuItem(vi.hMenu, IDM_D1U, (rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
+        if (rgvm[inst].rgvd[0].sz[0])
+            CheckMenuItem(vi.hMenu, IDM_WP1, FWriteProtectDiskVM(inst, 0, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
 
         sprintf(mNew, "&D2: %s ...", rgvm[inst].rgvd[1].sz);
         SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D2, 0);
+        EnableMenuItem(vi.hMenu, IDM_D2BLANKSD, 0);
+        EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, 0);
         EnableMenuItem(vi.hMenu, IDM_D2U, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP2, rgvm[inst].rgvd[1].sz[0] ? 0 : MF_GRAYED);
+        if (rgvm[inst].rgvd[1].sz[0])
+            CheckMenuItem(vi.hMenu, IDM_WP2, FWriteProtectDiskVM(inst, 1, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
+
+        EnableMenuItem(vi.hMenu, IDM_PASTEASCII, 0);
+        EnableMenuItem(vi.hMenu, IDM_PASTEATASCII, 0);
     }
 
     // no active instance
@@ -559,13 +572,24 @@ void FixAllMenus()
         SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D1, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D1U, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_D1BLANKSD, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP1, MF_GRAYED);
+        CheckMenuItem(vi.hMenu, IDM_WP1, MF_UNCHECKED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, MF_GRAYED);
 
         sprintf(mNew, "&D2: ...");
         SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D2, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D2U, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_D2BLANKSD, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP2, MF_GRAYED);
+        CheckMenuItem(vi.hMenu, IDM_WP2, MF_UNCHECKED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, MF_GRAYED);
+
+        EnableMenuItem(vi.hMenu, IDM_PASTEASCII, MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_PASTEATASCII, MF_GRAYED);
     }
 
     // if this VM type supports cartridges, and there is a valid active instance
@@ -3320,6 +3344,66 @@ break;
 
             break;
 
+        case IDM_WP1:
+            if (v.iVM >= 0)
+            {
+                BOOL fWP = FWriteProtectDiskVM(v.iVM, 0, FALSE, FALSE); // get old state
+                FWriteProtectDiskVM(v.iVM, 0, TRUE, !fWP);  // set new state to opposite
+                FixAllMenus();
+            }
+            break;
+
+        case IDM_WP2:
+            if (v.iVM >= 0)
+            {
+                BOOL fWP = FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE); // get old state
+                FWriteProtectDiskVM(v.iVM, 1, TRUE, !fWP);  // set new state to opposite
+                FixAllMenus();
+            }
+            break;
+            
+        case IDM_D1BLANKSD:
+        case IDM_D2BLANKSD:
+            int disk = wmId - IDM_D1BLANKSD;
+            if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[disk].sz, TRUE, 0))
+            {
+                int h = _open(rgvm[v.iVM].rgvd[disk].sz, _O_BINARY | _O_RDONLY);
+                if (h != -1)
+                {
+                    _close(h);
+                    char ods[MAX_PATH];
+                    sprintf(ods, "\"%s\" exists. Overwrite?", rgvm[v.iVM].rgvd[disk].sz);
+                    int h2 = MessageBox(vi.hWnd, ods, "File Exists", MB_YESNO);
+                    if (h2 == IDNO)
+                        break;
+                }
+                h = _open(rgvm[v.iVM].rgvd[disk].sz, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+                if (h != -1)
+                {
+                    // !!! This is ATARI 800 specific, get size of blank disk from VM
+                    BYTE b[6] = { 0x96, 0x02, 0x80, 0x16, 0x80, 0x00 };
+                    int fB = _write(h, b, 5);
+                    if (fB == 5)
+                        fB = _lseek(h, 92175, SEEK_SET);
+                    if (fB == 92175)
+                    {
+                        fB = _write(h, &b[5], 1);   // put a zero at the very end
+                        if (fB == 1)
+                        {
+                            rgvm[v.iVM].rgvd[disk].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC?
+
+                            // something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
+                            if (!FMountDiskVM(v.iVM, disk))
+                                SendMessage(vi.hWnd, WM_COMMAND, IDM_D1U + disk, 0);
+                            FWriteProtectDiskVM(v.iVM, disk, TRUE, FALSE); // write enable it
+                            FixAllMenus();
+                        }
+                    }
+                    _close(h);
+                }                
+            }
+            break;
+
         // !!! THIS IS ATARI 800 SPECIFIC!
         case IDM_PASTEASCII:
         case IDM_PASTEATASCII:
@@ -4093,7 +4177,7 @@ break;
         gc.dwWant = GC_ALLGESTURES;
         gc.dwBlock = 0;
 
-        BOOL bResult = SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
+        SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
         break;    // MUST break
         }
     case WM_GESTURE:

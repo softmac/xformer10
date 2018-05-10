@@ -74,6 +74,18 @@ BOOL IsEmpty(char *cc)
     return TRUE;
 }
 
+BOOL GetWriteProtectDrive(int iVM, int i)
+{
+    return rgDrives[iVM][i].fWP;
+}
+
+void SetWriteProtectDrive(int iVM, int i, BOOL fWP)
+{
+    // you can't un-write protect a binary file masquerading as a disk image, bad things will happen
+    if (rgDrives[iVM][i].mode != MD_FILE || fWP)
+        rgDrives[iVM][i].fWP = (WORD)fWP;
+}
+
 void DeleteDrive(int iVM, int i)
 {
     if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
@@ -82,7 +94,6 @@ void DeleteDrive(int iVM, int i)
     rgDrives[iVM][i].mode = MD_OFF;
     rgDrives[iVM][i].h    = (WORD)-1;
 }
-
 
 BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 {
@@ -102,16 +113,17 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
-    rgDrives[iVM][i].fWP = 0;   // assume file opened for R/W
+    // To be safe, by default drives are write protected. !!! Blank disks should not be
+    rgDrives[iVM][i].fWP = 1;
 
     if (h == -1)
-        {
+    {
         h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDONLY);
         if (h == -1)
             goto Lbadfile;
 
         rgDrives[iVM][i].fWP = 1;  // file is read-only or in use
-        }
+    }
 
     rgDrives[iVM][i].h = (WORD)h;
     rgDrives[iVM][i].wSectorMac = 720;
@@ -146,11 +158,15 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                 rgDrives[iVM][i].mode = MD_DD;
 
                 // Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
-                // 128-256 will be empty only in this version
+                // 128-256 will be empty only in this version. Also make sure sector 1 is not empty. We want a blank disk
+                // to register as a normal DD disk, not this.
                 if (_lseek(h, 128 + 16, SEEK_SET) == 128 + 16)
                     if (_read(h, cc, 128) == 128)
                         if (IsEmpty(cc))
-                            rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
+                            if (_lseek(h, 16, SEEK_SET) == 16)
+                                if (_read(h, cc, 128) == 128)
+                                    if (!IsEmpty(cc))
+                                        rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
 
                 // Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
                 // 384-512 will not be blank only in this version

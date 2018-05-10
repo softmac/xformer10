@@ -125,15 +125,37 @@ BEGIN
 
     END
     POPUP "&Disk/Cartridge"
+    BEGIN
+        POPUP "D&1:" //, IDM_D1LABEL
         BEGIN
-        MENUITEM "D&1:...", IDM_D1
-        MENUITEM "D&2:...", IDM_D2
-        MENUITEM SEPARATOR
-        MENUITEM "&Unmount D1:", IDM_D1U
-        MENUITEM "&Unmount D2:", IDM_D2U
-        MENUITEM SEPARATOR
-        MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
-        MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
+            MENUITEM "&Mount D1", IDM_D1
+            MENUITEM "&Unmount D1", IDM_D1U
+            MENUITEM SEPARATOR
+            POPUP "Create Blank Disk"
+            BEGIN
+                MENUITEM "&Single Density", IDM_D1BLANKSD
+                //MENUITEM "&Double Density", IDM_D1BLANKDD
+            END
+            MENUITEM SEPARATOR
+            MENUITEM "E&xtract ATARI DOS Files from D1", IDM_IMPORTDOS1
+            MENUITEM SEPARATOR
+            MENUITEM "Write &Protect", IDM_WP1
+    END
+        POPUP "D&2:" //, IDM_D2LABEL
+        BEGIN
+            MENUITEM "&Mount D2", IDM_D2
+            MENUITEM "&Unmount D2", IDM_D2U
+            MENUITEM SEPARATOR
+            POPUP "Create Blank Disk"
+            BEGIN
+                MENUITEM "&Single Density", IDM_D2BLANKSD
+                //MENUITEM "&Double Density", IDM_D2BLANKDD
+            END
+            MENUITEM SEPARATOR
+            MENUITEM "E&xtract ATARI DOS Files from D2", IDM_IMPORTDOS2
+            MENUITEM SEPARATOR
+            MENUITEM "Write &Protect", IDM_WP2
+    END
         //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
         MENUITEM SEPARATOR
         MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII

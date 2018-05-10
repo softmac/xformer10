@@ -1366,6 +1366,7 @@ if (sl.modelo < 2 || iTop > i)
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
         BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
         BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
+        yellow; // NYI
 
         // just for fun, don't interlace in B&W.
         // !!! It actually won't work in PMG mode right now
@@ -2168,6 +2169,7 @@ if (sl.modelo < 2 || iTop > i)
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
         BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
         BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
+        yellow; // NYI
 
         // just for fun, don't interlace in B&W
         // !!! It actually won't work in PMG mode right now

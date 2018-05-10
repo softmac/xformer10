@@ -39,7 +39,7 @@
 #define IDM_D3                          40242
 #define IDM_D4                          40243
 #define IDM_D1U                         40244
-#define IDM_D2U                         40245
+#define IDM_D2U                         40245   // must be consecutive
 #define IDM_D3U                         40246
 #define IDM_D4U                         40247
 #define IDM_CART                        40248
@@ -47,8 +47,16 @@
 #define IDM_WHEELSENS                   40250
 #define IDM_PASTEASCII                  40251
 #define IDM_PASTEATASCII                40252
+#define IDM_D1LABEL                     40253
+#define IDM_D2LABEL                     40254
+#define IDM_WP1                         40255
+#define IDM_WP2                         40256
+#define IDM_D1BLANKSD                   40257
+#define IDM_D2BLANKSD                   40258
+#define IDM_D1BLANKDD                   40259
+#define IDM_D2BLANKDD                   40260
 
-#define IDM_ABOUT                       40260
+#define IDM_ABOUT                       40261
 
 // legacy
 #define IDSCAN                          10
