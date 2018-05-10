@@ -208,6 +208,7 @@ typedef struct _vminfo
     PFNL pfnInit;           // VM initialization (load any cartridge data, etc.)
     PFNL pfnUnInit;         // VM uninit
     PFNL pfnInitDisks;      // VM disk initialization
+    PFNL pfnWriteProtectDisk;// VM disk write protected?
     PFNL pfnMountDisk;      // VM disk initialization
     PFNL pfnUnInitDisks;    // VM disk uninitialization
     PFNL pfnUnmountDisk;    // VM disk uninitialization

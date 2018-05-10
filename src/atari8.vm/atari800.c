@@ -47,6 +47,7 @@ VMINFO const vmi800 =
     InitAtari,
     UninitAtari,
     InitAtariDisks,
+    WriteProtectAtariDisk,
     MountAtariDisk,
     UninitAtariDisks,
     UnmountAtariDisk,
@@ -1417,6 +1418,18 @@ BOOL __cdecl UninitAtari(int iVM)
 
     UninitAtariDisks(iVM);
 
+    return TRUE;
+}
+
+// Get or Set the write protect status
+//
+BOOL __cdecl WriteProtectAtariDisk(int iVM, int i, BOOL fSet, BOOL fWP)
+{
+
+    if (!fSet)
+        return GetWriteProtectDrive(iVM, i);
+    else
+        SetWriteProtectDrive(iVM, i, fWP);
     return TRUE;
 }
 

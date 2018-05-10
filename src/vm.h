@@ -141,6 +141,11 @@ BOOL __inline FLoadStateVM(int iVM, char *pPersist, int cbPersist)
 	return rgvm[iVM].pvmi->pfnLoadState(iVM, pPersist, cbPersist);
 }
 
+BOOL __inline FWriteProtectDiskVM(int iVM, int i, BOOL fSet, BOOL fWP)
+{
+    return rgvm[iVM].pvmi->pfnWriteProtectDisk(iVM, i, fSet, fWP);
+}
+
 BOOL __inline FMountDiskVM(int iVM, int i)
 {
     return rgvm[iVM].pvmi->pfnMountDisk(iVM, i);
