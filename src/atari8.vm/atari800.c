@@ -39,7 +39,7 @@ VMINFO const vmi800 =
     TRUE,    // fUsesCart
     FALSE,    // fUsesMouse
     TRUE,    // fUsesJoystick
-    "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd\0All Files\0*.*\0\0",
+    "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd;*.xex;*.bas\0All Files\0*.*\0\0",
     "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",
 
     InstallAtari,
