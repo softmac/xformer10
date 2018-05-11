@@ -39,7 +39,7 @@ typedef struct
 //    char *pbRAMdisk;
     char path[80];
     char name[12];
-    ULONG cb;   // size of file when mode == MD_FILE
+    ULONG cb;   // size of file when mode == MD_FILE*
 } DRIVE;
 
 #define MAX_DRIVES 8
@@ -50,18 +50,50 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_SD   1
 #define MD_ED   2
 #define MD_DD   3            // normally, the first 3 sectors are 128 bytes long, then 768 bytes of blank, and then sector 4
-#define MD_DD_OLD_ATR1 10    // early .ATR files have the first half of the first three 256 byte sectors filled
-#define MD_DD_OLD_ATR2 11    // other early .ATR files sector 4 start at offset 384 w/o blank space
-#define MD_QD   4
-#define MD_HD   5
-#define MD_RD   6
-#define MD_35   7
-#define MD_EXT  8
-#define MD_FILE 9
+#define MD_DD_OLD_ATR1 4    // early .ATR files have the first half of the first three 256 byte sectors filled
+#define MD_DD_OLD_ATR2 5    // other early .ATR files sector 4 start at offset 384 w/o blank space
+#define MD_QD   6
+#define MD_HD   7
+#define MD_RD   8
+#define MD_35   9
+#define MD_EXT  10
+#define MD_FILE 11          // an unknown PC File mounted as an ATARI DOS File for them to see
+#define MD_FILEBIN 12       // a PC file that is an ATARI binary, mounted as an ATARI DOS file and also as an auto-boot
+#define MD_FILEBAS 13       // a PC file that is maybe an ATARI BASIC file, mounted in ATARI DOS and auto-booting
 
 // scary globals
 int wCOM;        // !!! doesn't seem to be used
 int fXFCable;    // !!! left unitialized
+
+BYTE Bin1[128] = {
+    0x00, 0x03, 0x00, 0x07, 0x08, 0x07, 0x18, 0x60, 0xA9, 0x00, 0x8D, 0x44, 0x02, 0xA8, 0x99, 0x80,
+    0x08, 0x88, 0xD0, 0xFA, 0xC8, 0x84, 0x09, 0x8C, 0x01, 0x03, 0xCE, 0x06, 0x03, 0xA9, 0x58, 0x8D,
+    0x30, 0x02, 0xA9, 0x08, 0x8D, 0x31, 0x02, 0xA9, 0x69, 0x85, 0x18, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA,
+    0xA5, 0x18, 0x8D, 0x0A, 0x03, 0xA9, 0x01, 0x8D, 0x0B, 0x03, 0xE6, 0x18, 0x20, 0x0D, 0x08, 0xB9,
+    0x00, 0x0A, 0xF0, 0x47, 0x30, 0x3B, 0xA6, 0x47, 0xB9, 0x03, 0x0A, 0x95, 0x5A, 0xB9, 0x04, 0x0A,
+    0x95, 0x6E, 0x8A, 0x18, 0x69, 0x91, 0xA6, 0x48, 0x9D, 0x80, 0x08, 0xA9, 0x0B, 0x85, 0x49, 0xB9,
+    0x05, 0x0A, 0x38, 0xE9, 0x20, 0x9D, 0x82, 0x08, 0xC8, 0xE8, 0xC6, 0x49, 0xD0, 0xF1, 0x98, 0x38,
+    0xE9, 0x0B, 0xA8, 0x8A, 0x18, 0x69, 0x09, 0x85, 0x48, 0xE6, 0x47, 0xA5, 0x47, 0xC9, 0x09, 0xF0 };
+
+BYTE Bin2[128] = { 
+    0x0A, 0x98, 0x18, 0x69, 0x10, 0xA8, 0x0A, 0x90, 0xB6, 0xB0, 0xA5, 0xC6, 0x42, 0x85, 0x14, 0xC5,
+    0x14, 0xF0, 0xFC, 0xA9, 0x31, 0xEA, 0x38, 0xE9, 0x31, 0xC5, 0x47, 0xB0, 0xF6, 0xAA, 0xDE, 0x60,
+    0x08, 0xB5, 0x5A, 0x8D, 0x0A, 0x03, 0xB5, 0x6E, 0x8D, 0x0B, 0x03, 0x20, 0x21, 0x08, 0xCA, 0x20,
+    0xFC, 0x07, 0x85, 0x43, 0x20, 0xFC, 0x07, 0x85, 0x44, 0x25, 0x43, 0xC9, 0xFF, 0xF0, 0xF0, 0x20,
+    0xFC, 0x07, 0x85, 0x45, 0x20, 0xFC, 0x07, 0x85, 0x46, 0x20, 0xFC, 0x07, 0x91, 0x43, 0xE6, 0x43,
+    0xD0, 0x02, 0xE6, 0x44, 0xA5, 0x45, 0xC5, 0x43, 0xA5, 0x46, 0xE5, 0x44, 0xB0, 0xEB, 0xAD, 0xE2,
+    0x02, 0x0D, 0xE3, 0x02, 0xF0, 0xC9, 0x86, 0x19, 0xC6, 0x42, 0x20, 0xF9, 0x07, 0xA6, 0x19, 0xA0,
+    0x00, 0x8C, 0xE2, 0x02, 0x8C, 0xE3, 0x02, 0xF0, 0xB6, 0x6C, 0xE2, 0x02, 0xE0, 0x7D, 0xD0, 0x4A };
+
+BYTE Bin3[128] = { 
+    0xAD, 0x0A, 0x03, 0x0D, 0x0B, 0x03, 0xD0, 0x19, 0xC6, 0x42, 0x6C, 0xE0, 0x02, 0xA9, 0x31, 0x8D,
+    0x00, 0x03, 0xA9, 0x52, 0x8D, 0x02, 0x03, 0xA9, 0x0A, 0x8D, 0x05, 0x03, 0xA9, 0x80, 0x8D, 0x08,
+    0x03, 0xA9, 0x40, 0x8D, 0x03, 0x03, 0x20, 0x59, 0xE4, 0x30, 0xF6, 0xE6, 0x42, 0xAD, 0x7D, 0x0A,
+    0x29, 0x03, 0x8D, 0x0B, 0x03, 0xAD, 0x7E, 0x0A, 0x8D, 0x0A, 0x03, 0x8D, 0x17, 0xD0, 0xAD, 0x7F,
+    0x0A, 0x29, 0x7F, 0x8D, 0xFD, 0x07, 0xA0, 0x00, 0xA2, 0x00, 0xBD, 0x00, 0x0A, 0xE8, 0x60, 0xAD,
+    0x25, 0xE4, 0x48, 0xAD, 0x24, 0xE4, 0x48, 0x60, 0x70, 0x70, 0x70, 0x47, 0x6C, 0x08, 0x70, 0x70,
+    0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x41, 0x58, 0x08, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x78, 0x66, 0x6F, 0x72, 0x6D, 0x65, 0x72, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 // is this 128 byte buffer empty?
 BOOL IsEmpty(char *cc)
@@ -81,8 +113,9 @@ BOOL GetWriteProtectDrive(int iVM, int i)
 
 void SetWriteProtectDrive(int iVM, int i, BOOL fWP)
 {
+    WORD mode = rgDrives[iVM][i].mode;
     // you can't un-write protect a binary file masquerading as a disk image, bad things will happen
-    if (rgDrives[iVM][i].mode != MD_FILE || fWP)
+    if ((mode != MD_FILE && mode != MD_FILEBIN && mode != MD_FILEBAS) || fWP)
         rgDrives[iVM][i].fWP = (WORD)fWP;
 }
 
@@ -261,7 +294,13 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             {
                 // it might be a BASIC or EXE file that we fake up as a virtual disk
 
-                rgDrives[iVM][i].mode = MD_FILE;
+                if (sc == 0xffff)
+                    rgDrives[iVM][i].mode = MD_FILEBIN;     // ATARI binary file
+                else if (sc == 0x0000)
+                    rgDrives[iVM][i].mode = MD_FILEBAS;     // ATARI BASIC tokenized file (I hope)
+                else
+                    rgDrives[iVM][i].mode = MD_FILE;        // who knows?
+
                 rgDrives[iVM][i].wSectorMac = 720;
                 rgDrives[iVM][i].fWP = 1;  // force read-only
                 rgDrives[iVM][i].cb = l;
@@ -792,7 +831,7 @@ lNAK:
             if (wSector < 1)            /* invalid sector # */
                 goto lNAK;
 
-            if ((wSector < 4) || (md == MD_FILE) || (md == MD_SD) || (md == MD_ED))
+            if ((wSector < 4) || (md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS) || (md == MD_SD) || (md == MD_ED))
                 {
                 if (wBytes != 128)
                     goto lNAK;
@@ -805,7 +844,7 @@ lNAK:
             if (wSector > pdrive->wSectorMac)   /* invalid sector # */
                 goto lNAK;
 
-            if ((md == MD_FILE) || (md == MD_SD) || (md == MD_ED))
+            if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS) || (md == MD_SD) || (md == MD_ED))
                 lcbSector = 128L;
             else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
             {
@@ -841,7 +880,7 @@ lNAK:
                 /* temporary kludge to prevent reading over ROM */
                 if (wBuff >= ramtop)
                     wRetStat = SIO_OK;
-                else if (md == MD_FILE)
+                else if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS))
                 {
                     // read a normal file as an 8-bit file in a virtual disk
 
@@ -920,6 +959,30 @@ lNAK:
 
                             rgbMem[wBuff + 125] = (BYTE)(wSector >> 8);
                             rgbMem[wBuff + 126] = (BYTE)wSector;
+                        }
+                    }
+                    // sector 1-3, provide boot disk data for binary and BASIC files to be auto-loaded
+                    else
+                    {
+                        if (md == MD_FILEBIN)
+                        {
+                            if (wSector == 1)
+                                memcpy(&rgbMem[wBuff], Bin1, 128);
+                            else if (wSector == 2)
+                                memcpy(&rgbMem[wBuff], Bin2, 128);
+                            else
+                                memcpy(&rgbMem[wBuff], Bin3, 128);
+                        }
+                        else if (md == MD_FILEBAS)
+                        {
+#if 0
+                            if (wSector == 1)
+                                memcpy(&rgbMem[wBuff], Bas1, 128);
+                            else if (wSector == 2)
+                                memcpy(&rgbMem[wBuff], Bas2, 128);
+                            else
+                                memcpy(&rgbMem[wBuff], Bas3, 128);
+#endif
                         }
                     }
                 }
