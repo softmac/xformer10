@@ -494,12 +494,13 @@ BOOL GetWriteProtectDrive(int iVM, int i)
     return rgDrives[iVM][i].fWP;
 }
 
-void SetWriteProtectDrive(int iVM, int i, BOOL fWP)
+BOOL SetWriteProtectDrive(int iVM, int i, BOOL fWP)
 {
     WORD mode = rgDrives[iVM][i].mode;
     // you can't un-write protect a binary file masquerading as a disk image, bad things will happen
     if ((mode != MD_FILE && mode != MD_FILEBIN && mode != MD_FILEBAS) || fWP)
         rgDrives[iVM][i].fWP = (WORD)fWP;
+    return rgDrives[iVM][i].fWP;
 }
 
 // make an ATARI compatible filename - 8.3 without the dot
@@ -581,8 +582,8 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
-    // To be safe, by default drives are write protected. !!! Blank disks should not be
-    rgDrives[iVM][i].fWP = 1;
+    // do not alter right protect status per disk, let it be remembered for a drive
+    //rgDrives[iVM][i].fWP = 1;
 
     if (h == -1)
     {
@@ -688,7 +689,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                     rgDrives[iVM][i].mode = MD_FILE;        // who knows?
 
                 rgDrives[iVM][i].wSectorMac = 720;
-                rgDrives[iVM][i].fWP = 1;  // force read-only
+                rgDrives[iVM][i].fWP = 1;  // force read-only for fake disks that can't be written to
                 rgDrives[iVM][i].cb = l;
 
                 AtariFNFromPath(iVM, i, pchPath);  // make an ATARI compatible filename

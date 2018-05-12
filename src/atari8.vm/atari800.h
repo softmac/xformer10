@@ -736,7 +736,7 @@ void UpdatePorts(int);
 void SIOV(int);
 BYTE SIOReadSector(int);
 BOOL GetWriteProtectDrive(int, int);
-void SetWriteProtectDrive(int, int, BOOL);
+BOOL SetWriteProtectDrive(int, int, BOOL);
 void DeleteDrive(int, int);
 BOOL AddDrive(int, int, BYTE *);
 void CreateDMATables();

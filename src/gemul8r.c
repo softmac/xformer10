@@ -3349,7 +3349,7 @@ break;
             if (v.iVM >= 0)
             {
                 BOOL fWP = FWriteProtectDiskVM(v.iVM, 0, FALSE, FALSE); // get old state
-                FWriteProtectDiskVM(v.iVM, 0, TRUE, !fWP);  // set new state to opposite
+                FWriteProtectDiskVM(v.iVM, 0, TRUE, !fWP);  // try to set new state to opposite
                 FixAllMenus();
             }
             break;
@@ -3358,7 +3358,7 @@ break;
             if (v.iVM >= 0)
             {
                 BOOL fWP = FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE); // get old state
-                FWriteProtectDiskVM(v.iVM, 1, TRUE, !fWP);  // set new state to opposite
+                FWriteProtectDiskVM(v.iVM, 1, TRUE, !fWP);  // try to set new state to opposite
                 FixAllMenus();
             }
             break;
@@ -3396,7 +3396,7 @@ break;
                             // something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
                             if (!FMountDiskVM(v.iVM, disk))
                                 SendMessage(vi.hWnd, WM_COMMAND, IDM_D1U + disk, 0);
-                            FWriteProtectDiskVM(v.iVM, disk, TRUE, FALSE); // write enable it
+                            //FWriteProtectDiskVM(v.iVM, disk, TRUE, FALSE); // write enable it
                             FixAllMenus();
                         }
                     }

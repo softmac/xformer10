@@ -173,7 +173,7 @@ typedef struct
     BYTE     id;           // SCSI device id
     BYTE     xfloppy:1;    // 0 = A:, 1 = B:
     BYTE     res5:5;
-    BYTE     mdWP:2;       // 0 = read/write, 1 = read only, 2 = CD-ROM
+    BYTE     mdWP:2;       // 0 = read/write, 1 = read only (2 = CD-ROM ?)
     char     sz[MAX_PATH]; // path to disk image
 } VD, *PVD;
 
