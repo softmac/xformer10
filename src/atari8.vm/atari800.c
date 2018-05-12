@@ -600,11 +600,7 @@ void DoVBI(int iVM)
         }
     }
 
-    // are we pasting into the keyboard buffer? We can only do 1 character per 4 VBIs, because we have to notice the key is up
-    // to allow it to be repeated, otherwise 2 of the same key in a row will be ignored thinking it's still held down from last time.
-    // I'm not sure why it's every 4, but it is. Every 3 doesn't work.
-    // We have 2 bytes to add per character
-    WORD myShift = 0;
+    // are we pasting into the keyboard buffer?
     if (cPasteBuffer && iVM == v.iVM)
     {
         fBrakes = FALSE;    // this is SLOW so we definitely need turbo mode for this
@@ -615,17 +611,17 @@ void DoVBI(int iVM)
 
             if (b == 0x2a)    // SHIFT
             {
-                myShift = wAnyShift;
+                wLiveShift = wAnyShift;
                 iPasteBuffer += 2;
             }
             else if (b == 0x1d)   // CTRL
             {
-                myShift = wCtrl;
+                wLiveShift = wCtrl;
                 iPasteBuffer += 2;
             }
             else
             {
-                myShift = 0;
+                wLiveShift = 0;
             }
 
             extern BYTE rgbMapScans[1024];
@@ -640,11 +636,8 @@ void DoVBI(int iVM)
             iPasteBuffer++; // do nothing on the odd count to make sure the key is noticed, one key per jiffy sometimes misses keys
         }
     }
-    else
+    else if (cPasteBuffer == 0)
         fBrakesSave = fBrakes;  // remember last state of fBrakes
-
-    // process the ATARI keyboard buffer. Don't look at the shift key if we're pasting, we're handling it
-    CheckKey(iVM, !(cPasteBuffer), myShift);
 
     if (cPasteBuffer && iPasteBuffer >= cPasteBuffer)
     {
@@ -1942,6 +1935,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // Scan lines 8-247 are 240 visible lines, ANTIC DMA is possible, depending on a lot of things
             // Scan line 248 is the VBLANK
             // Scan lines 249-261 are the rest of the overscan lines
+
+            if (wScan == STARTSCAN)
+            {
+                // process the ATARI keyboard buffer. Don't look at the shift key live if we're pasting, we're handling it
+                // we can't process keys only during a VB because that nests interrupts and breaks MULE pause
+                CheckKey(iVM, !(cPasteBuffer), wLiveShift);
+            }
 
             if (wScan == STARTSCAN + Y8)
             {
