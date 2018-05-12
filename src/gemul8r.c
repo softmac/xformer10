@@ -1356,9 +1356,15 @@ int CALLBACK WinMain(
         static ULONGLONG cCYCLES = 0;
         static ULONGLONG cErr = 0;
         static unsigned lastVM = 0;
+        static ULONGLONG lastRenderMs = 0;
 
         // !!! Speed things up by not doing then when in the console, or at least make it actually update the screen
-        RenderBitmap();
+        // Throttle the rendering to no more than 1000/14 = ~70 Hz because anything higher is just rendering duplicate frames
+        if ((GetTickCount64() - lastRenderMs) >= 14)
+        {
+            RenderBitmap();
+            lastRenderMs = GetTickCount64();
+        }
 
         // we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
         // don't let errors propogate
