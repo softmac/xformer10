@@ -156,13 +156,12 @@ BEGIN
             MENUITEM SEPARATOR
             MENUITEM "Write &Protect", IDM_WP2
     END
-        //MENUITEM "&Add PC file to ATARI DOS Disk...", IDM_EXPORTDOS
-        MENUITEM SEPARATOR
-        MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
-        MENUITEM "&Paste Text as ATASCII", IDM_PASTEATASCII
         MENUITEM SEPARATOR
         MENUITEM "&Cartridge...", IDM_CART
         MENUITEM "&Remove Cartridge" IDM_NOCART
+        MENUITEM SEPARATOR
+        MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
+        MENUITEM "&Paste Text as ATASCII", IDM_PASTEATASCII
     END
 
     //POPUP "&Options"
