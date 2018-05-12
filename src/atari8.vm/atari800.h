@@ -332,7 +332,7 @@ typedef struct
     WORD m_wStartScan;
     BYTE m_fRedoPoke;
     BYTE pad3B;
-    WORD pad4W;
+    WORD m_wLiveShift;    // do we look at the shift key live as we process keys, or are we pasting and we want a specific value?
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
@@ -436,6 +436,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define bp            CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
+#define wLiveShift    CANDY_STATE(wLiveShift)
 #define fTrace        CANDY_STATE(fTrace)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
