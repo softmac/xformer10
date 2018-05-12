@@ -125,7 +125,7 @@ static int sWheelOffset;    // for scrolling tiles using the pad or touchscreen
 extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
 WORD fBrakes;               // run at full speed or emulated speed?
 WORD fBrakesSave;           // remember last state when pasting
-ULONGLONG cEmulationSpeed;  // each VM can tell us the percent of real time it is taking. In Tiled mode, this will be the aggregate.
+ULONGLONG uExecSpeed;       // how long Execute() takes (for one, or all VMs if tiled)
 
 extern BOOL fDebug;            // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
@@ -454,7 +454,7 @@ typedef struct
 
     BOOL    _mdCPU:8;       // -1 = Auto, 0 = 68000, 1 = 68010, 2 = 68020, etc.
     BOOL     fNoDDraw:8;    // 1 = no preload of DirectX, 2 = disable DirectX
-    BOOL     fNoWW:8;       // 1 = disables Windows 98 write watch
+    BOOL     vRefresh:8;    // monitor refresh rate
     BOOL     fNoJit:8;      // 1 = disable jitter
 
     int         swWindowState;    // were we restored? maximized? minimized?
