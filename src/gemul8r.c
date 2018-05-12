@@ -2427,7 +2427,8 @@ BOOL ColdStart(int iVM)
         vi.fDebugBreak = TRUE;
     }
 #endif
-
+    
+    FixAllMenus();
     return f;
 }
 
@@ -2556,7 +2557,7 @@ BOOL SaveATARIDOS(int inst, int drive)
         if (ij >= pdi->cfd)
             strcat(szDir, ".txt");    // 2nd time around, save everything as text
 
-                                    // get file size
+        // get file size
         ULONG cbSize = CbReadFileContents(pdi, NULL, &pdi->pfd[ij % pdi->cfd]);
 
         if (cbSize > 0)

@@ -760,7 +760,7 @@ void CchDisAsm(int iVM, unsigned int *puMem)
         break;
         }
 
-    puts(rgch);
+    printf(rgch);   // must be printf, not puts, because we DON'T want a carriage return
     }
 
 /***********************************************************************/
