@@ -271,7 +271,7 @@ void DisplayStatus(int iVM)
     strcat(rgch0, rgch);
 
     // are we running at normal speed or turbo speed
-    sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo", cEmulationSpeed ? ((int)(100000000 / cEmulationSpeed)) : 0);
+    sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? ((int)(100000000 / uExecSpeed)) : 0);
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -1353,11 +1353,18 @@ int CALLBACK WinMain(
             WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
         }
 
-        static ULONGLONG cCYCLES = 0;
-        static ULONGLONG cErr = 0;
-        static unsigned lastVM = 0;
-        static ULONGLONG lastRenderMs = 0;
+        const ULONGLONG JIF = 29830;    // 1789790 / 60
+        static ULONGLONG cErr;          // how much we missed being exactly 1/60s apart
+        static ULONGLONG cLastJif;      // about 1/60s ago
+        static ULONGLONG cLastSecond;   // about 1 second ago
+        static BYTE cJifTally;          // how many jiffies have gone by
+        static ULONGLONG uDrawSpeed;     // how long it takes to render
+        static ULONG cDrawSpeed;        // # of times measured, for averaging
+        static BOOL fExecSpeedValid;    // need to calculate how long Execute() takes
+        static ULONG cExecSpeed;        // # of times measured, for averaging
 
+#if 0
+        static ULONGLONG lastRenderMs = 0;
         // !!! Speed things up by not doing then when in the console, or at least make it actually update the screen
         // Throttle the rendering to no more than 1000/14 = ~70 Hz because anything higher is just rendering duplicate frames
         if ((GetTickCount64() - lastRenderMs) >= 14)
@@ -1365,37 +1372,69 @@ int CALLBACK WinMain(
             RenderBitmap();
             lastRenderMs = GetTickCount64();
         }
-
-        // we're emulating its original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
+#endif
+       
+        // How long since last jiffy has it been? This number is bogus while tracing
+        ULONGLONG cCur = GetCycles() - cLastJif;
+        
+        // the first Execute after each jiffy gets timed (in turbo we execute many times per jiffy)
+        if (!fExecSpeedValid)
+        {
+            // What % of the time not spent drawing did this Exec take? (averaged)
+            // if we draw only 30fps, use 1/2 the draw time as the average time spent drawing per jiffy
+            ULONGLONG curexec = cCur * 1000000 / (JIF - ((v.vRefresh > 1 && v.vRefresh < 60) ? uDrawSpeed / 2 : uDrawSpeed));
+            uExecSpeed = (uExecSpeed * cExecSpeed + curexec) / (cExecSpeed + 1);
+            cExecSpeed++;
+            //ODS("EXEC %llu ", cCur);
+            fExecSpeedValid = TRUE;
+        }
+        
+        // we're emulating original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
         // don't let errors propogate
-
-        // !!! This number is bogus while tracing
-
-        const ULONGLONG cJif = 29830; // 1789790 / 60
-        ULONGLONG cCur = GetCycles() - cCYCLES;
-
-        // report back how long it took
-        cEmulationSpeed = cCur * 1000000 / cJif;
-
-        while (fBrakes && ((cJif - cErr) > cCur)) {
+        while (fBrakes && ((JIF - cErr) > cCur)) {
             Sleep(1);
-            cCur = GetCycles() - cCYCLES;
+            cCur = GetCycles() - cLastJif;
         }
 
-        cErr = cCur - (cJif - cErr);
-        if (cErr > cJif) cErr = cJif;    // don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-        cCYCLES = GetCycles();
+        // it's been 1/60th of a second, either because we waited, or eventually (in turbo mode)
+        if (cCur >= JIF - cErr)
+        {
+            // Don't render more often than max(60, refresh rate of the monitor)
+            // for 30 or 40fps monitors, only draw 30fps
+            cJifTally++;
+            if ((cJifTally & 1) || v.vRefresh <= 1 || v.vRefresh >= 60) // 0 and 1 mean default !!! figure out the default
+            {
+                ULONGLONG cc = GetCycles();
+                RenderBitmap();
+                uDrawSpeed = (uDrawSpeed * cDrawSpeed + (GetCycles() - cc)) / (cDrawSpeed + 1);
+                cDrawSpeed++;
+                //ODS("DRAW %llu\n", uDrawSpeed);
 
+            }
+
+            // don't let errors propagate
+            cErr = cCur - (JIF - cErr);
+            if (cErr > JIF)
+                cErr = JIF;    // don't race forever to catch up if game paused, just carry on (also, it's unsigned)
+            
+            cLastJif = GetCycles();
+
+            fExecSpeedValid = FALSE;    // time Execute() again, which will NOT include drawing time
+        }
 
         // every second, update our clock speed indicator
         // When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
-        static ULONGLONG sCJ;
+        // report back how long it took
         cCur = GetCycles();
-        if (cCur - sCJ >= 1789790)
+        if (cCur - cLastSecond >= 1789790)
         {
             int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
             DisplayStatus(ids);
-            sCJ = cCur;
+            cLastSecond = cCur;
+            cDrawSpeed = 0;  // every second, start a new average
+            uDrawSpeed = 0;
+            cExecSpeed = 0;
+            uExecSpeed = 0;
         }
 
 #ifndef NDEBUG
@@ -2906,6 +2945,7 @@ LRESULT CALLBACK WndProc(
 
     case WM_CREATE:
         vi.hdc = GetDC(hWnd);
+        v.vRefresh = GetDeviceCaps(vi.hdc, VREFRESH);   // monitor refresh rate
         SetTextAlign(vi.hdc, TA_NOUPDATECP);
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
         SetBkMode(vi.hdc, TRANSPARENT);
