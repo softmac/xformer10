@@ -466,6 +466,9 @@ BOOL TimeTravel(unsigned iVM)
     // Two 5-second snapshots ago will be from 10-15 seconds back in time
     f = LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]);    // restore our snapshot, and create a new anchor point here
 
+    // lift up the control and ALT keys, do NOT remember their state from before (or we start continuous firing, etc.)
+    //ControlKeyUp8(iVM);
+
     return f;
 }
 
@@ -483,6 +486,7 @@ BOOL TimeTravelReset(unsigned iVM)
     // don't remember that we were holding down shift, control or ALT, or going back in time will act like
     // they're still pressed because they won't see our letting go.
     // VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
+    // If we closed using ALT-F4 it will have saved the state that ALT is down
     // any other key can still stick, but that's less confusing
     // !!! joystick arrows stick too, and that's annoying. Need FLUSHVMINPUT in fn table
     ControlKeyUp8(iVM);
@@ -589,7 +593,7 @@ void DoVBI(int iVM)
     // I'm not sure why it's every 4, but it is. Every 3 doesn't work.
     // We have 2 bytes to add per character
     WORD myShift = 0;
-    if (cPasteBuffer)
+    if (cPasteBuffer && iVM == v.iVM)
     {
         fBrakes = FALSE;    // this is SLOW so we definitely need turbo mode for this
         

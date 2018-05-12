@@ -541,9 +541,9 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 
         UpdatePorts(iVM);
 
-        // !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee)
+        // !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee, Archon, etc.)
         // pause the game on any keystroke! Playing without a joystick and using the arrow keys would
-        // continuously pause/unpause the game. Some games pause (Archon) on any keystroke, so let's NOT pass
+        // continuously pause/unpause the game. Let's NOT pass
         // the arrow keys to Atari if RIGHT control is pressed. That will always work for joystick fire without
         // interfering (although you have to use the left control for the cursor keys)
         if (*pbshift & wCtrl && !(*pbshift & wRCtrl))
@@ -929,7 +929,9 @@ printf("joy0move %d %d\n", uParam, lParam);
     return FALSE;
 }
 
+// without this:
 // if we closed using ALT-F4 it will have saved the state that ALT is down
+// if we cold start, it will remember the time travel anchor point had the control key down
 //
 void ControlKeyUp8(int iVM)
 {
