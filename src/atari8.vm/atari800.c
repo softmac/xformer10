@@ -467,7 +467,19 @@ BOOL TimeTravel(unsigned iVM)
     f = LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]);    // restore our snapshot, and create a new anchor point here
 
     // lift up the control and ALT keys, do NOT remember their state from before (or we start continuous firing, etc.)
-    //ControlKeyUp8(iVM);
+    ControlKeyUp8(iVM);
+
+    // center the joysticks and release the triggers
+    rPADATA |= 255;
+    TRIG0 = 1;
+    TRIG1 = 1;
+    if (mdXLXE == md800)
+    {
+        rPBDATA |= 255;
+        TRIG2 = 1;
+        TRIG3 = 1;
+    }
+    UpdatePorts(iVM);
 
     return f;
 }
