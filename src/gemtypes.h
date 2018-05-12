@@ -334,7 +334,12 @@ typedef struct
 
     int      res83:8;
 
-    PVMINFO  pvmi;          // pointer to this VM's VMINFO data
+    union
+    {
+        PVMINFO  pvmi;          // pointer to this VM's VMINFO data
+        LONGLONG llpad;         // don't make the PVMINFO variable sized
+    };
+
     ULONG    bfHW;          // current hardware (bit index into rgfHW)
     ULONG    bfCPU;         // current hardware (bit index into rgfCPU)
     ULONG    bfMon;         // current monitor (bit index into rgfMon)
@@ -400,11 +405,6 @@ typedef struct
 
     int iVM;           // our current instance, which must be valid, or -1
     int cVM;           // total number of valid VM entries
-
-    // to speed up boot speed
-
-    ULONG    cbTryAlloc;    // previous large block size that worked
-    void    *pvTryAlloc;    // previous large block address that worked
 
     // obsolete Atari ST/STE specific settings used as placeholders now
 
