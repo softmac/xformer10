@@ -1427,10 +1427,11 @@ BOOL __cdecl WriteProtectAtariDisk(int iVM, int i, BOOL fSet, BOOL fWP)
 {
 
     if (!fSet)
-        return GetWriteProtectDrive(iVM, i);
+        rgvm[iVM].rgvd[i].mdWP = (BYTE)GetWriteProtectDrive(iVM, i);
     else
-        SetWriteProtectDrive(iVM, i, fWP);
-    return TRUE;
+        rgvm[iVM].rgvd[i].mdWP = (BYTE)SetWriteProtectDrive(iVM, i, fWP); // may or may not actually change
+
+    return rgvm[iVM].rgvd[i].mdWP;
 }
 
 BOOL __cdecl MountAtariDisk(int iVM, int i)
@@ -1438,14 +1439,19 @@ BOOL __cdecl MountAtariDisk(int iVM, int i)
     UnmountAtariDisk(iVM, i);    // make sure all emulator types know to do this first
 
     PVD pvd = &rgvm[iVM].rgvd[i];
-
+    BOOL f;
     if (pvd->dt == DISK_IMAGE)
-        return AddDrive(iVM, i, (BYTE *)pvd->sz);
-    if (pvd->dt == DISK_NONE)
-        return TRUE;
-
+    {
+        f = AddDrive(iVM, i, (BYTE *)pvd->sz);
+        SetWriteProtectDrive(iVM, i, rgvm[iVM].rgvd[i].mdWP);   // VM remembers state of write protect
+    }
+    else if (pvd->dt == DISK_NONE)
+        f = TRUE;
+    else
     // I don't recognize this kind of disk... yet
-    return FALSE;
+        f =  FALSE;
+    
+    return f;
 }
 
 BOOL __cdecl InitAtariDisks(int iVM)
