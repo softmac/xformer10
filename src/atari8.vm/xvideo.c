@@ -2719,7 +2719,7 @@ BOOL ProcessScanLine(int iVM)
     // !!! When wLeft <= 4 we'll wish we had started the next scan line already for things that have scan line granularity,
     // like VSCROL (bump pong)
     // Technically, we execute at the start of the STA GTIA, but it shouldn't happen until after the 4 cycle instruction.
-    // We may have been blocked after the 4th cycle of the store until the next instruction could being, so take
+    // We may have been blocked after the 4th cycle of the store until the next instruction could begin, so take
     // the position of the beginning of the 4th cycle, and add 1 to it when indexing rgPIXELMap to see when the 4th cycle ended.
     // DMAMAP[0] will be the maximum we can index rgPIXELMap, so don't go lower than 1, so we can +1 and still be in a valid
     // index for rgPIXELMap

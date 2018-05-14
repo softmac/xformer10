@@ -2410,12 +2410,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
 
+        // When you turn GRACTL off, you continue to use the most recent data
         if (addr == 0x1d)   // GRACTL
         {
-            if (!(b & 1))   // turn off missiles needs to clear GRAFM (Decathlon blue bar glitch)
-                GRAFM = 0;
-            if (!(b & 2))   // turn off players needs to clear GRAFPx
-                GRAFPX = 0;
+            if (!(b & 1))   // (blue bar glitches - Decathlon needs to continue to use 0, Pitfall needs to continue with $c0)
+                GRAFM = pmg.grafm;
+            if (!(b & 2))
+                GRAFPX = pmg.grafpX;
         }
         else if (addr == 30)
         {
