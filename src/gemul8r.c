@@ -58,6 +58,8 @@ INST vi;                // global non-persistable stuff
 VMINST vrgvmi[MAX_VM];    // per instance not persistable stuff
 VM rgvm[MAX_VM];        // per instance persistable stuff
 
+const ULONGLONG JIF = 29830;    // 1789790 / 60
+
 // and our other globals
 
 BOOL fDebug;
@@ -271,7 +273,7 @@ void DisplayStatus(int iVM)
     strcat(rgch0, rgch);
 
     // are we running at normal speed or turbo speed
-    sprintf(rgch, " (%s-%i%%)", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? ((int)(100000000 / uExecSpeed)) : 0);
+    sprintf(rgch, " (%s-%lli%%) %u Hz", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * 60ull * 100ull / uExecSpeed) : 0, v.vRefresh);
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -293,8 +295,13 @@ ULONGLONG GetCycles()
     LARGE_INTEGER qpc;
     QueryPerformanceCounter(&qpc);
     qpc.QuadPart -= vi.qpcCold;
+
     if (qpc.QuadPart == 0)    // wow, you JUST called us!
-        return 0;
+    {
+        // QPC is monotonically increasing, would take years to read the same value
+        Assert(0);
+    }
+
     ULONGLONG a = (qpc.QuadPart * 178979ULL);
     ULONGLONG b = (vi.qpfCold / 10ULL);
     ULONGLONG c = a / b;
@@ -1228,6 +1235,9 @@ int CALLBACK WinMain(
 
 #endif
 
+    ULONGLONG cLastJif = GetCycles();      // initialize the starting guest frame time
+    uExecSpeed = JIF * 60;                 // initialize execution speed to 100%
+
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
     for (;;)
@@ -1288,17 +1298,27 @@ int CALLBACK WinMain(
             }
         }
 
+        // No running VM?
+
+        if (v.cVM == 0)
+        {
+            uExecSpeed = 0;    // execution speed is 0
+            continue;
+        }
+
         // =====================
         // THIS IS OUR MAIN LOOP
         // =====================
 
+        ULONGLONG FrameBegin = GetCycles();
+
         HANDLE hVG[MAX_VM];    // handles of threads we want to go
         HANDLE hVD[MAX_VM];
-        int iV = 0;
 
         // Tell the thread(s) to go.
         if (v.cVM && v.fTiling)
         {
+            int iV = 0;
             RECT rect;
             GetClientRect(vi.hWnd, &rect);
 
@@ -1353,30 +1373,54 @@ int CALLBACK WinMain(
             WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
         }
 
-        const ULONGLONG JIF = 29830;    // 1789790 / 60
+#if 0
         static ULONGLONG cErr;          // how much we missed being exactly 1/60s apart
-        static ULONGLONG cLastJif;      // about 1/60s ago
-        static ULONGLONG cLastSecond;   // about 1 second ago
         static BYTE cJifTally;          // how many jiffies have gone by
         static ULONGLONG uDrawSpeed;     // how long it takes to render
         static ULONG cDrawSpeed;        // # of times measured, for averaging
         static BOOL fExecSpeedValid;    // need to calculate how long Execute() takes
         static ULONG cExecSpeed;        // # of times measured, for averaging
+#endif
 
-#if 0
+        // One guest video frame's worth of time has been emulated, a "jiffy" or 1/60th of a second.
+        // We are either emulating Normal speed mode (fBrakes == 1) or run as fast as possible Turbo mode (fBrakes==0).
+        //
+        // STEP 1:
+        //
+        // Before checking fBrakes to throttle the speed or not, go ahead and render the current guest video frame
+        // if necessary (as opposed to throttling and then rendering which introduces time skew in the guest).
+
         static ULONGLONG lastRenderMs = 0;
         // !!! Speed things up by not doing then when in the console, or at least make it actually update the screen
-        // Throttle the rendering to no more than 1000/14 = ~70 Hz because anything higher is just rendering duplicate frames
-        if ((GetTickCount64() - lastRenderMs) >= 14)
+        // Throttle the rendering to no more than 70 Hz because anything higher renders too many duplicate guest frames
+        if ((GetTickCount64() - lastRenderMs) >= (1000 / (min(70, (v.vRefresh + 1)))))
         {
             RenderBitmap();
             lastRenderMs = GetTickCount64();
         }
-#endif
-       
+
+        // STEP 2:
+        //
+        // Now check fBrakes and decide whether to go right back to emulation or throttle for a while so that the
+        // guest time does not get ahead of wall clock time.
+        //
+        // Of course this assumes that emulation is faster than guest :-)
+        //
+        // In the rare time emulation is too slow (weak host CPU or too many background processes) then no throttling
+        // will happen either way and Normal mode and Turbo mode essentially become one and the same with some observed
+        // slowdown in the guest time.
+
         // How long since last jiffy has it been? This number is bogus while tracing
-        ULONGLONG cCur = GetCycles() - cLastJif;
-        
+        ULONGLONG FrameEnd = GetCycles();
+        ULONGLONG cCur = FrameEnd - cLastJif;
+
+        // Aggregate the execution time to the total execution speed for the current one-second interval.
+        // This is tracked as a decaying average to smooth out the number and weight it for most recent frames
+
+        uExecSpeed = (uExecSpeed * 59) / 60;
+        uExecSpeed += (FrameEnd - FrameBegin);
+
+#if 0
         // the first Execute after each jiffy gets timed (in turbo we execute many times per jiffy)
         if (!fExecSpeedValid)
         {
@@ -1388,14 +1432,37 @@ int CALLBACK WinMain(
             //ODS("EXEC %llu ", cCur);
             fExecSpeedValid = TRUE;
         }
-        
+
         // we're emulating original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
         // don't let errors propogate
         while (fBrakes && ((JIF - cErr) > cCur)) {
             Sleep(1);
             cCur = GetCycles() - cLastJif;
         }
+#endif
 
+        // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th sec)
+        // Don't allow guest time drift to propagate by more than one extra guest second.
+
+        if (fBrakes && (cCur < (JIF*60)))
+        {
+            while (cCur < JIF)
+            {
+                // If the deadline is still over half a jiffy away (1/120th second or 8 ms) use Sleep otherwise poll
+                Sleep((cCur < (JIF/2)) ? 8 : 0);
+                cCur = GetCycles() - cLastJif;
+            };
+
+            // At this point host time has over shot, but this will be accounted for next iteration by braking less
+
+            cLastJif += JIF;
+        }
+        else
+        {
+            cLastJif = GetCycles();
+        }
+
+#if 0
         // it's been 1/60th of a second, either because we waited, or eventually (in turbo mode)
         if (cCur >= JIF - cErr)
         {
@@ -1416,25 +1483,29 @@ int CALLBACK WinMain(
             cErr = cCur - (JIF - cErr);
             if (cErr > JIF)
                 cErr = JIF;    // don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-            
-            cLastJif = GetCycles();
 
             fExecSpeedValid = FALSE;    // time Execute() again, which will NOT include drawing time
         }
+#endif
 
         // every second, update our clock speed indicator
         // When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
         // report back how long it took
-        cCur = GetCycles();
-        if (cCur - cLastSecond >= 1789790)
+
+        static ULONGLONG lastUpdateMs = 0;
+        if ((GetTickCount64() - lastUpdateMs) >= 1000)
         {
+            lastUpdateMs = GetTickCount64();
+
             int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
             DisplayStatus(ids);
-            cLastSecond = cCur;
+
+#if 0
             cDrawSpeed = 0;  // every second, start a new average
             uDrawSpeed = 0;
             cExecSpeed = 0;
             uExecSpeed = 0;
+#endif
         }
 
 #ifndef NDEBUG
