@@ -68,6 +68,29 @@ static const WORD mpmdbits[19] =
     0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
 };
 
+static const ULONG BitsToByteMask[16] =
+{
+    // 6502 is big endian so it renders pixels in a left-to-right bit ordering.
+    // The lookup table to map to a little-endian mask for x86/ARM is therefore byte swapped!
+
+    0x00000000,
+    0xFF000000,
+    0x00FF0000,
+    0xFFFF0000,
+    0x0000FF00,
+    0xFF00FF00,
+    0x00FFFF00,
+    0xFFFFFF00,
+    0x000000FF,
+    0xFF0000FF,
+    0x00FF00FF,
+    0xFFFF00FF,
+    0x0000FFFF,
+    0xFF00FFFF,
+    0x00FFFFFF,
+    0xFFFFFFFF,
+};
+
 void ShowCountDownLine(int iVM)
 {
     int i = wScan - (wStartScan + wcScans - 12);
@@ -1363,17 +1386,24 @@ if (sl.modelo < 2 || iTop > i)
 
         vpix = vpixO;
 
-        // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-        BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
-        BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
-        yellow; // NYI
+        col1 = sl.colpf1;
+        col2 = sl.colpf2;
 
         // just for fun, don't interlace in B&W.
         // !!! It actually won't work in PMG mode right now
-        BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
+        const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
 
-        col1 = sl.colpf1;
-        col2 = sl.colpf2;
+        // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
+        const BYTE red = fArtifacting ? (0x40 | (col1 & 0x0F)) : col1;
+        const BYTE green = fArtifacting ? (0xc0 | (col1 & 0x0F)) : col1;
+        const BYTE yellow = fArtifacting ? (0xe0 | (col1 & 0x0F)) : col1;
+        yellow; // NYI
+
+        // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
+
+        const ULONG FillA = 0x00010001 * (red | (green << 8));
+        const ULONG Fill1 = 0x01010101 * col1;
+        const ULONG Fill2 = 0x01010101 * col2;
 
         if ((sl.chactl & 4) && sl.modelo == 2)    // vertical reflect bit
             vpix = 7 - (vpix & 7);
@@ -1614,92 +1644,18 @@ if (sl.modelo < 2 || iTop > i)
             // GR.0 See mode 15 for artifacting theory of operation
             else
             {
-                // do a pair of pixels, even then odd
-                for (j = 0; j < 4; j++)
-                {
-                    // EVEN
+                ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+                ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
 
-                    switch (b2 & 0x80)
-                    {
-                    default:
-                        Assert(FALSE);
-                        break;
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                qch += sizeof(ULONG);
 
-                    case 0x00:
-                        *qch++ = col2;
-                        break;
+                BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+                ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)] | BitsToByteMask[((b2 << 1) & 0xF) | 1];
 
-                    case 0x80:
-                        {
-                        // don't walk off the beginning of the array
-                        BYTE last = col2, last2 = col2;
-
-                        if (i != 0 || j != 0)
-                        {
-                            last = *(qch - 1);
-                            last2 = *(qch - 2);
-                        }
-
-                        if (last == col2)
-                        {
-                            *qch++ = fArtifacting ? red : col1;
-                            if (last2 == red)
-                                *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        else
-                        {
-                            *qch++ = col1;
-                            if (last == green)
-                            {
-                                *(qch - 2) = col1; // yellow doesn't seem to work
-                                                   //*(qch - 1) = yellow;
-                            }
-                        }
-                        }
-                    }
-
-                    // ODD
-
-                    switch (b2 & 0x40)
-                    {
-                    default:
-                        Assert(FALSE);
-                        break;
-
-                    case 0x00:
-                        *qch++ = col2;
-                        break;
-
-                    case 0x40:
-                        {
-                        // don't walk off the beginning of the array later on
-                        BYTE last, last2 = col2;
-
-                        last = *(qch - 1);
-                        if (i == 0 && j == 0)
-                            last2 = col2;
-                        else
-                            last2 = *(qch - 2);
-
-                        if (last == col2)
-                        {
-                            *qch++ = fArtifacting ? green : col1;
-                            if (last2 == green)
-                                *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        else
-                        {
-                            *qch++ = col1;
-                            if (last == red)
-                                *(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        }
-                    }
-
-                    b2 <<= 2;
-                }
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                qch += sizeof(ULONG);
             }
-            //                _fmemcpy(qch,rgch,8);
         }
         break;
         }
@@ -1746,14 +1702,6 @@ if (sl.modelo < 2 || iTop > i)
 
             for (j = 0; j < 4; j++)
             {
-                // which character was shifted into this position? Pay attention to its high bit to switch colours
-                int index = (hshift + 7 - 2 * j) / 8;
-
-                if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
-                    col3 = sl.colpf3;
-                else
-                    col3 = sl.colpf2;
-
                 switch (b2 & 0xC0)
                 {
                 default:
@@ -1776,8 +1724,18 @@ if (sl.modelo < 2 || iTop > i)
                     break;
 
                 case 0xC0:
-                    *qch++ = col3;
-                    *qch++ = col3;
+                    {
+                    // which character was shifted into this position? Pay attention to its high bit to switch colours
+                    int index = (hshift + 7 - 2 * j) / 8;
+
+                    if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
+                        col3 = sl.colpf3;
+                    else
+                        col3 = sl.colpf2;
+
+                        *qch++ = col3;
+                        *qch++ = col3;
+                    }
                     break;
                 }
                 b2 <<= 2;
@@ -1823,13 +1781,13 @@ if (sl.modelo < 2 || iTop > i)
 
                 for (j = 0; j < 8; j++)
                 {
-                    if (j < hshift)    // hshift restricted to 7 or less, so this is sufficient
-                        col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i - 1]) >> 6];
-                    else
-                        col1 = sl.colpf[b1 >> 6];
-
                     if (b2 & 0x80)
                     {
+                        if (j < hshift)    // hshift restricted to 7 or less, so this is sufficient
+                            col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i - 1]) >> 6];
+                        else
+                            col1 = sl.colpf[b1 >> 6];
+
                         *qch++ = col1;
                         *qch++ = col1;
                     }
@@ -2166,135 +2124,55 @@ if (sl.modelo < 2 || iTop > i)
         col1 = sl.colpf1;
         col2 = sl.colpf2;
 
-        // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-        BYTE red = 0x40 | (sl.colpf1 & 0x0F), green = 0xc0 | (sl.colpf1 & 0x0F);
-        BYTE yellow = 0xe0 | (sl.colpf1 & 0x0F);
-        yellow; // NYI
-
         // just for fun, don't interlace in B&W
         // !!! It actually won't work in PMG mode right now
-        BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
+        const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
+
+        // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
+        const BYTE red = fArtifacting ? (0x40 | (col1 & 0x0F)) : col1;
+        const BYTE green = fArtifacting ? (0xc0 | (col1 & 0x0F)) : col1;
+        const BYTE yellow = fArtifacting ? (0xe0 | (col1 & 0x0F)) : col1;
+        yellow; // NYI
+
+        // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
+
+        const ULONG FillA = 0x00010001 * (red | (green << 8));
+        const ULONG Fill1 = 0x01010101 * col1;
+        const ULONG Fill2 = 0x01010101 * col2;
+
+        WORD u = (i == 0 ? rgbSpecial : sl.rgb[i - 1]);
 
         for (; i < iTop; i++)
         {
             b2 = sl.rgb[i];
 
-            WORD u = b2;
+            u = (u << 8) | (BYTE)b2;
 
             // do you have the hang of this by now? Use hshift, not sl.hscrol
-            if (hshift)
-            {
-                // non-zero horizontal scroll
-
-                // this shift may involve our byte and the one before it
-                u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
-            }
-
             // what bit position in the WORD u do we start copying from?
-            int index = 7 + hshift;    // ATARI can only shift 2 pixels minimum at this resolution
+            int index = 7 + hshift;
 
-                                       // THEORY OF OPERATION - INTERLACING
-                                       // - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
-                                       // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
-                                       // - a background pixel between white and (red/green) seems to stay background colour
+            // ATARI can only shift 2 pixels minimum at this resolution
 
-                                       // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
-            for (j = 0; j < 4; j++)
-            {
-                // don't walk off the beginning of the array
-                BYTE last, last2;
+            // THEORY OF OPERATION - INTERLACING
+            // - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
+            // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
+            // - a background pixel between white and (red/green) seems to stay background colour
+            // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
 
-                if (i == 0 && j == 0)
-                {
-                    last = col2;
-                    last2 = col2;
-                }
-                else
-                {
-                    last = *(qch - 1);
-                    last2 = *(qch - 2);
-                }
+            u = 0x3FF & (u >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
-                // EVEN - (unwind the loop for speed)
+            ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
+            ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
 
-                // which bit is this bit position?
-                int k = (index - (j << 1));
+            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+            qch += sizeof(ULONG);
 
-                // look at that bit
-                b2 = (u >> k) & 0x1;
+            BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
+            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | 1];
 
-                // supports artifacting
-                switch (b2 & 0x01)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col2;
-                    break;
-
-                case 0x01:
-                    if (last == col2)
-                    {
-                        *qch++ = fArtifacting ? red : col1;
-                        if (last2 == red)
-                            *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
-                    }
-                    else
-                    {
-                        *qch++ = col1;
-                        if (last == green)
-                        {
-                            *(qch - 2) = col1; // yellow doesn't seem to work
-                                               //*(qch - 1) = yellow;
-                        }
-                    }
-                    break;
-                }
-
-                // ODD
-
-                // don't walk off the beginning of the array later on
-                last = *(qch - 1);
-                if (i == 0 && j == 0)
-                    last2 = col2;
-                else
-                    last2 = *(qch - 2);
-
-                // which bit is this bit position?
-                k = (index - (j << 1) - 1);
-
-                // look at that bit
-                b2 = (u >> k) & 0x1;
-
-                // supports artifacting
-                switch (b2 & 0x01)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col2;
-                    break;
-
-                case 0x01:
-                    if (last == col2)
-                    {
-                        *qch++ = fArtifacting ? green : col1;
-                        if (last2 == green)
-                            *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
-                    }
-                    else
-                    {
-                        *qch++ = col1;
-                        if (last == red)
-                            *(qch - 2) = col1; // shouldn't affect a visible pixel if it's out of range
-                    }
-                    break;
-                }
-            }
+            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+            qch += sizeof(ULONG);
         }
         break;
         }
