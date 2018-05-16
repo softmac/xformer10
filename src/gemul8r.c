@@ -1312,13 +1312,12 @@ int CALLBACK WinMain(
 
         ULONGLONG FrameBegin = GetCycles();
 
-        HANDLE hVG[MAX_VM];    // handles of threads we want to go
         HANDLE hVD[MAX_VM];
+        int iV = 0;
 
         // Tell the thread(s) to go.
         if (v.cVM && v.fTiling)
         {
-            int iV = 0;
             RECT rect;
             GetClientRect(vi.hWnd, &rect);
 
@@ -1341,7 +1340,7 @@ int CALLBACK WinMain(
                     // Don't consider tiles completely off screen
                     if (y + vvmhw[iVM].ypix > 0 && y < rect.bottom)
                     {
-                        hVG[iV] = hGoEvent[iVM];    // found one
+                        SetEvent(hGoEvent[iVM]);    // found one, tell the thread to go now!
                         hVD[iV++] = hDoneEvent[iVM];
                     }
 
@@ -1358,10 +1357,6 @@ int CALLBACK WinMain(
                 if (iDone == iVM)
                     break;
             }
-
-            // tell each thread to go
-            for (iVM = 0; iVM < iV; iVM++)
-                SetEvent(hVG[iVM]);
 
             // wait for them to complete one frame
             WaitForMultipleObjects(iV, hVD, TRUE, INFINITE);
@@ -1395,8 +1390,8 @@ int CALLBACK WinMain(
         // Throttle the rendering to no more than 70 Hz because anything higher renders too many duplicate guest frames
         if ((GetTickCount64() - lastRenderMs) >= (1000 / (min(70, (v.vRefresh + 1)))))
         {
-            RenderBitmap();
             lastRenderMs = GetTickCount64();
+            RenderBitmap();
         }
 
         // STEP 2:
@@ -2270,9 +2265,9 @@ void RenderBitmap()
                         int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
                         BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
                         BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                        BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
                         BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
                         BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                        BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
                     }
                     else
                         BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
