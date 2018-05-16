@@ -336,8 +336,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         // non-persistable pointers need to be refreshed
         // and only use VM's that we can handle in this build
 
-        int i;
-        for (i = 0; i < MAX_VM; i++)
+        char *pPersist = malloc(65536);
+
+        for (int i = 0; i < MAX_VM; i++)
         {
             // actually, don't go further
             if (fPropsOnly)
@@ -379,7 +380,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                     f = FALSE;
                     if (l)    // that's a L, not a 1.
                     {
-                        char *pPersist = malloc(cb);
+                        pPersist = realloc(pPersist, cb);
                         l = 0;
                         if (pPersist)
                             l = _read(h, pPersist, cb);
@@ -387,8 +388,6 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                             if (FLoadStateVM(i, pPersist, cb))
                                 f = TRUE;
                         }
-                        if (pPersist)
-                            free(pPersist);
                     }
 
                     if (!f)
@@ -427,6 +426,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 rgvm[i].cbSize = sizeof(VM);    // init the size for validity
             }
         }
+
+        if (pPersist)
+            free(pPersist);
 
         // now select the instance that was current when we saved (or find something good)
         if (v.cVM > 0)
