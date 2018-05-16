@@ -1645,6 +1645,9 @@ if (sl.modelo < 2 || iTop > i)
             // GR.0 See mode 15 for artifacting theory of operation
             else
             {
+#if 1
+                // This is the "I have sharp display with minimum pixel bleeding" version
+
                 ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
                 ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
 
@@ -1656,6 +1659,21 @@ if (sl.modelo < 2 || iTop > i)
 
                 *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
                 qch += sizeof(ULONG);
+#elif 1
+                // This is the "my cheap TV really sucks" version
+
+                ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+                ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF];
+
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                qch += sizeof(ULONG);
+
+                BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+                ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)];
+
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                qch += sizeof(ULONG);
+#endif
             }
         }
         break;
@@ -2163,17 +2181,55 @@ if (sl.modelo < 2 || iTop > i)
 
             u = 0x3FF & (u >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
+#if 0
+            // This is the "I have sharp display with minimum pixel bleeding" version
+
             ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
             ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
 
             *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
             qch += sizeof(ULONG);
 
+            BYTE bPeekAhead = (sl.rgb[i+1] & 0x80) >> 7;
             BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | 1];
+            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
 
             *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
             qch += sizeof(ULONG);
+#elif 0
+            // This is the "my cheap TV really sucks" version
+
+            ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
+            ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF];
+
+            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+            qch += sizeof(ULONG);
+
+            BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
+            ColorMask = BitsToByteMask[((u >> 1) & 0xF)];
+
+            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+            qch += sizeof(ULONG);
+#elif 1
+            // This is the "make the bricks solid in Lode Runner" mode (Apple II users would disagree!)
+
+            ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
+            ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
+            ULONG SolidMask = BitsToByteMask[(u >> 5) & 0xF] & BitsToByteMask[(u >> 3) & 0xF];
+
+            *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                             ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+            qch += sizeof(ULONG);
+
+            BYTE bPeekAhead = (sl.rgb[i+1] & 0x80) >> 7;
+            BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
+            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+            SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+
+            *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                             ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+            qch += sizeof(ULONG);
+#endif
         }
         break;
         }
