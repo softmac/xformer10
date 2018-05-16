@@ -1002,8 +1002,7 @@ void PSLPrepare(int iVM)
 
         // Other things we only need once per scan line
 
-        sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
-        sl.chactl = CHACTL & 7;
+        sl.chactl = CHACTL & 7; // !!! cycle granularity?
         sl.addr = wAddr;
         sl.dmactl = DMACTL;
 
@@ -1138,6 +1137,8 @@ void PSLReadRegs(int iVM, short start, short stop)
     // Note: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
 
     sl.prior = PRIOR;
+
+    sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
 
     // note if GTIA modes enabled... no collisions to playfield in GTIA
     pmg.fGTIA = sl.prior & 0xc0;

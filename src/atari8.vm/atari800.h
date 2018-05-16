@@ -86,7 +86,7 @@ char rgPMGMap[65536];
 
 // for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
-//   0            2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
+//   0          2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
 
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1

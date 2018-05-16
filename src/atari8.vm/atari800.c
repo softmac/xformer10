@@ -2592,11 +2592,20 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xD4:      // ANTIC
         addr &= 15;
 
+        // CYCLE COUNTING - Writes to CHBASE should take effect IMMEDIATELY (BD BeefDrop) so process the scan line up to where
+        // the electron beam is right now before we change the values. The next time its called will be with the new values.
+        // !!! CHACTL, etc, too?
+        if (addr == 9)
+        {
+            //ODS("GTIA %04x=%02x at VCOUNT=%02x clock=%02x\n", addr, b, PeekBAtari(iVM, 0xd40b), DMAMAP[wLeft - 1]);
+            ProcessScanLine(iVM);    // !!! should anything else instantly affect the screen?
+        }
+
         // Uh-oh, we're changing something with scan line granularity that shouldn't happen until after the next scan line is set up
         // since the STA abs won't have finished by the end of this line (4 cycle instruction) and we execute at the beginning of the
         // instruction instead of the end like we're supposed to. Skip doing it now and back up to do it again.
         // Without this Bump Pong is 2x too tall
-        if (addr < 10 && rgbMem[regPC - 1] == 0xd4 && wLeft < 4)
+        else if (addr < 9 && rgbMem[regPC - 1] == 0xd4 && wLeft < 4)
         {
             regPC -= 3; // !!! Support indirect and 2-byte instructions that access ANTIC too
             fRedoPoke = TRUE;   // add 4 cycles to the next scan line so the timing isn't changed
