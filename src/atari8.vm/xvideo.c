@@ -102,8 +102,9 @@ void ShowCountDownLine(int iVM)
         char *pch;
         int cch;
         BYTE *qch;
-        RECT rectC;
 
+#if 0
+        RECT rectC;
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
@@ -112,6 +113,7 @@ void ShowCountDownLine(int iVM)
             qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
         }
         else
+#endif
             qch = vrgvmi[iVM].pvBits;
         
         BYTE colfg;
@@ -127,8 +129,11 @@ void ShowCountDownLine(int iVM)
         else
             pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
 
-        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
-        
+        //qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+        //if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
+        //    return;
+        qch += ((wScan - wStartScan) * vcbScan);
+
         colfg = (BYTE)(((wFrame >> 2) << 4) + i + i);
         colfg = (BYTE)((((wFrame >> 2) + i) << 4) + 8);
 
@@ -1303,6 +1308,7 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
     // redraw scan line
 
     BYTE *qch0;
+#if 0
     RECT rectC;
     if (v.fTiling)
     {
@@ -1312,6 +1318,7 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
         qch0 += rect.top * rectC.right + rect.left;  // right round up to multiple of 8?
     }
     else
+#endif
         qch0 = vrgvmi[iVM].pvBits;
 
     BYTE *qch = qch0;
@@ -1349,9 +1356,10 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
     else
     {
         // not doing a bitfield, just write into this scan line
-        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
-        if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
-            return;
+        qch += ((wScan - wStartScan) * vcbScan);
+        //qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+        //if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
+        //    return;
     }
 
     // what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
@@ -2422,6 +2430,7 @@ if (sl.modelo < 2 || iTop > i)
     {
         BYTE rgColour[129]; // quick access to necessary colour
 
+#if 0
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
@@ -2430,6 +2439,7 @@ if (sl.modelo < 2 || iTop > i)
             qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
         }
         else
+#endif
             qch = vrgvmi[iVM].pvBits;
 
         // !!! VDELAY NYI
@@ -2452,10 +2462,10 @@ if (sl.modelo < 2 || iTop > i)
         pmg.fHitclr = 0;
 
         // now map the rgpix array to the screen
-
-        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
-        if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
-            return;
+        qch += ((wScan - wStartScan) * vcbScan);
+//        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+ //       if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
+   //         return;
 
         // turn the rgpix array from a bitfield of which items are present (player or field colours)
         // into the actual colour that will show up there, based on priorities

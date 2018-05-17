@@ -1235,8 +1235,8 @@ int CALLBACK WinMain(
 
 #endif
 
-    ULONGLONG cLastJif = GetCycles();      // initialize the starting guest frame time
-    uExecSpeed = JIF * 60;                 // initialize execution speed to 100%
+    ULONGLONG cLastJif = GetCycles();       // initialize the starting guest frame time
+    uExecSpeed = 0;                         // initialize execution speed to 0, so the first reading will start the running average
 
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
@@ -1412,10 +1412,20 @@ int CALLBACK WinMain(
         // Aggregate the execution time to the total execution speed for the current one-second interval.
         // This is tracked as a decaying average to smooth out the number and weight it for most recent frames
 
-        uExecSpeed = (uExecSpeed * 59) / 60;
-        uExecSpeed += (FrameEnd - FrameBegin);
+        if (uExecSpeed)
+        {
+            uExecSpeed = (uExecSpeed * 59) / 60;
+            uExecSpeed += (FrameEnd - FrameBegin);
+        }
+        else
+        {
+            // the first reading (after boot or making your 1st VM) starts the average off
+            // hopefully close to the real number so it will settle quicker
+            // (otherwise you have to wait 6s or so to get numbers close to reality)
+            uExecSpeed = (FrameEnd - FrameBegin) * 60;
+        }
 
-#if 0
+        #if 0
         // the first Execute after each jiffy gets timed (in turbo we execute many times per jiffy)
         if (!fExecSpeedValid)
         {
@@ -2122,7 +2132,9 @@ Ltryagain:
     }
     else
     {
-        // create a 256 color bitmap buffer
+        // create a 256 color bitmap buffer - here are the perf numbers
+        // 8 bit - 485%     16 bit - 325%       24 bit - 420%       32 bit - 485%
+        // I conclude 32 bit is native format but the reduced data copying allows an extra table lookup for 8 bit
 
         vvmhw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
         vvmhw[iVM].bmiHeader.biWidth = vvmhw[iVM].xpix;
@@ -2317,7 +2329,7 @@ void RenderBitmap()
     //  PrintScreenStats();
 #endif
 
-#if 0
+#if 1
     if (v.fTiling)
     {
         // Tiling
