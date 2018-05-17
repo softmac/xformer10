@@ -534,6 +534,13 @@ typedef struct
     BYTE *pbFrameBuf;   // frame buffer in shared memory
     BYTE *pbAudioBuf;   // audio buffer in shared memory
 
+    // bit tiled bitmap
+    HANDLE hdcTiled;
+    HANDLE hbmTiled;
+    HANDLE hbmTiledOld;
+    void *pTiledBits;
+    BITMAPINFOHEADER bmiTiled;
+
     HANDLE hAccelTable; // accelerator table
     HWND hWnd;          // main window handle
     HMENU hMenu;        // pop-up menu handle
@@ -946,6 +953,8 @@ void CreateInstanceName(int, LPSTR);
 //void UpdateMenuCheckmarks();
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(int);
+BOOL CreateTiledBitmap();
+RECT GetPosFromTile(int);
 void RenderBitmap();
 void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();

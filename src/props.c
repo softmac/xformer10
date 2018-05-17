@@ -143,6 +143,10 @@ int AddVM(int type)
     rgvm[iVM].fSound = TRUE;
     rgvm[iVM].fJoystick = TRUE;
 
+    // if this is our first VM...
+    if (v.cVM == 1)
+        CreateTiledBitmap();
+
     return iVM;
 }
 

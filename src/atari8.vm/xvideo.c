@@ -101,7 +101,19 @@ void ShowCountDownLine(int iVM)
     {
         char *pch;
         int cch;
-        BYTE *qch = vrgvmi[iVM].pvBits;
+        BYTE *qch;
+        RECT rectC;
+
+        if (v.fTiling)
+        {
+            qch = vi.pTiledBits;
+            RECT rect = GetPosFromTile(iVM);
+            GetClientRect(vi.hWnd, &rectC);
+            qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
+        }
+        else
+            qch = vrgvmi[iVM].pvBits;
+        
         BYTE colfg;
 
         if (cntTick < 2)
@@ -115,13 +127,13 @@ void ShowCountDownLine(int iVM)
         else
             pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
 
-        qch += (wScan - wStartScan) * vcbScan;
-
+        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+        
         colfg = (BYTE)(((wFrame >> 2) << 4) + i + i);
         colfg = (BYTE)((((wFrame >> 2) + i) << 4) + 8);
 
         for (cch = 0; cch < X8 >> 3; cch++)
-            {
+        {
             BYTE b = *pch ? *pch - ' ' : 0;
 
             b = rgbAtariOSB[0x800 + (b << 3) + i];
@@ -138,7 +150,7 @@ void ShowCountDownLine(int iVM)
 
             if (*pch)
                 pch++;
-            }
+        }
 
         if ((i == 7) && (cntTick == 1))
         {
@@ -1290,7 +1302,18 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
 
     // redraw scan line
 
-    BYTE *qch0 = vrgvmi[iVM].pvBits;
+    BYTE *qch0;
+    RECT rectC;
+    if (v.fTiling)
+    {
+        qch0 = vi.pTiledBits;
+        RECT rect = GetPosFromTile(iVM);
+        GetClientRect(vi.hWnd, &rectC);
+        qch0 += rect.top * rectC.right + rect.left;  // right round up to multiple of 8?
+    }
+    else
+        qch0 = vrgvmi[iVM].pvBits;
+
     BYTE *qch = qch0;
 
     BYTE b1, b2;
@@ -1326,7 +1349,9 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
     else
     {
         // not doing a bitfield, just write into this scan line
-        qch += (wScan - wStartScan) * vcbScan;
+        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+        if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
+            return;
     }
 
     // what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
@@ -2397,7 +2422,15 @@ if (sl.modelo < 2 || iTop > i)
     {
         BYTE rgColour[129]; // quick access to necessary colour
 
-        qch = vrgvmi[iVM].pvBits;
+        if (v.fTiling)
+        {
+            qch = vi.pTiledBits;
+            RECT rect = GetPosFromTile(iVM);
+            GetClientRect(vi.hWnd, &rectC);
+            qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
+        }
+        else
+            qch = vrgvmi[iVM].pvBits;
 
         // !!! VDELAY NYI
 
@@ -2420,7 +2453,9 @@ if (sl.modelo < 2 || iTop > i)
 
         // now map the rgpix array to the screen
 
-        qch += (wScan - wStartScan) * vcbScan;
+        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
+        if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
+            return;
 
         // turn the rgpix array from a bitfield of which items are present (player or field colours)
         // into the actual colour that will show up there, based on priorities
@@ -2450,6 +2485,8 @@ if (sl.modelo < 2 || iTop > i)
         for (i = start; i < stop; i++)
         {
             b = *pb++;
+
+            // !!! combine IFs
 
             // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
             // (so that text shows up on top of a fifth player using its chroma).

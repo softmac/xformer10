@@ -1751,6 +1751,90 @@ BOOL SetBitmapColors(int iVM)
     return TRUE;
 }
 
+
+// CreateTiledBitmap
+// Make a big bitmap for the tiles they all share so there's only 1 BitBlt
+//
+BOOL CreateTiledBitmap()
+{
+    int i;
+    RECT rect;
+    GetClientRect(vi.hWnd, &rect); // size of tiled window
+    
+    if (vi.hbmTiledOld)
+    {
+        SelectObject(vi.hdcTiled, vi.hbmTiledOld);
+        vi.hbmTiledOld = NULL;
+    }
+
+    if (vi.hbmTiled)
+    {
+        DeleteObject(vi.hbmTiled);
+        vi.hbmTiled = NULL;
+    }
+
+    if (vi.hdcTiled)
+    {
+        DeleteDC(vi.hdcTiled);
+        vi.hdcTiled = NULL;
+    }
+
+    // create a 256 color bitmap buffer
+
+    vi.bmiTiled.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+    vi.bmiTiled.biWidth = rect.right;
+    vi.bmiTiled.biHeight = -rect.bottom;
+    vi.bmiTiled.biPlanes = 1;
+    vi.bmiTiled.biBitCount = 8;
+    vi.bmiTiled.biCompression = BI_RGB;
+    vi.bmiTiled.biSizeImage = 0;
+    vi.bmiTiled.biXPelsPerMeter = 2834;
+    vi.bmiTiled.biYPelsPerMeter = 2834;
+    vi.bmiTiled.biClrUsed = 256;  // (rgvm[iVM].pvmi->planes == 8) ? 256 : 26; // !!! 4 bit colour gets 10 extra colours?
+    vi.bmiTiled.biClrImportant = 0;
+
+    vi.hbmTiled = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vi.bmiTiled, DIB_RGB_COLORS, &(vi.pTiledBits), NULL, 0);
+    vi.hdcTiled = CreateCompatibleDC(vi.hdc);
+
+    if (vi.hbmTiled == NULL || vi.hdcTiled == NULL)
+        return FALSE;
+
+    vi.hbmTiledOld = SelectObject(vi.hdcTiled, vi.hbmTiled);
+    RGBQUAD rgrgb[256];
+    int j;
+
+    for (j = 0; j < MAX_VM; j++)
+        if (rgvm[j].fValidVM)
+            break;
+
+    if (j < MAX_VM)
+    {
+        for (i = 0; i < 256; i++)
+        {
+            rgrgb[i].rgbRed = (rgvm[j].pvmi->rgbRainbow[i * 3] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3] >> 5);
+            rgrgb[i].rgbGreen = (rgvm[j].pvmi->rgbRainbow[i * 3 + 1] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3 + 1] >> 5);
+            rgrgb[i].rgbBlue = (rgvm[j].pvmi->rgbRainbow[i * 3 + 2] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3 + 2] >> 5);
+            rgrgb[i].rgbReserved = 0;
+        }
+
+        SetDIBColorTable(vi.hdcTiled, 0, 256, rgrgb);
+    }
+
+#if 0   // TODO, this code assumes 800 VMs only and breaks otherwise
+    // we may have moved the window, so we need to move the mouse capture rectangle too
+    if (rgvm[iVM].pvmi->fUsesMouse && vi.fGEMMouse)
+    {
+        ShowWindowsMouse();
+        ShowGEMMouse();
+    }
+#endif
+
+    InvalidateRect(vi.hWnd, NULL, 0);
+
+    return TRUE;
+}
+
+
 /****************************************************************************
 
     FUNCTION: CreateNewBitmap
@@ -1812,6 +1896,7 @@ BOOL CreateNewBitmap(int iVM)
         }
 
     // initialize to some initial state, will be set further below
+    // !!! that's a scary global, kill these!
 
     vi.sx = vvmhw[iVM].xpix;
     vi.sy = vvmhw[iVM].ypix;
@@ -2052,7 +2137,7 @@ Ltryagain:
         vvmhw[iVM].bmiHeader.biClrImportant = 0;
 
         vi.cbScan = (ULONG)(min(x, (ULONG)vvmhw[iVM].xpix));
-        }
+    }
 
     // Create offscreen bitmap
 
@@ -2232,6 +2317,7 @@ void RenderBitmap()
     //  PrintScreenStats();
 #endif
 
+#if 0
     if (v.fTiling)
     {
         // Tiling
@@ -2291,6 +2377,13 @@ void RenderBitmap()
             }
         }
     }
+#else
+    if (v.fTiling)
+    {
+        BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
+    }
+#endif
+
     else if (v.fZoomColor)
     {
         // Smart Scaling
@@ -2303,6 +2396,8 @@ void RenderBitmap()
         // Integer scaling
 
         int x, y, scale;
+
+        // !!! vi is a global! Don't use it?
 
         for (scale = 16; scale > 1; scale--)
         {
@@ -2544,6 +2639,58 @@ BOOL ColdStart(int iVM)
 }
 
 
+// what are the tiled coordinates of this VM?
+//
+RECT GetPosFromTile(int iVMTarget)
+{
+    RECT rect = { 0 };
+   
+    if (v.cVM == 0)
+        return rect;
+
+    GetClientRect(vi.hWnd, &rect);
+
+    int x, y, iVM;
+
+    iVM = nFirstTile;
+    while (iVM < 0 || !rgvm[iVM].fValidVM)
+        iVM = ((iVM + 1) % MAX_VM);
+    int fDone = iVM;
+
+    int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+
+    for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix * vi.fYscale)
+    {
+        for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+        {
+            if (iVM == iVMTarget)
+            {
+                rect.left = x;
+                rect.top = y;
+                rect.right = x + vvmhw[iVM].xpix;
+                rect.bottom = y + vvmhw[iVM].ypix;
+                return rect;
+            }
+
+            // advance to the next valid bitmap
+            do
+            {
+                iVM = (iVM + 1) % MAX_VM;
+            } while (vrgvmi[iVM].hdcMem == NULL);
+
+            // we've reached the end of the tiles
+            if (iVM == fDone)
+            {
+                y = rect.bottom;    // double break
+                break;
+            }
+        }
+    }
+    rect.left = rect.right = rect.top = rect.bottom = 0;
+    return rect;
+}
+
+
 // which tile is under the mouse right now? (Or -1 if none)
 //
 int GetTileFromPos(int xPos, int yPos)
@@ -2568,6 +2715,9 @@ int GetTileFromPos(int xPos, int yPos)
     {
         for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
         {
+
+            // !!! vi is a global! Don't use it?
+
             if ((xPos >= x) && (xPos < x + vvmhw[iVM].xpix * vi.fXscale) &&
                 (yPos >= y) && (yPos < y + vvmhw[iVM].ypix * vi.fYscale))
             {
@@ -3055,7 +3205,7 @@ LRESULT CALLBACK WndProc(
         RECT rect;
         GetWindowRect(hWnd, &rect);
         if (!v.fFullScreen)
-          if ((vvmhw[v.iVM].xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN))
+          if ((vvmhw[v.iVM].xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN)) // !!! vi is a global!
           if ((vvmhw[v.iVM].ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
           if (rect.left > 0 && rect.top > 0)
                 GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
@@ -3094,6 +3244,8 @@ LRESULT CALLBACK WndProc(
 
         // If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
         sWheelOffset = 0;
+
+        CreateTiledBitmap();    // !!! error check
 
         break;
 
@@ -4554,6 +4706,15 @@ break;
             if (hDoneEvent[ii])
                 CloseHandle(hDoneEvent[ii]);
         }
+
+        if (vi.hdcTiled)
+        {
+            SelectObject(vi.hdcTiled, vi.hbmTiledOld);
+            DeleteDC(vi.hdcTiled);
+        }
+
+        if (vi.hbmTiled)
+            DeleteObject(vi.hbmTiled);
 
         FInitSerialPort(0);
         ShowCursor(TRUE);
