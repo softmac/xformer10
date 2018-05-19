@@ -1845,6 +1845,7 @@ if (sl.modelo < 2 || iTop > i)
         vpix &= 7;
 
         Col.col0 = sl.colbk;
+        const ULONG Fill0 = 0x01010101 * Col.col0;
 
         for (; i < iTop; i++)
         {
@@ -1898,20 +1899,38 @@ if (sl.modelo < 2 || iTop > i)
                 b2 = cpuPeekB(iVM, (sl.chbase << 8)
                     + ((b1 & 0x3F) << 3) + vpix);
 
-                for (j = 0; j < 8; j++)
-                {
-                    if (b2 & 0x80)
-                    {
-                        *qch++ = Col.col1;
-                        *qch++ = Col.col1;
-                    }
-                    else
-                    {
-                        *qch++ = Col.col0;
-                        *qch++ = Col.col0;
-                    }
-                    b2 <<= 1;
-                }
+                const ULONG Fill1 = 0x01010101 * Col.col1;
+
+                ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+                ULONG PixelsHi = (Fill1 & BlendMask) | (Fill0 & ~BlendMask);
+                BlendMask = BitsToByteMask[(b2 >> 0) & 0xF];
+                ULONG PixelsLo = (Fill1 & BlendMask) | (Fill0 & ~BlendMask);
+
+                *qch++ = PixelsHi & 0xff;
+                *qch++ = PixelsHi & 0xff;
+                PixelsHi >>= 8;
+                *qch++ = PixelsHi & 0xff;
+                *qch++ = PixelsHi & 0xff;
+                PixelsHi >>= 8;
+                *qch++ = PixelsHi & 0xff;
+                *qch++ = PixelsHi & 0xff;
+                PixelsHi >>= 8;
+                *qch++ = PixelsHi & 0xff;
+                *qch++ = PixelsHi & 0xff;
+                PixelsHi >>= 8;
+
+                *qch++ = PixelsLo & 0xff;
+                *qch++ = PixelsLo & 0xff;
+                PixelsLo >>= 8;
+                *qch++ = PixelsLo & 0xff;
+                *qch++ = PixelsLo & 0xff;
+                PixelsLo >>= 8;
+                *qch++ = PixelsLo & 0xff;
+                *qch++ = PixelsLo & 0xff;
+                PixelsLo >>= 8;
+                *qch++ = PixelsLo & 0xff;
+                *qch++ = PixelsLo & 0xff;
+                PixelsLo >>= 8;
             }
         }
         break;
