@@ -1298,7 +1298,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 
 void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars, RECT *prectTile)
 {
-    BYTE rgFifth[X8];     // is fifth player colour present in GTIA modes?
+    BYTE rgFifth[X8] = { 0 };     // is fifth player colour present in GTIA modes?
 
     if (start >= stop)
         return;
@@ -2570,7 +2570,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = sl.colpf3;
-                        rgFifth[i] = 0;
+                        //rgFifth[i] = 0;
                     }
                     else
                     {
@@ -2590,7 +2590,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = sl.colpf3;
-                        rgFifth[i] = 0;
+                        //rgFifth[i] = 0;
                     }
                     else
                     {
@@ -2610,7 +2610,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = sl.colpf3;
-                        rgFifth[i] = 0;
+                        //rgFifth[i] = 0;
                     }
                     else
                     {

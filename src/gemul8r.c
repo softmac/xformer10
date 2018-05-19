@@ -2412,12 +2412,13 @@ void RenderBitmap()
         // border around the one we're hovering over
         if (sVM > -1)
         {
-            GetPosFromTile(sVM, &rect);
+            RECT rectB;
+            GetPosFromTile(sVM, &rectB);
             int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
-            BitBlt(vi.hdc, rect.left, rect.top, xw, 5, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rect.left, rect.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rect.left + xw - 5, rect.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rect.left, rect.top + yw - 5, xw, 5, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rectB.left, rectB.top, xw, 5, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rectB.left, rectB.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rectB.left + xw - 5, rectB.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rectB.left, rectB.top + yw - 5, xw, 5, NULL, 0, 0, WHITENESS);
         }
 
         // now black out the place where there are no tiles
