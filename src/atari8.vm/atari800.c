@@ -1518,6 +1518,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     wScan = 0;    // start at top of screen again
     wLeft = 0;
     PSL = 0;
+    wSLEnd = X8;
 
     // SIO init
     cSEROUT = 0;

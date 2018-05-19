@@ -126,6 +126,8 @@ extern int sVM;             // which tile you're hovering over, -1 means none so
 WORD fBrakes;               // run at full speed or emulated speed?
 WORD fBrakesSave;           // remember last state when pasting
 ULONGLONG uExecSpeed;       // how long Execute() takes (for one, or all VMs if tiled)
+BOOL fNeedTiledBitmap;      // size change or something means we need a new size bitmap
+POINT ptBlack;              // the top left of the black area of the tiled window
 
 extern BOOL fDebug;            // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
@@ -954,7 +956,7 @@ void CreateInstanceName(int, LPSTR);
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmap(int);
 BOOL CreateTiledBitmap();
-RECT GetPosFromTile(int);
+void GetPosFromTile(int, RECT *);
 void RenderBitmap();
 void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();

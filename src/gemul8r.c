@@ -1310,6 +1310,16 @@ int CALLBACK WinMain(
         // THIS IS OUR MAIN LOOP
         // =====================
 
+        // We delayed this until now because sizing would fill black in our pretty window.
+        // Since we now do 1 BitBlt instead of as many as 99 or more, widening the window will not pop more VMs into the space you
+        // open up, everything you grow will be black, but that's not a big deal like making the whole window go black was.
+        if (fNeedTiledBitmap)
+        {
+            CreateTiledBitmap(); // !!! error check
+            fNeedTiledBitmap = FALSE;
+        }
+        ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
+
         ULONGLONG FrameBegin = GetCycles();
 
         HANDLE hVD[MAX_VM];
@@ -1771,6 +1781,11 @@ BOOL CreateTiledBitmap()
     RECT rect;
     GetClientRect(vi.hWnd, &rect); // size of tiled window
     
+    // It would be too complicated to avoid writing off the right edge of the screen for a partially visible tile.
+    // So extend the right side of the screen by 32 bytes (the lowest resolution ANTIC mode writes 32 bytes at a time
+    // and needs to finish)
+    rect.right += 32;
+
     if (vi.hbmTiledOld)
     {
         SelectObject(vi.hdcTiled, vi.hbmTiledOld);
@@ -2329,7 +2344,7 @@ void RenderBitmap()
     //  PrintScreenStats();
 #endif
 
-#if 1
+#if 0
     if (v.fTiling)
     {
         // Tiling
@@ -2393,6 +2408,20 @@ void RenderBitmap()
     if (v.fTiling)
     {
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
+
+        // border around the one we're hovering over
+        if (sVM > -1)
+        {
+            GetPosFromTile(sVM, &rect);
+            int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
+            BitBlt(vi.hdc, rect.left, rect.top, xw, 5, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rect.left, rect.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rect.left + xw - 5, rect.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
+            BitBlt(vi.hdc, rect.left, rect.top + yw - 5, xw, 5, NULL, 0, 0, WHITENESS);
+        }
+
+        // now black out the place where there are no tiles
+        BitBlt(vi.hdc, ptBlack.x, ptBlack.y, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
     }
 #endif
 
@@ -2653,13 +2682,14 @@ BOOL ColdStart(int iVM)
 
 // what are the tiled coordinates of this VM?
 //
-RECT GetPosFromTile(int iVMTarget)
+void GetPosFromTile(int iVMTarget, RECT *prect)
 {
-    RECT rect = { 0 };
+    prect->top = prect->bottom = prect->left = prect->right = 0;
    
     if (v.cVM == 0)
-        return rect;
+        return;
 
+    RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
     int x, y, iVM;
@@ -2677,11 +2707,11 @@ RECT GetPosFromTile(int iVMTarget)
         {
             if (iVM == iVMTarget)
             {
-                rect.left = x;
-                rect.top = y;
-                rect.right = x + vvmhw[iVM].xpix;
-                rect.bottom = y + vvmhw[iVM].ypix;
-                return rect;
+                prect->left = x;
+                prect->top = y;
+                prect->right = x + vvmhw[iVM].xpix;
+                prect->bottom = y + vvmhw[iVM].ypix;
+                return;
             }
 
             // advance to the next valid bitmap
@@ -2698,8 +2728,7 @@ RECT GetPosFromTile(int iVMTarget)
             }
         }
     }
-    rect.left = rect.right = rect.top = rect.bottom = 0;
-    return rect;
+    return;
 }
 
 
@@ -3257,7 +3286,13 @@ LRESULT CALLBACK WndProc(
         // If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
         sWheelOffset = 0;
 
-        CreateTiledBitmap();    // !!! error check
+        // !!! This blanks out the window while sizing because execution is stopped so the new bitmap isn't filled
+        // until we let go
+        if (v.fTiling)
+        {
+            fNeedTiledBitmap = TRUE;
+            uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
+        }
 
         break;
 
@@ -3279,7 +3314,8 @@ LRESULT CALLBACK WndProc(
         for (int ii = 0; ii < MAX_VM; ii++)
         {
             if (rgvm[ii].fValidVM)
-                CreateNewBitmap(ii);    // fix every instance's bitmap
+                CreateNewBitmap(ii);    // fix every instance's bitmap !!! error check
+            CreateTiledBitmap();        // !!! error check
         }
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
@@ -3331,15 +3367,13 @@ break;
     }
 #endif
 
-#if 1
     case WM_GETMINMAXINFO:
         {
         LPMINMAXINFO lpmm = (LPMINMAXINFO)lParam;
 
-        // !!! shouldn't apply to tiled mode?
         // !!! Switching to a completely different VM needs to trigger this code again
 
-        if (v.iVM >= 0)
+        if (v.iVM >= 0 && !v.fTiling)
         {
             RECT rc1, rc2;
             GetWindowRect(hWnd, &rc1);
@@ -3410,7 +3444,6 @@ break;
         break;
 #endif
         }
-#endif
 
     case WM_NCPAINT:
         if (vi.fInDirectXMode && vi.fHaveFocus)
@@ -3756,6 +3789,8 @@ break;
             // which tile appears in the top left? There are often more tiles than fit, so to give everybody a chance,
             // we'll start with the current instance, not always the first one.
             v.fTiling = !v.fTiling;
+            CreateTiledBitmap();
+            uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             if (v.cVM && v.fTiling)
             {
                 //nFirstTile = v.iVM;    // show the current VM as the top left one - that's annoying
@@ -3783,6 +3818,7 @@ break;
         // toggle TURBO mode
         case IDM_TURBO:
             fBrakes = !fBrakes;
+            uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             FixAllMenus();
             break;
 
@@ -3901,7 +3937,7 @@ break;
             {
                 fA = ColdStart(vmNew);
                 if (fA && vi.hdc)
-                    CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
+                    CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do !!! error check
             }
             if (!fA)
                 DeleteVM(vmNew);
