@@ -103,17 +103,18 @@ void ShowCountDownLine(int iVM)
         int cch;
         BYTE *qch;
 
-#if 0
-        RECT rectC;
+        RECT rectC = { 0 };
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
-            RECT rect = GetPosFromTile(iVM);
+            RECT rect;
+            GetPosFromTile(iVM, &rect);
             GetClientRect(vi.hWnd, &rectC);
-            qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
+            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+            qch += rect.top * stride + rect.left;
         }
         else
-#endif
             qch = vrgvmi[iVM].pvBits;
         
         BYTE colfg;
@@ -129,10 +130,16 @@ void ShowCountDownLine(int iVM)
         else
             pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
 
-        //qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
-        //if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
-        //    return;
-        qch += ((wScan - wStartScan) * vcbScan);
+        if (v.fTiling)
+        {
+            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+            qch += ((wScan - wStartScan) * stride);
+            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+                return;
+        }
+        else
+            qch += ((wScan - wStartScan) * vcbScan);
 
         colfg = (BYTE)(((wFrame >> 2) << 4) + i + i);
         colfg = (BYTE)((((wFrame >> 2) + i) << 4) + 8);
@@ -771,7 +778,7 @@ short ShiftBitsAtATime(int iVM)
 //
 void PSLPrepare(int iVM)
 {
-    if (PSL == 0 || PSL == X8)    // or just trust the caller and don't check
+    if (PSL == 0 || PSL == wSLEnd)    // or just trust the caller and don't check
     {
         PSL = 0;    // allow PSL to do stuff again
 
@@ -1108,7 +1115,7 @@ void PSLPrepare(int iVM)
 //
 void PSLPostpare(int iVM)
 {
-    if (PSL == X8)
+    if (PSL == wSLEnd)      // the last pixel to do (may be < X8 if we're a tile partially off the right side of the screen)
     {
         // When we're done with this mode line, fetch again. If we couldn't fetch because DMA was off, keep wanting to fetch
         if (!fFetch)
@@ -1289,7 +1296,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 // start and stop are already on a BitsAtATime boundary for whatever graphics mode we are doing
 // (a multiple of 8, 16 or 32 from the end of the left black bar, depending on if we're in a high, medium or lo-res mode).
 
-void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars)
+void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars, RECT *prectTile)
 {
     BYTE rgFifth[X8];     // is fifth player colour present in GTIA modes?
 
@@ -1308,17 +1315,16 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
     // redraw scan line
 
     BYTE *qch0;
-#if 0
-    RECT rectC;
+    RECT rectC = { 0 };
     if (v.fTiling)
     {
         qch0 = vi.pTiledBits;
-        RECT rect = GetPosFromTile(iVM);
         GetClientRect(vi.hWnd, &rectC);
-        qch0 += rect.top * rectC.right + rect.left;  // right round up to multiple of 8?
+        // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+        int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+        qch0 += prectTile->top * stride + prectTile->left;
     }
     else
-#endif
         qch0 = vrgvmi[iVM].pvBits;
 
     BYTE *qch = qch0;
@@ -1356,10 +1362,16 @@ void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bb
     else
     {
         // not doing a bitfield, just write into this scan line
-        qch += ((wScan - wStartScan) * vcbScan);
-        //qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
-        //if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
-        //    return;
+        if (v.fTiling)
+        {
+            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+            qch += ((wScan - wStartScan) * stride);
+            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+                return;
+        }
+        else
+            qch += ((wScan - wStartScan) * vcbScan);
     }
 
     // what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
@@ -2430,16 +2442,17 @@ if (sl.modelo < 2 || iTop > i)
     {
         BYTE rgColour[129]; // quick access to necessary colour
 
-#if 0
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
-            RECT rect = GetPosFromTile(iVM);
+            RECT rect;
+            GetPosFromTile(iVM, &rect);
             GetClientRect(vi.hWnd, &rectC);
-            qch += rect.top * ((((rectC.right - 1) >> 3) + 1) << 3) + rect.left;  // right round up to multiple of 8?
+            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+            qch += rect.top * stride + rect.left;
         }
         else
-#endif
             qch = vrgvmi[iVM].pvBits;
 
         // !!! VDELAY NYI
@@ -2462,10 +2475,16 @@ if (sl.modelo < 2 || iTop > i)
         pmg.fHitclr = 0;
 
         // now map the rgpix array to the screen
-        qch += ((wScan - wStartScan) * vcbScan);
-//        qch += ((wScan - wStartScan) * (v.fTiling ? ((((rectC.right - 1) >> 3) + 1) << 3) : vcbScan));
- //       if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + rectC.right * rectC.bottom)
-   //         return;
+        if (v.fTiling)
+        {
+            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
+            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
+            qch += ((wScan - wStartScan) * stride);
+            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+                return;
+        }
+        else
+            qch += ((wScan - wStartScan) * vcbScan);
 
         // turn the rgpix array from a bitfield of which items are present (player or field colours)
         // into the actual colour that will show up there, based on priorities
@@ -2715,6 +2734,39 @@ BOOL ProcessScanLine(int iVM)
     if (cclock == 352 - 6)
         cclock = 352;
 
+    // Don't write off the right side of the bitmap if we are a partially visible tile, why waste time?
+    // We have a wide enough bitmap to finish even the lowest resolution atari pixel (32 Windows pixels wider than the client rect
+    // as a safety buffer we can grow into).
+
+    wSLEnd = X8;    // assume we're doing the whole scan line
+
+    RECT rectTile = { 0 };
+    RECT rectc = { 0 };
+    if (v.fTiling)
+    {
+        // !!! precompute this
+        // this is the rectangle of the big window to fill with our bits
+        GetPosFromTile(iVM, &rectTile);
+        
+        // Note the last tile's position so we can put black in empty tiles later
+        if (rectTile.top >= ptBlack.y)
+        {
+            if (rectTile.top > ptBlack.y)
+                ptBlack.x = rectTile.right;
+            else if (rectTile.right > ptBlack.x)
+                ptBlack.x = rectTile.right;
+            ptBlack.y = rectTile.top;
+        }
+
+        // uh oh, we're clipped off the right edge, only draw what you can see or you'll write over another tile's bits
+        GetClientRect(vi.hWnd, &rectc);
+        if (rectTile.right > rectc.right)
+        {
+            cclock = (short)(rectc.right - rectTile.left);
+            wSLEnd = cclock;    // and this is as far as we ever want to render
+        }
+    }
+
     // what part of the scan line were we on last time?
     short cclockPrev = PSL;
 
@@ -2760,6 +2812,8 @@ BOOL ProcessScanLine(int iVM)
             {
                 cclock = newTop;
                 PSL = cclock;
+                if (v.fTiling && rectTile.right > rectc.right)  // our right side is clipped
+                    wSLEnd = cclock;    // now THIS is as far as we need to render
             }
         }
     }
@@ -2815,18 +2869,18 @@ BOOL ProcessScanLine(int iVM)
         //ODS("          %d-%d (%d-%d)\n", pmg.hposPixLatest, cclock, iLate, iTop);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars);
+        PSLInternal(iVM, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &rectTile);
   
         sl.fpmg = TRUE;
-        PSLInternal(iVM, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest), max(i, iEarly), min(iTop, iLate), bbars);
+        PSLInternal(iVM, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest), max(i, iEarly), min(iTop, iLate), bbars, &rectTile);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars);
+        PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &rectTile);
     }
     else
     {
         //ODS("%d-%d (%d-%d)\n", cclockPrev, cclock, i, iTop);
-        PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars);
+        PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars, &rectTile);
     }
 
     PSLPostpare(iVM);    // see if we're done this scan line and be ready to do the next one

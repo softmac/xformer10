@@ -336,7 +336,9 @@ typedef struct
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
 
-    ULONG pad5UL;
+    WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
+
+    WORD pad5W;
     ULONG pad6UL;
 
     // clock multiplier
@@ -417,6 +419,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define WSYNC_Waiting CANDY_STATE(WSYNC_Waiting)
 #define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
 #define PSL           CANDY_STATE(PSL)
+#define wSLEnd        CANDY_STATE(wSLEnd)
 #define wNMI          CANDY_STATE(wNMI)
 #define rgbSpecial    CANDY_STATE(rgbSpecial)
 #define rgSIO         CANDY_STATE(rgSIO)
