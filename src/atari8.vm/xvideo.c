@@ -1173,6 +1173,9 @@ void UpdateColourRegisters(int iVM)
     // if in a hi-res 2 color mode, set playfield 1 color to some luminence of PF2
     if (pmg.fHiRes)
         sl.colpf1 = (sl.colpf2 & 0xF0) | (sl.colpf1 & 0x0F);
+
+    // uncomment to make all PMG orange and hopefully stand out
+    //pmg.colpm0 = pmg.colpm1 = pmg.colpm2 = pmg.colpm3 = 245;
 }
 
 
@@ -1258,8 +1261,9 @@ void PSLReadRegs(int iVM, short start, short stop)
             if (pmg.cwp[i] == 4)
                 pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
 
-            pmg.hpospPixStart[i] = off[i] << 1;        // first pixel affected by this player
-            pmg.hpospPixStop[i] = pmg.hpospPixStart[i] + (8 << pmg.cwp[i]);    // the pixel after the last one affected
+            // these are unsigned for efficiency so make sure they don't try to go negative
+            pmg.hpospPixStart[i] = max(off[i] << 1, 0);        // first pixel affected by this player
+            pmg.hpospPixStop[i] = max((off[i] << 1) + (8 << pmg.cwp[i]), 0);    // the pixel after the last one affected
 
             if (pmg.grafp[i])   // it's visible!
             {
@@ -1280,8 +1284,9 @@ void PSLReadRegs(int iVM, short start, short stop)
             if (pmg.cwm[i] == 4)
                 pmg.cwm[i] = 3;    //# of times to shift to divide by (cw *2)
 
-            pmg.hposmPixStart[i] = off[i] << 1;        // first pixel affected by this missile
-            pmg.hposmPixStop[i] = pmg.hposmPixStart[i] + (2 << pmg.cwm[i]);    // the pixel after the last one affected
+            // these are unsigned for efficiency so make sure they don't try to go negative
+            pmg.hposmPixStart[i] = max(off[i] << 1, 0);                         // first pixel affected by this missile
+            pmg.hposmPixStop[i] = max((off[i] << 1) + (2 << pmg.cwm[i]), 0);    // the pixel after the last one affected
 
             if (pmg.grafm & (0x03 << (i << 1))) // it's visible
             {
@@ -1295,8 +1300,8 @@ void PSLReadRegs(int iVM, short start, short stop)
             }
         }
 
-        if (pmg.hposPixEarliest < 0)
-            pmg.hposPixEarliest = 0;
+//        if (pmg.hposPixEarliest < 0)
+//            pmg.hposPixEarliest = 0;
         if (pmg.hposPixLatest > X8)
             pmg.hposPixLatest = X8;
     }
@@ -2545,8 +2550,6 @@ if (sl.modelo < 2 || iTop > i)
                 colpmX = colpmXSpec;
             }
 
-            // !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI in DrawMissiles
-
             if (!pmg.fGTIA)
             {
                 if (b)
@@ -2815,7 +2818,7 @@ BOOL ProcessScanLine(int iVM)
 
         // and where do we stop drawing? Don't go into the right hand bar
         iTop = cclock - bbars;
-        if (((short)iTop) <= 0)
+        if (cclock <= bbars)
             iTop = 0;    // inside the left side bar
         else if (iTop > X8 - bbars - bbars)
             iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);    // inside the right side bar
