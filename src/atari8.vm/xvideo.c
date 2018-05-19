@@ -1803,18 +1803,18 @@ if (sl.modelo < 2 || iTop > i)
                     break;
 
                 case 0x00:
-                    *qch++ = Col.col0;
-                    *qch++ = Col.col0;
+                    qch[0] = Col.col0;
+                    qch[1] = Col.col0;
                     break;
 
                 case 0x40:
-                    *qch++ = Col.col1;
-                    *qch++ = Col.col1;
+                    qch[0] = Col.col1;
+                    qch[1] = Col.col1;
                     break;
 
                 case 0x80:
-                    *qch++ = Col.col2;
-                    *qch++ = Col.col2;
+                    qch[0] = Col.col2;
+                    qch[1] = Col.col2;
                     break;
 
                 case 0xC0:
@@ -1827,11 +1827,13 @@ if (sl.modelo < 2 || iTop > i)
                     else
                         Col.col3 = sl.colpf2;
 
-                        *qch++ = Col.col3;
-                        *qch++ = Col.col3;
+                        qch[0] = Col.col3;
+                        qch[1] = Col.col3;
                     }
                     break;
                 }
+
+                qch += 2;
                 b2 <<= 2;
             }
         }
@@ -1883,14 +1885,16 @@ if (sl.modelo < 2 || iTop > i)
                         else
                             Col.col1 = sl.colpf[b1 >> 6];
 
-                        *qch++ = Col.col1;
-                        *qch++ = Col.col1;
+                        qch[0] = Col.col1;
+                        qch[1] = Col.col1;
                     }
                     else
                     {
-                        *qch++ = Col.col0;
-                        *qch++ = Col.col0;
+                        qch[0] = Col.col0;
+                        qch[1] = Col.col0;
                     }
+
+                    qch += 2;
                     b2 <<= 1;
                 }
             }
