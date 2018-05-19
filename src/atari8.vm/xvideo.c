@@ -68,6 +68,28 @@ static const WORD mpmdbits[19] =
     0, 0, 4, 4, 4, 4, 2, 2,    1, 1, 2, 2, 2, 4, 4, 4, 4, 4, 4
 };
 
+static const ULONG BitsToArrayMask[16] =
+{
+    // The lookup table to map to a little-endian bit mask to little-endian byte mask
+
+    0x00000000,
+    0x000000FF,
+    0x0000FF00,
+    0x0000FFFF,
+    0x00FF0000,
+    0x00FF00FF,
+    0x00FFFF00,
+    0x00FFFFFF,
+    0xFF000000,
+    0xFF0000FF,
+    0xFF00FF00,
+    0xFF00FFFF,
+    0xFFFF0000,
+    0xFFFF00FF,
+    0xFFFFFF00,
+    0xFFFFFFFF,
+};
+
 static const ULONG BitsToByteMask[16] =
 {
     // 6502 is big endian so it renders pixels in a left-to-right bit ordering.
@@ -551,7 +573,7 @@ void CreatePMGTable()
 }
 
 
-void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
+void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
 {
     BYTE b2;
     BYTE c;
@@ -572,7 +594,7 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
         c = mppmbw[i];
 
         // first loop, fill in where each player is
-        for (int z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
+        for (unsigned z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
@@ -600,7 +622,7 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
         c = mppmbw[i];
 
         // first loop, fill in where each player is
-        for (int z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
+        for (unsigned z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
@@ -626,7 +648,7 @@ void DrawPlayers(int iVM, BYTE *qb, short start, short stop)
 #pragma optimize("",off)
 #endif
 
-void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop, BYTE *rgFifth)
+void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, BYTE *rgFifth)
 {
     BYTE b2;
     BYTE c;
@@ -650,7 +672,7 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, short start, short stop, BYTE *
 
         c = mppmbw[i];
 
-        for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
+        for (unsigned z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
@@ -715,7 +737,7 @@ Ldm:
         }
 #endif
 
-        for (int z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
+        for (unsigned z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
         {
             if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
             {
@@ -1296,7 +1318,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 // start and stop are already on a BitsAtATime boundary for whatever graphics mode we are doing
 // (a multiple of 8, 16 or 32 from the end of the left black bar, depending on if we're in a high, medium or lo-res mode).
 
-void PSLInternal(int iVM, short start, short stop, short i, short iTop, short bbars, RECT *prectTile)
+void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iTop, unsigned bbars, RECT *prectTile)
 {
     BYTE rgFifth[X8] = { 0 };     // is fifth player colour present in GTIA modes?
 
@@ -2440,8 +2462,6 @@ if (sl.modelo < 2 || iTop > i)
     // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
-        BYTE rgColour[129]; // quick access to necessary colour
-
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
@@ -2493,48 +2513,37 @@ if (sl.modelo < 2 || iTop > i)
         // EXCEPT for GR.9, 10 & 11, which does not have playfield bitfield data. There are 16 colours in those modes and only 4 regsiters.
         // So don't try to look at PF bits. In GR.9 & 11, all playfield is underneath all players.
 
-        // precompute some thing so our loop can be fast. It was the slowest part of the code
-        BYTE colpf3Norm = sl.colpf3;
-        BYTE colpf3Spec = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
-        DWORD colpmXNorm = pmg.colpmX;
-        pmg.colpm0 = (pmg.colpm0 & 0xf0) | (sl.colpf1 & 0x0f);
-        pmg.colpm1 = (pmg.colpm1 & 0xf0) | (sl.colpf1 & 0x0f);
-        pmg.colpm2 = (pmg.colpm2 & 0xf0) | (sl.colpf1 & 0x0f);
-        pmg.colpm3 = (pmg.colpm3 & 0xf0) | (sl.colpf1 & 0x0f);
-        DWORD colpmXSpec = pmg.colpmX;
-        
-        BYTE *pb = &rgpix[start + ((NTSCx - X8) >> 1)];
-        BYTE b = *pb;
+        // precompute some things so our loop can be fast. It was the slowest part of the code
 
-        rgColour[0] = 0;
-        rgColour[bfPF0] = sl.colpf0;
-        rgColour[bfPF1] = sl.colpf1;
-        rgColour[bfPF2] = sl.colpf2;
+        // In fifth player mode PF3's colour uses the luma of PF1
+        const DWORD colpfXNorm = sl.colpfX;
+        const BYTE  colpf3 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
+        sl.colpf3 = colpf3;
+        const DWORD colpfXSpec = sl.colpfX;
+        sl.colpfX = colpfXNorm;
+
+        // In hi-res mode PMG colours use the luma of PF1
+        const DWORD colpmXNorm = pmg.colpmX;
+        const DWORD colpmXSpec = (pmg.colpmX & 0xF0F0F0F0) | (0x01010101 * (sl.colpf1 & 0x0f));
+
+        const BYTE *pb = &rgpix[((NTSCx - X8) >> 1)];
 
         for (i = start; i < stop; i++)
         {
-            b = *pb++;
+            BYTE b = pb[i];
 
-            // !!! combine IFs
+            DWORD colpfX = colpfXNorm;
+            DWORD colpmX = colpmXNorm;
 
-            // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
-            // (so that text shows up on top of a fifth player using its chroma).
             if (pmg.fHiRes && (b & bfPF1))
-                sl.colpf3 = colpf3Spec;
-            else
-                sl.colpf3 = colpf3Norm;
-            rgColour[bfPF3] = sl.colpf3;
+            {
+                // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
+                colpfX = colpfXSpec;
 
-            // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
-            // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
-            if (pmg.fHiRes && (b & bfPF1))
-                pmg.colpmX = colpmXSpec;    // put it back later
-            else
-                pmg.colpmX = colpmXNorm;
-            rgColour[bfPM0] = pmg.colpm0;
-            rgColour[bfPM1] = pmg.colpm1;
-            rgColour[bfPM2] = pmg.colpm2;
-            rgColour[bfPM3] = pmg.colpm3;
+                // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
+                // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
+                colpmX = colpmXSpec;
+            }
 
             // !!! Fifth player colour is altered in GTIA modes (pg. 108) NYI in DrawMissiles
 
@@ -2545,9 +2554,10 @@ if (sl.modelo < 2 || iTop > i)
                     // convert bitfield of what is present to bitfield of what wins and is visible
                     b = rgPMGMap[(sl.prior << 8) + b];
 
-                    // use sparse array to quickly get proper colour for bits that are present and visible, mix them with OR
-                    b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0] |
-                        rgColour[b & bfPF3] | rgColour[b & bfPF2] | rgColour[b & bfPF1] | rgColour[b & bfPF0];
+                    // OR the colours in parallel
+                    DWORD bX = (colpmX & BitsToArrayMask[(b / bfPM0) & 0x0f]) | (colpfX & BitsToArrayMask[(b / bfPF0) & 0x0f]);
+                    bX = bX | (bX >> 16);
+                    b = (bX | (bX >> 8)) & 0xff;
                 }
                 else
                 {
@@ -2565,11 +2575,15 @@ if (sl.modelo < 2 || iTop > i)
                     if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
                     {
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
-                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+
+                        // OR the colours in parallel
+                        DWORD bX = (colpmX & BitsToArrayMask[(b / bfPM0) & 0x0f]);
+                        bX = bX | (bX >> 16);
+                        b = (bX | (bX >> 8)) & 0xff;
                     }
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
-                        b = sl.colpf3;
+                        b = colpf3;
                         //rgFifth[i] = 0;
                     }
                     else
@@ -2585,11 +2599,15 @@ if (sl.modelo < 2 || iTop > i)
                     if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
                     {
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
-                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+
+                        // OR the colours in parallel
+                        DWORD bX = (colpmX & BitsToArrayMask[(b / bfPM0) & 0x0f]);
+                        bX = bX | (bX >> 16);
+                        b = (bX | (bX >> 8)) & 0xff;
                     }
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
-                        b = sl.colpf3;
+                        b = colpf3;
                         //rgFifth[i] = 0;
                     }
                     else
@@ -2605,11 +2623,15 @@ if (sl.modelo < 2 || iTop > i)
                     if (b & (bfPM3 | bfPM2 | bfPM1 | bfPM0))    // all players visible over all playfields
                     {
                         b = rgPMGMap[(sl.prior << 8) + b];  // lookup who wins, get colours quickly from sparse array
-                        b = rgColour[b & bfPM3] | rgColour[b & bfPM2] | rgColour[b & bfPM1] | rgColour[b & bfPM0];
+
+                        // OR the colours in parallel
+                        DWORD bX = (colpmX & BitsToArrayMask[(b / bfPM0) & 0x0f]);
+                        bX = bX | (bX >> 16);
+                        b = (bX | (bX >> 8)) & 0xff;
                     }
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
-                        b = sl.colpf3;
+                        b = colpf3;
                         //rgFifth[i] = 0;
                     }
                     else
@@ -2627,7 +2649,6 @@ if (sl.modelo < 2 || iTop > i)
 
             qch[i] = b;
         }
-        pmg.colpmX = colpmXNorm;    // put this back the way we found it
     }
 
     // Check if mode status countdown is in effect
@@ -2775,7 +2796,7 @@ BOOL ProcessScanLine(int iVM)
     // We may need to draw more than asked for, to draw an integer # of bytes of a scan mode at a time (!!! current limitation)
     // Figure out i & iTop, the beginning and ending pixel we have to draw to (iTop may be > cclock which will have to grow)
 
-    short bbars = 0, i = 0, iTop = 0;
+    WORD bbars = 0, i = 0, iTop = 0;
     if (sl.modelo >= 2)
     {
         if ((sl.dmactl & 3) == 1)
@@ -2794,7 +2815,7 @@ BOOL ProcessScanLine(int iVM)
 
         // and where do we stop drawing? Don't go into the right hand bar
         iTop = cclock - bbars;
-        if (iTop <= 0)
+        if (((short)iTop) <= 0)
             iTop = 0;    // inside the left side bar
         else if (iTop > X8 - bbars - bbars)
             iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);    // inside the right side bar
@@ -2835,7 +2856,7 @@ BOOL ProcessScanLine(int iVM)
         iEarly = 0;
         if (sl.modelo >= 2 && pmg.hposPixEarliest >= bbars)
         {
-            if (pmg.hposPixEarliest >= X8 - bbars)
+            if (pmg.hposPixEarliest >= (X8 - bbars))
                 iEarly = iTop;
             else
             {

@@ -69,13 +69,13 @@ extern const BYTE rgDMA[HCLOCKS];
 // index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
 // index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
 // index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
-char rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
+BYTE rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
 
 // for clock cycle number 0-113 (0 based), what pixel is being drawn when wLeft is from 1-114).
-short rgPIXELMap[HCLOCKS];
+WORD rgPIXELMap[HCLOCKS];
 
 // precompute PMG priorities
-char rgPMGMap[65536];
+BYTE rgPMGMap[65536];
 
 // this mess is how we properly index all of those arrays
 #define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
@@ -91,8 +91,10 @@ char rgPMGMap[65536];
 // XE is non-zero when 130XE emulation is wanted
 #define XE 1
 
-#define X8 352        // screen width
-#define Y8 240        // screen height
+// keep screen pixel co-ordinates unsigned, both to reduce compiler warnings about signed/unsigned comparisons
+// and also to reduce code size when using a pixel offset to index an array
+#define X8 352u       // screen width
+#define Y8 240u       // screen height
 
 #define CART_8K      1    // 0 for invalid
 #define CART_16K     2
@@ -248,14 +250,14 @@ typedef struct
         };
 
     // which pixel the players and missiles start at stop at, given their current hpos's and sizes
-    short hpospPixStart[4];
-    short hpospPixStop[4];
-    short hposmPixStart[4];
-    short hposmPixStop[4];
+    WORD hpospPixStart[4];
+    WORD hpospPixStop[4];
+    WORD hposmPixStart[4];
+    WORD hposmPixStop[4];
     
     // of all the PMs, what is the earliest and latest pixel they can be found at? (optimize areas we know to be empty of PMG)
-    short hposPixEarliest;
-    short hposPixLatest;
+    WORD hposPixEarliest;
+    WORD hposPixLatest;
 
     BYTE cwp[4];    // size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
     BYTE cwm[4];
