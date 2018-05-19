@@ -643,11 +643,6 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     *(ULONG *)PXPL &= 0x070B0D0E;
 }
 
-#if _MSC_VER >= 1200
-// VC 6.0 optimization bug having to do with (byte >> int)
-#pragma optimize("",off)
-#endif
-
 void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, BYTE *rgFifth)
 {
     BYTE b2;
@@ -749,8 +744,6 @@ Ldm:
         }
     }
 }
-
-#pragma optimize("",on)
 
 __inline void IncDLPC(int iVM)
 {
@@ -1354,12 +1347,22 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
     else
         qch0 = vrgvmi[iVM].pvBits;
 
-    BYTE *qch = qch0;
+    BYTE * __restrict qch = qch0;
 
     BYTE b1, b2;
-    BYTE col0, col1, col2, col3;
     BYTE vpix = iscan;
 
+    union
+    {
+        struct
+        {
+            BYTE col0, col1, col2, col3;
+        };
+
+        BYTE col[4];
+        DWORD colX;
+    } Col;
+    
 #ifndef NDEBUG
     // show current stack
     // annoying debug pixels near top of screen: qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
@@ -1459,24 +1462,24 @@ if (sl.modelo < 2 || iTop > i)
 
         vpix = vpixO;
 
-        col1 = sl.colpf1;
-        col2 = sl.colpf2;
+        Col.col1 = sl.colpf1;
+        Col.col2 = sl.colpf2;
 
         // just for fun, don't interlace in B&W.
         // !!! It actually won't work in PMG mode right now
         const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
 
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-        const BYTE red = fArtifacting ? (0x40 | (col1 & 0x0F)) : col1;
-        const BYTE green = fArtifacting ? (0xc0 | (col1 & 0x0F)) : col1;
-        const BYTE yellow = fArtifacting ? (0xe0 | (col1 & 0x0F)) : col1;
+        const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
+        const BYTE green = fArtifacting ? (0xc0 | (Col.col1 & 0x0F)) : Col.col1;
+        const BYTE yellow = fArtifacting ? (0xe0 | (Col.col1 & 0x0F)) : Col.col1;
         yellow; // NYI
 
         // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
 
         const ULONG FillA = 0x00010001 * (red | (green << 8));
-        const ULONG Fill1 = 0x01010101 * col1;
-        const ULONG Fill2 = 0x01010101 * col2;
+        const ULONG Fill1 = 0x01010101 * Col.col1;
+        const ULONG Fill2 = 0x01010101 * Col.col2;
 
         if ((sl.chactl & 4) && sl.modelo == 2)    // vertical reflect bit
             vpix = 7 - (vpix & 7);
@@ -1612,33 +1615,33 @@ if (sl.modelo < 2 || iTop > i)
             // but treat them as GR.9 luminences
             if (pmg.fGTIA == 0x40)
             {
-                col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
-                col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
+                Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
+                Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
 
                                                            // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
                 if (sl.fpmg)
                 {
-                    col1 &= 0x0f;
-                    col2 &= 0x0f;
+                    Col.col1 &= 0x0f;
+                    Col.col2 &= 0x0f;
                 }
 
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
 
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
             }
 
             // undocumented GR.10 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
             // but treat them as GR.10 indexes
             else if (pmg.fGTIA == 0x80)
             {
-                col1 = (b2 >> 4);
-                col2 = (b2 & 15);
+                Col.col1 = (b2 >> 4);
+                Col.col2 = (b2 & 15);
 
                 // if PMG are present on this line, we are asked to make a bitfield in the low nibble of which colours we are
                 // using. That's not possible in GR.10 which has >4 possible colours, so we'll just use our index. If we're not
@@ -1646,72 +1649,72 @@ if (sl.modelo < 2 || iTop > i)
 
                 if (!sl.fpmg)
                 {
-                    if (col1 < 9)
-                        col1 = *(((BYTE FAR *)&COLPM0) + col1);
-                    else if (col1 < 12)
-                        col1 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                    if (Col.col1 < 9)
+                        Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1);
+                    else if (Col.col1 < 12)
+                        Col.col1 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
                     else
-                        col1 = *(((BYTE FAR *)&COLPM0) + col1 - 8);    // col. 12-15 are copies of c.4-7
+                        Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1 - 8);    // col. 12-15 are copies of c.4-7
 
-                    if (col2 < 9)
-                        col2 = *(((BYTE FAR *)&COLPM0) + col2);
-                    else if (col2 < 12)
-                        col2 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                    if (Col.col2 < 9)
+                        Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2);
+                    else if (Col.col2 < 12)
+                        Col.col2 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
                     else
-                        col2 = *(((BYTE FAR *)&COLPM0) + col2 - 8);    // col. 12-15 are copies of c.4-7
+                        Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2 - 8);    // col. 12-15 are copies of c.4-7
                 }
                 else
                 {
-                    if (col1 < 9)
+                    if (Col.col1 < 9)
                         ;
-                    else if (col1 < 12)
-                        col1 = 8;            // col. 9-11 are copies of c.8
+                    else if (Col.col1 < 12)
+                        Col.col1 = 8;            // col. 9-11 are copies of c.8
                     else
-                        col1 = col1 - 8;    // col. 12-15 are copies of c.4-7
+                        Col.col1 = Col.col1 - 8;    // col. 12-15 are copies of c.4-7
 
-                    if (col2 < 9)
+                    if (Col.col2 < 9)
                         ;
-                    else if (col2 < 12)
-                        col2 = 8;            // col. 9-11 are copies of c.8
+                    else if (Col.col2 < 12)
+                        Col.col2 = 8;            // col. 9-11 are copies of c.8
                     else
-                        col2 = col2 - 8;    // col. 12-15 are copies of c.4-7
+                        Col.col2 = Col.col2 - 8;    // col. 12-15 are copies of c.4-7
                 }
 
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
 
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
             }
 
             // undocumented GR.11 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
             // but treat them as GR.11 chromas
             else if (pmg.fGTIA == 0xC0)
             {
-                col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);    // lum comes from 712
-                col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
+                Col.col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);    // lum comes from 712
+                Col.col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
 
                                                                 // We're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
                                                                 // we'll shift it back up and put the luma value back in later
                 if (sl.fpmg)
                 {
-                    col1 = col1 >> 4;
-                    col2 = col2 >> 4;
+                    Col.col1 = Col.col1 >> 4;
+                    Col.col2 = Col.col2 >> 4;
                 }
 
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
-                *qch++ = col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
+                *qch++ = Col.col1;
 
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
-                *qch++ = col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
+                *qch++ = Col.col2;
             }
 
             // GR.0 See mode 15 for artifacting theory of operation
@@ -1758,9 +1761,9 @@ if (sl.modelo < 2 || iTop > i)
             vpix ^= 7;                // vertical reflect bit
         vpix &= 7;
 
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
-        col2 = sl.colpf1;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
+        Col.col2 = sl.colpf1;
         //            col3 = sl.colpf2;
 
         for (; i < iTop; i++)
@@ -1800,18 +1803,18 @@ if (sl.modelo < 2 || iTop > i)
                     break;
 
                 case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
+                    *qch++ = Col.col0;
+                    *qch++ = Col.col0;
                     break;
 
                 case 0x40:
-                    *qch++ = col1;
-                    *qch++ = col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
                     break;
 
                 case 0x80:
-                    *qch++ = col2;
-                    *qch++ = col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
                     break;
 
                 case 0xC0:
@@ -1820,12 +1823,12 @@ if (sl.modelo < 2 || iTop > i)
                     int index = (hshift + 7 - 2 * j) / 8;
 
                     if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
-                        col3 = sl.colpf3;
+                        Col.col3 = sl.colpf3;
                     else
-                        col3 = sl.colpf2;
+                        Col.col3 = sl.colpf2;
 
-                        *qch++ = col3;
-                        *qch++ = col3;
+                        *qch++ = Col.col3;
+                        *qch++ = Col.col3;
                     }
                     break;
                 }
@@ -1841,13 +1844,13 @@ if (sl.modelo < 2 || iTop > i)
             vpix ^= 7;                // vertical reflect bit
         vpix &= 7;
 
-        col0 = sl.colbk;
+        Col.col0 = sl.colbk;
 
         for (; i < iTop; i++)
         {
             b1 = sl.rgb[i];
 
-            col1 = sl.colpf[b1 >> 6];
+            Col.col1 = sl.colpf[b1 >> 6];
 
             if (hshift)
             {
@@ -1875,17 +1878,17 @@ if (sl.modelo < 2 || iTop > i)
                     if (b2 & 0x80)
                     {
                         if (j < hshift)    // hshift restricted to 7 or less, so this is sufficient
-                            col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i - 1]) >> 6];
+                            Col.col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i - 1]) >> 6];
                         else
-                            col1 = sl.colpf[b1 >> 6];
+                            Col.col1 = sl.colpf[b1 >> 6];
 
-                        *qch++ = col1;
-                        *qch++ = col1;
+                        *qch++ = Col.col1;
+                        *qch++ = Col.col1;
                     }
                     else
                     {
-                        *qch++ = col0;
-                        *qch++ = col0;
+                        *qch++ = Col.col0;
+                        *qch++ = Col.col0;
                     }
                     b2 <<= 1;
                 }
@@ -1899,13 +1902,13 @@ if (sl.modelo < 2 || iTop > i)
                 {
                     if (b2 & 0x80)
                     {
-                        *qch++ = col1;
-                        *qch++ = col1;
+                        *qch++ = Col.col1;
+                        *qch++ = Col.col1;
                     }
                     else
                     {
-                        *qch++ = col0;
-                        *qch++ = col0;
+                        *qch++ = Col.col0;
+                        *qch++ = Col.col0;
                     }
                     b2 <<= 1;
                 }
@@ -1914,10 +1917,10 @@ if (sl.modelo < 2 || iTop > i)
         break;
 
     case 8:
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
-        col2 = sl.colpf1;
-        col3 = sl.colpf2;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
+        Col.col2 = sl.colpf1;
+        Col.col3 = sl.colpf2;
 
         for (; i < iTop; i++)
         {
@@ -1947,39 +1950,15 @@ if (sl.modelo < 2 || iTop > i)
                 // look at that bit pair
                 b2 = (u >> k >> k) & 0x3;
 
-                switch (b2 & 0x03)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
-                    break;
-
-                case 0x01:
-                    *qch++ = col1;
-                    *qch++ = col1;
-                    break;
-
-                case 0x02:
-                    *qch++ = col2;
-                    *qch++ = col2;
-                    break;
-
-                case 0x03:
-                    *qch++ = col3;
-                    *qch++ = col3;
-                    break;
-                }
+                *qch++ = Col.col[b2];
+                *qch++ = Col.col[b2];
             }
         }
         break;
 
     case 9:
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
 
         for (; i < iTop; i++)
         {
@@ -2008,31 +1987,17 @@ if (sl.modelo < 2 || iTop > i)
                 // look at that bit
                 b2 = (u >> k) & 0x1;
 
-                switch (b2 & 0x01)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
-                    break;
-
-                case 0x01:
-                    *qch++ = col1;
-                    *qch++ = col1;
-                    break;
-                }
+                *qch++ = Col.col[b2];
+                *qch++ = Col.col[b2];
             }
         }
         break;
 
     case 10:
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
-        col2 = sl.colpf1;
-        col3 = sl.colpf2;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
+        Col.col2 = sl.colpf1;
+        Col.col3 = sl.colpf2;
 
         for (; i < iTop; i++)
         {
@@ -2063,32 +2028,8 @@ if (sl.modelo < 2 || iTop > i)
                 // look at that bit pair
                 b2 = (u >> k >> k) & 0x3;
 
-                switch (b2 & 0x03)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
-                    break;
-
-                case 0x01:
-                    *qch++ = col1;
-                    *qch++ = col1;
-                    break;
-
-                case 0x02:
-                    *qch++ = col2;
-                    *qch++ = col2;
-                    break;
-
-                case 0x03:
-                    *qch++ = col3;
-                    *qch++ = col3;
-                    break;
-                }
+                *qch++ = Col.col[b2];
+                *qch++ = Col.col[b2];
             }
         }
         break;
@@ -2096,8 +2037,8 @@ if (sl.modelo < 2 || iTop > i)
         // these only differ by # of scan lines, we'll get called twice for 11 and once for 12
     case 11:
     case 12:
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
 
         for (; i < iTop; i++)
         {
@@ -2126,32 +2067,18 @@ if (sl.modelo < 2 || iTop > i)
                 // look at that bit
                 b2 = (u >> k) & 0x1;
 
-                switch (b2 & 0x01)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
-                    break;
-
-                case 0x01:
-                    *qch++ = col1;
-                    *qch++ = col1;
-                    break;
-                }
+                *qch++ = Col.col[b2];
+                *qch++ = Col.col[b2];
             }
         }
         break;
 
     case 13:
     case 14:
-        col0 = sl.colbk;
-        col1 = sl.colpf0;
-        col2 = sl.colpf1;
-        col3 = sl.colpf2;
+        Col.col0 = sl.colbk;
+        Col.col1 = sl.colpf0;
+        Col.col2 = sl.colpf1;
+        Col.col3 = sl.colpf2;
 
         for (; i < iTop; i++)
         {
@@ -2180,56 +2107,32 @@ if (sl.modelo < 2 || iTop > i)
                 // look at that bit pair
                 b2 = (u >> k >> k) & 0x3;
 
-                switch (b2 & 0x03)
-                {
-                default:
-                    Assert(FALSE);
-                    break;
-
-                case 0x00:
-                    *qch++ = col0;
-                    *qch++ = col0;
-                    break;
-
-                case 0x01:
-                    *qch++ = col1;
-                    *qch++ = col1;
-                    break;
-
-                case 0x02:
-                    *qch++ = col2;
-                    *qch++ = col2;
-                    break;
-
-                case 0x03:
-                    *qch++ = col3;
-                    *qch++ = col3;
-                    break;
-                }
+                *qch++ = Col.col[b2];
+                *qch++ = Col.col[b2];
             }
         }
         break;
 
     case 15:
         {
-        col1 = sl.colpf1;
-        col2 = sl.colpf2;
+        Col.col1 = sl.colpf1;
+        Col.col2 = sl.colpf2;
 
         // just for fun, don't interlace in B&W
         // !!! It actually won't work in PMG mode right now
         const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !sl.fpmg;
 
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-        const BYTE red = fArtifacting ? (0x40 | (col1 & 0x0F)) : col1;
-        const BYTE green = fArtifacting ? (0xc0 | (col1 & 0x0F)) : col1;
-        const BYTE yellow = fArtifacting ? (0xe0 | (col1 & 0x0F)) : col1;
+        const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
+        const BYTE green = fArtifacting ? (0xc0 | (Col.col1 & 0x0F)) : Col.col1;
+        const BYTE yellow = fArtifacting ? (0xe0 | (Col.col1 & 0x0F)) : Col.col1;
         yellow; // NYI
 
         // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
 
         const ULONG FillA = 0x00010001 * (red | (green << 8));
-        const ULONG Fill1 = 0x01010101 * col1;
-        const ULONG Fill2 = 0x01010101 * col2;
+        const ULONG Fill1 = 0x01010101 * Col.col1;
+        const ULONG Fill2 = 0x01010101 * Col.col2;
 
         WORD u = (i == 0 ? rgbSpecial : sl.rgb[i - 1]);
 
@@ -2320,24 +2223,24 @@ if (sl.modelo < 2 || iTop > i)
                 b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
             }
 
-            col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
-            col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
+            Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
+            Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
 
                                                        // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
             if (sl.fpmg)
             {
-                col1 &= 0x0f;
-                col2 &= 0x0f;
+                Col.col1 &= 0x0f;
+                Col.col2 &= 0x0f;
             }
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
 
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
         }
         break;
 
@@ -2356,8 +2259,8 @@ if (sl.modelo < 2 || iTop > i)
                 b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
             }
 
-            col1 = (b2 >> 4);
-            col2 = (b2 & 15);
+            Col.col1 = (b2 >> 4);
+            Col.col2 = (b2 & 15);
 
             // if PMG are present on this line, we are asked to make a bitfield in the low nibble of which colours we are
             // using. That's not possible in GR.10 which has >4 possible colours, so we'll just use our index. If we're not
@@ -2365,46 +2268,46 @@ if (sl.modelo < 2 || iTop > i)
 
             if (!sl.fpmg)
             {
-                if (col1 < 9)
-                    col1 = *(((BYTE FAR *)&COLPM0) + col1);
-                else if (col1 < 12)
-                    col1 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                if (Col.col1 < 9)
+                    Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1);
+                else if (Col.col1 < 12)
+                    Col.col1 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
                 else
-                    col1 = *(((BYTE FAR *)&COLPM0) + col1 - 8);    // col. 12-15 are copies of c.4-7
+                    Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1 - 8);    // col. 12-15 are copies of c.4-7
 
-                if (col2 < 9)
-                    col2 = *(((BYTE FAR *)&COLPM0) + col2);
-                else if (col2 < 12)
-                    col2 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                if (Col.col2 < 9)
+                    Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2);
+                else if (Col.col2 < 12)
+                    Col.col2 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
                 else
-                    col2 = *(((BYTE FAR *)&COLPM0) + col2 - 8);    // col. 12-15 are copies of c.4-7
+                    Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2 - 8);    // col. 12-15 are copies of c.4-7
             }
             else
             {
-                if (col1 < 9)
+                if (Col.col1 < 9)
                     ;
-                else if (col1 < 12)
-                    col1 = 8;            // col. 9-11 are copies of c.8
+                else if (Col.col1 < 12)
+                    Col.col1 = 8;            // col. 9-11 are copies of c.8
                 else
-                    col1 = col1 - 8;    // col. 12-15 are copies of c.4-7
+                    Col.col1 = Col.col1 - 8;    // col. 12-15 are copies of c.4-7
 
-                if (col2 < 9)
+                if (Col.col2 < 9)
                     ;
-                else if (col2 < 12)
-                    col2 = 8;            // col. 9-11 are copies of c.8
+                else if (Col.col2 < 12)
+                    Col.col2 = 8;            // col. 9-11 are copies of c.8
                 else
-                    col2 = col2 - 8;    // col. 12-15 are copies of c.4-7
+                    Col.col2 = Col.col2 - 8;    // col. 12-15 are copies of c.4-7
             }
 
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
 
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
         }
         break;
 
@@ -2423,37 +2326,37 @@ if (sl.modelo < 2 || iTop > i)
                 b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
             }
 
-            col1 = ((b2 >> 4) << 4);
-            col2 = ((b2 & 15) << 4);
+            Col.col1 = ((b2 >> 4) << 4);
+            Col.col2 = ((b2 & 15) << 4);
 
             // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
             // we'll shift it back up and put the luma value back in later
             if (sl.fpmg)
             {
-                col1 = col1 >> 4;
-                col2 = col2 >> 4;
+                Col.col1 = Col.col1 >> 4;
+                Col.col2 = Col.col2 >> 4;
             }
             else
             {
-                if (col1)
-                    col1 |= COLBK; /* & 15*/    // C.1-15 lum comes from COLBK, sl.colbk has luminence stripped out of it
+                if (Col.col1)
+                    Col.col1 |= COLBK; /* & 15*/    // C.1-15 lum comes from COLBK, sl.colbk has luminence stripped out of it
                 else
-                    col1 |= sl.colbk;           // C.0 is forced dark, strip out lum
-                if (col2)
-                    col2 |= COLBK; /* & 15*/    // you better keep COLBK <16, if not, it deliberately screws up like the real hw
+                    Col.col1 |= sl.colbk;           // C.0 is forced dark, strip out lum
+                if (Col.col2)
+                    Col.col2 |= COLBK; /* & 15*/    // you better keep COLBK <16, if not, it deliberately screws up like the real hw
                 else
-                    col2 |= sl.colbk;
+                    Col.col2 |= sl.colbk;
             }
 
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
-            *qch++ = col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
+            *qch++ = Col.col1;
 
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
-            *qch++ = col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
+            *qch++ = Col.col2;
         }
         break;
     }
@@ -2531,7 +2434,7 @@ if (sl.modelo < 2 || iTop > i)
         const DWORD colpmXNorm = pmg.colpmX;
         const DWORD colpmXSpec = (pmg.colpmX & 0xF0F0F0F0) | (0x01010101 * (sl.colpf1 & 0x0f));
 
-        const BYTE *pb = &rgpix[((NTSCx - X8) >> 1)];
+        const BYTE * __restrict pb = &rgpix[((NTSCx - X8) >> 1)];
 
         for (i = start; i < stop; i++)
         {
