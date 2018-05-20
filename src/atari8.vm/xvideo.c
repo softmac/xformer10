@@ -793,7 +793,7 @@ short ShiftBitsAtATime(int iVM)
 //
 void PSLPrepare(int iVM)
 {
-    if (PSL == 0 || PSL == wSLEnd)    // or just trust the caller and don't check
+    if (PSL == 0 || PSL >= wSLEnd)    // or just trust the caller and don't check
     {
         PSL = 0;    // allow PSL to do stuff again
 
@@ -834,15 +834,15 @@ void PSLPrepare(int iVM)
 
             fFetch = FALSE;
 
-                        // vertical scroll bit enabled - you can only start vscrolling on a real mode
+            // vertical scroll bit enabled - you can only start vscrolling on a real mode
             if ((sl.modehi & 2) && !sl.fVscrol && (sl.modelo >= 2))
             {
                 sl.fVscrol = TRUE;
-                sl.vscrol = VSCROL & 15;    // stores the first value of iscan to see if this is the first scan line of the mode
-                iscan = sl.vscrol;    // start displaying at this scan line. If > # of scan lines per mode line (say, 14)
-                                    // we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
-                                    // up to sscans. The last scan line is always when iscan == sscans.
-                                    // The actual scan line drawn will be iscan % (number of scan lines in that mode line)
+                sl.vscrol = VSCROL & 15;// stores the first value of iscan to see if this is the first scan line of the mode
+                iscan = sl.vscrol;      // start displaying at this scan line. If > # of scan lines per mode line (say, 14)
+                                        // we'll see parts of this mode line twice. We'll count up to 15, then back to 0 and
+                                        // up to sscans. The last scan line is always when iscan == sscans.
+                                        // The actual scan line drawn will be iscan % (number of scan lines in that mode line)
                 //ODS("%d iscan = %d\n", wScan, iscan);
             }
             else
@@ -1130,13 +1130,13 @@ void PSLPrepare(int iVM)
 //
 void PSLPostpare(int iVM)
 {
-    if (PSL == wSLEnd)      // the last pixel to do (may be < X8 if we're a tile partially off the right side of the screen)
+    if (PSL >= wSLEnd)      // we are at least at the last pixel to do (may be < X8 if we're a tile partially off the right side of the screen)
     {
         // When we're done with this mode line, fetch again. If we couldn't fetch because DMA was off, keep wanting to fetch
         if (!fFetch)
             fFetch = (iscan == scans);
         iscan = (iscan + 1) & 15;
-
+        
         if (fFetch)
         {
             // ANTIC's PC can't cross a 4K boundary, poor thing
@@ -2723,13 +2723,15 @@ BOOL ProcessScanLine(int iVM)
 
         // uh oh, we're clipped off the right edge, only draw what you can see or you'll write over another tile's bits
         GetClientRect(vi.hWnd, &rectc);
+        
+        // this is how many pixels are visible, and our stop point for this scan line instead of X8 (352)
+        if (rectTile.right > rectc.right)
+            wSLEnd = rectc.right - rectTile.left;
+
         if (rectTile.right > rectc.right)
         {
             if ((short)(rectc.right - rectTile.left) < cclock)
-            {
                 cclock = (short)(rectc.right - rectTile.left);
-                wSLEnd = cclock;    // and this is as far as we ever want to render
-            }
         }
     }
 
@@ -2778,8 +2780,6 @@ BOOL ProcessScanLine(int iVM)
             {
                 cclock = newTop;
                 PSL = cclock;
-                if (wSLEnd < X8)  // our right side is clipped
-                    wSLEnd = cclock;    // now THIS is as far as we need to render
             }
         }
     }
@@ -2829,7 +2829,7 @@ BOOL ProcessScanLine(int iVM)
             }
         }
 
-        //ODS("PSL m%02x %d-%d (%d-%d)\n", sl.modelo, cclockPrev, cclock, i, iTop);
+        //ODS("%d %d-%d (%d-%d)\n", wScan, cclockPrev, cclock, i, iTop);
         //ODS("          %d-%d (%d-%d)\n", cclockPrev, pmg.hposPixEarliest, i, iEarly);
         //ODS("          %d-%d (%d-%d)\n", max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest), max(i, iEarly), min(iTop, iLate));
         //ODS("          %d-%d (%d-%d)\n", pmg.hposPixLatest, cclock, iLate, iTop);
@@ -2845,7 +2845,7 @@ BOOL ProcessScanLine(int iVM)
     }
     else
     {
-        //ODS("%d-%d (%d-%d)\n", cclockPrev, cclock, i, iTop);
+        //ODS("%d %d-%d (%d-%d)\n", wScan, cclockPrev, cclock, i, iTop);
         PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars, &rectTile);
     }
 

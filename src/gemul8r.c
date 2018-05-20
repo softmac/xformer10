@@ -2426,11 +2426,11 @@ void RenderBitmap()
             int xmax = xw;
             int ymax = yw;
             if (rectB.left + xw > rect.right)
-                xw -= (rectB.left + xw - rect.right);       // right side of tile might be clipped
+                xw -= (rectB.left + xw - rect.right);    // right side of tile might be clipped
             if (rectB.top + yw > rect.bottom)
                 yw -= (rectB.top + yw - rect.bottom);    // bottom of tile might be clipped
             if (rectB.top < 0)
-                ycur = abs(rectB.top);                      // top of tile off screen
+                ycur = abs(rectB.top);                   // top of tile off screen
 
             // get a pointer to the top left of the current tile
             BYTE *ptb = (BYTE *)(vi.pTiledBits);
@@ -2465,6 +2465,7 @@ void RenderBitmap()
 
         }
 
+        // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
 
         // now black out the place where there are no tiles
@@ -3533,7 +3534,7 @@ break;
         PAINTSTRUCT ps;
 
         BeginPaint(hWnd, &ps);
-        RenderBitmap();
+        //RenderBitmap();   // we constanly blit, not just when "dirty" so we don't need to do anything here
         //UpdateOverlay();
 
         EndPaint(hWnd, &ps);
