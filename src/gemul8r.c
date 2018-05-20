@@ -66,6 +66,9 @@ BOOL fDebug;
 int nFirstTile; // at which instance does tiling start?
 int sVM = -1;    // the tile with focus
 
+static ULONG renders;
+static ULONG lastRenderCost;
+
 // convert ASCII to ATARI keyboard scan codes
 // high byte is the second scan code to send, except for special cases:
 // 1 meaning SHIFT and 2 meaning CTRL need to be pressed (subtract these values to get real second scan code)
@@ -273,7 +276,7 @@ void DisplayStatus(int iVM)
     strcat(rgch0, rgch);
 
     // are we running at normal speed or turbo speed
-    sprintf(rgch, " (%s-%lli%%) %u Hz", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * 60ull * 100ull / uExecSpeed) : 0, v.vRefresh);
+    sprintf(rgch, " (%s-%lli%%) %u Hz, %u renders %u ms last render cost", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * 60ull * 100ull / uExecSpeed) : 0, v.vRefresh, renders, lastRenderCost);
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -303,6 +306,25 @@ ULONGLONG GetCycles()
     }
 
     ULONGLONG a = (qpc.QuadPart * 178979ULL);
+    ULONGLONG b = (vi.qpfCold / 10ULL);
+    ULONGLONG c = a / b;
+    return c;
+}
+
+// Gets the number of elapsed milliseconds
+ULONGLONG GetMs()
+{
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    qpc.QuadPart -= vi.qpcCold;
+
+    if (qpc.QuadPart == 0)    // wow, you JUST called us!
+    {
+        // QPC is monotonically increasing, would take years to read the same value
+        Assert(0);
+    }
+
+    ULONGLONG a = (qpc.QuadPart * 100ull);
     ULONGLONG b = (vi.qpfCold / 10ULL);
     ULONGLONG c = a / b;
     return c;
@@ -1419,7 +1441,11 @@ int CALLBACK WinMain(
         // if necessary (as opposed to throttling and then rendering which introduces time skew in the guest).
 
         if (fRenderThisTime)
+        {
+            ULONGLONG start = GetMs();
             RenderBitmap();
+            lastRenderCost = (ULONG)(GetMs() - start);
+        }
 
         // STEP 2:
         //
@@ -1525,9 +1551,9 @@ int CALLBACK WinMain(
         // report back how long it took
 
         static ULONGLONG lastUpdateMs = 0;
-        if ((GetTickCount64() - lastUpdateMs) >= 1000)
+        if ((GetMs() - lastUpdateMs) >= 1000)
         {
-            lastUpdateMs = GetTickCount64();
+            lastUpdateMs = GetMs();
 
             int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
             DisplayStatus(ids);
@@ -2355,6 +2381,8 @@ void RenderBitmap()
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
         return;
     }
+
+ renders++;
 
 #if !defined(NDEBUG)
     //  printf("rnb: rect = %d %d %d %d\n", rect.left, rect.top, rect.right, rect.bottom);
