@@ -510,12 +510,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 // Platform specific stuff
 //
 
-#define pbtick _pbtick(iVM)
-__inline BYTE *_pbtick(int iVM)
-{
-    btickByte = (BYTE)(GetTickCount() / 50);
-    return &btickByte;
-}
 #define pbshift _pbshift(iVM)
 __inline BYTE *_pbshift(int iVM)
 {
