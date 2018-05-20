@@ -2446,14 +2446,16 @@ if (sl.modelo < 2 || iTop > i)
 
         // precompute some things so our loop can be fast. It was the slowest part of the code
 
-        // In fifth player mode PF3's colour uses the luma of PF1
+        // In fifth player mode, use PF3 unless PF1 also present in which case use the luma of PF1 (special)
+        // Both pf3 and pfX have special versions, depending on which we need to use
         const DWORD colpfXNorm = sl.colpfX;
-        const BYTE  colpf3 = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
-        sl.colpf3 = colpf3;
+        const BYTE  colpf3Norm = sl.colpf3;
+        const BYTE  colpf3Spec = (sl.colpf3 & 0xF0) | (sl.colpf1 & 0x0F);
+        sl.colpf3 = colpf3Spec;
         const DWORD colpfXSpec = sl.colpfX;
         sl.colpfX = colpfXNorm;
 
-        // In hi-res mode PMG colours use the luma of PF1
+        // In hi-res mode PMG colours use the luma of PF1 when PF1 present (special)
         const DWORD colpmXNorm = pmg.colpmX;
         const DWORD colpmXSpec = (pmg.colpmX & 0xF0F0F0F0) | (0x01010101 * (sl.colpf1 & 0x0f));
 
@@ -2463,13 +2465,17 @@ if (sl.modelo < 2 || iTop > i)
         {
             BYTE b = pb[i];
 
+            // assume we're using the normal versions
             DWORD colpfX = colpfXNorm;
+            BYTE  colpf3 = colpf3Norm;
             DWORD colpmX = colpmXNorm;
 
+            // use the special version in hires modes with PF1 present
             if (pmg.fHiRes && (b & bfPF1))
             {
                 // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
                 colpfX = colpfXSpec;
+                colpf3 = colpf3Spec;
 
                 // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
                 // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
@@ -2765,7 +2771,7 @@ BOOL ProcessScanLine(int iVM)
             {
                 cclock = newTop;
                 PSL = cclock;
-                if (v.fTiling && rectTile.right > rectc.right)  // our right side is clipped
+                if (wSLEnd < X8)  // our right side is clipped
                     wSLEnd = cclock;    // now THIS is as far as we need to render
             }
         }
