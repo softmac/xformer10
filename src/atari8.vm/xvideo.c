@@ -1318,7 +1318,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 
 void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iTop, unsigned bbars, RECT *prectTile)
 {
-    BYTE rgFifth[X8] = { 0 };     // is fifth player colour present in GTIA modes?
+    BYTE rgFifth[X8]; // is fifth player colour present in GTIA modes?
 
     if (start >= stop)
         return;
@@ -2393,6 +2393,9 @@ if (sl.modelo < 2 || iTop > i)
     // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
+        // We didn't waste time initializing the array if we weren't going to use it
+        memset(rgFifth, 0, sizeof(rgFifth));
+
         if (v.fTiling)
         {
             qch = vi.pTiledBits;
@@ -2523,7 +2526,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = colpf3;
-                        //rgFifth[i] = 0;
+                        rgFifth[i] = 0;
                     }
                     else
                     {
@@ -2547,7 +2550,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = colpf3;
-                        //rgFifth[i] = 0;
+                        rgFifth[i] = 0;
                     }
                     else
                     {
@@ -2571,7 +2574,7 @@ if (sl.modelo < 2 || iTop > i)
                     else if (rgFifth[i]) // we want the fifth player but there was no other way to indicate that
                     {
                         b = colpf3;
-                        //rgFifth[i] = 0;
+                        rgFifth[i] = 0;
                     }
                     else
                     {
