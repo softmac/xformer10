@@ -1320,6 +1320,19 @@ int CALLBACK WinMain(
         }
         ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
 
+        static ULONGLONG lastRenderMs;
+        // Catch 22 - First execute a frame of code, then render it. But we need to know if we're going to render before
+        // the code executes so we can save time (eg. only do collision detection, no actual rendering)
+
+        // !!! Speed things up by not doing this when in the console, or at least make it actually update the screen
+        // Throttle the rendering to no more than 70 Hz because anything higher renders too many duplicate guest frames
+        fRenderThisTime = FALSE;
+        if ((GetTickCount64() - lastRenderMs) >= (1000 / (min(70, (v.vRefresh + 1)))))
+        {
+            lastRenderMs = GetTickCount64();
+            fRenderThisTime = TRUE;
+        }
+
         ULONGLONG FrameBegin = GetCycles();
 
         HANDLE hVD[MAX_VM];
@@ -1395,14 +1408,8 @@ int CALLBACK WinMain(
         // Before checking fBrakes to throttle the speed or not, go ahead and render the current guest video frame
         // if necessary (as opposed to throttling and then rendering which introduces time skew in the guest).
 
-        static ULONGLONG lastRenderMs = 0;
-        // !!! Speed things up by not doing then when in the console, or at least make it actually update the screen
-        // Throttle the rendering to no more than 70 Hz because anything higher renders too many duplicate guest frames
-        if ((GetTickCount64() - lastRenderMs) >= (1000 / (min(70, (v.vRefresh + 1)))))
-        {
-            lastRenderMs = GetTickCount64();
+        if (fRenderThisTime)
             RenderBitmap();
-        }
 
         // STEP 2:
         //
@@ -3203,7 +3210,11 @@ LRESULT CALLBACK WndProc(
 
     case WM_CREATE:
         vi.hdc = GetDC(hWnd);
+        
         v.vRefresh = GetDeviceCaps(vi.hdc, VREFRESH);   // monitor refresh rate
+        if (v.vRefresh <= 1)
+            v.vRefresh = 60;    // some drivers return 0 or 1 for default, assume that means 60. !!! What does it mean?
+
         SetTextAlign(vi.hdc, TA_NOUPDATECP);
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
         SetBkMode(vi.hdc, TRANSPARENT);

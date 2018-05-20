@@ -2461,6 +2461,10 @@ if (sl.modelo < 2 || iTop > i)
 
         const BYTE * __restrict pb = &rgpix[((NTSCx - X8) >> 1)];
 
+        // we did the PMG collisions. Priorities and actual render can wait, we're not even going to render this frame!
+//        if (!fRenderThisTime)
+//            start = stop;
+
         for (i = start; i < stop; i++)
         {
             BYTE b = pb[i];

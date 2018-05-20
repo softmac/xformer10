@@ -128,6 +128,7 @@ WORD fBrakesSave;           // remember last state when pasting
 ULONGLONG uExecSpeed;       // how long Execute() takes (for one, or all VMs if tiled)
 BOOL fNeedTiledBitmap;      // size change or something means we need a new size bitmap
 POINT ptBlack;              // the top left of the black area of the tiled window
+BOOL fRenderThisTime;       //
 
 extern BOOL fDebug;            // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
