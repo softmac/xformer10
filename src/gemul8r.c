@@ -2462,14 +2462,14 @@ void RenderBitmap()
                 memset(ptb, 0x0f, xw);
                 ptb += stride;
             }
-
         }
 
         // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
 
-        // now black out the place where there are no tiles
-        BitBlt(vi.hdc, ptBlack.x, ptBlack.y, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
+        // now black out the places where there are no tiles
+        BitBlt(vi.hdc, ptBlack.x, ptBlack.y, rect.right, ptBlack.y + vvmhw[iVM].ypix, NULL, 0, 0, BLACKNESS);   // the rest of the last row
+        BitBlt(vi.hdc, 0, ptBlack.y + vvmhw[iVM].ypix, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);   // empty rows may follow if VMs were deleted
     }
 #endif
 
