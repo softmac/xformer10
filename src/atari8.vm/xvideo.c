@@ -1573,8 +1573,6 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
 
     if (sl.fpmg)
     {
-        memset(rgFifth, 0, X8);
-
         // When PM/G are present on the scan line is first rendered
         // into rgpix as bytes of bit vectors representing the playfields
         // and PM/G that are present at each pixel. Then later we map
