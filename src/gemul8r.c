@@ -2414,19 +2414,58 @@ void RenderBitmap()
 #else
     if (v.fTiling)
     {
-        BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
-
-        // border around the one we're hovering over
-        if (sVM > -1)
+        // border around the one we're hovering over - write to source to avoid flicker and get best perf
+        // don't do this if we're resizing, the bitmap is out of date!
+        if (sVM > -1 && !fNeedTiledBitmap)
         {
+            // get the rect of the current tile and its width & height
             RECT rectB;
+            int ycur = 0;
             GetPosFromTile(sVM, &rectB);
             int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
-            BitBlt(vi.hdc, rectB.left, rectB.top, xw, 5, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rectB.left, rectB.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rectB.left + xw - 5, rectB.top + 5, 5, yw - 10, NULL, 0, 0, WHITENESS);
-            BitBlt(vi.hdc, rectB.left, rectB.top + yw - 5, xw, 5, NULL, 0, 0, WHITENESS);
+            int xmax = xw;
+            int ymax = yw;
+            if (rectB.left + xw > rect.right)
+                xw -= (rectB.left + xw - rect.right);       // right side of tile might be clipped
+            if (rectB.top + yw > rect.bottom)
+                yw -= (rectB.top + yw - rect.bottom);    // bottom of tile might be clipped
+            if (rectB.top < 0)
+                ycur = abs(rectB.top);                      // top of tile off screen
+
+            // get a pointer to the top left of the current tile
+            BYTE *ptb = (BYTE *)(vi.pTiledBits);
+            int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+            ptb += rectB.top * stride + rectB.left;
+            
+            // blit white (ATARI colour $f)
+            
+            // top white bar
+            ptb += stride * ycur;
+            for (; ycur < min(5,yw); ycur++)
+            {
+                memset(ptb, 0x0f, xw);
+                ptb += stride;
+            }
+
+            // side bars
+            for (; ycur < min(yw,ymax - 5); ycur++)
+            {
+                memset(ptb, 0x0f, min(5, xw));
+                ptb += xmax - 5;
+                memset(ptb, 0x0f, max(0, 5 - xmax + xw));
+                ptb += (stride - (xmax - 5));
+            }
+
+            // bottom white bar
+            for (; ycur < min(ymax, yw); ycur++)
+            {
+                memset(ptb, 0x0f, xw);
+                ptb += stride;
+            }
+
         }
+
+        BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
 
         // now black out the place where there are no tiles
         BitBlt(vi.hdc, ptBlack.x, ptBlack.y, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
