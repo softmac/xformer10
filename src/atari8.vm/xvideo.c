@@ -2712,8 +2712,11 @@ BOOL ProcessScanLine(int iVM)
         GetClientRect(vi.hWnd, &rectc);
         if (rectTile.right > rectc.right)
         {
-            cclock = (short)(rectc.right - rectTile.left);
-            wSLEnd = cclock;    // and this is as far as we ever want to render
+            if ((short)(rectc.right - rectTile.left) < cclock)
+            {
+                cclock = (short)(rectc.right - rectTile.left);
+                wSLEnd = cclock;    // and this is as far as we ever want to render
+            }
         }
     }
 

@@ -4454,7 +4454,7 @@ break;
 
         if (fZoom)
         {
-            if (offset < 0)    // zoom in
+            if (offset > 0)    // zoom in
             {
                 POINT pt;
                 pt.x = GET_X_LPARAM(lParam);
@@ -4470,7 +4470,7 @@ break;
                     }
                 }
             }
-            else if (offset > 0) // zoom out
+            else if (offset < 0) // zoom out
             {
                 if (!v.fTiling)
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
