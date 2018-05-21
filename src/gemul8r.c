@@ -4971,7 +4971,7 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
     OpenFileName.lpstrTitle        = fCreate ? "Save As..." : "Select a File...";
     OpenFileName.nFileOffset       = 0;
     OpenFileName.nFileExtension    = 0;
-    OpenFileName.lpstrDefExt       = (fCreate && nType == 2) ? "gem" : NULL;
+    OpenFileName.lpstrDefExt       = (fCreate && nType == 2) ? "gem" : ((fCreate && nType == 0) ? "atr" : NULL);
     OpenFileName.lCustData         = 0;
     OpenFileName.lpfnHook            = NULL;
     OpenFileName.lpTemplateName    = NULL;
