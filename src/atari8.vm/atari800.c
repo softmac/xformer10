@@ -39,7 +39,8 @@ VMINFO const vmi800 =
     TRUE,    // fUsesCart
     FALSE,    // fUsesMouse
     TRUE,    // fUsesJoystick
-    "Xformer/SIO2PC Disks\0*.xfd;*.atr;*.sd;*.dd;*.xex;*.bas\0All Files\0*.*\0\0",
+    // ATR must come first to be the default extension when creating a new disk image
+    "Xformer/SIO2PC Disks\0*.atr;*.xfd;*.sd;*.dd;*.xex;*.bas\0All Files\0*.*\0\0",
     "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",
 
     InstallAtari,
@@ -1508,6 +1509,9 @@ BOOL __cdecl WarmbootAtari(int iVM)
 
     cPasteBuffer = 0;   // stop pasting
 
+    // !!! Warm start is broken on XL/XE - swap banks back?
+    // 221B broken
+
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;    // delay for banner messages
@@ -1518,7 +1522,6 @@ BOOL __cdecl WarmbootAtari(int iVM)
     wScan = 0;    // start at top of screen again
     wLeft = 0;
     PSL = 0;
-    wSLEnd = X8;
 
     // SIO init
     cSEROUT = 0;
