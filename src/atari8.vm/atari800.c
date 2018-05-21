@@ -2619,9 +2619,6 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         if (addr == 2 || addr == 3)
             rgbMem[0xd400 + addr] = b;
 
-        if (addr == 14 && b != 0)
-            addr = addr;
-        
         // Do NOT reload the DL to the top when DMA fetch is turned on, that turned out to be disastrous
 
         if (addr == 10)

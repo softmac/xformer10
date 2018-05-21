@@ -905,46 +905,46 @@ void PSLPrepare(int iVM)
                 }
                 break;
             }
-
-            // Check playfield width and set cbWidth (number of bytes read by Antic)
-            // and the smaller cbDisp (number of bytes actually visible)
-            // This only happens every time a new mode is fetched, not every scan line
-            switch (DMACTL & 3)
-            {
-            default:
-                Assert(FALSE);
-                break;
-
-                // cbDisp - actual number of bytes per line of this graphics mode visible
-                // cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
-
-            case 0:    // playfield off
-                sl.modelo = 0;
-                cbWidth = 0;
-                cbDisp = cbWidth;
-                break;
-            case 1: // narrow playfield
-                cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
-                cbDisp = cbWidth;
-                if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
-                    cbWidth |= (cbWidth >> 2);
-                break;
-            case 2: // normal playfield
-                cbWidth = mpMdBytes[sl.modelo];        // bytes in NARROW mode, eg. 32
-                cbDisp = cbWidth | (cbWidth >> 2);    // cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
-                if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
-                    cbWidth |= (cbWidth >> 1);            // boost cbWidth to mimic wide playfield, eg. 48
-                else
-                    cbWidth |= (cbWidth >> 2);            // otherwise same as cbDisp
-                break;
-            case 3: // wide playfield
-                cbWidth = mpMdBytes[sl.modelo];        // NARROW width
-                cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);    // visible area is half way between NORMAL and WIDE
-                cbWidth |= (cbWidth >> 1);            // WIDE width
-                break;
-            }
         }
+         
+        // Check playfield width and set cbWidth (number of bytes read by Antic)
+        // and the smaller cbDisp (number of bytes actually visible)
+        // This happens every scan line (frogger)
+        switch (DMACTL & 3)
+        {
+        default:
+            Assert(FALSE);
+            break;
 
+            // cbDisp - actual number of bytes per line of this graphics mode visible
+            // cbWidth - boosted number of bytes read by ANTIC if horizontal scrolling (narrow->normal, normal->wide)
+
+        case 0:    // playfield off
+            sl.modelo = 0;
+            cbWidth = 0;
+            cbDisp = cbWidth;
+            break;
+        case 1: // narrow playfield
+            cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
+            cbDisp = cbWidth;
+            if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
+                cbWidth |= (cbWidth >> 2);
+            break;
+        case 2: // normal playfield
+            cbWidth = mpMdBytes[sl.modelo];        // bytes in NARROW mode, eg. 32
+            cbDisp = cbWidth | (cbWidth >> 2);    // cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
+            if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
+                cbWidth |= (cbWidth >> 1);            // boost cbWidth to mimic wide playfield, eg. 48
+            else
+                cbWidth |= (cbWidth >> 2);            // otherwise same as cbDisp
+            break;
+        case 3: // wide playfield
+            cbWidth = mpMdBytes[sl.modelo];        // NARROW width
+            cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);    // visible area is half way between NORMAL and WIDE
+            cbWidth |= (cbWidth >> 1);            // WIDE width
+            break;
+        }
+        
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
         // allow blank mode lines to mean duplicates of previous lines (GR.9++)
@@ -2726,7 +2726,7 @@ BOOL ProcessScanLine(int iVM)
         
         // this is how many pixels are visible, and our stop point for this scan line instead of X8 (352)
         if (rectTile.right > rectc.right)
-            wSLEnd = rectc.right - rectTile.left;
+            wSLEnd = (WORD)(rectc.right - rectTile.left);
 
         if (rectTile.right > rectc.right)
         {
