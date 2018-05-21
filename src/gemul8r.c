@@ -1047,17 +1047,22 @@ int CALLBACK WinMain(
     }
     // drag and drop a single file shouldn't be tiled, but re-loading your preference that way should
     else if (fSkipLoad)
+    {
         v.fTiling = FALSE;
+        // !!! If the saved size is a small window, allowed because of tiling, we'll start up this 
+        // drag/drop VM single sized, not double sized!
+    }
 
     // If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
     if (!fSkipLoad && v.fSaveOnExit)
         fProps = LoadProperties(lpLoad, FALSE);
 
-    // If we didn't restore/drag any VM's, we need some, so make some
+    // If we didn't restore/drag any VM's
     if (v.cVM == 0)
     {
-        v.iVM = -1;
-        // !!! TEMP TEST
+        v.iVM = -1; // make sure the current one is invalid
+
+        // we don't need any anymore
         //CreateAllVMs();
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -1302,6 +1307,10 @@ int CALLBACK WinMain(
 
         if (v.cVM == 0)
         {
+            // erase the VM just deleted or its last image will hang around
+            if (v.fTiling)
+                RenderBitmap();
+
             uExecSpeed = 0;    // execution speed is 0
             continue;
         }
