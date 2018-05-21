@@ -157,6 +157,7 @@ DWORD WINAPI VMThread(LPVOID l); // thread proc
 
 char *PchFromBfRgSz(ULONG bf, char const * const *rgsz);
 BOOL FMonoFromBf(ULONG bf);
+BOOL FGreyFromBf(ULONG bf);
 ULONG CbRamFromBf(ULONG bf);
 ULONG BfFromWfI(ULONG wf, int i);
 
@@ -622,7 +623,7 @@ typedef struct
 extern INST vi;
 
 //
-// HW info needed by every VM type. STHW is a superset of this structure, not persisted
+// per-VM HW info needed by every VM type. STHW is a superset of this structure, not persisted
 //
 typedef struct _vmhw
 {
@@ -631,7 +632,8 @@ typedef struct _vmhw
     int   xpix;         // horizontal resolution (ST pixels)
     int   ypix;         // vertical resolution (ST pixels)
     int   planes;       // number of bit planes (ST mode)
-    BOOL fMono;         // true if emulating mono (using the mono bitmap)
+    BOOL fMono;         // true if emulating mono (using the mono bitmap) - 2 colour only
+    BOOL fGrey;         // true if grey scale
 
     BITMAPINFOHEADER bmiHeader;
     union
