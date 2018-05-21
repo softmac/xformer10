@@ -1169,6 +1169,14 @@ void UpdateColourRegisters(int iVM)
 
     // uncomment to make all PMG orange and hopefully stand out
     //pmg.colpm0 = pmg.colpm1 = pmg.colpm2 = pmg.colpm3 = 245;
+
+    // in greyscale mode, just use luminences
+    if (vvmhw[iVM].fGrey)
+    {
+        sl.colpfX &= 0x0f0f0f0f;
+        pmg.colpmX &= 0x0f0f0f0f;
+        sl.colbk &= 0x0f;
+    }
 }
 
 

@@ -1686,7 +1686,7 @@ BOOL SetBitmapColors(int iVM)
 {
     int i;
 
-    // this VM is always or currently in Monochrome mode
+    // this VM is always or currently in Monochrome mode (2-color)
     if (rgvm[iVM].pvmi->planes == 1 || vvmhw[iVM].fMono)
     {
         if (vi.fInDirectXMode)
@@ -1717,6 +1717,8 @@ BOOL SetBitmapColors(int iVM)
     // we are 8 bit colour
     else if (rgvm[iVM].pvmi->planes == 8)
     {
+
+#if 0
         // but are on a B&W monitor that does shades of grey
         if (rgvm[iVM].bfMon == monGreyTV)
 
@@ -1730,7 +1732,9 @@ BOOL SetBitmapColors(int iVM)
                  (rgvm[iVM].pvmi->rgbRainbow[i*3+2]  + (rgvm[iVM].pvmi->rgbRainbow[i*3+2] >> 2));
                 vvmhw[iVM].rgrgb[i].rgbReserved = 0;
         }
-        else for (i = 0; i < 256; i++)
+        else
+#endif
+        for (i = 0; i < 256; i++)
         {
             vvmhw[iVM].rgrgb[i].rgbRed = (rgvm[iVM].pvmi->rgbRainbow[i*3] << 2) | (rgvm[iVM].pvmi->rgbRainbow[i*3] >> 5);
             vvmhw[iVM].rgrgb[i].rgbGreen = (rgvm[iVM].pvmi->rgbRainbow[i*3+1] << 2) | (rgvm[iVM].pvmi->rgbRainbow[i*3+1] >> 5);
@@ -1790,10 +1794,11 @@ BOOL SetBitmapColors(int iVM)
 
 // CreateTiledBitmap
 // Make a big bitmap for the tiles they all share so there's only 1 BitBlt
+// !!! Almost a duplicate of CreateNewBitmap, only differs by size of bitmap.
+// !!! TODO - only use 1 giant bitmap and get rid of the 1,000 VM bitmaps
 //
 BOOL CreateTiledBitmap()
 {
-    int i;
     RECT rect;
     GetClientRect(vi.hWnd, &rect); // size of tiled window
     
@@ -1841,25 +1846,17 @@ BOOL CreateTiledBitmap()
         return FALSE;
 
     vi.hbmTiledOld = SelectObject(vi.hdcTiled, vi.hbmTiled);
-    RGBQUAD rgrgb[256];
+    
     int j;
-
     for (j = 0; j < MAX_VM; j++)
         if (rgvm[j].fValidVM)
             break;
 
     if (j < MAX_VM)
-    {
-        for (i = 0; i < 256; i++)
-        {
-            rgrgb[i].rgbRed = (rgvm[j].pvmi->rgbRainbow[i * 3] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3] >> 5);
-            rgrgb[i].rgbGreen = (rgvm[j].pvmi->rgbRainbow[i * 3 + 1] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3 + 1] >> 5);
-            rgrgb[i].rgbBlue = (rgvm[j].pvmi->rgbRainbow[i * 3 + 2] << 2) | (rgvm[j].pvmi->rgbRainbow[i * 3 + 2] >> 5);
-            rgrgb[i].rgbReserved = 0;
-        }
+        SetBitmapColors(j);
 
-        SetDIBColorTable(vi.hdcTiled, 0, 256, rgrgb);
-    }
+    // SetBitmapColors sets the colours in that VM's personal bitmap, now set it in the tiled bitmap
+    SetDIBColorTable(vi.hdcTiled, 0, 256, vvmhw[j].rgrgb);
 
 #if 0   // TODO, this code assumes 800 VMs only and breaks otherwise
     // we may have moved the window, so we need to move the mouse capture rectangle too
@@ -2142,7 +2139,7 @@ Ltryagain:
         vi.sy = vvmhw[iVM].ypix * vi.fYscale;
     }
 
-    // true monochrome?
+    // true monochrome? (2-color)
     if (vvmhw[iVM].fMono && !v.fNoMono)
     {
         vvmhw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
@@ -2308,9 +2305,11 @@ BOOL FToggleMonitor(int iVM)
     if (bfSav == rgvm[iVM].bfMon)
         return FALSE;
 
+#if 0
     // We need to guard the video critical section since
     // we are modifying the global vvmhw.fMono which both
     // the pallete and redraw routines depend on.
+#endif
 
     vvmhw[iVM].rgrgb[0].rgbRed = 255;
     vvmhw[iVM].rgrgb[0].rgbGreen = 255;
@@ -2326,6 +2325,7 @@ BOOL FToggleMonitor(int iVM)
     }
 
     vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
+    vvmhw[iVM].fGrey = FGreyFromBf(rgvm[iVM].bfMon);
 
     SetBitmapColors(v.iVM);
 //    FCreateOurPalette();
@@ -5216,12 +5216,17 @@ char *PchFromBfRgSz(ULONG bf, char const * const *rgsz)
     return *ppch;
 }
 
-
+// Is this true 2-colour monochrome (grey scale doesn't count)
 BOOL FMonoFromBf(ULONG bf)
 {
     return (bf == monMono) || (bf == monSTMono);
 }
 
+// Is this grey scale?
+BOOL FGreyFromBf(ULONG bf)
+{
+    return (bf == monGreyTV);
+}
 
 ULONG CbRamFromBf(ULONG bf)
 {
