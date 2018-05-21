@@ -2938,7 +2938,9 @@ BOOL SaveATARIDOS(int inst, int drive)
         strcat(szDir, "\\");                    // add '\'
         strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);    // add the filename
         if (ij >= pdi->cfd)
-            strcat(szDir, ".txt");    // 2nd time around, save everything as text
+            // 2nd time around, save everything as text, with _, a character not supported by ATARI
+            // so the filename won't be the same as something already on the disk
+            strcat(szDir, "_.txt");
 
         // get file size
         ULONG cbSize = CbReadFileContents(pdi, NULL, &pdi->pfd[ij % pdi->cfd]);
