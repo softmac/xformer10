@@ -1263,7 +1263,9 @@ lNAK:
                 printf("Read: sector = %d  wBuff = $%4x  wBytes = %d  lcbSector = %ld  md = %d\n",
                     wSector, wBuff, wBytes, lcbSector, md);
 #endif
-
+                // now that SIO is not instantaneous, mute the audio. This seems to do the trick without calling PokeBAtari
+                AUDF1 = AUDF2 = AUDF3 = AUDF4 = 0;
+                
                 /* temporary kludge to prevent reading over ROM */
                 if (wBuff >= ramtop)
                     wRetStat = SIO_OK;
