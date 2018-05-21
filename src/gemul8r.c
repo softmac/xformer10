@@ -2464,12 +2464,36 @@ void RenderBitmap()
             }
         }
 
+        // now black out the places where there are no tiles
+
+        // get a pointer to the top right of the last tile
+        BYTE *ptb = (BYTE *)(vi.pTiledBits);
+        int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+        ptb += ptBlack.y * stride + ptBlack.x;
+
+        // black out the rest of this row
+        int ycur = ptBlack.y;
+        // !!! 240 constant assumed
+        while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
+        {
+            memset(ptb, 0, rect.right - ptBlack.x);
+            ycur += 1;
+            ptb += stride;
+        }
+
+        // black out any bottom blank rows (if VMs are deleted, that could make some)
+        ycur = ptBlack.y + 240;
+        ptb = (BYTE *)(vi.pTiledBits);
+        ptb += (ptBlack.y + 240) * stride;
+        while (ycur < rect.bottom)
+        {
+            memset(ptb, 0, rect.right);
+            ycur += 1;
+            ptb += stride;
+        }
+
         // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
-
-        // now black out the places where there are no tiles
-        BitBlt(vi.hdc, ptBlack.x, ptBlack.y, rect.right, ptBlack.y + vvmhw[iVM].ypix, NULL, 0, 0, BLACKNESS);   // the rest of the last row
-        BitBlt(vi.hdc, 0, ptBlack.y + vvmhw[iVM].ypix, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);   // empty rows may follow if VMs were deleted
     }
 #endif
 
