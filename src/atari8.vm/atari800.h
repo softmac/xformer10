@@ -268,7 +268,7 @@ typedef struct
     BYTE grafm;
     BYTE sizem;
     BYTE pmbase;
-    BYTE fHitclr;
+    BYTE fHitclr; // defunct
 } PMG;
 
 #pragma pack()

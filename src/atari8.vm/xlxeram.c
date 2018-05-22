@@ -176,6 +176,7 @@ BOOL __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
         if ((flags & SELF_MASK) == SELF_IN)
         {
             // enable Self Test ROMs
+            // !!! THIS SHOULD BE READ ONLY
             _fmemcpy(rgbSwapSelf, &rgbMem[0x5000], SELF_SIZE);
             _fmemcpy(&rgbMem[0x5000], rgbXLXE5000, SELF_SIZE);
         }

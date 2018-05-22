@@ -604,8 +604,8 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     }
 
     // don't want collisions
-    if (pmg.fHitclr)
-        return;
+    //if (pmg.fHitclr)
+    //    return;
 
     // second loop, check for collisions once all the players have reported
     for (i = 0; i < 4; i++)
@@ -650,8 +650,8 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
     int i;
 
     // no collisions wanted
-    if (pmg.fHitclr)
-        goto Ldm;
+    //if (pmg.fHitclr)
+    //    goto Ldm;
 
     // first loop, do missile collisions with playfield and with players (after we add missile data to the bitfield we'll no longer
     // be able to tell a player apart from its missile)
@@ -686,7 +686,7 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
     *(ULONG *)MXPL &= 0x0F0F0F0F;
     *(ULONG *)MXPF &= 0x0F0F0F0F;
 
-Ldm:
+//Ldm:
 
     // Now go through and set the bit saying a missile is present wherever it is present. Fifth player is like PF3
 
@@ -830,6 +830,7 @@ void PSLPrepare(int iVM)
             //ODS("scan %04x FETCH %02x %02x\n", wScan, sl.modehi, sl.modelo);
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
+            //sl.modehi |= (sl.modelo << 4);   // hide original mode up here !!! technically correct?
             IncDLPC(iVM);
 
             fFetch = FALSE;
@@ -925,12 +926,14 @@ void PSLPrepare(int iVM)
             cbDisp = cbWidth;
             break;
         case 1: // narrow playfield
+            //sl.modelo = sl.modehi >> 4; // restore the mode !!! technically correct
             cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
             cbDisp = cbWidth;
             if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
                 cbWidth |= (cbWidth >> 2);
             break;
         case 2: // normal playfield
+            //sl.modelo = sl.modehi >> 4; // restore the mode
             cbWidth = mpMdBytes[sl.modelo];        // bytes in NARROW mode, eg. 32
             cbDisp = cbWidth | (cbWidth >> 2);    // cbDisp: boost to get bytes per graphics mode line in NORMAL mode, eg. 40
             if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling?
@@ -939,6 +942,7 @@ void PSLPrepare(int iVM)
                 cbWidth |= (cbWidth >> 2);            // otherwise same as cbDisp
             break;
         case 3: // wide playfield
+            //sl.modelo = sl.modehi >> 4; // restore the mode
             cbWidth = mpMdBytes[sl.modelo];        // NARROW width
             cbDisp = cbWidth | (cbWidth >> 2) | (cbWidth >> 3);    // visible area is half way between NORMAL and WIDE
             cbWidth |= (cbWidth >> 1);            // WIDE width
@@ -1144,6 +1148,10 @@ void PSLPostpare(int iVM)
             fFetch = (iscan == scans);
         iscan = (iscan + 1) & 15;
         
+        // !!! This is wrong, but doesn't seem to hurt anything but an acid test.
+        // We should only advance ANTIC's PC during a fetch if playfield is on (DMACTL & 3) and the fetched mode >= 2
+        // However, that is difficult as we won't remember the correct amount to advance it if we move this code
+        // (save cbWidth from the last valid mode drawn?)
         if (fFetch)
         {
             // ANTIC's PC can't cross a 4K boundary, poor thing
@@ -1222,6 +1230,7 @@ void PSLReadRegs(int iVM, short start, short stop)
     }
 
     // are we in a hi-res mono mode that has special collision detection rules?
+    // !!! apparently this should be forced off if fGTIA? (pseudo mode E)
     pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
     // fGTIA and fHiRes must be set first
@@ -2441,7 +2450,7 @@ if (sl.modelo < 2 || iTop > i)
             }
     #endif
 
-        pmg.fHitclr = 0;
+        //pmg.fHitclr = 0;
 
         // now map the rgpix array to the screen
         if (v.fTiling)
