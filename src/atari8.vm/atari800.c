@@ -2178,6 +2178,9 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     {
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
+        // !!! This is technically correct, but might hurt perf and has not yet been found to be necessary for anything but an acid test
+        //if (addr < 0xd010)
+        //    ProcessScanLine(iVM);   // reading collision registers better process the latest scan line to look for collisions
         break;
     case 0xd2:
         addr &= 0xff0f;    // POKEY has 16 registers
@@ -2431,11 +2434,15 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             *(ULONG *)PXPF = 0;
             *(ULONG *)PXPL = 0;
 
-            pmg.fHitclr = 1;
+            //We are supposed to start detecting collisions again right away
+            //pmg.fHitclr = 1;
             //ODS("HITCLR! - %04x %04x %02x\n", wFrame, wScan, wLeft);
         }
         else if (addr == 31)
         {
+            // !!! Supposed to RESET when 8 bit is set, to ~(bits 4,2,1)
+            // Therefore poking with 8 resets to no buttons pressed
+
             // !!! REVIEW: click the speaker
 
             // printf("CONSOL %02X %02X\n", bOld, b);
@@ -2541,6 +2548,9 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         //
         // When reading PORTA or PORTB, return (writereg ^ ddir) | (readreg ^ ~ddir)
         //
+        // Apparently, if we write something to a PORT while it's in input mode,
+        // it is of course ignored, but the next time we put it into output mode
+        // it is supposed to remember what we previously tried to write to it (ACID PIA_BASIC)
 
         if (addr & 2)
         {
