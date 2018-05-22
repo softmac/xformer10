@@ -1057,6 +1057,7 @@ void PSLPrepare(int iVM)
             // single line resolution
             if (sl.dmactl & 0x10)
             {
+                // !!! VDELAY affects this too, but in an undefined way such that nobody is likely to be using it
                 pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
                 pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
                 pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
@@ -1065,22 +1066,28 @@ void PSLPrepare(int iVM)
             // double line resolution
             else
             {
-                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1));
-                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1));
-                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1));
-                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1));
+                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1) - ((VDELAY >> 4) & 1));
+                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1) - ((VDELAY >> 5) & 1));
+                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1) - ((VDELAY >> 6) & 1));
+                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1) - ((VDELAY >> 7) & 1));
             }
         }
 
         // enable MISSILE DMA and enable missiles? (enabling players enables missiles too)
         if ((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1)
         {
-            // single res
+            // single res - !!! VDELAY ignored as well
             if (sl.dmactl & 0x10)
                 pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + wScan);
             // double res
             else
-                pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1));
+            {
+                pmg.grafm = 0;
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 0) & 1)) & 0x3);    //M0
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 1) & 1)) & 0xc);    //M1
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 2) & 1)) & 0x30);   //M2
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 3) & 1)) & 0xc0);   //M3
+            }
         }
 
         // the extent of visible PM data on this scan line
