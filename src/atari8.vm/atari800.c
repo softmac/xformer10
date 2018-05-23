@@ -2178,9 +2178,8 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
     {
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
-        // !!! This is technically correct, but might hurt perf and has not yet been found to be necessary for anything but an acid test
-        //if (addr < 0xd010)
-        //    ProcessScanLine(iVM);   // reading collision registers better process the latest scan line to look for collisions
+        if (addr < 0xd010)
+            ProcessScanLine(iVM);   // reading collision registers needs cycle accuracy
         break;
     case 0xd2:
         addr &= 0xff0f;    // POKEY has 16 registers
@@ -2408,7 +2407,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 
         // CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
         // before we change the values. The next time its called will be with the new values.
-        if (addr < 0x1d)
+        // HITCLR needs cycle accuracy too, to get all collisions in the past processed before clearing
+        if (addr < 0x1d || addr == 30)
         {
             //ODS("GTIA %04x=%02x at VCOUNT=%02x clock=%02x\n", addr, b, PeekBAtari(iVM, 0xd40b), DMAMAP[wLeft - 1]);
             ProcessScanLine(iVM);    // !!! should anything else instantly affect the screen?

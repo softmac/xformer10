@@ -1061,7 +1061,7 @@ void PSLPrepare(int iVM)
             // single line resolution
             if (sl.dmactl & 0x10)
             {
-                // !!! VDELAY affects this too, but in an undefined way such that nobody is likely to be using it
+                // !!! VDELAY affects this too, but in an odd way such that nobody is likely to be using it
                 pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
                 pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
                 pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
@@ -1070,10 +1070,10 @@ void PSLPrepare(int iVM)
             // double line resolution
             else
             {
-                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + (wScan >> 1) - ((VDELAY >> 4) & 1));
-                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + (wScan >> 1) - ((VDELAY >> 5) & 1));
-                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + (wScan >> 1) - ((VDELAY >> 6) & 1));
-                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + (wScan >> 1) - ((VDELAY >> 7) & 1));
+                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + ((wScan - ((VDELAY >> 4) & 1)) >> 1));
+                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + ((wScan - ((VDELAY >> 5) & 1)) >> 1));
+                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + ((wScan - ((VDELAY >> 6) & 1)) >> 1));
+                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + ((wScan - ((VDELAY >> 7) & 1)) >> 1));
             }
         }
 
@@ -1087,10 +1087,10 @@ void PSLPrepare(int iVM)
             else
             {
                 pmg.grafm = 0;
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 0) & 1)) & 0x3);    //M0
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 1) & 1)) & 0xc);    //M1
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 2) & 1)) & 0x30);   //M2
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + (wScan >> 1) - ((VDELAY >> 3) & 1)) & 0xc0);   //M3
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 0) & 1)) >> 1)) & 0x3);    //M0
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 1) & 1)) >> 1)) & 0xc);    //M1
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 2) & 1)) >> 1)) & 0x30);   //M2
+                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 3) & 1)) >> 1)) & 0xc0);   //M3
             }
         }
 
@@ -1235,8 +1235,6 @@ void PSLReadRegs(int iVM, short start, short stop)
 
     // fGTIA and fHiRes must be set first
     UpdateColourRegisters(iVM);
-
-    // !!! VDELAY NYI
 
     // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
     BOOL newGRAF = FALSE;   // !!! I should check if one becomes or stops being 0
@@ -2432,8 +2430,6 @@ if (sl.modelo < 2 || iTop > i)
         }
         else
             qch = vrgvmi[iVM].pvBits;
-
-        // !!! VDELAY NYI
 
         // now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
         // tell them what range they are to fill in data for (start to stop)
