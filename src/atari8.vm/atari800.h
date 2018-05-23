@@ -250,14 +250,17 @@ typedef struct
         };
 
     // which pixel the players and missiles start at stop at, given their current hpos's and sizes
-    WORD hpospPixStart[4];
-    WORD hpospPixStop[4];
-    WORD hposmPixStart[4];
-    WORD hposmPixStop[4];
+    // Sorry, Darek, these have to be signed. A PMG that straddles the left edge of the screen only
+    // has its right half showing and my math only works if these are signed
+    short hpospPixStart[4];
+    short hpospPixStop[4];
+    short hposmPixStart[4];
+    short hposmPixStop[4];
     
     // of all the PMs, what is the earliest and latest pixel they can be found at? (optimize areas we know to be empty of PMG)
-    WORD hposPixEarliest;
-    WORD hposPixLatest;
+    // also must be signed
+    short hposPixEarliest;
+    short hposPixLatest;
 
     BYTE cwp[4];    // size, translated into how much to shift by (1, 2 or 3 for single, double, quad)
     BYTE cwm[4];

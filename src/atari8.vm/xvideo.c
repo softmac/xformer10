@@ -588,13 +588,13 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
             continue;
 
         // no part of the player is in the region we care about
-        if (pmg.hpospPixStart[i] >= stop || pmg.hpospPixStop[i] <= start)
+        if (pmg.hpospPixStart[i] >= (short)stop || pmg.hpospPixStop[i] <= (short)start)
             continue;
 
         c = mppmbw[i];
 
         // first loop, fill in where each player is
-        for (unsigned z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
+        for (unsigned z = max((short)start, pmg.hpospPixStart[i]); z < (unsigned)min((short)stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
@@ -608,6 +608,8 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     //    return;
 
     // second loop, check for collisions once all the players have reported
+    // !!! I can only detect collisions from hpos 40 (visible) but I'm supposed detect collisions
+    // in the overscan area back to hpos 34! (and similarly on the right)
     for (i = 0; i < 4; i++)
     {
         // no PM data in this pixel
@@ -616,18 +618,19 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
             continue;
 
         // no part of the player is in the region we care about
-        if (pmg.hpospPixStart[i] >= stop || pmg.hpospPixStop[i] <= start)
+        if (pmg.hpospPixStart[i] >= (short)stop || pmg.hpospPixStop[i] <= (short)start)
             continue;
 
         c = mppmbw[i];
 
         // first loop, fill in where each player is
-        for (unsigned z = max(start, pmg.hpospPixStart[i]); z < min(stop, pmg.hpospPixStop[i]); z++)
+        for (unsigned z = max((short)start, pmg.hpospPixStart[i]); z < (unsigned)min((short)stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
             // fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
             // fGTIA - no collisions to playfield in GTIA
+            // !!! GR.10 is supposed to have collisions!
             if (b2 & (0x80 >> ((z - pmg.hpospPixStart[i]) >> pmg.cwp[i])))
             {
                 PXPL[i] |= ((*pq) >> 4);
@@ -655,6 +658,8 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
 
     // first loop, do missile collisions with playfield and with players (after we add missile data to the bitfield we'll no longer
     // be able to tell a player apart from its missile)
+    // !!! I can only detect collisions from hpos 40 (visible) but I'm supposed detect collisions
+    // in the overscan area back to hpos 34! (and similarly on the right)
     for (i = 0; i < 4; i++)
     {
         b2 = (pmg.grafm >> (i + i)) & 3;
@@ -662,17 +667,18 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
             continue;
 
         // no part of the player is in the region we care about
-        if (pmg.hposmPixStart[i] >= stop || pmg.hposmPixStop[i] <= start)
+        if (pmg.hposmPixStart[i] >= (short)stop || pmg.hposmPixStop[i] <= (short)start)
             continue;
 
         c = mppmbw[i];
 
-        for (unsigned z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
+        for (unsigned z = max((short)start, pmg.hposmPixStart[i]); z < (unsigned)min((short)stop, pmg.hposmPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
             // fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
             // fGTIA - no collisions to playfield in GTIA
+            // !!! GR.10 should have collisions
             if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
             {
                 MXPL[i] |= ((*pq) >> 4);
@@ -697,7 +703,7 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
             continue;
 
         // no part of the player is in the region we care about
-        if (pmg.hposmPixStart[i] >= stop || pmg.hposmPixStop[i] <= start)
+        if (pmg.hposmPixStart[i] >= (short)stop || pmg.hposmPixStop[i] <= (short)start)
             continue;
 
         // treat fifth player like PF3 being present instead of its corresponding player. This is the only case
@@ -732,7 +738,7 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
         }
 #endif
 
-        for (unsigned z = max(start, pmg.hposmPixStart[i]); z < min(stop, pmg.hposmPixStop[i]); z++)
+        for (unsigned z = max((short)start, pmg.hposmPixStart[i]); z < (unsigned)min((short)stop, pmg.hposmPixStop[i]); z++)
         {
             if (b2 & (0x02 >> ((z - pmg.hposmPixStart[i]) >> pmg.cwm[i])))
             {
@@ -1277,8 +1283,8 @@ void PSLReadRegs(int iVM, short start, short stop)
                 pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
 
             // these are unsigned for efficiency so make sure they don't try to go negative
-            pmg.hpospPixStart[i] = max(off[i] << 1, 0);        // first pixel affected by this player
-            pmg.hpospPixStop[i] = max((off[i] << 1) + (8 << pmg.cwp[i]), 0);    // the pixel after the last one affected
+            pmg.hpospPixStart[i] = off[i] << 1;        // first pixel affected by this player
+            pmg.hpospPixStop[i] = (off[i] << 1) + (8 << pmg.cwp[i]);    // the pixel after the last one affected
 
             if (pmg.grafp[i])   // it's visible!
             {
@@ -1300,8 +1306,8 @@ void PSLReadRegs(int iVM, short start, short stop)
                 pmg.cwm[i] = 3;    //# of times to shift to divide by (cw *2)
 
             // these are unsigned for efficiency so make sure they don't try to go negative
-            pmg.hposmPixStart[i] = max(off[i] << 1, 0);                         // first pixel affected by this missile
-            pmg.hposmPixStop[i] = max((off[i] << 1) + (2 << pmg.cwm[i]), 0);    // the pixel after the last one affected
+            pmg.hposmPixStart[i] = off[i] << 1;                         // first pixel affected by this missile
+            pmg.hposmPixStop[i] = (off[i] << 1) + (2 << pmg.cwm[i]);    // the pixel after the last one affected
 
             if (pmg.grafm & (0x03 << (i << 1))) // it's visible
             {
@@ -1315,8 +1321,8 @@ void PSLReadRegs(int iVM, short start, short stop)
             }
         }
 
-//        if (pmg.hposPixEarliest < 0)
-//            pmg.hposPixEarliest = 0;
+        if (pmg.hposPixEarliest < 0)
+            pmg.hposPixEarliest = 0;
         if (pmg.hposPixLatest > X8)
             pmg.hposPixLatest = X8;
     }
@@ -2821,7 +2827,7 @@ BOOL ProcessScanLine(int iVM)
         iEarly = 0;
         if (sl.modelo >= 2 && pmg.hposPixEarliest >= bbars)
         {
-            if (pmg.hposPixEarliest >= (X8 - bbars))
+            if (pmg.hposPixEarliest >= (short)(X8 - bbars))
                 iEarly = iTop;
             else
             {
@@ -2837,7 +2843,7 @@ BOOL ProcessScanLine(int iVM)
         iLate = 0;
         if (sl.modelo >= 2 && pmg.hposPixLatest >= bbars)
         {
-            if (pmg.hposPixLatest >= X8 - bbars)
+            if (pmg.hposPixLatest >= (short)(X8 - bbars))
                 iLate = iTop;
             else
             {
