@@ -2473,32 +2473,35 @@ void RenderBitmap()
             }
         }
 
-        // now black out the places where there are no tiles
-
-        // get a pointer to the top right of the last tile
-        BYTE *ptb = (BYTE *)(vi.pTiledBits);
-        int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
-        ptb += ptBlack.y * stride + ptBlack.x;
-
-        // black out the rest of this row
-        int ycur = ptBlack.y;
-        // !!! 240 constant assumed
-        while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
+        if (!fNeedTiledBitmap)
         {
-            memset(ptb, 0, rect.right - ptBlack.x);
-            ycur += 1;
-            ptb += stride;
-        }
+            // now black out the places where there are no tiles
 
-        // black out any bottom blank rows (if VMs are deleted, that could make some)
-        ycur = ptBlack.y + 240;
-        ptb = (BYTE *)(vi.pTiledBits);
-        ptb += (ptBlack.y + 240) * stride;
-        while (ycur < rect.bottom)
-        {
-            memset(ptb, 0, rect.right);
-            ycur += 1;
-            ptb += stride;
+            // get a pointer to the top right of the last tile
+            BYTE *ptb = (BYTE *)(vi.pTiledBits);
+            int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+            ptb += ptBlack.y * stride + ptBlack.x;
+
+            // black out the rest of this row
+            int ycur = ptBlack.y;
+            // !!! 240 constant assumed
+            while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
+            {
+                memset(ptb, 0, rect.right - ptBlack.x);
+                ycur += 1;
+                ptb += stride;
+            }
+
+            // black out any bottom blank rows (if VMs are deleted, that could make some)
+            ycur = ptBlack.y + 240;
+            ptb = (BYTE *)(vi.pTiledBits);
+            ptb += (ptBlack.y + 240) * stride;
+            while (ycur < rect.bottom)
+            {
+                memset(ptb, 0, rect.right);
+                ycur += 1;
+                ptb += stride;
+            }
         }
 
         // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
@@ -3373,8 +3376,7 @@ LRESULT CALLBACK WndProc(
         // If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
         sWheelOffset = 0;
 
-        // !!! This blanks out the window while sizing because execution is stopped so the new bitmap isn't filled
-        // until we let go
+        // Don't make a tiled bitmap of the new size yet, that blanks out our window as we resize.
         if (v.fTiling)
         {
             fNeedTiledBitmap = TRUE;
@@ -3569,7 +3571,10 @@ break;
         PAINTSTRUCT ps;
 
         BeginPaint(hWnd, &ps);
-        //RenderBitmap();   // we constanly blit, not just when "dirty" so we don't need to do anything here
+        
+        // This blit is what keeps the screen from going black during a re-sizing
+        RenderBitmap();
+        
         //UpdateOverlay();
 
         EndPaint(hWnd, &ps);
