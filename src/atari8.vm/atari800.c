@@ -1650,14 +1650,15 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // POKEY reset
 
-    POT0 = 228;
-    POT1 = 228;
-    POT2 = 228;
-    POT3 = 228;
-    POT4 = 228;
-    POT5 = 228;
-    POT6 = 228;
-    POT7 = 228;
+    //POT0 = 228;   // now we actually scan and do it for real!
+    //POT1 = 228;
+    //POT2 = 228;
+    //POT3 = 228;
+    //POT4 = 228;
+    //POT5 = 228;
+    //POT6 = 228;
+    //POT7 = 228;
+    
     SKSTAT = 0xFF;
     IRQST = 0xFF;
     AUDC1 = 0x00;
@@ -2059,6 +2060,12 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             wScan = wScan + 1;
 
+            // increment the POT counters once per scan line until they hit 228, in which case say we are done
+            if (POT < 228)
+                POT0 = POT1 = POT2 = POT3 = POT4 = POT5 = POT6 = POT7 = ++POT;
+            if (POT == 228)
+                ALLPOT = 0;
+            
             // we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
             if ((IRQEN & 0x10) && fWant10 && (--fWant10 == 0))
             {
@@ -2495,6 +2502,13 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // SKRES
 
             SKSTAT |=0xE0;
+        }
+        else if (addr == 11)
+        {
+            // POTGO - start counting once per scan line from 0 to 228, which will be the paddle values
+            // ALLPOT bits get reset when the counting is done
+            POT = 0;
+            ALLPOT = 0xff;
         }
         else if (addr == 13)
         {
