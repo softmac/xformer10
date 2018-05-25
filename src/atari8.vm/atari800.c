@@ -1533,6 +1533,10 @@ BOOL __cdecl WarmbootAtari(int iVM)
     InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
     CaptureJoysticks();
 
+    // unused new starting positions of PMGs must be huge, since 0 and some negative numbers are valid locations
+    for (BYTE i = 0; i < 4; i++)
+        pmg.hpospPixNewStart[i] = 512;  // should be NTSCx
+
     return TRUE;
 }
 
@@ -2637,23 +2641,16 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         if (addr == 10)
         {
             // WSYNC
-            // !!! I assume STA WSYNC. INC WSYNC is 6 cycles, and it triggers the WSYNC on cycle 5, not 4.
-            //
-            // I wonder if the beam is 5 cycles behind ANTIC. It fetchs the first NARROW non-character byte at 28.
+            // The beam is 5 cycles behind ANTIC. It fetchs the first NARROW non-character byte at cycle 28.
             // It fetches the first character at 26, and the first char lookup at 29. Subsequent lines only do the
             // char lookup starting at 29. So it doesn't have the data it needs to draw at 25 until 30. 5 behind.
             // Also, ANTIC stop fetching at 106. 5 before that is 101, the end of the visibile screen. Coincidence?
             // 5 cycles is 20 pixels.
             //
             // Worm War and the HARDB Chess board are two of the most cycle precise apps I know of.
-            // Worm War changes HPOSP3 while it's being drawn. I implement a lag of 6 pixels in ProcessScanLine
-            // so that the change happens on a PMG pixel boundary, and that fixes WW for now. Even Altirra shows
-            // corruption in the level select text at top that I do not! (At least last I looked).
-            // HARDB/CHESS changes HPOSP3 after it's completed drawing in the wrong place! If I lag 6 pixels, this also
+            // Worm War changes HPOSP3 while it's being drawn and it must continue with the old parameters.
+            // HARDB/CHESS seems to change HPOSP3 after it's completed drawing in the wrong place! If I lag 20 pixels, this
             // is corrected.
-            // I thought that the solution was to finish every PMG that begins in the range being drawn (drawing with a lag of
-            // 20 pixels) so that changes mid-draw will not take effect yet, but that seemed to mess up WW pretty badly. So
-            // I do not understand the GTIA lag and when to make a change take effect yet.
             //
             // The snow near the beginning of HARDB is a great cycle precision test, but doesn't use WSYNC/VCOUNT.
             //
@@ -2662,15 +2659,25 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // Pitfall 2 scan line $6d needs to start early (104) on line $6c, and it writes to WSYNC again barely in time
             // to make the deadline.
             //
-            // -1 to make it 0 based. Look at last cycle of this 4 cycle instruction (3 fewer). One cycle later is where the
-            // store will actually be complete. (If the cycle after it finished is blocked, the next instruction won't start
+            // -1 to make it 0 based. Look at the cycle the write happens on (4 or 5) of this 4 or 6 cycle instruction.
+            // When that cycle finishes is where the store will actually be complete.
+            // (If the cycle after it finished is blocked, the next instruction won't start
             // for a while, so where the next instruction starts is irrelevant). The WSYNC is in time if it's complete
             // by the start of 104 (not being complete until the start of 105, the WSYNC point itself, it too late).
-            if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 104)
+            //
+            BYTE cT = 4;    // assumed STA WSYNC is 4 cycles
+            BYTE cW = 4;    // cycle that the write happens on
+            if (rgbMem[regPC - 3] == 0xee)
+            {
+                cT = 6;     // INC WSYNC is 6 cycles
+                cW = 5;     // and the write happens on cycle 5
+            }
+            // -1 to make it 0 based, cW - 1 to get the beginning of the write cycle. Plus one to get the end of that cycle
+            if (wLeft >= cT && DMAMAP[wLeft - 1 - (cW - 1)] + 1 <= 104)
                 // + 1 to make it 1-based
-                // assume we're doing STA abs which is 4 cycles about to be decremented from us when we return
+                // +cT is how many cycles are about to be decremented the moment we return
                 // + 1 is to start early at cycle 104 !!! not always true, but usually?
-                wLeft = DMAMAP[115] + 1 + 4 + 1;
+                wLeft = DMAMAP[115] + 1 + cT + 1;
             else
             {
                 wLeft = 0;               // stop right now and wait till next line's WSYNC

@@ -444,12 +444,12 @@ void CreateDMATables()
     // now make a conversion table of clock cycles to pixels... We start drawing at cycle 13 through 100 and there are 4 pixels per cycle
     for (cycle = 0; cycle < HCLOCKS; cycle++)
     {
-        if (cycle < 13)
+        if (cycle < 14)
             rgPIXELMap[cycle] = 0;
         else if (cycle >= 101)
             rgPIXELMap[cycle] = X8;
         else
-            rgPIXELMap[cycle] = (cycle - 12) << 2;
+            rgPIXELMap[cycle] = (cycle - 13) << 2;
     }
 }
 
@@ -578,6 +578,8 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     BYTE b2;
     BYTE c;
     int i;
+    short new[4] = { NTSCx, NTSCx,NTSCx,NTSCx };       // the new location we're moving a player to
+    short newstop[4];   // the stop position of the new location
 
     // first loop, fill the bit array with all the players located at each spot
     for (i = 0; i < 4; i++)
@@ -593,17 +595,51 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
 
         c = mppmbw[i];
 
-        // first loop, fill in where each player is
-        for (unsigned z = max((short)start, pmg.hpospPixStart[i]); z < (unsigned)min((short)stop, pmg.hpospPixStop[i]); z++)
+        // take note of where the player is
+        WORD z;
+        for (z = max((short)start, pmg.hpospPixStart[i]); z < (unsigned)min((short)stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
 
             if (b2 & (0x80 >> ((z - pmg.hpospPixStart[i]) >> pmg.cwp[i])))
                 *pq |= c;
         }
+
+        // If we finished drawing a PMG, see if there's a new location or GRAF data for for it
+        if ((short)z == pmg.hpospPixStop[i])
+        {
+            // one a PMG finishes, we update the pending new data to use next time
+            if (pmg.newGRAFp[i])
+            {
+                pmg.grafp[i] = rgbMem[GRAFP0A + i];
+                pmg.newGRAFp[i] = FALSE;
+                //ODS("Draw [%02x] done @ %04x Update GRAF to %02x\n", i, z, pmg.grafp[i]);
+            }
+
+            if (pmg.hpospPixNewStart[i] < NTSCx)
+            {
+                new[i] = pmg.hpospPixNewStart[i];
+                //ODS("Draw [%02x] done @ %04x, new HPOS is %04x\n", i, z, new[i]);
+
+                newstop[i] = new[i] + (8 << pmg.cwp[i]);
+
+                // data for new location is empty (may differ from data at old location, b2)
+                if (!pmg.grafp[i])
+                    continue;
+
+                // now note all the locations of the new player
+                for (z = max((short)start, new[i]); z < (unsigned)min((short)stop, newstop[i]); z++)
+                {
+                    BYTE *pq = qb + z;
+
+                    if (pmg.grafp[i] & (0x80 >> ((z - new[i]) >> pmg.cwp[i])))
+                        *pq |= c;
+                }
+            }
+        }
     }
 
-    // don't want collisions
+    // don't want collisions - we always do
     //if (pmg.fHitclr)
     //    return;
 
@@ -612,18 +648,18 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     // in the overscan area back to hpos 34! (and similarly on the right)
     for (i = 0; i < 4; i++)
     {
-        // no PM data in this pixel
+        // no PM data in this pixel (old data) - we didn't do anything above in this case, so no need to check for collisions
         b2 = pmg.grafp[i];
         if (!b2)
             continue;
 
-        // no part of the player is in the region we care about
+        // no part of the player is in the region we care about.
         if (pmg.hpospPixStart[i] >= (short)stop || pmg.hpospPixStop[i] <= (short)start)
             continue;
 
         c = mppmbw[i];
 
-        // first loop, fill in where each player is
+        // look for collisions
         for (unsigned z = max((short)start, pmg.hpospPixStart[i]); z < (unsigned)min((short)stop, pmg.hpospPixStop[i]); z++)
         {
             BYTE *pq = qb + z;
@@ -636,6 +672,32 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
                 PXPL[i] |= ((*pq) >> 4);
                 PXPF[i] |= pmg.fHiRes ? ((*pq & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
             }
+        }
+
+        // this player may be in two places, check the second place for collisions too,
+        // with its data, pmg.grafp[i], which may be different than b2
+        if (new[i] < NTSCx) // even if hpospPixNewStart < NTSCx, this may not be valid if we didn't finish drawing the old one
+        {
+            //ODS("now note collisions at new pos for %d. MAKE IT REAL\n", i);
+
+            for (unsigned z = max((short)start, pmg.hpospPixNewStart[i]); z < (unsigned)min((short)stop, newstop[i]); z++)
+            {
+                BYTE *pq = qb + z;
+
+                // fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+                // fGTIA - no collisions to playfield in GTIA
+                // !!! GR.10 is supposed to have collisions!
+                if (pmg.grafp[i] & (0x80 >> ((z - pmg.hpospPixNewStart[i]) >> pmg.cwp[i])))
+                {
+                    PXPL[i] |= ((*pq) >> 4);
+                    PXPF[i] |= pmg.fHiRes ? ((*pq & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
+                }
+            }
+
+            // from now on, there's just one place this PMG lives
+            pmg.hpospPixStart[i] = new[i];
+            pmg.hpospPixStop[i] = newstop[i];
+            pmg.hpospPixNewStart[i] = NTSCx;
         }
     }
 
@@ -655,6 +717,9 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
     // no collisions wanted
     //if (pmg.fHitclr)
     //    goto Ldm;
+
+    // !!! We do not support moving missiles in the middle of drawing the same missile, like we do players. They are much
+    // narrower, and I don't know of any app that counts on it.
 
     // first loop, do missile collisions with playfield and with players (after we add missile data to the bitfield we'll no longer
     // be able to tell a player apart from its missile)
@@ -1104,7 +1169,9 @@ void PSLPrepare(int iVM)
         pmg.hposPixEarliest = X8;
         pmg.hposPixLatest = 0;
 
-        // Is there is visible PMG data on this scan line? Figure out the extents
+        // PM DMA might have changed which players are visible - maybe a PL is empty and wasn't before or v.v. 
+        // Is there visible PMG data on this scan line? Figure out the extents
+        // This code is also in ReadRegs but only executes when something changes requiring recalculation during the scan line
         if (pmg.grafpX || pmg.grafm)
         {
 
@@ -1112,6 +1179,9 @@ void PSLPrepare(int iVM)
             // also keep track of the overall range of VISIBLE PMs on this scan line
             for (int i = 0; i < 4; i++)
             {
+                // a pending change in data for a player should have resolved itself by the end of the last scan line
+                Assert(!pmg.newGRAFp[i]);
+
                 if (pmg.grafp[i]) // player visible
                 {
                     // keep track of left-most P pixel
@@ -1121,6 +1191,10 @@ void PSLPrepare(int iVM)
                     // keep track of right-most P pixel
                     if (pmg.hpospPixStop[i] > pmg.hposPixLatest)
                         pmg.hposPixLatest = pmg.hpospPixStop[i];
+
+                    // We don't have to check hpospPixNewStart since we are definitely not in the middle of drawing a player
+                    // so it's not active
+                    Assert(pmg.hpospPixNewStart[i] == NTSCx);
                 }
 
                 if (pmg.grafm & (0x03 << (i << 1))) // missile visible
@@ -1154,7 +1228,7 @@ void PSLPostpare(int iVM)
             fFetch = (iscan == scans);
         iscan = (iscan + 1) & 15;
         
-        // !!! This is wrong, but doesn't seem to hurt anything but an acid test.
+        // !!! This is wrong, but doesn't seem to hurt anything but acid test - ANTIC line buffering
         // We should only advance ANTIC's PC during a fetch if playfield is on (DMACTL & 3) and the fetched mode >= 2
         // However, that is difficult as we won't remember the correct amount to advance it if we move this code
         // (save cbWidth from the last valid mode drawn?)
@@ -1205,8 +1279,9 @@ void UpdateColourRegisters(int iVM)
 //
 void PSLReadRegs(int iVM, short start, short stop)
 {
-    // Note: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
+    int i;
 
+    // Note: in GTIA mode, ALL scan lines behave somewhat like GTIA, no matter what mode. Mix modes at your peril.
     sl.prior = PRIOR;
 
     sl.chbase = CHBASE & ((sl.modelo < 6) ? 0xFC : 0xFE);
@@ -1243,31 +1318,121 @@ void PSLReadRegs(int iVM, short start, short stop)
     UpdateColourRegisters(iVM);
 
     // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
-    BOOL newGRAF = FALSE;   // !!! I should check if one becomes or stops being 0
     if (!(sl.dmactl & 0x08 && GRACTL & 2))
     {
-        if (GRAFPX != pmg.grafpX)
-            newGRAF = TRUE;
-        pmg.grafpX = GRAFPX;
+        // note that we're trying to change player data
+        if (GRAFP0 != pmg.grafp[0])
+            pmg.newGRAFp[0] = TRUE;
+        if (GRAFP1 != pmg.grafp[1])
+            pmg.newGRAFp[1] = TRUE;
+        if (GRAFP2 != pmg.grafp[2])
+            pmg.newGRAFp[2] = TRUE;
+        if (GRAFP3 != pmg.grafp[3])
+            pmg.newGRAFp[3] = TRUE;
+
+        // but it doesn't take effect yet (if we're in the middle of drawing it now)
+        //pmg.grafpX = GRAFPX;  
     }
 
+    BOOL newGRAFm = FALSE;
     if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
     {
         if (GRAFM != pmg.grafm)
-            newGRAF = TRUE;
-        pmg.grafm = GRAFM;
+        {
+            // !!! I do not properly wait until the current missile is finished drawing before allowing its data to change,
+            // since they're so narrow and it's complex and no known app needs it.
+            newGRAFm = TRUE;
+            pmg.grafm = GRAFM;
+        }
     }
 
     // Did the H-pos or sizes or data (possibly affecting visibility) change?
-    if (newGRAF || pmg.hposmX != HPOSMX || pmg.hpospX != HPOSPX || pmg.sizem != SIZEM || pmg.sizepX != SIZEPX)
+    if (pmg.newGRAFp[0] || pmg.newGRAFp[1] || pmg.newGRAFp[2] || pmg.newGRAFp[3] ||
+                    newGRAFm || pmg.hposmX != HPOSMX || pmg.hpospX != HPOSPX || pmg.sizem != SIZEM || pmg.sizepX != SIZEPX)
     {
+        short off;
+
+        // we do update the HPOS, but we won't map that to a pixel number until we're ready to draw it
+        // (if we're still in the middle of drawing it in an old location)
         pmg.hposmX = HPOSMX;
         pmg.hpospX = HPOSPX;
         pmg.sizem = SIZEM;
         pmg.sizepX = SIZEPX;
 
-        short off[4];
-        int i;
+        for (i = 0; i < 4; i++)
+        {
+            // at what pixel is the new hpos?
+            off = (pmg.hposp[i] - ((NTSCx - X8) >> 2)) << 1;
+
+            pmg.cwp[i] = (BYTE)mpsizecw[pmg.sizep[i] & 3];    // normal, double or quad size?
+            if (pmg.cwp[i] == 4)
+                pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
+
+            // We are in the middle of drawing this player, and its old data is non-zero
+            if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && pmg.grafp[i])
+            {
+                // it's position has moved
+                if (off != pmg.hpospPixStart[i])
+                {
+                    //ODS("%04x: HPOS CHANGE (delay both) during [%02x] G=%02x @ %04x, new pos %04x nG=%02x\n", wScan, i, pmg.grafp[i], start, off, rgbMem[GRAFP0A + i]);
+                    
+                    pmg.hpospPixNewStart[i] = off;  // remember the new position after we finish drawing the old position
+                    
+                    // do not update its GRAF data yet
+
+                    // if the new pos is overlapping, stop the old player where the new one begins
+                    if (off > start && off < pmg.hpospPixStop[i])
+                    {
+                        ODS("ReadRegs: truncate\n");
+                        pmg.hpospPixStop[i] = off;
+                    }
+                }
+                else
+                {
+                    // if it hasn't moved, keep drawing in old pos with old GRAF data.
+                    // When it finishes drawing, it will grab the new GRAF data.
+                    
+                    //if (rgbMem[GRAFP0A + i] != pmg.grafp[i])
+                    //    ODS("%04x: GRAF CHANGE (delay GRAF) during draw [%02x] G=%02x to %02x @ %04x\n", wScan, i, pmg.grafp[i], rgbMem[GRAFP0A +i], start, off);
+                }
+            }
+
+            // OK to update HPOS and GRAF
+            // !! No it's not. If we're in the middle of the new pos, we should wait until the beginning of the next time it's drawn,
+            // but we can only do that if the old place is drawing GRAF != 0
+            // !!! No it's not #2. If we're in the middle of drawing GRAF=0, there's no way to delay GRAF <= non-0
+            // until it's finished drawing, but hopefully no app does this
+            else
+            {
+                short offstop = off + (8 << pmg.cwp[i]);
+
+#ifndef NDEBUG
+                // as explained above, we may prematurely alter the HPOS and GRAF, but that's better than
+                // ignoring the change.
+                if (off != pmg.hpospPixStart[i])    // hpos is moving
+                {
+                    if (off < start && offstop > start && (pmg.grafp[i] || (pmg.newGRAFp[i] && rgbMem[GRAFP0A + i])))
+                        ODS("CRAP, HPOS moved to straddle current pos while GRAF != 0!\n");
+
+                    if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && !pmg.grafp[i] && rgbMem[GRAFP0A + i])
+                        ODS("CRAP, HPOS moved while old pos was drawing 0 and new GRAF != 0!\n");
+                }
+#endif
+
+                // update GRAF
+                if (pmg.newGRAFp[i])
+                {
+                    pmg.grafp[i] = rgbMem[GRAFP0A + i];
+                    pmg.newGRAFp[i] = FALSE;
+                    //ODS("...Update GRAFP%02x to %02x\n", i, pmg.grafp[i]);
+                }
+
+                //ODS("ReadRegs: new %d can replace old\n", i);
+                pmg.hpospPixStart[i] = off;
+                pmg.hpospPixStop[i] = offstop;
+                pmg.hpospPixNewStart[i] = NTSCx;
+            }
+        }
 
         pmg.hposPixEarliest = X8;
         pmg.hposPixLatest = 0;
@@ -1276,16 +1441,6 @@ void PSLReadRegs(int iVM, short start, short stop)
         // also keep track of the overall range of VISIBLE PMs on this scan line
         for (i = 0; i < 4; i++)
         {
-            off[i] = (pmg.hposp[i] - ((NTSCx - X8) >> 2));
-
-            pmg.cwp[i] = (BYTE)mpsizecw[pmg.sizep[i] & 3];    // normal, double or quad size?
-            if (pmg.cwp[i] == 4)
-                pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
-
-            // these are unsigned for efficiency so make sure they don't try to go negative
-            pmg.hpospPixStart[i] = off[i] << 1;        // first pixel affected by this player
-            pmg.hpospPixStop[i] = (off[i] << 1) + (8 << pmg.cwp[i]);    // the pixel after the last one affected
-
             if (pmg.grafp[i])   // it's visible!
             {
                 // keep track of left-most PMG pixel
@@ -1295,19 +1450,32 @@ void PSLReadRegs(int iVM, short start, short stop)
                 // keep track of right-most PMG pixel
                 if (pmg.hpospPixStop[i] > pmg.hposPixLatest)
                     pmg.hposPixLatest = pmg.hpospPixStop[i];
+
+                // the new pending start location for a recently moved PMG, valid if < NTSCx
+                if (pmg.hpospPixNewStart[i] < NTSCx && pmg.hpospPixNewStart[i] < pmg.hposPixEarliest)
+                {
+                    //ODS("ReadRegs: include new %i in early\n", i);
+                    pmg.hposPixEarliest = pmg.hpospPixNewStart[i];
+                }
+
+                // the new pending end location for a recently moved PMG
+                if (pmg.hpospPixNewStart[i] < NTSCx && pmg.hpospPixNewStart[i] + (8 << pmg.cwp[i]) > pmg.hposPixLatest)
+                {
+                    //ODS("ReadRegs: include new %i in late\n", i);
+                    pmg.hposPixLatest = pmg.hpospPixNewStart[i] + (8 << pmg.cwp[i]);
+                }
             }
      
             // now do missile #i
 
-            off[i] = (pmg.hposm[i] - ((NTSCx - X8) >> 2));
+            off = (pmg.hposm[i] - ((NTSCx - X8) >> 2));
 
             pmg.cwm[i] = (BYTE)mpsizecw[((pmg.sizem >> (i + i))) & 3];
             if (pmg.cwm[i] == 4)
                 pmg.cwm[i] = 3;    //# of times to shift to divide by (cw *2)
 
-            // these are unsigned for efficiency so make sure they don't try to go negative
-            pmg.hposmPixStart[i] = off[i] << 1;                         // first pixel affected by this missile
-            pmg.hposmPixStop[i] = (off[i] << 1) + (2 << pmg.cwm[i]);    // the pixel after the last one affected
+            pmg.hposmPixStart[i] = off << 1;                         // first pixel affected by this missile
+            pmg.hposmPixStop[i] = (off << 1) + (2 << pmg.cwm[i]);    // the pixel after the last one affected
 
             if (pmg.grafm & (0x03 << (i << 1))) // it's visible
             {
@@ -2692,35 +2860,33 @@ if (sl.modelo < 2 || iTop > i)
 // PSL is the first pixel not drawn last time. Process the appropriate number of
 // pixels of this scan line. At the end of the scan line, make sure to call us
 // with wLeft <= 0 to finish up.
-
+// Returns the last pixel processed
+//
 BOOL ProcessScanLine(int iVM)
 {
     // don't do anything in the invisible top and bottom sections
     if (wScan < wStartScan)
-        return 0;
+        return TRUE;
 
     if (wScan >= wStartScan + wcScans)
-        return 0;    // uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
+        return TRUE;    // uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
 
     // what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
     // so the index into the DMA array, which is 0-based, is (wLeft - 1). That tells us the horizontal clock cycle we're on,
     // which is an index into the PIXEL array to tell us the pixel we're drawing at this moment.
     // Finally, once the whole scan line executes, we will be called with wLeft <= 0 to finish things up
-    // !!! When wLeft <= 4 we'll wish we had started the next scan line already for things that have scan line granularity,
-    // like VSCROL (bump pong)
-    // Technically, we execute at the start of the STA GTIA, but it shouldn't happen until after the 4 cycle instruction.
+    // (When wLeft <= 4 we'll wish we had started the next scan line already for things that have scan line granularity,
+    // like VSCROL (bump pong), so we have code elsewhere to delay the execution until the next scan line).
+    // Technically, I execute at the start of the STA GTIA, but it shouldn't happen until after the 4 cycle instruction.
     // We may have been blocked after the 4th cycle of the store until the next instruction could begin, so take
     // the position of the beginning of the 4th cycle, and add 1 to it when indexing rgPIXELMap to see when the 4th cycle ended.
     // DMAMAP[0] will be the maximum we can index rgPIXELMap, so don't go lower than 1, so we can +1 and still be in a valid
     // index for rgPIXELMap
-    // I believe the beam is 20 pixels behind ANTIC (see WSYNC).
-    // !!! Hack, 6 or 14 fixes Worm War by changing on a PMG pixel boundary, but anything over 18 makes things worse.
-    // !!! 6 also fixes HARDB/CHESS. I don't know how the lag really works. If I try to finish all the PMG started in this range now,
-    // that messes up WormWar's display quite badly, so that doesn't seem to be the solution like it appeared.
-    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 6;
+    // The beam is 20 pixels behind ANTIC fetching (see WSYNC).
+    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
     if (cclock < 0)
         cclock = 0;
-    if (cclock == 352 - 6)
+    if (cclock == 352 - 20)
         cclock = 352;
 
     // Don't write off the right side of the bitmap if we are a partially visible tile, why waste time?
