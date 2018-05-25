@@ -147,7 +147,7 @@ char *Time[MAX_VM][3];        // 3 time travel saved snapshots, 5 seconds apart,
 
 typedef struct
 {
-    BYTE rgb[48];               // values of scanline data
+    //BYTE rgb[48];               // values of scanline data (now we're cycle granular so we don't pre-cache the screen RAM)
 
     BYTE modehi;                // display list byte (hi nibble)
     BYTE modelo;                // display list byte (lo nibble)
@@ -366,9 +366,9 @@ typedef struct
 
     BYTE m_fWait;       // wait until next VBI
     BYTE m_fFetch;      // fetch next DL instruction
-    BYTE m_rgbSpecial;    // the offscreen character being scrolled on
+    BYTE pad7B;
 
-    WORD pad7W;
+    WORD m_wAddrOff;      // because of HSCROL, how many bytes forward to actually start the scan line
     WORD pad8W;
 
     BYTE m_bCartType;   // type of cartridge
@@ -472,6 +472,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define iscan         CANDY_STATE(iscan)
 #define scans         CANDY_STATE(scans)
 #define wAddr         CANDY_STATE(wAddr)
+#define wAddrOff      CANDY_STATE(wAddrOff)
 #define fWait         CANDY_STATE(fWait)
 #define fFetch        CANDY_STATE(fFetch)
 #define POT           CANDY_STATE(POT)

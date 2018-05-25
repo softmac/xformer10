@@ -2438,17 +2438,18 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xD0:      // GTIA
 
         addr &= 31;
+        bOld = rgbMem[writeGTIA + addr];
 
         // CYCLE COUNTING - Writes to GTIA should take effect IMMEDIATELY so process the scan line up to where the electron beam is right now
         // before we change the values. The next time its called will be with the new values.
         // HITCLR needs cycle accuracy too, to get all collisions in the past processed before clearing
-        if (addr < 0x1d || addr == 30)
+        // Don't waste time if this isn't changing the value
+        if ((addr < 0x1d || addr == 30) && bOld != b)
         {
             //ODS("GTIA %04x=%02x at VCOUNT=%02x clock=%02x\n", addr, b, PeekBAtari(iVM, 0xd40b), DMAMAP[wLeft - 1]);
             ProcessScanLine(iVM);    // !!! should anything else instantly affect the screen?
         }
 
-        bOld = rgbMem[writeGTIA+addr];
         rgbMem[writeGTIA+addr] = b;
 
         // When you turn GRACTL off, you continue to use the most recent data
