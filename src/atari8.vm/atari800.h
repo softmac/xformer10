@@ -71,7 +71,7 @@ extern const BYTE rgDMA[HCLOCKS];
 // index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
 BYTE rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
 
-// for clock cycle number 0-113 (0 based), what pixel is being drawn when wLeft is from 1-114).
+// for clock cycle number 0-113 (0 based), what pixel is about to be drawn at the start of that cycle #?
 WORD rgPIXELMap[HCLOCKS];
 
 // precompute PMG priorities
@@ -250,15 +250,20 @@ typedef struct
         };
 
     // which pixel the players and missiles start at stop at, given their current hpos's and sizes
-    // Sorry, Darek, these have to be signed. A PMG that straddles the left edge of the screen only
-    // has its right half showing and my math only works if these are signed
+    // (Sorry, Darek, these have to be signed. A PMG that straddles the left edge of the screen only
+    // has its right half showing and my math only works if these are signed)
     short hpospPixStart[4];
     short hpospPixStop[4];
     short hposmPixStart[4];
     short hposmPixStop[4];
+
+    // when we change the location of a PMG, this is the location we're trying to change it to
+    // It doesn't take effect right away, since we have to finish it in the old position, if we're halfway through drawing it
+    short hpospPixNewStart[4];
+    BYTE newGRAFp[4];       // delay changing the data in the player until it completes drawing the current one
     
-    // of all the PMs, what is the earliest and latest pixel they can be found at? (optimize areas we know to be empty of PMG)
-    // also must be signed
+    // of all the PMs, old and new positions, what is the earliest and latest pixel they can be found at?
+    // (optimize areas we know to be empty of PMG). Also must be signed.
     short hposPixEarliest;
     short hposPixLatest;
 
@@ -271,7 +276,6 @@ typedef struct
     BYTE grafm;
     BYTE sizem;
     BYTE pmbase;
-    BYTE fHitclr; // defunct
 } PMG;
 
 #pragma pack()
@@ -641,6 +645,7 @@ __inline BYTE *_pbshift(int iVM)
 #define SIZEM   rgbMem[0xD11C]
 
 #define GRAFPX  (*(ULONG *)&rgbMem[0xD11D])
+#define GRAFP0A 0xD11D
 #define GRAFP0  rgbMem[0xD11D]
 #define GRAFP1  rgbMem[0xD11E]
 #define GRAFP2  rgbMem[0xD11F]
