@@ -188,7 +188,10 @@ void DeleteVM(int iVM)
         SelectInstance(v.iVM);    // better find a new valid current instance
     }
     else
+    {
         v.iVM = -1;
+        RenderBitmap(); // draw black to make the last image go away
+    }
 
     FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }

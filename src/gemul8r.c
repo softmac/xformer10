@@ -311,6 +311,12 @@ ULONGLONG GetCycles()
     return c;
 }
 
+ULONGLONG GetJiffies()
+{
+    ULONGLONG c = GetCycles() / 29833;
+    return c;
+}
+
 // Gets the number of elapsed milliseconds
 ULONGLONG GetMs()
 {
@@ -6297,12 +6303,6 @@ void ClearSystemPalette(void)
     }
 
     ReleaseDC(hwnd, ScreenDC);
-}
-
-ULONGLONG GetJiffies()
-{
-    ULONGLONG c = GetCycles() / 29833;
-    return c;
 }
 
 int UpdateOverlay()

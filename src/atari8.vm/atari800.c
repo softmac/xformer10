@@ -1356,6 +1356,9 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
     // candy must be set up first (above)
     TimeTravelInit(iVM);
 
+    // init breakpoint. JMP $0 happens, so the only safe address that won't ever execute is $FFFF
+    bp = 0xfff;
+
     return TRUE;
 }
 
@@ -2692,6 +2695,8 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             //
             // Pitfall 2 scan line $6d needs to start early (104) on line $6c, and it writes to WSYNC again barely in time
             // to make the deadline.
+            // Annoyingly alternatively, Tarzan needs to resume at 105 from WSYNC, to see VCOUNT increment in time or the
+            // splash screen is garbled. So I can't just pick one or the other
             //
             // -1 to make it 0 based. Look at the cycle the write happens on (4 or 5) of this 4 or 6 cycle instruction.
             // When that cycle finishes is where the store will actually be complete.
