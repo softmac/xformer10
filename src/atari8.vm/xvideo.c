@@ -1099,15 +1099,16 @@ void PSLPrepare(int iVM)
         }
 
         // HSCROL - we read more bytes than we display. View the center portion of what we read, offset cbDisp/10 bytes into the scan line
-        int j = 0;
+        wAddrOff = 0;
         if (cbDisp != cbWidth)
         {
             // wide is 48, normal is 40, that's j=4 (split the difference) characters before we begin.
             // subtract one for every multiple of 8 hshift is, that's an entire character shift
-            j = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
+            wAddrOff = ((cbWidth - cbDisp) >> 1) - ((hshift) >> 3);
             hshift &= 7;    // now only consider the part < 8
         }
 
+#if 0
         // !!! Looking at the screen RAM should be cycle granular. Turmoil fills it as its drawing, so
         // fetching at the beginning of the scanline doesn't work
 
@@ -1123,6 +1124,7 @@ void PSLPrepare(int iVM)
                 sl.rgb[i] = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
             rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));    // ditto
         }
+#endif
 
         // Other things we only need once per scan line
 
@@ -1692,11 +1694,11 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = sl.rgb[i];
+            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             if ((sl.chactl & 4) && sl.modelo == 3)
             {
-                if ((sl.rgb[i] & 0x7F) < 0x60)
+                if ((b1 & 0x7F) < 0x60)
                     vpix = vpixO < 8 ? 7 - vpixO : vpixO;
                 else
                     // mimic odd ANTIC behaviour - you're just going to have to trust me on this one
@@ -1712,14 +1714,14 @@ if (sl.modelo < 2 || iTop > i)
                 // we need to look at 1 or 2 of the characters ending in the current character, depending on how much shift.
 
                 // we are not in the blank part of a mode 3 character
-                if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (sl.rgb[i] & 0x7F) < 0x60) ||
-                    (vpix >= 8 && (sl.rgb[i] & 0x7F) >= 0x60)))
+                if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (b1 & 0x7F) < 0x60) ||
+                    (vpix >= 8 && (b1 & 0x7F) >= 0x60)))
                 {
                     // use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
-                    vpix23 = (vpix >= 8 && (sl.rgb[i] & 0x7f) >= 0x60) ? vpix - 8 : vpix;
+                    vpix23 = (vpix >= 8 && (b1 & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
                     // CHBASE must be on an even page boundary
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i] & 0x7f) << 3) + vpix23);
+                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7f) << 3) + vpix23);
                 }
                 // we ARE in the blank part
                 else {
@@ -1727,10 +1729,10 @@ if (sl.modelo < 2 || iTop > i)
                 }
 
                 // mimic obscure quirky ANTIC behaviour - scans 8 and 9 go missing under these circumstances
-                if ((sl.rgb[i] & 0x7f) < 0x60 && (iscan == 8 || iscan == 9))
+                if ((b1 & 0x7f) < 0x60 && (iscan == 8 || iscan == 9))
                     vv = 0;
 
-                if (sl.rgb[i] & 0x80)
+                if (b1 & 0x80)
                 {
                     if (sl.chactl & 1)  // blank (blink) flag
                         vv = 0;
@@ -1746,10 +1748,10 @@ if (sl.modelo < 2 || iTop > i)
                     // do the same exact thing again
                     int index = 1;
 
-                    // we can't look past the front of the array, we stored that byte in rgbSpecial
-                    BYTE rgb = rgbSpecial = 0;
+                    BYTE rgb = 0;
                     if (i > 0)
-                        rgb = sl.rgb[i - index];
+                        rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff - index) & 0x0FFF));  // the char offscreen to the left
+
 
                     if ((sl.chactl & 4) && sl.modelo == 3)
                     {
@@ -1926,6 +1928,8 @@ if (sl.modelo < 2 || iTop > i)
             // GR.0 See mode 15 for artifacting theory of operation
             else
             {
+
+// !!! TODO - make this a monitor type you can select
 #if 1
                 // This is the "I have sharp display with minimum pixel bleeding" version
 
@@ -1974,7 +1978,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = sl.rgb[i];
+            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             if (hshift)
             {
@@ -1983,15 +1987,15 @@ if (sl.modelo < 2 || iTop > i)
                 ULONGLONG u, vv;
 
                 // see comments for modes 2 & 3
-                int index = 0;
 
-                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x7F) << 3) + vpix);
-                u = vv << (index << 3);
+                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+                u = vv;
 
                 if (hshift % 8)
                 {
-                    index += 1;
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x7f) << 3) + vpix);
+                    int index = 1;
+                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) +
+                                ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x7f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
 
@@ -2028,7 +2032,7 @@ if (sl.modelo < 2 || iTop > i)
                     // which character was shifted into this position? Pay attention to its high bit to switch colours
                     int index = (hshift + 7 - 2 * j) / 8;
 
-                    if (((i == 0 && index == 1) ? rgbSpecial : sl.rgb[i - index]) & 0x80)
+                    if (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x80)
                         Col.col3 = sl.colpf3;
                     else
                         Col.col3 = sl.colpf2;
@@ -2057,7 +2061,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = sl.rgb[i];
+            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             Col.col1 = sl.colpf[b1 >> 6];
 
@@ -2068,15 +2072,15 @@ if (sl.modelo < 2 || iTop > i)
                 ULONGLONG u, vv;
 
                 // see comments for modes 2 & 3
-                int index = 0;
-
-                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((sl.rgb[i - index] & 0x3F) << 3) + vpix);
-                u = vv << (index << 3);
+               
+                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x3F) << 3) + vpix);
+                u = vv;
 
                 if (hshift % 8)
                 {
-                    index += 1;
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + (((i == 0 ? rgbSpecial : sl.rgb[i - index]) & 0x3f) << 3) + vpix);
+                    int index = 1;
+                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) +
+                                ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x3f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
 
@@ -2087,7 +2091,7 @@ if (sl.modelo < 2 || iTop > i)
                     if (b2 & 0x80)
                     {
                         if (j < hshift)    // hshift restricted to 7 or less, so this is sufficient
-                            Col.col1 = sl.colpf[(i == 0 ? rgbSpecial : sl.rgb[i - 1]) >> 6];
+                            Col.col1 = sl.colpf[cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) >> 6];
                         else
                             Col.col1 = sl.colpf[b1 >> 6];
 
@@ -2153,7 +2157,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2163,7 +2167,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (sl.rgb[i - 1] << 8) | (BYTE)b2;
+                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what 1/2-bit position in the WORD u do we start copying from?
@@ -2191,7 +2195,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2201,7 +2205,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what 1/2-bit position in the WORD u do we start copying from?
@@ -2230,7 +2234,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2242,7 +2246,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit position in the WORD u do we start copying from?
@@ -2271,7 +2275,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2281,7 +2285,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit position in the WORD u do we start copying from?
@@ -2311,7 +2315,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2321,7 +2325,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = ((i == 0 ? rgbSpecial : sl.rgb[i - 1]) << 8) | (BYTE)b2;
+                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit pair position in the WORD u do we start copying from?
@@ -2363,11 +2367,11 @@ if (sl.modelo < 2 || iTop > i)
         const ULONG Fill1 = 0x01010101 * Col.col1;
         const ULONG Fill2 = 0x01010101 * Col.col2;
 
-        WORD u = (i == 0 ? rgbSpecial : sl.rgb[i - 1]);
+        WORD u = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             u = (u << 8) | (BYTE)b2;
 
@@ -2425,7 +2429,7 @@ if (sl.modelo < 2 || iTop > i)
                              ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
             qch += sizeof(ULONG);
 
-            BYTE bPeekAhead = (sl.rgb[i+1] & 0x80) >> 7;
+            BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
             BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
             ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
             SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
@@ -2442,14 +2446,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
@@ -2478,14 +2482,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = (b2 >> 4);
@@ -2545,14 +2549,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = sl.rgb[i];
+            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= (((i == 0 ? rgbSpecial : sl.rgb[i - 1]) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = ((b2 >> 4) << 4);

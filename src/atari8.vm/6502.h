@@ -44,9 +44,17 @@ __inline BYTE cpuPeekB(const int iVM, ADDR addr)
     return rgbMem[addr];
 }
 
+extern BOOL ProcessScanLine(int);
+
 __inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
+
+    // !!! controversial perf hit - we are writing into the line of screen RAM that we are current displaying
+    // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
+    // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
+    if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+        ProcessScanLine(iVM);
 
     rgbMem[addr] = (BYTE) b;
     return TRUE;
