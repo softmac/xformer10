@@ -108,6 +108,8 @@ BEGIN
         MENUITEM "Tur&bo Mode\tCtrl+F12", IDM_TURBO
         MENUITEM SEPARATOR
         MENUITEM "Mouse &Wheel Sensitivity High\tAlt+F12", IDM_WHEELSENS
+        MENUITEM SEPARATOR
+        MENUITEM "My &Video Cards Sucks", IDM_MYVIDEOCARDSUCKS
     END
     POPUP "&VM"
     BEGIN
