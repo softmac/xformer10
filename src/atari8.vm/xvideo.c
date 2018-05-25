@@ -1750,7 +1750,7 @@ if (sl.modelo < 2 || iTop > i)
 
                     BYTE rgb = 0;
                     if (i > 0)
-                        rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff - index) & 0x0FFF));  // the char offscreen to the left
+                        rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
 
 
                     if ((sl.chactl & 4) && sl.modelo == 3)
