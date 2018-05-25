@@ -340,7 +340,9 @@ typedef struct
     WORD m_fStop;
     WORD m_wStartScan;
     BYTE m_fRedoPoke;
-    BYTE pad3B;
+    
+    BYTE m_POT;             // current paddle potentiometer reading, counts from 0 to 228
+
     WORD m_wLiveShift;    // do we look at the shift key live as we process keys, or are we pasting and we want a specific value?
 
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
@@ -472,6 +474,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wAddr         CANDY_STATE(wAddr)
 #define fWait         CANDY_STATE(fWait)
 #define fFetch        CANDY_STATE(fFetch)
+#define POT           CANDY_STATE(POT)
 #define bCartType     CANDY_STATE(bCartType)
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
