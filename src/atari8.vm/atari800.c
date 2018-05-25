@@ -601,6 +601,26 @@ void DoVBI(int iVM)
         }
     }
 
+    // Process LightPen - we are told which pixel we are on, translate that to colour clock and VCOUNT
+    if (iVM == LightPenVM)
+    {
+        // For some reason, although the left side of the screen is colour clock 27, you need to report it as 67 + (27/2)
+        PENH = (BYTE)(LightPenX / 2 + 67 + 27 / 2);
+        PENV = (BYTE)((LightPenY + 8) / 2);
+
+        if (PENH < 8)
+            PENH = 255;    // it can wrap
+        if (PENV < 4)
+            PENV = 4;
+        if (PENV > 124)
+            PENV = 124;
+    }
+    else
+    {
+        PENH = 0;
+        PENV = 0;
+    }
+
     // are we pasting into the keyboard buffer?
     if (cPasteBuffer && iVM == v.iVM)
     {
