@@ -2706,12 +2706,23 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                 cT = 6;     // INC WSYNC is 6 cycles
                 cW = 5;     // and the write happens on cycle 5
             }
+
+            // !!! hack for Tarzan. Sometimes WSYNC resumes at cycle 105 instead of 104, if the cycle after STA WSYNC is blocked,
+            // or if playfield DMA or RAM refresh DMA uses cycle 104. It's difficult to know for sure, but
+            // if we're drawing in the middle (narrow) section of a character mode right now, chances are ANTIC is busy and
+            // a STA WSYNC won't resume until cycle 105. At least it works for Tarzan.
+            short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
+            short wo = 1;
+            if (cclock > 48 && cclock < 352 - 48 && sl.modelo > 1 && sl.modelo < 8)
+                wo = 0;
+
             // -1 to make it 0 based, cW - 1 to get the beginning of the write cycle. Plus one to get the end of that cycle
             if (wLeft >= cT && DMAMAP[wLeft - 1 - (cW - 1)] + 1 <= 104)
                 // + 1 to make it 1-based
                 // +cT is how many cycles are about to be decremented the moment we return
-                // + 1 is to start early at cycle 104 !!! not always true, but usually?
-                wLeft = DMAMAP[115] + 1 + cT + 1;
+                // + wo is to start 1 cycle early at cycle 104 if wo == 1.
+                // 
+                wLeft = DMAMAP[115] + 1 + cT + wo;
             else
             {
                 wLeft = 0;               // stop right now and wait till next line's WSYNC
