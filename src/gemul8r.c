@@ -2821,8 +2821,9 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
 
 
 // which tile is under the mouse right now? (Or -1 if none)
+// can return the top left co-ordinate of the tile too
 //
-int GetTileFromPos(int xPos, int yPos)
+int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 {
     RECT rect;
 
@@ -2844,12 +2845,16 @@ int GetTileFromPos(int xPos, int yPos)
     {
         for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
         {
-
             // !!! vi is a global! Don't use it?
 
             if ((xPos >= x) && (xPos < x + vvmhw[iVM].xpix * vi.fXscale) &&
                 (yPos >= y) && (yPos < y + vvmhw[iVM].ypix * vi.fYscale))
             {
+                if (ppt)
+                {
+                    ppt->x = x;
+                    ppt->y = y;
+                }
                 return iVM;
             }
 
@@ -2897,7 +2902,7 @@ void ScrollTiles()
     if (GetCursorPos(&pt))
         if (ScreenToClient(vi.hWnd, &pt))
         {
-            int s = GetTileFromPos(pt.x, pt.y);
+            int s = GetTileFromPos(pt.x, pt.y, NULL);
             if (s != sVM)
             {
                 sVM = s;
@@ -3897,7 +3902,7 @@ break;
                 if (GetCursorPos(&pt))
                     if (ScreenToClient(vi.hWnd, &pt))
                     {
-                        int s = GetTileFromPos(pt.x, pt.y);
+                        int s = GetTileFromPos(pt.x, pt.y, NULL);
                         if (s != sVM)
                         {
                             sVM = s;        // the current tile in focus (may be -1)
@@ -4566,7 +4571,7 @@ break;
                 pt.y = GET_Y_LPARAM(lParam);
                 if (v.fTiling && ScreenToClient(vi.hWnd, &pt))
                 {
-                    int iVM = GetTileFromPos(pt.x, pt.y);
+                    int iVM = GetTileFromPos(pt.x, pt.y, NULL);
                     if (iVM >= 0)
                     {
                         v.iVM = iVM;
@@ -4642,7 +4647,7 @@ break;
                         pt.y = gi.ptsLocation.y;
                         if (v.fTiling && ScreenToClient(vi.hWnd, &pt))
                         {
-                            int iVM = GetTileFromPos(pt.x, pt.y);
+                            int iVM = GetTileFromPos(pt.x, pt.y, NULL);
                             if (iVM >= 0)
                             {
                                 v.iVM = iVM;
@@ -4776,31 +4781,93 @@ break;
         return 0;
 
     case WM_MOUSEMOVE:
+        
         // !!! if the VM type supports a mouse, how do we figure out when to capture the mouse inside a tile?
+
+        if (v.iVM >= 0)
+            FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);    // give mouse move to the VM !!! not listening to whether to eat it
+
+        // make sure this works on multimon, GET_X_LPARAM is not defined
+        int xPos = LOWORD(lParam);
+        int yPos = HIWORD(lParam);
+        
+        LightPenX = 0;
+        LightPenY = 0;
+
+        // in Tile Mode, make note of which tile we are hovering over
+        //
+        if (v.fTiling)
         {
-            if (v.iVM >= 0)
-                FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);    // give mouse move to the VM !!! not listening to whether to eat it
-
-            // in Tile Mode, make note of which tile we are hovering over
-            //
-            if (v.fTiling)
+            POINT pt;
+            int s = GetTileFromPos(xPos, yPos, &pt);
+            if (s != sVM)
             {
-                // make sure this works on multimon, GET_X_LPARAM is not defined
-                int xPos = LOWORD(lParam);
-                int yPos = HIWORD(lParam);
+                sVM = s;        // the tile in focus
+                v.iVM = sVM;    // "current" VM is now this
 
-                int s = GetTileFromPos(xPos, yPos);
-                if (s != sVM)
-                {
-                    sVM = s;        // the tile in focus
-                    v.iVM = sVM;    // "current" VM is now this
-                    FixAllMenus();
-                }
+                FixAllMenus();
             }
 
-            vi.fMouseMoved = TRUE;
+            if (s > -1)
+            {
+                LightPenX = (WORD)(xPos - pt.x);
+                LightPenY = (WORD)(yPos - pt.y);
+            }
+
+            // set which pixel we are hovering over
+            LightPenVM = s;
         }
 
+        // not tiled mode
+        else
+        {
+            LightPenVM = v.iVM;
+            
+            if (v.iVM > -1)
+            {
+                RECT rect;
+                GetClientRect(vi.hWnd, &rect);
+
+                // the whole client area is the visible part of the ATARI screen
+                if (v.fZoomColor)
+                {
+                    LightPenX = (WORD)(xPos * vvmhw[v.iVM].xpix / rect.right);
+                    LightPenY = (WORD)(yPos * vvmhw[v.iVM].ypix / rect.bottom);
+                }
+
+                // the screen aspect ratio is preserved and it is a certain scale multiple
+                else
+                {
+                    int x, y, scale;
+                    // !!! vi is a global! Don't use it?
+
+                    for (scale = 16; scale > 1; scale--)
+                    {
+                        x = rect.right - (vvmhw[v.iVM].xpix * vi.fXscale * scale);
+                        y = rect.bottom - (vvmhw[v.iVM].ypix * vi.fYscale * scale);
+
+                        if ((x >= 0) && (y >= 0))
+                            break;
+                    }
+
+                    int bb = (rect.right - scale * vvmhw[v.iVM].xpix) / 2;    // black bar size on left
+                    if (xPos > bb)
+                        LightPenX = (WORD)((xPos - bb) / scale);
+                    if (LightPenX >= vvmhw[v.iVM].xpix)
+                        LightPenX = (WORD)(vvmhw[v.iVM].xpix - 1);
+                    bb = (rect.bottom - scale * vvmhw[v.iVM].ypix) / 2;    // black bar size on top
+                    if (yPos > bb)
+                        LightPenY = (WORD)((yPos - bb) / scale);
+                    if (LightPenY >= vvmhw[v.iVM].ypix)
+                        LightPenY = (WORD)(vvmhw[v.iVM].ypix - 1);
+                }
+            }
+        }
+
+        //ODS("LightPen %d X=%02x Y=%02x\n", v.iVM, LightPenX, LightPenY);
+
+        vi.fMouseMoved = TRUE;
+        
         break;    // or return?
 
     case WM_POWERBROADCAST:

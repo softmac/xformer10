@@ -139,6 +139,12 @@ int cPasteBuffer, iPasteBuffer;
 extern WORD rgAsciiToScan[256];     // convert ASCII to ATARI keyboard scan codes
 extern WORD rgAtasciiToScan[256];   // convert ATASCII to ATARI keyboard scan codes
 
+// which VM the mouse is over, and which pixel the mouse is hovering over, in case the VM wants to know, for instance
+// for a light pen. The VM can translate that however it wants.
+int LightPenVM;
+WORD LightPenX;
+WORD LightPenY;
+
 // 
 // We will make one thread per VM 
 //

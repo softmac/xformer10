@@ -627,6 +627,10 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
                 if (!pmg.grafp[i])
                     continue;
 
+                // no part of the player is in the region we care about
+                if (new[i] >= (short)stop || newstop[i] <= (short)start)
+                    continue;
+
                 // now note all the locations of the new player
                 for (z = max((short)start, new[i]); z < (unsigned)min((short)stop, newstop[i]); z++)
                 {
@@ -678,22 +682,25 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
         // with its data, pmg.grafp[i], which may be different than b2
         if (new[i] < NTSCx) // even if hpospPixNewStart < NTSCx, this may not be valid if we didn't finish drawing the old one
         {
-            //ODS("now note collisions at new pos for %d. MAKE IT REAL\n", i);
-
-            for (unsigned z = max((short)start, pmg.hpospPixNewStart[i]); z < (unsigned)min((short)stop, newstop[i]); z++)
+            // no part of the player is in the region we care about. Can't continue because we have to execute the code below it
+            if (!(new[i] >= (short)stop || newstop[i] <= (short)start))
             {
-                BYTE *pq = qb + z;
 
-                // fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
-                // fGTIA - no collisions to playfield in GTIA
-                // !!! GR.10 is supposed to have collisions!
-                if (pmg.grafp[i] & (0x80 >> ((z - pmg.hpospPixNewStart[i]) >> pmg.cwp[i])))
+                for (unsigned z = max((short)start, new[i]); z < (unsigned)min((short)stop, newstop[i]); z++)
                 {
-                    PXPL[i] |= ((*pq) >> 4);
-                    PXPF[i] |= pmg.fHiRes ? ((*pq & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
+                    BYTE *pq = qb + z;
+
+                    // fHiRes - GR.0 and GR.8 only register collisions with PF1, but they report it as a collision with PF2
+                    // fGTIA - no collisions to playfield in GTIA
+                    // !!! GR.10 is supposed to have collisions!
+                    if (pmg.grafp[i] & (0x80 >> ((z - pmg.hpospPixNewStart[i]) >> pmg.cwp[i])))
+                    {
+                        PXPL[i] |= ((*pq) >> 4);
+                        PXPF[i] |= pmg.fHiRes ? ((*pq & 0x02) << 1) : (pmg.fGTIA ? 0 : *pq);
+                    }
                 }
             }
-
+            
             // from now on, there's just one place this PMG lives
             pmg.hpospPixStart[i] = new[i];
             pmg.hpospPixStop[i] = newstop[i];
