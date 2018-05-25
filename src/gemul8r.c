@@ -521,6 +521,7 @@ void FixAllMenus()
     CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
 
@@ -2360,155 +2361,156 @@ void RenderBitmap()
     //  PrintScreenStats();
 #endif
 
-#if 0
+    // TILING MODE
     if (v.fTiling)
     {
-        // Tiling
-
-        // find a valid VM we can use
-        iVM = nFirstTile; // we're asked to start tiling at this point
-        while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-            iVM++;
-
-        int x, y, fDone = iVM;
-        BOOL fBlack = FALSE;
-
-        // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-        int nx1 = rect.right / vvmhw[iVM].xpix; // how many fit across entirely?
-        int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
-
-        // black out the area we'll never draw to
-        if (nx == nx1)
-            BitBlt(vi.hdc, nx * vvmhw[iVM].xpix, 0, rect.right - (vvmhw[iVM].xpix * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
-
-        for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
+        if (v.fMyVideoCardSucks)
         {
-            for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+
+            // find a valid VM we can use
+            iVM = nFirstTile; // we're asked to start tiling at this point
+            while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
+                iVM++;
+
+            int x, y, fDone = iVM;
+            BOOL fBlack = FALSE;
+
+            // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
+            int nx1 = rect.right / vvmhw[iVM].xpix; // how many fit across entirely?
+            int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+
+            // black out the area we'll never draw to
+            if (nx == nx1)
+                BitBlt(vi.hdc, nx * vvmhw[iVM].xpix, 0, rect.right - (vvmhw[iVM].xpix * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
+
+            for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
             {
-                // Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
-                if (y + vvmhw[iVM].ypix > 0 && !fBlack)
+                for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
                 {
-                    if (sVM == (int)iVM)
+                    // Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
+                    if (y + vvmhw[iVM].ypix > 0 && !fBlack)
                     {
-                        // border around the one we're hovering over
-                        int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
-                        BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                        BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                        BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
-                        BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                        BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                        if (sVM == (int)iVM)
+                        {
+                            // border around the one we're hovering over
+                            int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
+                            BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
+                            BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                        }
+                        else
+                            BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
                     }
-                    else
-                        BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+                    else if (fBlack)
+                        BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, BLACKNESS);
+
+                    //StretchBlt(vi.hdc, x, y,
+                    //    (vvmhw[iVM].xpix * vi.fXscale), (vvmhw[iVM].ypix * vi.fYscale),
+                    //    vrgvmi[iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
+
+                    // advance to the next valid bitmap
+                    do
+                    {
+                        iVM = (iVM + 1) % MAX_VM;
+                    } while (vrgvmi[iVM].hdcMem == NULL);
+
+                    // we've painted them all, now just black for the rest
+                    if (fDone == (int)iVM)
+                        fBlack = TRUE;
                 }
-                else if (fBlack)
-                    BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, BLACKNESS);
+            }
+        }
+        else
+        {
+            // border around the one we're hovering over - write to source to avoid flicker and get best perf
+            // don't do this if we're resizing, the bitmap is out of date!
+            if (sVM > -1 && !fNeedTiledBitmap)
+            {
+                // get the rect of the current tile and its width & height
+                RECT rectB;
+                int ycur = 0;
+                GetPosFromTile(sVM, &rectB);
+                int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
+                int xmax = xw;
+                int ymax = yw;
+                if (rectB.left + xw > rect.right)
+                    xw -= (rectB.left + xw - rect.right);    // right side of tile might be clipped
+                if (rectB.top + yw > rect.bottom)
+                    yw -= (rectB.top + yw - rect.bottom);    // bottom of tile might be clipped
+                if (rectB.top < 0)
+                    ycur = abs(rectB.top);                   // top of tile off screen
 
-                //StretchBlt(vi.hdc, x, y,
-                //    (vvmhw[iVM].xpix * vi.fXscale), (vvmhw[iVM].ypix * vi.fYscale),
-                //    vrgvmi[iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
+                // get a pointer to the top left of the current tile
+                BYTE *ptb = (BYTE *)(vi.pTiledBits);
+                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+                ptb += rectB.top * stride + rectB.left;
 
-                // advance to the next valid bitmap
-                do
+                // blit white (ATARI colour $f)
+
+                // top white bar
+                ptb += stride * ycur;
+                for (; ycur < min(5, yw); ycur++)
                 {
-                    iVM = (iVM + 1) % MAX_VM;
-                } while (vrgvmi[iVM].hdcMem == NULL);
+                    memset(ptb, 0x0f, xw);
+                    ptb += stride;
+                }
 
-                // we've painted them all, now just black for the rest
-                if (fDone == (int)iVM)
-                    fBlack = TRUE;
+                // side bars
+                for (; ycur < min(yw, ymax - 5); ycur++)
+                {
+                    memset(ptb, 0x0f, min(5, xw));
+                    ptb += xmax - 5;
+                    memset(ptb, 0x0f, max(0, 5 - xmax + xw));
+                    ptb += (stride - (xmax - 5));
+                }
+
+                // bottom white bar
+                for (; ycur < min(ymax, yw); ycur++)
+                {
+                    memset(ptb, 0x0f, xw);
+                    ptb += stride;
+                }
             }
+
+            if (!fNeedTiledBitmap)
+            {
+                // now black out the places where there are no tiles
+
+                // get a pointer to the top right of the last tile
+                BYTE *ptb = (BYTE *)(vi.pTiledBits);
+                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+                ptb += ptBlack.y * stride + ptBlack.x;
+
+                // black out the rest of this row
+                int ycur = ptBlack.y;
+                // !!! 240 constant assumed
+                while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
+                {
+                    memset(ptb, 0, rect.right - ptBlack.x);
+                    ycur += 1;
+                    ptb += stride;
+                }
+
+                // black out any bottom blank rows (if VMs are deleted, that could make some)
+                ycur = ptBlack.y + 240;
+                ptb = (BYTE *)(vi.pTiledBits);
+                ptb += (ptBlack.y + 240) * stride;
+                while (ycur < rect.bottom)
+                {
+                    memset(ptb, 0, rect.right);
+                    ycur += 1;
+                    ptb += stride;
+                }
+            }
+
+            // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
+            BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
         }
     }
-#else
-    if (v.fTiling)
-    {
-        // border around the one we're hovering over - write to source to avoid flicker and get best perf
-        // don't do this if we're resizing, the bitmap is out of date!
-        if (sVM > -1 && !fNeedTiledBitmap)
-        {
-            // get the rect of the current tile and its width & height
-            RECT rectB;
-            int ycur = 0;
-            GetPosFromTile(sVM, &rectB);
-            int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
-            int xmax = xw;
-            int ymax = yw;
-            if (rectB.left + xw > rect.right)
-                xw -= (rectB.left + xw - rect.right);    // right side of tile might be clipped
-            if (rectB.top + yw > rect.bottom)
-                yw -= (rectB.top + yw - rect.bottom);    // bottom of tile might be clipped
-            if (rectB.top < 0)
-                ycur = abs(rectB.top);                   // top of tile off screen
 
-            // get a pointer to the top left of the current tile
-            BYTE *ptb = (BYTE *)(vi.pTiledBits);
-            int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
-            ptb += rectB.top * stride + rectB.left;
-            
-            // blit white (ATARI colour $f)
-            
-            // top white bar
-            ptb += stride * ycur;
-            for (; ycur < min(5,yw); ycur++)
-            {
-                memset(ptb, 0x0f, xw);
-                ptb += stride;
-            }
-
-            // side bars
-            for (; ycur < min(yw,ymax - 5); ycur++)
-            {
-                memset(ptb, 0x0f, min(5, xw));
-                ptb += xmax - 5;
-                memset(ptb, 0x0f, max(0, 5 - xmax + xw));
-                ptb += (stride - (xmax - 5));
-            }
-
-            // bottom white bar
-            for (; ycur < min(ymax, yw); ycur++)
-            {
-                memset(ptb, 0x0f, xw);
-                ptb += stride;
-            }
-        }
-
-        if (!fNeedTiledBitmap)
-        {
-            // now black out the places where there are no tiles
-
-            // get a pointer to the top right of the last tile
-            BYTE *ptb = (BYTE *)(vi.pTiledBits);
-            int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
-            ptb += ptBlack.y * stride + ptBlack.x;
-
-            // black out the rest of this row
-            int ycur = ptBlack.y;
-            // !!! 240 constant assumed
-            while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
-            {
-                memset(ptb, 0, rect.right - ptBlack.x);
-                ycur += 1;
-                ptb += stride;
-            }
-
-            // black out any bottom blank rows (if VMs are deleted, that could make some)
-            ycur = ptBlack.y + 240;
-            ptb = (BYTE *)(vi.pTiledBits);
-            ptb += (ptBlack.y + 240) * stride;
-            while (ycur < rect.bottom)
-            {
-                memset(ptb, 0, rect.right);
-                ycur += 1;
-                ptb += stride;
-            }
-        }
-
-        // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
-        BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
-    }
-#endif
-
+    // ZOOM MODE
     else if (v.fZoomColor)
     {
         // Smart Scaling
@@ -2516,6 +2518,8 @@ void RenderBitmap()
         StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
             vrgvmi[v.iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
     }
+    
+    // NORMAL MODE
     else
     {
         // Integer scaling
@@ -3956,6 +3960,16 @@ break;
         case IDM_WHEELSENS:
             v.fWheelSensitive = !v.fWheelSensitive;
             FixAllMenus();
+            break;
+
+        // toggle whether to do 1 BitBlt or multiple in tiled mode
+        // BEST PERF - use a giant tiled memory bitmap that every VM writes into, and do 1 blit to video memory
+        //              but old crappy NVIDIA cards flash in a super ugly way
+        // WORST PERF - every tile has its own memory bitmap, with up to 99 video blits
+        case IDM_MYVIDEOCARDSUCKS:
+            v.fMyVideoCardSucks = !v.fMyVideoCardSucks;
+            FixAllMenus();
+            break;
 
         // Delete this instance, and choose another
         case IDM_DELVM:

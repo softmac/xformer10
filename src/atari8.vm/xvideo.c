@@ -126,7 +126,7 @@ void ShowCountDownLine(int iVM)
         BYTE *qch;
 
         RECT rectC = { 0 };
-        if (v.fTiling)
+        if (v.fTiling && !v.fMyVideoCardSucks)
         {
             qch = vi.pTiledBits;
             RECT rect;
@@ -152,7 +152,7 @@ void ShowCountDownLine(int iVM)
         else
             pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
 
-        if (v.fTiling)
+        if (v.fTiling && !v.fMyVideoCardSucks)
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
@@ -1532,7 +1532,7 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
 
     BYTE *qch0;
     RECT rectC = { 0 };
-    if (v.fTiling)
+    if (v.fTiling && !v.fMyVideoCardSucks)
     {
         qch0 = vi.pTiledBits;
         GetClientRect(vi.hWnd, &rectC);
@@ -1588,7 +1588,7 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
     else
     {
         // not doing a bitfield, just write into this scan line
-        if (v.fTiling)
+        if (v.fTiling && !v.fMyVideoCardSucks)
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
@@ -2592,7 +2592,7 @@ if (sl.modelo < 2 || iTop > i)
         // We didn't waste time initializing the array if we weren't going to use it
         memset(rgFifth, 0, sizeof(rgFifth));
 
-        if (v.fTiling)
+        if (v.fTiling && !v.fMyVideoCardSucks)
         {
             qch = vi.pTiledBits;
             RECT rect;
@@ -2623,7 +2623,7 @@ if (sl.modelo < 2 || iTop > i)
         //pmg.fHitclr = 0;
 
         // now map the rgpix array to the screen
-        if (v.fTiling)
+        if (v.fTiling && !v.fMyVideoCardSucks)
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);

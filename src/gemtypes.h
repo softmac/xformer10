@@ -442,7 +442,7 @@ typedef struct
     BOOL     fSkipStartup:8;// bit 0 = skip splash, bit 1 = one time unhybernate
     BOOL     fNoQckBoot:8;  // 0 = don't skip hardware check in BIOS
     BOOL     fNoMono:1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
-    BOOL             :1;    // reserved (deprecated)
+    BOOL     fMyVideoCardSucks:1;    // asynchronous slow blits, so do 99 blits instead of 1 in tiled mode
     BOOL     fSaveOnExit:1; // 0 = normal, 1 = save INI file on exit
     BOOL     fHibrOnExit:1; // 0 = normal, 1 = hibernate on exit
     BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
