@@ -387,7 +387,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
             pwhdr[sCurBuf].dwFlags &= ~WHDR_DONE;
             waveOutWrite(hWave, &pwhdr[sCurBuf], sizeof(WAVEHDR));
 
-            //ODS("Write %d %08x (t=%lld)\n", sCurBuf, &pwhdr[sCurBuf],GetJiffies());
+            //ODS("Write (%d) %08x @ %llu\n", sCurBuf, &pwhdr[sCurBuf], GetJiffies());
 
             //unsigned char *bb = pwhdr[sCurBuf].lpData;
             //for (int zz = 0; zz < 800; zz++)

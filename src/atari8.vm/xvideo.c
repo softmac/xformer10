@@ -1108,6 +1108,9 @@ void PSLPrepare(int iVM)
             hshift &= 7;    // now only consider the part < 8
         }
 
+        // !!! Looking at the screen RAM should be cycle granular. Turmoil fills it as its drawing, so
+        // fetching at the beginning of the scanline doesn't work
+
         if (((wAddr + j) & 0xFFF) < 0xFD0)  // even wide playfield won't wrap a 4K boundary
         {
             // tough to avoid memcpy if we support wrapping on a 4K boundary below
