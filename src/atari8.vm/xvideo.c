@@ -1747,11 +1747,7 @@ if (sl.modelo < 2 || iTop > i)
                     // partial shifting means we also need to look at a second character intruding into our space
                     // do the same exact thing again
                     int index = 1;
-
-                    BYTE rgb = 0;
-                    if (i > 0)
-                        rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
-
+                    BYTE rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
 
                     if ((sl.chactl & 4) && sl.modelo == 3)
                     {
