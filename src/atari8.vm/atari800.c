@@ -1997,12 +1997,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             {
                 //ODS("WAITING\n");
 
-                if (WSYNC_Waiting || wLeft <= wNMI)
-                    wLeft = wLeft;
+                // Is there an NMI on this upcoming scan line that will be skipped by a WSYNC?
+                BOOL fNMI = WSYNC_Waiting && wNMI && wNMI < wLeft;
 
                 // we need to delay the next thing that executes (regular or NMI code) until the WSYNC point
                 if (WSYNC_Waiting)
                 {
+                    
                     // + 1 to make it 1-based
                     // + 1 is to start early at cycle 104
                     // !!! That's not always true, but usually is, especially if the WSYNC happened at the end of the previous scan line,
@@ -2011,10 +2012,17 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     wCycle = DMAMAP[wLeft - 1];
 
                     WSYNC_Waiting = FALSE;
+
+                    // the NMI would trigger right away since we are jumping past it. But in real life,
+                    // the next instruction after the STA WSYNC is allowed to execute first, so move the NMI
+                    // to one cycle from now so one more instruction will execute and then the NMI will fire
+                    if (fNMI)
+                        wNMI = wLeft - 1;
                 }
                 
                 // Uh oh, an NMI was to happen at cycle 10, and we're already there or past it, so trigger it now
-                if (wScan == STARTSCAN + Y8)
+                // unless we've arranged to trigger it soon because now is too soon (fNMI)
+                if (!fNMI && wScan == STARTSCAN + Y8)
                 {
                     // clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
                     NMIST = (NMIST & 0x20) | 0x5F;
@@ -2034,7 +2042,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     }
                 }
 
-                else if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
+                else if (!fNMI && (sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
                 {
                     // set DLI, clear VBI leave RST alone - even if we don't take the interrupt
                     NMIST = (NMIST & 0x20) | 0x9F;
@@ -2745,12 +2753,22 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // -1 to make it 0 based, cW - 1 to get the beginning of the write cycle. Plus one to get the end of that cycle
             if (wLeft >= cT && DMAMAP[wLeft - 1 - (cW - 1)] + 1 <= 104)
             {
+                // Is there an NMI on this scan line that hasn't happened yet?
+                BOOL fNMI = wNMI && wNMI < wLeft;
+
                 // + 1 to make it 1-based
                 // +cT is how many cycles are about to be decremented the moment we return
                 // + wo is to start 1 cycle early at cycle 104 if wo == 1.
                 // 
                 wLeft = DMAMAP[115] + 1 + cT + wo;
                 wCycle = DMAMAP[wLeft - 1];
+
+                // the NMI would trigger right away since we are jumping past it. But in real life,
+                // the next instruction after the STA WSYNC is allowed to execute first, so move the NMI
+                // to one cycle from now so one more instruction will execute and then the NMI will fire
+                // (cT cycles are about to be decremented)
+                if (fNMI)
+                    wNMI = wLeft - cT - 1;
             }
             else
             {
