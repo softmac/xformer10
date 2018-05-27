@@ -316,7 +316,7 @@ typedef struct
     short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
     short m_wLastSIOSector; // which sector we read last time
     BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
-    BYTE m_WSYNC_on_RTI;  // restore the state of m_WSYNC_Waiting after a DLI
+    BYTE pad4B;
 
     short m_PSL;        // the value of wLeft last time ProcessScanLine was called
 
@@ -349,7 +349,7 @@ typedef struct
 
     WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
 
-    WORD pad5W;
+    WORD m_wCycle;      // the cycle of the scan line we're about to execute (0 - 113)
     ULONG pad6UL;
 
     // clock multiplier
@@ -428,10 +428,10 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define srC           CANDY_STATE(srC)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waiting CANDY_STATE(WSYNC_Waiting)
-#define WSYNC_on_RTI  CANDY_STATE(WSYNC_on_RTI)
 #define PSL           CANDY_STATE(PSL)
 #define wSLEnd        CANDY_STATE(wSLEnd)
 #define wNMI          CANDY_STATE(wNMI)
+#define wCycle        CANDY_STATE(wCycle)
 #define rgbSpecial    CANDY_STATE(rgbSpecial)
 #define rgSIO         CANDY_STATE(rgSIO)
 #define cSEROUT       CANDY_STATE(cSEROUT)
@@ -758,7 +758,7 @@ BOOL ProcessScanLine(int);
 void ForceRedraw(int);
 BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);
 void InitBanks(int);
-void CchDisAsm(int, unsigned int *puMem);
+void CchDisAsm(int, WORD *puMem);
 void CchShowRegs(int);
 void ControlKeyUp8(int);
 

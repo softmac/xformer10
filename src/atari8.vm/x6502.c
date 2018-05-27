@@ -152,11 +152,16 @@ void __fastcall Stop6502(const int iVM)
 
 // in debug, stop on a breakpoint or if tracing
 #ifndef NDEBUG
-#define HANDLER_END() if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM); }
+// it's really handy for debugging to see what cycle of the scan line we're on.
+// !!! when wCycle is 0xff, we are passed the end of the scan line, so the next instruction displayed by the monitor
+// may NOT be what was shown, it may be the first instr of an interrupt instead
+#define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM); } }
 #else
 #if USE_JUMP_TABLE
 #define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[READ_BYTE(iVM, regPC++)]; (*p)(iVM); } }
 #else
+// the switch statement only does one instruction at a time (no tail calling) so no need to check wLeft against wNMI
+// !!! Darek, how can switch be faster than jump table when there are 2 ifs between each switch statement?
 #define HANDLER_END() { } }
 #endif
 #endif
@@ -1209,12 +1214,6 @@ HANDLER(op40)
     regP |= 0x10;    // force srB
     UnpackP(iVM);
     regPC = PopWord(iVM);
-
-    // before our DLI the main code was waiting on WSYNC
-    // !!! If we are now past the WSYNC point
-    if (WSYNC_on_RTI)
-        WSYNC_Waiting = TRUE;
-    WSYNC_on_RTI = FALSE;
 
     wLeft -= 6;
     HANDLER_END_FLOW();
@@ -3956,6 +3955,10 @@ void __cdecl Go6502(const int iVM)
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
+
+                    Assert(wLeft >= 7);
+                    wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
+                    wCycle = DMAMAP[wLeft - 1];
                 }
             }
             else
@@ -3970,6 +3973,10 @@ void __cdecl Go6502(const int iVM)
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
+                    
+                    Assert(wLeft >= 7);
+                    wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
+                    wCycle = DMAMAP[wLeft - 1];
                 }
             }
             wNMI = 0;

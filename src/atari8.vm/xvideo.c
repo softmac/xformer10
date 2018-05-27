@@ -355,7 +355,7 @@ void CreateDMATables()
     //
     // rgDMAMap index 114 will tell you how many CPU cycles can execute on this scan line so you can set the initial wLeft
     // Index 115 will tell you what wLeft should be set to after WSYNC is released (cycle 105)
-    // Index 116 will tell you what wLeft will be on cycle 17, when it's time for an NMI (DLI/VBI)
+    // Index 116 will tell you what wLeft will be on cycle 10, when it's time for an NMI (DLI/VBI)
     //
 
     for (mode = 0; mode < 20; mode++)
@@ -420,13 +420,12 @@ void CreateDMATables()
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][115] = cycle - 1;
 
                                     // index 116 - remember what wLeft will be when it's time for a DLI/VBI NMI (cycle 10)
-                                    // but it takes 7 cycles for the CPU to process the NMI and start executing code, so
-                                    // we don't get to run until cycle 17. (Decathalon glitches if we start the DLI earlier).
-                                    // !!! I don't halt the processor between 10 and 17, I think I should.
-                                    if (index == 17)
+                                    // (it takes 7 cycles for the CPU to process the NMI and start executing code, so
+                                    // we won't run until cycle 17, see x6502.c. Decathalon glitches if we start the DLI earlier).
+                                    if (index == 10)
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle;
                                     // oops, 10 was busy
-                                    else if (index < 17 && rgDMAMap[mode][pf][width][first][player][missile][lms][116] == 0)
+                                    else if (index < 10 && rgDMAMap[mode][pf][width][first][player][missile][lms][116] == 0)
                                         rgDMAMap[mode][pf][width][first][player][missile][lms][116] = cycle - 1;
                                 }
 
@@ -1048,37 +1047,6 @@ void PSLPrepare(int iVM)
             sl.vscrol = 0;    // note that this is not the first scan line of a new mode line (do not do PF DMA fetch)
             scans = 0;        // pretend it's a 1-line blank mode
         }
-
-        // DLI now happens inside of Go6502 at the proper cycle (17)
-#if 0
-        // generate a DLI if necessary. Do so on the last scan line of a graphics mode line
-        // a JVB instruction with DLI set keeps firing them all the way to the VBI (Race in Space)
-        if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
-        {
-#ifndef NDEBUG
-            extern BOOL  fDumpHW;
-
-            if (fDumpHW)
-                printf("DLI interrupt at scan %d\n", wScan);
-#endif
-
-            // set DLI, clear VBI leave RST alone - even if we don't take the interrupt
-            NMIST = (NMIST & 0x20) | 0x9F;
-            if (NMIEN & 0x80)    // DLI enabled
-            {
-                Interrupt(iVM, FALSE);
-                regPC = cpuPeekW(iVM, 0xFFFA);
-
-                // the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT. on RTI set it back.
-                // This won't work for nested interrupts, or if DLI finishes either before or after WSYNC point!
-                WSYNC_Waiting = FALSE;
-                WSYNC_on_RTI = TRUE;
-
-                if (regPC == bp)
-                    fHitBP = TRUE;
-            }
-        }
-#endif
 
         // we do not support changing HSCROL in the middle of a scan line. I doubt it's necessary, it would slow things down,
         // and it's complicated anyway
