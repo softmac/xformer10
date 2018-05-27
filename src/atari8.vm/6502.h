@@ -16,7 +16,7 @@
 // 6502 specific implementation of the CPU API
 //
 
-// !!! It shouldn't be ATARI specific, get rid of every reference to CANDY, keep it's own thread-safe state
+// !!! It shouldn't be ATARI specific?, get rid of every reference to CANDY, keep it's own thread-safe state
 
 // !!! don't call this directly
 void __cdecl Go6502(const int);
@@ -45,6 +45,8 @@ __inline BYTE cpuPeekB(const int iVM, ADDR addr)
 }
 
 extern BOOL ProcessScanLine(int);
+extern void __forceinline __fastcall PackP(const int);
+extern void __forceinline __fastcall UnpackP(const int);
 
 __inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
 {
@@ -54,7 +56,11 @@ __inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
     // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
     // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
     if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+    {
+        PackP(iVM);
         ProcessScanLine(iVM);
+        UnpackP(iVM);
+    }
 
     rgbMem[addr] = (BYTE) b;
     return TRUE;

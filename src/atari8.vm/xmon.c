@@ -28,7 +28,7 @@
 
 // globals are not thread safe, but only one is up at a time
 
-unsigned int uMemDump, uMemDasm;
+WORD uMemDump, uMemDasm;
 char const rgchHex[] = "0123456789ABCDEF";
 
 char const szCR[] = "\n";
@@ -283,6 +283,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
     int cNum, cLines;
     unsigned u1, u2;
     char *pch;
+    WORD w;
 
     //fMON=TRUE;
 
@@ -312,6 +313,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
         Cconws(" When in Atari mode press PAUSE to get back to the debugger");
         Cconws("\n");
 
+
+        w = regPC;
+        CchDisAsm(iVM, &w); // don't alter the actual PC
         CchShowRegs(iVM);
         uMemDasm = regPC;    // 'd' and 'm' dumps will start here
         uMemDump = regPC;
@@ -438,12 +442,16 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
             {
                 /* dump/modify registers */
 
+                w = regPC;
+                CchDisAsm(iVM, &w); // don't alter the actual PC
                 CchShowRegs(iVM);
             }
 
             else if (chCom == 'C')
             {
                 ColdStart(v.iVM);
+                w = regPC;
+                CchDisAsm(iVM, &w);
                 CchShowRegs(iVM);
                 uMemDasm = regPC; // is this handy or mean?
             }
@@ -460,7 +468,6 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
             else if ((chCom == 'G') || (chCom == 'S') || (chCom == 'T') || (chCom == 'A'))
             {
-                unsigned int u;
                 int bpT = bp;    
 
                 cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
@@ -479,11 +486,11 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                     break;
                 }
 
-                // auto-brk if we jump to 0 (MULE actually does legit jmp to z-page)
                 do { // do at least 1 thing, don't get stuck at the breakpoint
-                    u = regPC;
-                    CchDisAsm(iVM, &u);            // what's about to execute
                     FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+                    RenderBitmap();
+                    w = regPC;
+                    CchDisAsm(iVM, &w);          // show the next instruction that will run
                     CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
                     if (GetAsyncKeyState(VK_END) & 0x8000)
                         break;
@@ -555,6 +562,9 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
 void CchShowRegs(int iVM)
     {
+    
+    printf("(%03x/%02x) ", wScan, wCycle);
+
     printf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X P:%02X ", 
         regPC, regA, regX, regY, regSP, regP);
 
@@ -577,7 +587,7 @@ void CchShowRegs(int iVM)
 /* Disassemble instruction at location uMem to space filled buffer pch. */
 /* Returns with puMem incremented appropriate number of bytes. */
 
-void CchDisAsm(int iVM, unsigned int *puMem)
+void CchDisAsm(int iVM, WORD *puMem)
 {
     char rgch[32];
     char *pch = rgch;
@@ -591,7 +601,6 @@ void CchDisAsm(int iVM, unsigned int *puMem)
     _fmemset(rgch, ' ', sizeof(rgch)-1);
     rgch[sizeof(rgch)-1] = 0;
 
-    *pch++ = ',';
     XtoPch(pch, *puMem);
     pch += 5;
 

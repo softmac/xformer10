@@ -547,6 +547,7 @@ void Interrupt(int iVM, BOOL b)
 }
 
 // What happens when it's scan line 241 and it's time to start the VBI
+// Joysticks, light pen, pasting, etc.
 //
 void DoVBI(int iVM)
 {
@@ -1544,6 +1545,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     wFrame = 0;
     wScan = 0;    // start at top of screen again
     wLeft = 0;
+    wCycle = 0;
     PSL = 0;
 
     // SIO init
@@ -1876,8 +1878,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 #ifndef NDEBUG
             // Display scan line here
             if (fDumpHW) {
-                UINT PCt = cpuPeekW(iVM, 0x200);
-                extern void CchDisAsm(int, unsigned int *);
+                WORD PCt = cpuPeekW(iVM, 0x200);
+                extern void CchDisAsm(int, WORD *);
                 int i;
 
                 printf("\n\nscan = %d, DLPC = %04X, %02X\n", wScan, DLPC,
@@ -1953,6 +1955,10 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // table element HCLOCKS has the starting value of wLeft for this kind of scan line (0-based)
             // subtract any extra cycles we spent last time finishing an instruction
             wLeft += (DMAMAP[HCLOCKS] + 1);
+            wCycle = DMAMAP[wLeft - 1];
+            
+            // If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+ 1 since it's 0-based)
+            wNMI = (((sl.modehi & 8) && (iscan == scans || (fWait & 0x08))) || (wScan == STARTSCAN + Y8)) ? DMAMAP[116] + 1 : 0;
 
             // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
             // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
@@ -1960,6 +1966,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             if (fRedoPoke)
             {
                 wLeft += 4;
+                wCycle = DMAMAP[wLeft - 1];
                 fRedoPoke = FALSE;
             }
 
@@ -1977,25 +1984,36 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             if (wScan == STARTSCAN + Y8)
             {
-                // Joysticks and Keys are looked at just before the VBI, because many games process them there
+                // Joysticks, light pen and pasting are processed just before the VBI, many games process joysticks in a VBI
                 DoVBI(iVM);
             }
 
             // We're supposed to start executing at the WSYNC release point (cycle 105) not the beginning of the scan line
             // That point is stored in index 115 of this array, and + 1 because the index is 0-based
-            if (WSYNC_Waiting)
+            // OR we want an NMI on this scan line, and it's already past the point for it! (The last instruction on the previous
+            // scan line went over and then DMA happened and there you go). If so, Go6502 won't trigger the NMI, so we have to do it now
+
+            if (WSYNC_Waiting || wLeft <= wNMI)
             {
                 //ODS("WAITING\n");
-                
-                // + 1 to make it 1-based
-                // +1 is to start early at cycle 104 !!! not always true, but usually?
-                wLeft = DMAMAP[115] + 1 +1;
-                
-                WSYNC_Waiting = FALSE;
 
-                // Uh oh, an NMI should happen in the mean time, so better do that now and delay the wait for WSYNC until the RTI
-                // and the main code is executing again
+                if (WSYNC_Waiting || wLeft <= wNMI)
+                    wLeft = wLeft;
 
+                // we need to delay the next thing that executes (regular or NMI code) until the WSYNC point
+                if (WSYNC_Waiting)
+                {
+                    // + 1 to make it 1-based
+                    // + 1 is to start early at cycle 104
+                    // !!! That's not always true, but usually is, especially if the WSYNC happened at the end of the previous scan line,
+                    // so I'm pretty sure in this case we should resume at 104.
+                    wLeft = DMAMAP[115] + 1 + 1;
+                    wCycle = DMAMAP[wLeft - 1];
+
+                    WSYNC_Waiting = FALSE;
+                }
+                
+                // Uh oh, an NMI was to happen at cycle 10, and we're already there or past it, so trigger it now
                 if (wScan == STARTSCAN + Y8)
                 {
                     // clear DLI, set VBI, leave RST alone - even if we're not taking the interrupt
@@ -2007,12 +2025,15 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         Interrupt(iVM, FALSE);
                         regPC = cpuPeekW(iVM, 0xFFFA);
 
+                        Assert(wLeft >= 7);
+                        wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
+                        wCycle = DMAMAP[wLeft - 1];
+
                         if (regPC == bp)
                             fHitBP = TRUE;
                     }
-
-                    // !!! We let the VBI not start until the WSYNC point because it's so long anyway
                 }
+
                 else if ((sl.modehi & 8) && (iscan == scans || (fWait & 0x08)))
                 {
                     // set DLI, clear VBI leave RST alone - even if we don't take the interrupt
@@ -2023,13 +2044,9 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         Interrupt(iVM, FALSE);
                         regPC = cpuPeekW(iVM, 0xFFFA);
 
-                        // the main code may be waiting for a WSYNC, but in the meantime this DLI should NOT.
-                        // It should start at the regular DLI start point. On RTI note to resume waiting for WSYNC
-                        // !!! This won't work for nested interrupts
-                        // !!! This doesn't work, whether or not the DLI goes past the WSYNC point. (Most do a STA WSYNC)
-                        wLeft = DMAMAP[116] + 1;
-                        WSYNC_Waiting = FALSE;
-                        WSYNC_on_RTI = TRUE;
+                        Assert(wLeft >= 7);
+                        wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
+                        wCycle = DMAMAP[wLeft - 1];
 
                         if (regPC == bp)
                             fHitBP = TRUE;
@@ -2044,8 +2061,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         // if we just hit a breakpoint at the IRQ vector above, then don't do anything
         if (!fHitBP)
         {
-            // If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+ 1 since it's 0-based)
-            wNMI = (((sl.modehi & 8) && (iscan == scans || (fWait & 0x08))) || (wScan == STARTSCAN + Y8)) ? DMAMAP[116] + 1 : 0;
             Go6502(iVM);
         }
 
@@ -2717,21 +2732,30 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // or if playfield DMA or RAM refresh DMA uses cycle 104. It's difficult to know for sure, but
             // if we're drawing in the middle (narrow) section of a character mode right now, chances are ANTIC is busy and
             // a STA WSYNC won't resume until cycle 105. At least it works for Tarzan.
-            short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
+            short dma = DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1];
+            short cclock = rgPIXELMap[dma + 1] - 20;
             short wo = 1;
             if (cclock > 48 && cclock < 352 - 48 && sl.modelo > 1 && sl.modelo < 8)
                 wo = 0;
 
+            // This might make us delay an NMI, which it's supposed to. But...
+            // !!! If a WSYNC is issued just before cycle 10, the NMI is delayed until after one instruction past STA WSYNC
+            // has executed, then 7 cycles are lost, then the NMI begins. I won't do an extra instruction
+
             // -1 to make it 0 based, cW - 1 to get the beginning of the write cycle. Plus one to get the end of that cycle
             if (wLeft >= cT && DMAMAP[wLeft - 1 - (cW - 1)] + 1 <= 104)
+            {
                 // + 1 to make it 1-based
                 // +cT is how many cycles are about to be decremented the moment we return
                 // + wo is to start 1 cycle early at cycle 104 if wo == 1.
                 // 
                 wLeft = DMAMAP[115] + 1 + cT + wo;
+                wCycle = DMAMAP[wLeft - 1];
+            }
             else
             {
                 wLeft = 0;               // stop right now and wait till next line's WSYNC
+                wCycle = 0x0;
                 WSYNC_Waiting = TRUE;    // next scan line only gets a few cycles
             }
         }
