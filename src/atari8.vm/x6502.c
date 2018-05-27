@@ -3958,7 +3958,7 @@ void __cdecl Go6502(const int iVM)
 
                     Assert(wLeft >= 7);
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
-                    wCycle = DMAMAP[wLeft - 1];
+                    wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }
             }
             else
@@ -3976,7 +3976,7 @@ void __cdecl Go6502(const int iVM)
                     
                     Assert(wLeft >= 7);
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
-                    wCycle = DMAMAP[wLeft - 1];
+                    wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;  // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }
             }
             wNMI = 0;
