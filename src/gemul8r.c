@@ -1438,6 +1438,13 @@ int CALLBACK WinMain(
         static ULONG cExecSpeed;        // # of times measured, for averaging
 #endif
 
+        // the thread asked us to break into the debugger
+        if (vi.fWantDebugBreak)
+        {
+            vi.fWantDebugBreak = FALSE;
+            SendMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);
+        }
+
         // One guest video frame's worth of time has been emulated, a "jiffy" or 1/60th of a second.
         // We are either emulating Normal speed mode (fBrakes == 1) or run as fast as possible Turbo mode (fBrakes==0).
         //
@@ -1573,7 +1580,7 @@ int CALLBACK WinMain(
         }
 
 #ifndef NDEBUG
-        // Break into debugger is asked to, or if in debug mode and VM died or hit breakpoint
+        // Break into debugger if asked to, or if in debug mode and VM died or hit breakpoint
         if (vi.fDebugBreak || ((vi.fInDebugger /*|| v.fDebugMode */) && !vi.fExecuting))
         {
             vi.fInDebugger = TRUE;    // we are currently tracing

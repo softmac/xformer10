@@ -74,6 +74,34 @@ VMINFO const vmi800 =
     LoadStateAtari
     };
 
+#ifndef NDEBUG
+/*static */ __inline void _800_assert(int f, char *file, int line, int iVM)
+{
+    char sz[99];
+
+    if (!f)
+    {
+        int ret;
+
+        wsprintf(sz, "%s: line #%d", file, line);
+        ret = MessageBox(GetFocus(), sz, "Assert failed", MB_APPLMODAL | MB_ABORTRETRYIGNORE);
+
+        if (ret == 3)
+        {
+            // ABORT - break into the debugger!
+            bp = regPC; // makes Exec fail so the debugger knows which VM to use !!! won't work if we're not in Exec
+            vi.fWantDebugBreak = TRUE; // tell the main thread to break into debugger. We can't do it from a VM thread which we might be.
+            PostMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);  // Send will hang, we're a VM thread and the window thread is blocked on us
+                                                                // so it's not wise to block on them.
+        }
+        else if (ret == 4)
+        {
+            __debugbreak();
+        }
+    }
+}
+
+#endif
 
 //
 // Globals
@@ -1032,7 +1060,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     if (bCartType == CART_OSSA)
     {
         i = (iBank == 0 ? 0 : (iBank == 3 ? 1 : (iBank == 4 ? 2 : -1)));
-        assert(i != -1);
+        Assert(i != -1);
         if (i != -1)
             _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
     }
@@ -1041,7 +1069,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     if (bCartType == CART_OSSAX)
     {
         i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
-        assert(i != -1);
+        Assert(i != -1);
         if (i != -1)
             _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
     }
@@ -1058,7 +1086,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         else
             i = -1;     //!!! swapping OSS A & B cartridge out to RAM not supported
 
-        assert(i != -1);
+        Assert(i != -1);
         if (i != -1)
             _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
     }
@@ -1910,7 +1938,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 {
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFE);
-                    //ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+                    ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
 
                     // check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
                     if (regPC == bp)
@@ -2005,10 +2033,16 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 {
                     
                     // + 1 to make it 1-based
-                    // + 1 is to start early at cycle 104
+                    // + 1 is to restart early at cycle 104
                     // !!! That's not always true, but usually is, especially if the WSYNC happened at the end of the previous scan line,
-                    // so I'm pretty sure in this case we should resume at 104.
-                    wLeft = DMAMAP[115] + 1 + 1;
+                    // so I'm pretty sure in this case we should resume at 104, unless the previous instruction was INC WSYNC in which
+                    // case after the WSYNC is touched at cycle 5, the instruction still has another cycle left to do, so the next
+                    // instruction can't start early at 104
+                    if (rgbMem[regPC - 3] == 0xee)
+                        wLeft = DMAMAP[115] + 1;
+                    else
+                        wLeft = DMAMAP[115] + 1 + 1;
+
                     wCycle = DMAMAP[wLeft - 1];
 
                     WSYNC_Waiting = FALSE;
@@ -2076,7 +2110,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         if (regPC == bp)
             fStop = TRUE;
 
-        assert(wLeft <= 0 || fTrace == 1 || regPC == bp);
+        Assert(wLeft <= 0 || fTrace == 1 || regPC == bp);
 
         // we finished the scan line
         if (wLeft <= 0)
@@ -2348,8 +2382,8 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
 //
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
 {
-    assert(addr >= ramtop);
-    assert(FALSE); // I'm curious when this happens
+    Assert(addr >= ramtop);
+    Assert(FALSE); // I'm curious when this happens
 
     return PeekBAtari(iVM, addr) | (PeekBAtari(iVM, addr + 1) << 8);
 }
@@ -2372,8 +2406,8 @@ BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 //
 BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 {
-    assert(addr >= ramtop);
-    assert(FALSE);    // I'm curious if this ever happens
+    Assert(addr >= ramtop);
+    Assert(FALSE);    // I'm curious if this ever happens
 
     PokeBAtari(iVM, addr, w & 255);
     PokeBAtari(iVM, addr + 1, w >> 8);
@@ -2389,7 +2423,7 @@ __declspec(noinline)
 BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
-    assert(addr < 65536);
+    Assert(addr < 65536);
 
 #if 0
     printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
@@ -2541,7 +2575,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         {
             if (PBCTL == 0x34)
             {
-                assert(cSEROUT < 5);
+                Assert(cSEROUT < 5);
                 //ODS("SEROUT #%d = 0x%02x %d %d %d\n", cSEROUT, b, wFrame, wScan, wLeft);
                 rgSIO[cSEROUT] = b;
                 cSEROUT++;
@@ -2744,6 +2778,10 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             short cclock = rgPIXELMap[dma + 1] - 20;
             short wo = 1;
             if (cclock > 48 && cclock < 352 - 48 && sl.modelo > 1 && sl.modelo < 8)
+                wo = 0;
+            // INC WSYNC touches WSYNC on cycle 5 of a 6 cycle instruction and cycle 6 executes next for free instead
+            // of the first cycle of the next instruction, so we never start early at 104 after an INC WSYNC
+            if (cT > cW)
                 wo = 0;
 
             // This might make us delay an NMI, which it's supposed to. But...
