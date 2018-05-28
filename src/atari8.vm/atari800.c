@@ -1344,6 +1344,24 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         random17pos = qpc.QuadPart & 0x1ffff;
     } while (random17pos == 0x1ffff);
 
+    WORD initramtop = 0;
+
+    if (pvmi == (PVMINFO)VM_CRASHED)
+    {
+        // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XE w/o BASIC. If XL/XE breaks, try 800 w/ BASIC.
+
+        if (type == md800)
+        {
+            type = mdXE;
+            initramtop = 0xc000;
+        }
+        else
+        {
+            type = md800;
+            initramtop = 0xa000;
+        }
+    }
+
     // These things change depending on the machine we're emulating
 
     switch (1 << type)
@@ -1403,11 +1421,13 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
     else
         return FALSE;
 
+    ramtop = initramtop;    // if we needed to set this to something in particular
+
     // candy must be set up first (above)
     TimeTravelInit(iVM);
 
     // init breakpoint. JMP $0 happens, so the only safe address that won't ever execute is $FFFF
-    bp = 0xfff;
+    bp = 0xffff;
 
     return TRUE;
 }
@@ -1436,9 +1456,11 @@ BOOL __cdecl InitAtari(int iVM)
     rgvm[iVM].bfMon = monColrTV;
     rgvm[iVM].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);    // we only have 8, others have 9
 
-    // by default, use XL and XE built in BASIC, but no BASIC for Atari 800.
-    // unless Shift-F10 changes it
-    ramtop = (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+    // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
+    // Install may have a preference and set this already, in which case, don't change it
+    if (!ramtop)
+        ramtop = (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+    
     wStartScan = STARTSCAN;    // this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
 
     switch (rgvm[iVM].bfHW)
@@ -1959,7 +1981,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 {
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFE);
-                    ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
+                    //ODS("IRQ %02x TIME! %d %d\n", (BYTE)~IRQST, wFrame, wScan);
 
                     // check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
                     if (regPC == bp)
@@ -2694,19 +2716,26 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                 {
                     cpuPokeB(iVM, wPADATAea + addr, bNew);
 
-                    if ((addr == 1) && (mdXLXE != md800))
+                    if (addr == 1)
                     {
-
-                        // Writing a new value to PORT B on the XL/XE.
-
-                        if (mdXLXE != mdXE)
+                        if (mdXLXE != md800)
                         {
-                            // in 800XL mode, mask bank select bits
-                            bNew |= 0x7C;
-                            wPBDATA |= 0x7C;
-                        }
 
-                        SwapMem(iVM, bOld ^ bNew, bNew);
+                            // Writing a new value to PORT B on the XL/XE.
+
+                            if (mdXLXE != mdXE)
+                            {
+                                // in 800XL mode, mask bank select bits
+                                bNew |= 0x7C;
+                                wPBDATA |= 0x7C;
+                            }
+
+                            SwapMem(iVM, bOld ^ bNew, bNew);
+                        }
+                        else
+                        {
+                            Assert(FALSE);
+                        }
                     }
                 }
             }

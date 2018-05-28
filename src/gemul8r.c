@@ -1438,11 +1438,46 @@ int CALLBACK WinMain(
         static ULONG cExecSpeed;        // # of times measured, for averaging
 #endif
 
-        // the thread asked us to break into the debugger
+        // some thread asked us to break into the debugger
         if (vi.fWantDebugBreak)
         {
             vi.fWantDebugBreak = FALSE;
             SendMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);
+        }
+
+        // some thread hung, and we need to try a different VM type to find one that works with this app
+        if (!vi.fExecuting)
+        {
+            BOOL fOK = TRUE;    // assume only 1 reason we stopped executing
+
+            for (int i = 0; i < MAX_VM; i++)
+            {
+                if (vrgvmi[i].fKillMePlease)
+                {
+                    vrgvmi[i].fKillMePlease = FALSE;
+                    // what type are we now?
+                    int type = rgvm[i].bfHW;
+                    int otype = 0;
+                    while (type >>= 1)
+                        otype++; // convert bitfield to index
+
+                    // give the VM a non-hacky way of choosing an alternate type, since this one didn't work
+                    FUnInitVM(i);
+                    FUnInstallVM(i);
+                    if (FInstallVM(i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
+                        if (FInitVM(i))
+                            if (ColdStart(i))
+                                fOK = TRUE;
+                    if (!fOK)
+                        DeleteVM(v.iVM);
+                    FixAllMenus();
+                }
+               
+                else if (vrgvmi[i].fWantDebugger)    // we also stopped because a different VM wants the debugger, so don't lose that
+                    fOK = FALSE;
+            }
+            if (fOK)
+                vi.fExecuting = TRUE;   // only reason for stopping was to switch VM types, it's all OK again
         }
 
         // One guest video frame's worth of time has been emulated, a "jiffy" or 1/60th of a second.
@@ -4262,7 +4297,8 @@ break;
         case IDM_TOGGLEBASIC:
             assert(v.iVM != -1);
 
-            // It's a keystroke combo, so it's not as simple as sending the right key to the VM
+            // It's a keystroke combo, so it's not as simple as sending the right key to the VM. The VM needs to see
+            // SHIFT actively pressed for that to work
             if (v.iVM != -1)
             {
                 char *pCandy;
