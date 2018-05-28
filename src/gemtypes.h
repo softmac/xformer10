@@ -110,12 +110,14 @@ typedef void *(__fastcall *PHNDLR)(void *, long);
 //
 #define MAX_VM 1584 // 99 or 396
 
-#define wJoySens  3            // set higher for smaller dead zone, no lower than 3
+#define wJoySens  3         // set higher for smaller dead zone, no lower than 3
 
 // I assume this is acceptable to all VM types
 #define SAMPLE_RATE 48000
-#define SNDBUFS     6        // we fill and send two right away to keep from starving, a 1/30s latency
+#define SNDBUFS     6       // we fill and send two right away to keep from starving, a 1/30s latency
 #define SAMPLES_PER_VOICE SAMPLE_RATE / 60    // 1/60th of a second, one buffer per VBI
+
+#define VM_CRASHED 1        // special code sent to FInstallVM to say the type we gave you crashed so try something else
 
 //
 // globals used by the app and not persisted, extern ones are visible from other files
@@ -380,7 +382,8 @@ typedef struct VMINST
     HBITMAP hbmOld;         // handle of previous bitmap
     HDC  hdcMem;            // hdc of memory context
 
-    BOOL fWantDebugger;        // EXEC failed, time to debug it
+    BOOL fWantDebugger;     // EXEC failed, use it to figure out which VM wants the debugger
+    BOOL fKillMePlease;     // I hung, probably because I need a different VM type to run
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer

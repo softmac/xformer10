@@ -2759,11 +2759,25 @@ HANDLER(unused)
     HANDLER_END();
 }
 
+// we hit a KIL instruction and should hang. Try a different VM type
+HANDLER(KIL)
+{
+    vi.fExecuting = FALSE;  // alert the main thread something is up
+
+    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+    
+    // quit the thread as early as possible
+    wLeft = 0;  // exit the Go6502 loop
+    bp = regPC; // don't do additional scan lines
+
+    HANDLER_END();
+}
+
 PFNOP jump_tab[256] =
 {
     op00,
     op01,
-    unused,
+    KIL,
     op03,
     op04,
     op05,
@@ -2779,7 +2793,7 @@ PFNOP jump_tab[256] =
     unused,
     op10,
     op11,
-    unused,
+    KIL,
     op13,
     op14,
     op15,
@@ -2795,7 +2809,7 @@ PFNOP jump_tab[256] =
     unused,
     op20,
     op21,
-    unused,
+    KIL,
     unused,
     op24,
     op25,
@@ -2811,7 +2825,7 @@ PFNOP jump_tab[256] =
     op2F,
     op30,
     op31,
-    unused,
+    KIL,
     op33,
     op34,
     op35,
@@ -2827,7 +2841,7 @@ PFNOP jump_tab[256] =
     op3F,
     op40,
     op41,
-    unused,
+    KIL,
     unused,
     op44,
     op45,
@@ -2843,7 +2857,7 @@ PFNOP jump_tab[256] =
     unused,
     op50,
     op51,
-    unused,
+    KIL,
     unused,
     op54,
     op55,
@@ -2859,7 +2873,7 @@ PFNOP jump_tab[256] =
     op5F,
     op60,
     op61,
-    unused,
+    KIL,
     op63,
     op64,
     op65,
@@ -2875,7 +2889,7 @@ PFNOP jump_tab[256] =
     op6F,
     op70,
     op71,
-    unused,
+    KIL,
     unused,
     op74,
     op75,
@@ -2907,7 +2921,7 @@ PFNOP jump_tab[256] =
     op8F,
     op90,
     op91,
-    unused,
+    KIL,
     unused,
     op94,
     op95,
@@ -2939,7 +2953,7 @@ PFNOP jump_tab[256] =
     opAF,
     opB0,
     opB1,
-    unused,
+    KIL,
     unused,
     opB4,
     opB5,
@@ -2971,7 +2985,7 @@ PFNOP jump_tab[256] =
     opCF,
     opD0,
     opD1,
-    unused,
+    KIL,
     opD3,
     opD4,
     opD5,
@@ -3003,7 +3017,7 @@ PFNOP jump_tab[256] =
     unused,
     opF0,
     opF1,
-    unused,
+    KIL,
     opF3,
     opF4,
     opF5,
@@ -3018,6 +3032,7 @@ PFNOP jump_tab[256] =
     opFE,
     unused,
 };
+
 
 // Run for "wLeft" cycles and then return after completing the last instruction (cycles may go negative)
 // In debug, tracing and breakpoints can return early.
@@ -3063,50 +3078,55 @@ void __cdecl Go6502(const int iVM)
 #if USE_JUMP_TABLE
         (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM);
 #else
-        switch(READ_BYTE(iVM, regPC++))
-            {
+        switch (READ_BYTE(iVM, regPC++))
+        {
         default:
             Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check
             break;
 
-        // There need to be all 256 cases below, 0x00 through 0xFF, since the compiler just optimized away the default case
+            // There need to be all 256 cases below, 0x00 through 0xFF, since the compiler just optimized away the default case
 
         case 0x02:
+        case 0x12:
+        case 0x22:
+        case 0x32:
+        case 0x42:
+        case 0x52:
+        case 0x62:
+        case 0x72:
+        case 0x92:
+        case 0xB2:
+        case 0xD2:
+        case 0xF2:
+            KIL(iVM);
+            break;
+
         case 0x0B:
         case 0x0F:
-        case 0x12:
         case 0x1B:
         case 0x1F:
-        case 0x22:
         case 0x23:
         case 0x27:
         case 0x2B:
-        case 0x32:
         case 0x37:
         case 0x3B:
-        case 0x42:
         case 0x43:
         case 0x47:
         case 0x4B:
         case 0x4F:
-        case 0x52:
         case 0x53:
         case 0x5B:
-        case 0x62:
         case 0x6B:
-        case 0x72:
         case 0x73:
         case 0x7A:
         case 0x7B:
         case 0x7F:
         case 0x82:
-        case 0x92:
         case 0x93:
         case 0x9B:
         case 0x9C:
         case 0xA3:
         case 0xA7:
-        case 0xB2:
         case 0xB3:
         case 0xB7:
         case 0xBB:
@@ -3115,13 +3135,11 @@ void __cdecl Go6502(const int iVM)
         case 0xC7:
         case 0xCB:
         case 0xCF:
-        case 0xD2:
         case 0xD7:
         case 0xDA:
         case 0xDB:
         case 0xE3:
         case 0xEF:
-        case 0xF2:
         case 0xF7:
         case 0xFB:
         case 0xFF:
