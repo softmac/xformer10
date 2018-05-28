@@ -373,7 +373,7 @@ BYTE    rgbRainbow[256 * 3] =
 CANDYHW *vrgcandy[MAX_VM];
 
 // This map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
-// 0 means it never steals the cycle, but somebody else might (RAM refresh)
+// 0 means ANTIC never steals the cycle, but somebody else might (RAM refresh)
 //
 // THEORY OF OPERATION - there are 456 pixels on an NTSC scan line, 4 pixels can get drawn in the time it takes for 1 CPU cycle
 // (and there are 114 CPU cycles per scan line) 114 x 4 = 456. Even though for a wide playfield ANTIC starts fetching data after 9
@@ -388,23 +388,25 @@ CANDYHW *vrgcandy[MAX_VM];
 // is at cycle -7, or 28 pixels before CPU cycle 0. 28 pixels on either side would add 56 pixels to the 456 pixel scan line,
 // which is, surprise, surprise, 512. Haven't you always wondered about that?
 //
-// In keeping with my theory that ANTIC lags behind GTIA, the real ANTIC starts PF DMA late, not at 9, meaning
-// that although I am cycle accurate in how many cycles I give to the CPU, I'm supposed to give it one earlier in the scan
-// line and take it away later in the scan line. This actually breaks HARDB/CHESS, so I jigger an A8 and A2 cycle from 
-// early to late to avoid having to implement the complexity of exactly how it happens
+// !!! This map is not accurate. W8 starts on cycle 13, not 9, and its pattern should extend every other cycle (8, 2, 4, 2) to cycle 105.
+// WC4 should extend to 114, not 110. However, if I do this correctly, cycles 104-106 can be blocked (106 by RAM refresh) and
+// I need everything free from 104 on for my WSYNC code to function right now.
+//
 const BYTE rgDMA[HCLOCKS] =
 {
     /*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
     /*  9 - 16 */ W8, WC4, W2, WC2, W4, WC4, W2, WC2,    // ANTIC fetches the overscan early WIDE pixels it never uses :-(
     /* 17 - 24 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
 //  /* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
+    // make stolen cycles back end heavy like real 800, this fixes acid test PM retrigger 1
     /* 25 - 88 */  0, AC4,  0, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
                   A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
     /* 89 - 96 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
 //  /* 97- 104 */ W8, WC4, W2, WC2, W4,  0, W2,  0,   // ANTIC fetches some useless overscan data, but not all of it.
-    /* 97- 104 */ W8, WC4, W2, WC2, W4, A8, W2, A2,   // ANTIC fetches some useless overscan data, but not all of it.
+    // part 2 of method to weight the free cycles differently to help with acid test
+    /* 97- 104 */ W8, WC4, W2, WC2, W4, A8, W2, A2,
     /* 105-113 */ 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
@@ -2501,7 +2503,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
         // before we change the values. The next time its called will be with the new values.
         // HITCLR needs cycle accuracy too, to get all collisions in the past processed before clearing
         // Don't waste time if this isn't changing the value
-        if ((addr < 0x1d || addr == 30) && bOld != b)
+        if ((addr < 0x1d && bOld !=b) || addr == 30)
         {
             //ODS("GTIA %04x=%02x at VCOUNT=%02x clock=%02x\n", addr, b, PeekBAtari(iVM, 0xd40b), DMAMAP[wLeft - 1]);
             ProcessScanLine(iVM);    // !!! should anything else instantly affect the screen?
