@@ -1431,7 +1431,8 @@ void PSLReadRegs(int iVM, short start, short stop)
                 pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
 
             // We are in the middle of drawing this player, and its old data is non-zero
-            if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && pmg.grafp[i])
+            // (if we're already past the visible area, we're not in the middle of drawing, so updates can happen now)
+            if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && pmg.grafp[i] && start < X8)
             {
                 // it's position has moved
                 if (off != pmg.hpospPixStart[i])
@@ -1455,7 +1456,7 @@ void PSLReadRegs(int iVM, short start, short stop)
                     // When it finishes drawing, it will grab the new GRAF data.
                     
                     //if (rgbMem[GRAFP0A + i] != pmg.grafp[i])
-                    //    ODS("%04x: GRAF CHANGE (delay GRAF) during draw [%02x] G=%02x to %02x @ %04x\n", wScan, i, pmg.grafp[i], rgbMem[GRAFP0A +i], start, off);
+                    //    ODS("%04x: GRAF CHANGE (delay GRAF) during draw [%02x] G=%02x to %02x @ %04x\n", wScan, i, pmg.grafp[i], rgbMem[GRAFP0A +i], start);
                 }
             }
 
@@ -1474,10 +1475,10 @@ void PSLReadRegs(int iVM, short start, short stop)
                 if (off != pmg.hpospPixStart[i])    // hpos is moving
                 {
                     if (off < start && offstop > start && (pmg.grafp[i] || (pmg.newGRAFp[i] && rgbMem[GRAFP0A + i])))
-                        ODS("CRAP, HPOS moved to straddle current pos while GRAF != 0!\n");
+                        ODS("%04x: CRAP! HPOS[%02x] moved to %04x to straddle current pos %04x while GRAF != 0!\n", wScan, i, off, start);
 
                     if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && !pmg.grafp[i] && rgbMem[GRAFP0A + i])
-                        ODS("CRAP, HPOS moved while old pos was drawing 0 and new GRAF != 0!\n");
+                        ODS("%04x: CRAP! HPOS[%02x] moved to %04x while old pos %04x was drawing 0 and new GRAF != 0!\n", wScan, i, i, start);
                 }
 #endif
 
