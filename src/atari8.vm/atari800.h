@@ -33,11 +33,11 @@ extern BYTE rgbRainbow[];    // the ATARI colour palette
 #define DMA_P 3     // grab player data if player DMA is on
 #define DMA_LMS 4   // do the load memory scan
 
-#define W8 5        // wide playfield hi, med or lo res modes
-#define WC4 6       // 1st scan line of a character mode, hi or med res
+#define W8 5        // wide playfield hi, med or lo res mode grab (on first or only line)
+#define WC4 6       // grab char data, all lines of a character mode, hi or med res
 #define W4 7        // wide playfield hi or med res modes
-#define WC2 8       // 1st scan line of a character mode, hi res
-#define W2 9        // wide playfield hi res mode
+#define WC2 8       // character mode, hi res only
+#define W2 9        // wide playfield, hi res mode only
 
 #define N8 10       // same for wide or normal playfield (present in all but narrow)
 #define NC4 11
@@ -52,7 +52,8 @@ extern BYTE rgbRainbow[];    // the ATARI colour palette
 #define A2 19
 
 // Describes what ANTIC does for each cycle, see comment in atari800.c
-extern const BYTE rgDMA[HCLOCKS];
+extern const BYTE rgDMAC[HCLOCKS];
+extern const BYTE rgDMANC[HCLOCKS];
 
 // all the possible variables affecting which cycles ANTIC will have the CPU blocked
 //
