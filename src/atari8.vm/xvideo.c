@@ -1431,8 +1431,8 @@ void PSLReadRegs(int iVM, short start, short stop)
                 pmg.cwp[i] = 3;    //# of times to shift to divide by (cw *2)
 
             // We are in the middle of drawing this player, and its old data is non-zero
-            // (if we're already past the visible area, we're not in the middle of drawing, so updates can happen now)
-            if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && pmg.grafp[i] && start < X8)
+            // (if we're already past the (clipped?) visible area, wSLEnd, there will be no further drawing, so updates can happen now)
+            if (pmg.hpospPixStart[i] < start && pmg.hpospPixStop[i] > start && pmg.grafp[i] && start < wSLEnd)
             {
                 // it's position has moved
                 if (off != pmg.hpospPixStart[i])
