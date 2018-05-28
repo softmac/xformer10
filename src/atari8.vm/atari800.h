@@ -28,24 +28,24 @@ extern BYTE rgbRainbow[];    // the ATARI colour palette
 
 // all the reasons ANTIC might do DMA and block the CPU
 
-#define DMA_M 1        // grab missile data if missile DMA is on
+#define DMA_M 1     // grab missile data if missile DMA is on
 #define DMA_DL 2    // grab DList mode if Playfield DMA is on
-#define DMA_P 3        // grab player data if player DMA is on
-#define DMA_LMS 4    // do the load memory scan
+#define DMA_P 3     // grab player data if player DMA is on
+#define DMA_LMS 4   // do the load memory scan
 
 #define W8 5        // wide playfield hi, med or lo res modes
-#define WC4 6        // 1st scan line of a character mode, hi or med res
+#define WC4 6       // 1st scan line of a character mode, hi or med res
 #define W4 7        // wide playfield hi or med res modes
-#define WC2 8        // 1st scan line of a character mode, hi res
+#define WC2 8       // 1st scan line of a character mode, hi res
 #define W2 9        // wide playfield hi res mode
 
-#define N8 10        // same for wide or normal playfield (present in all but narrow)
+#define N8 10       // same for wide or normal playfield (present in all but narrow)
 #define NC4 11
 #define N4 12
 #define NC2 13
 #define N2 14
 
-#define A8 15        // same for wide, normal or narrow playfield
+#define A8 15       // same for wide, normal or narrow playfield
 #define AC4 16
 #define A4 17
 #define AC2 18
