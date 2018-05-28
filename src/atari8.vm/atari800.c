@@ -88,13 +88,19 @@ VMINFO const vmi800 =
 
         if (ret == 3)
         {
-            // ABORT - break into the debugger!
-            bp = regPC; // makes Exec fail so the debugger knows which VM to use !!! won't work if we're not in Exec
-            vi.fWantDebugBreak = TRUE; // tell the main thread to break into debugger. We can't do it from a VM thread which we might be.
-            PostMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);  // Send will hang, we're a VM thread and the window thread is blocked on us
-                                                                // so it's not wise to block on them.
+            // ABORT - break into the debugger! (if we can)
+            if (iVM == v.iVM)
+            {
+                bp = regPC; // makes Exec fail so the debugger knows which VM to use !!! won't work if we're not in Exec
+                vi.fWantDebugBreak = TRUE; // tell the main thread to break into debugger. We can't do it from a VM thread which we might be.
+                PostMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);  // Send will hang, we're a VM thread and the window thread is blocked on us
+                                                                    // so it's not wise to block on them.
+            }
+            else
+                ret = 4;    // we'll crash, since the tile that asserted is not in focus, so let's retry instead to break into VS
         }
-        else if (ret == 4)
+
+        if (ret == 4)
         {
             __debugbreak();
         }
