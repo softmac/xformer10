@@ -43,7 +43,7 @@ BYTE const * const rgszModes[6] =
 #define vcbScan X8
 #define wcScans Y8    // # of valid scan lines
 #define NTSCx 512       // TRIVIA: only 456 pixels take time to draw, the other 56 are instantaneous and no CPU time elapses.
-                        // see ATARI800.c rgDMA[] comment for explanation
+                        // see ATARI800.c rgDMAx[] comment for explanation
 #define NARROWx 256
 #define NORMALx 320
 #define WIDEx 384
@@ -218,128 +218,205 @@ void CreateDMATables()
                                     // assume free
                                     rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 0;
 
-                                    // this cycle is for missile DMA? Then all the tables with missile DMA on have it blocked
-                                    // in double line resolution, there is still a DMA fetch every line - one was unnecessary
-                                    if (rgDMA[cycle] == DMA_M)
+                                    // CHARACTER MODE
+                                    if (mode < 8)
                                     {
-                                        if (missile)
-                                            rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                        // this cycle is for missile DMA? Then all the tables with missile DMA on have it blocked
+                                        // in double line resolution, there is still a DMA fetch every line, stupid ANTIC
+                                        if (rgDMAC[cycle] == DMA_M)
+                                        {
+                                            if (missile)
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
 
-                                    // same for player DMA
+                                        // same for player DMA
+                                        }
+                                        else if (rgDMAC[cycle] == DMA_P)
+                                        {
+                                            if (player)
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                        }
+
+                                        // nothing else halts the CPU if Playfield DMA is off
+
+                                        if (pf)
+                                        {
+                                            // mode fetch will happen on the first scan line of a mode
+                                            if (rgDMAC[cycle] == DMA_DL)
+                                            {
+                                                if (first)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // this cycle is blocked by a load memory scan (first scan line only)
+                                            else if (rgDMAC[cycle] == DMA_LMS)
+                                            {
+                                                if (lms && first)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == W4)
+                                            {
+                                                if (first && mode >= 2 && width == 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == W2)
+                                            {
+                                                if (first && width == 2 && mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == WC4)
+                                            {
+                                                if (width == 2 && mode >= 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield hi-res character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == WC2)
+                                            {
+                                                if (width == 2 && mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // NORMAL - all but narrow playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == N4)
+                                            {
+                                                if (first && mode >= 2 && width > 0)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but narrow playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == N2)
+                                            {
+                                                if (first && width > 0 && mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but narrow playfield character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == NC4)
+                                            {
+                                                if (width > 0 && mode >= 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but wide playfield hi-res character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == NC2)
+                                            {
+                                                if (width > 0 && mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == A4)
+                                            {
+                                                if (first && mode >= 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMAC[cycle] == A2)
+                                            {
+                                                if (first && mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == AC4)
+                                            {
+                                                if (mode >= 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield hi-res character modes use this cycle on every scan line to get char data
+                                            else if (rgDMAC[cycle] == AC2)
+                                            {
+                                                if (mode >= 2 && mode <= 5)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                        }
                                     }
-                                    else if (rgDMA[cycle] == DMA_P)
-                                    {
-                                        if (player)
-                                            rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                    }
 
-                                    // nothing else halts the CPU if Playfield DMA is off
-
-                                    if (pf)
+                                    // NON CHARACTER MODE
+                                    else
                                     {
-                                        // mode fetch will happen on the first scan line of a mode
-                                        if (rgDMA[cycle] == DMA_DL)
+                                        // this cycle is for missile DMA? Then all the tables with missile DMA on have it blocked
+                                        // in double line resolution, there is still a DMA fetch every line
+                                        if (rgDMANC[cycle] == DMA_M)
                                         {
-                                            if (first)
+                                            if (missile)
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+
+                                            // same for player DMA
+                                        }
+                                        else if (rgDMANC[cycle] == DMA_P)
+                                        {
+                                            if (player)
                                                 rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
                                         }
-                                        // this cycle is blocked by a load memory scan (first scan line only)
-                                        else if (rgDMA[cycle] == DMA_LMS)
+
+                                        // nothing else halts the CPU if Playfield DMA is off
+
+                                        if (pf)
                                         {
-                                            if (lms && first)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all wide playfield modes (>= 2) use this cycle on the first scan line
-                                        // (GTIA 9++ is an example of bitmap modes that actually do have subsequent scan lines
-                                        //  where DMA should not occur)
-                                        else if (rgDMA[cycle] == W8)
-                                        {
-                                            if (first && mode >= 2 && width == 2)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // wide playfield hi and med res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == W4)
-                                        {
-                                            if (first && mode >= 2 && width == 2 && (mode != 8 && mode != 9))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // wide playfield hi res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == W2)
-                                        {
-                                            if (first && width == 2 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // wide playfield character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == WC4)
-                                        {
-                                            if (width == 2 && (mode >= 2 && mode <= 7))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // wide playfield hi-res character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == WC2)
-                                        {
-                                            if (width == 2 && (mode >= 2 && mode <= 5))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all but narrow playfield modes (>= 2) use this one on the first scan line
-                                        else if (rgDMA[cycle] == N8)
-                                        {
-                                            if (first && mode >= 2 && width > 0)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all but narrow playfield hi and med res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == N4)
-                                        {
-                                            if (first && mode >= 2 && width > 0 && (mode != 8 && mode != 9))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all but narrow playfield hi res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == N2)
-                                        {
-                                            if (first && width > 0 && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all but narrow playfield character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == NC4)
-                                        {
-                                            if (width > 0 && (mode >= 2 && mode <= 7))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all but narrow playfield hi-res character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == NC2)
-                                        {
-                                            if (width > 0 && (mode >= 2 && mode <= 5))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all playfield modes (>= 2) use this one on the first scan line
-                                        else if (rgDMA[cycle] == A8)
-                                        {
-                                            if (first && mode >= 2)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all playfield hi and med res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == A4)
-                                        {
-                                            if (first && mode >= 2 && mode != 8 && mode != 9)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all playfield hi res modes use this cycle on the first scan line
-                                        else if (rgDMA[cycle] == A2)
-                                        {
-                                            if (first && ((mode >= 2 && mode <= 5) || (mode >= 13 && mode <= 18)))
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all playfield character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == AC4)
-                                        {
-                                            if (mode >= 2 && mode <= 7)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
-                                        }
-                                        // all playfield hi-res character modes use this cycle on every scan line to get char data
-                                        else if (rgDMA[cycle] == AC2)
-                                        {
-                                            if (mode >= 2 && mode <= 5)
-                                                rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            // mode fetch will happen on the first scan line of a mode
+                                            if (rgDMANC[cycle] == DMA_DL)
+                                            {
+                                                if (first)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // this cycle is blocked by a load memory scan (first scan line only)
+                                            else if (rgDMANC[cycle] == DMA_LMS)
+                                            {
+                                                if (lms && first)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all wide playfield modes (>= 2) use this cycle on the first scan line
+                                            // (GTIA 9++ is an example of bitmap modes that actually do have subsequent scan lines
+                                            //  where DMA should not occur)
+                                            else if (rgDMANC[cycle] == W8)
+                                            {
+                                                if (first && width == 2)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == W4)
+                                            {
+                                                if (first && width == 2 && mode != 8 && mode != 9)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // wide playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == W2)
+                                            {
+                                                if (first && width == 2 && mode >= 13 && mode <= 18)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but wide playfield modes (>= 2) use this one on the first scan line
+                                            else if (rgDMANC[cycle] == N8)
+                                            {
+                                                if (first && width > 0)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but wide playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == N4)
+                                            {
+                                                if (first && width > 0 && mode != 8 && mode != 9)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all but wide playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == N2)
+                                            {
+                                                if (first && width > 0 && mode >= 13 && mode <= 18)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield modes (>= 2) use this one on the first scan line
+                                            else if (rgDMANC[cycle] == A8)
+                                            {
+                                                if (first)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield hi and med res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == A4)
+                                            {
+                                                if (first && mode != 8 && mode != 9)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
+                                            // all playfield hi res modes use this cycle on the first scan line
+                                            else if (rgDMANC[cycle] == A2)
+                                            {
+                                                if (first && mode >= 13 && mode <= 18)
+                                                    rgDMAMap[mode][pf][width][first][player][missile][lms][cycle] = 1;
+                                            }
                                         }
                                     }
                                 }
@@ -367,10 +444,9 @@ void CreateDMATables()
                         for (missile = 0; missile < 2; missile++)
                             for (lms = 0; lms < 2; lms++)
                             {
-                                // !!! correct timing seems to be with 4 refresh cycles?
                                 // Now block out 9 RAM refresh cycles, every 4 cycles starting at 25.
-                                // They can be bumped up to the next cycle's start point. The last one might be bumped all the way to 102
-                                // (If there are no free cycles between 25 and 101, you just one one RAM refresh at 102)
+                                // They can be bumped up to the next cycle's start point. The last one might be bumped all the way to 106
+                                // (If there are no free cycles between 25 and 60, you just get one RAM refresh at the end)
                                 for (cycle = 0; cycle < 9; cycle++)
                                 {
                                     for (int xx = 0; xx < 4; xx++)
@@ -381,9 +457,15 @@ void CreateDMATables()
                                             break;
                                         }
                                         if (cycle == 8 && xx == 3)
-                                            // !!! not true, WIDE fetches the offscreen bytes, and 105 might be the first free one
-                                            // but we can't handle interfering with anything after WSYNC right now
-                                            rgDMAMap[mode][pf][width][first][player][missile][lms][102] = 1;
+                                        {
+                                            // a few modes are so contended there's only 1 RAM refresh
+                                            if (width == 0)
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][90] = 1;
+                                            else if (width == 1)
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][98] = 1;
+                                            else
+                                                rgDMAMap[mode][pf][width][first][player][missile][lms][106] = 1;
+                                        }
                                     }
                                 }
 
@@ -409,7 +491,7 @@ void CreateDMATables()
                                     if (index < 0)
                                         break;
 
-                                    // we found a free cycle. This is where wLeft == index will execute
+                                    // we found a free cycle.
                                     array[cycle] = index;
 
                                     // index 115 - remember what wLeft should jump to on a WSYNC (cycle 105)

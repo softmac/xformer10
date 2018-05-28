@@ -372,7 +372,7 @@ BYTE    rgbRainbow[256 * 3] =
 //
 CANDYHW *vrgcandy[MAX_VM];
 
-// This map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
+// These map describes what ANTIC is doing (why it might steal the cycle) for every cycle as a horizontal scan line is being drawn
 // 0 means ANTIC never steals the cycle, but somebody else might (RAM refresh)
 //
 // THEORY OF OPERATION - there are 456 pixels on an NTSC scan line, 4 pixels can get drawn in the time it takes for 1 CPU cycle
@@ -384,30 +384,49 @@ CANDYHW *vrgcandy[MAX_VM];
 // That's the WSYNC point. The end of the invisible extra wide pixels. Then 9 cycles after WSYNC to balance out the first 9.
 // 
 // PMG HPOS = 40 is where you start to be able to see a PMG. Which as explained above is cycle 13. PMG are 1/2 resolution
-// of a hi-res playfield, so 40 PMG pixels is like 80 pixels which means it's 20 CPU cycles. Which means PMG HPOS = 0
+// of a hi-res playfield, so 40 PMG pixels is like 80 pixels which means it should be @ 20 CPU cycles not 13. Which means PMG HPOS = 0
 // is at cycle -7, or 28 pixels before CPU cycle 0. 28 pixels on either side would add 56 pixels to the 456 pixel scan line,
 // which is, surprise, surprise, 512. Haven't you always wondered about that?
 //
-// !!! This map is not accurate. W8 starts on cycle 13, not 9, and its pattern should extend every other cycle (8, 2, 4, 2) to cycle 105.
-// WC4 should extend to 114, not 110. However, if I do this correctly, cycles 104-106 can be blocked (106 by RAM refresh) and
-// I need everything free from 104 on for my WSYNC code to function right now.
-//
-const BYTE rgDMA[HCLOCKS] =
+// Let's say you do STA WSYNC STA COLPF0. The STA wakes up at the earliest at cycle 114 115 116 117. GTIA is 5 cycles behind ANTIC
+// so the new colour takes effect at the beginning of cycle 113. But cycles 111 -114 are the invisible overscan pixels, so 
+// you won't see the new colour, as desired. Therefore ATARI even accounts for more overscan than I'm showing where only 2 cycles are
+// offscreen instead of the 4 that I make offscreen. I'm supposed to do collisions in this extra overscan area too, but I don't
+
+//           < WIDE ><NORMAL><NARROW><NORMAL>< WIDE > 
+//  0  3     9   13  17      25  ... 89      97  101 105   111.114 (CYCLE)
+//  -  -     -   0   16          ...         336 352 -     -  .   (MY VISIBLE PIXEL # - 0 starts at clock 13, 352 ends at cycle 101)
+//  14 20    32  40  48      64      192     208 216 224   236.242 (PMG HPOS - extends 14 more on either side would make 512 pixels
+//                   ^  VISIBLE AREA (MY OVERSCAN)   ^
+
+// char mode map - 1st scan line mode grab starts at 10. char data itself is on every line of that mode and starts at 13
+const BYTE rgDMAC[HCLOCKS] =
 {
     /*  0 - 8  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0,
-    /*  9 - 16 */ W8, WC4, W2, WC2, W4, WC4, W2, WC2,    // ANTIC fetches the overscan early WIDE pixels it never uses :-(
-    /* 17 - 24 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
-//  /* 25 - 88 */ A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-    // make stolen cycles back end heavy like real 800, this fixes acid test PM retrigger 1
-    /* 25 - 88 */  0, AC4,  0, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-                  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-                  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-                  A8, AC4, A2, AC2, A4, AC4, A2, AC2, A8, AC4, A2, AC2, A4, AC4, A2, AC2,
-    /* 89 - 96 */ N8, NC4, N2, NC2, N4, NC4, N2, NC2,
-//  /* 97- 104 */ W8, WC4, W2, WC2, W4,  0, W2,  0,   // ANTIC fetches some useless overscan data, but not all of it.
-    // part 2 of method to weight the free cycles differently to help with acid test
-    /* 97- 104 */ W8, WC4, W2, WC2, W4, A8, W2, A2,
-    /* 105-113 */ 0, 0, 0, 0, 0, 0, 0, 0, 0
+    /*  9 - 16 */ 0,  W4, 0,  W2, WC4, W4, WC2, W2,
+    /* 17 - 24 */ WC4, N4, WC2, N2, NC4, N4, NC2, N2,
+    /* 25 - 88 */ NC4, A4, NC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2,
+                  AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2,
+                  AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2,
+                  AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2, AC4, A4, AC2, A2,
+    /* 89 - 96 */ AC4, N4, AC2, N2, NC4, N4, NC2, N2,
+    /* 97- 104 */ NC4, W4, NC2, W2, WC4, W4, WC2, W2,
+    /* 105-113 */ WC4, 0, 0, 0, 0, 0, 0, 0, 0   // WC2 overscan and not needed
+};
+
+// non-char mode map - scan line data grab starts at 12, first line only (usually there's only 1 line of non-char mode but GR.9++)
+const BYTE rgDMANC[HCLOCKS] =
+{
+    /*  0 - 11  */ DMA_M, DMA_DL, DMA_P, DMA_P, DMA_P, DMA_P, DMA_LMS, DMA_LMS, 0, 0, 0, 0,
+    /* 12 - 19  */ W8, 0, W2, 0, W4, 0, W2, 0,
+    /* 20 - 27 */ N8, 0, N2, 0, N4, 0, N2, 0,
+    /* 28 - 91 */ A8, 0, A2, 0, A4, 0, A2, 0, A8, 0, A2, 0, A4, 0, A2, 0,   // 28-43
+                  A8, 0, A2, 0, A4, 0, A2, 0, A8, 0, A2, 0, A4, 0, A2, 0,   // 44-59
+                  A8, 0, A2, 0, A4, 0, A2, 0, A8, 0, A2, 0, A4, 0, A2, 0,   // 60-75
+                  A8, 0, A2, 0, A4, 0, A2, 0, A8, 0, A2, 0, A4, 0, A2, 0,   // 76-91
+    /* 92 - 99 */ N8, 0, N2, 0, N4, 0, N2, 0,
+    /* 100- 107 */ W8, 0, W2, 0, W4, 0, 0, 0, // W2 overscan and not needed
+    /* 108-113 */ 0, 0, 0, 0, 0, 0
 };
 
 BOOL fDumpHW;
@@ -2785,10 +2804,6 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // of the first cycle of the next instruction, so we never start early at 104 after an INC WSYNC
             if (cT > cW)
                 wo = 0;
-
-            // This might make us delay an NMI, which it's supposed to. But...
-            // !!! If a WSYNC is issued just before cycle 10, the NMI is delayed until after one instruction past STA WSYNC
-            // has executed, then 7 cycles are lost, then the NMI begins. I won't do an extra instruction
 
             // -1 to make it 0 based, cW - 1 to get the beginning of the write cycle. Plus one to get the end of that cycle
             if (wLeft >= cT && DMAMAP[wLeft - 1 - (cW - 1)] + 1 <= 104)
