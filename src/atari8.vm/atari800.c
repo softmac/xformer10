@@ -2739,10 +2739,20 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                             SwapMem(iVM, bOld ^ bNew, bNew);
                         }
                         else
-                        {
-                            Assert(FALSE);
-                        }
+                            Assert(FALSE);  // wrong VM? This doesn't seem to get hit
                     }
+                }
+
+                // PORT B in write mode, being used to attempt to swap out the OS on an 800
+                else if (addr == 1 && mdXLXE == md800 && wPORTB && !(b & 1))
+                {
+                    vi.fExecuting = FALSE;  // alert the main thread something is up
+
+                    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+
+                    // quit the thread as early as possible
+                    wLeft = 0;  // exit the Go6502 loop
+                    bp = regPC; // don't do additional scan lines
                 }
             }
             else

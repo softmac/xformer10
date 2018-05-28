@@ -351,7 +351,9 @@ typedef struct
     WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
 
     WORD m_wCycle;      // the cycle of the scan line we're about to execute (0 - 113)
-    ULONG pad6UL;
+    WORD m_wSIORTS;     // return value of the SIO routine, used in monitor
+
+    WORD pad6W;
 
     // clock multiplier
     ULONG m_clockMult;
@@ -433,6 +435,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wSLEnd        CANDY_STATE(wSLEnd)
 #define wNMI          CANDY_STATE(wNMI)
 #define wCycle        CANDY_STATE(wCycle)
+#define wSIORTS       CANDY_STATE(wSIORTS)
 #define rgbSpecial    CANDY_STATE(rgbSpecial)
 #define rgSIO         CANDY_STATE(rgSIO)
 #define cSEROUT       CANDY_STATE(cSEROUT)

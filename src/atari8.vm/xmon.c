@@ -489,9 +489,12 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 do { // do at least 1 thing, don't get stuck at the breakpoint
                     FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
                     RenderBitmap();
-                    w = regPC;
-                    CchDisAsm(iVM, &w);          // show the next instruction that will run
-                    CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
+                    if (!wSIORTS)   // hide instructions inside our hacky SIO delay
+                    {
+                        w = regPC;
+                        CchDisAsm(iVM, &w);          // show the next instruction that will run
+                        CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
+                    }
                     if (GetAsyncKeyState(VK_END) & 0x8000)
                         break;
                 } while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
