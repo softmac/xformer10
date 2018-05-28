@@ -645,7 +645,7 @@ __inline void SIOCheck(const int iVM)
 
         // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
         // a little bit of time (but not nearly as much as it would really take)
-        
+
         rgbMem[0xd180] = 0x08;  // php
         rgbMem[0xd181] = 0x48;  // pha
         rgbMem[0xd182] = 0x8a;  // txa
@@ -670,6 +670,13 @@ __inline void SIOCheck(const int iVM)
         rgbMem[0xd195] = 0x28;  // plp
         rgbMem[0xd196] = 0x60;
         PushWord(iVM, regPC - 1);
+
+        if (vi.fInDebugger && !vi.fExecuting && fTrace)
+        {
+            fTrace = FALSE; // stop tracing until RTS so we don't get bogged down by this hacky delay code
+            wSIORTS = regPC;
+        }
+
         regPC = 0xd180;
     }
     else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
@@ -679,6 +686,8 @@ __inline void SIOCheck(const int iVM)
         SIOV(iVM);
         UnpackP(iVM);
     }
+    else if (regPC >= 0xD700 && regPC <= 0xD7FF)
+        Assert(FALSE);  // Wrong VM?
 }
 
 
@@ -1456,6 +1465,15 @@ HANDLER(op60)
 {
     regPC = PopWord(iVM) + 1;
     wLeft -= 6;
+
+#ifndef NDEBUG
+    // resume tracing after skipping our hacky delay code
+    if (vi.fInDebugger && !vi.fExecuting && !fTrace && regPC == wSIORTS)
+    {
+        fTrace = TRUE;
+        wSIORTS = 0;
+    }
+#endif
 
     SIOCheck(iVM);  // SIO hack
 
