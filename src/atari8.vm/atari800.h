@@ -859,3 +859,9 @@ BOOL  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
 #define bfPM1 0x20
 #define bfPM2 0x40
 #define bfPM3 0x80
+
+#ifndef NDEBUG
+#undef Assert
+#define Assert(f) _800_assert((f), __FILE__, __LINE__, iVM)
+extern __inline void _800_assert(int f, char *file, int line, int iVM);
+#endif

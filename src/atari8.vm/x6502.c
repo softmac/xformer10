@@ -161,7 +161,6 @@ void __fastcall Stop6502(const int iVM)
 #define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[READ_BYTE(iVM, regPC++)]; (*p)(iVM); } }
 #else
 // the switch statement only does one instruction at a time (no tail calling) so no need to check wLeft against wNMI
-// !!! Darek, how can switch be faster than jump table when there are 2 ifs between each switch statement?
 #define HANDLER_END() { } }
 #endif
 #endif
@@ -3956,7 +3955,6 @@ void __cdecl Go6502(const int iVM)
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
 
-                    Assert(wLeft >= 7);
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }
@@ -3974,7 +3972,6 @@ void __cdecl Go6502(const int iVM)
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
                     
-                    Assert(wLeft >= 7);
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;  // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }

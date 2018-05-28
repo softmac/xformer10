@@ -500,7 +500,7 @@ typedef struct
     int  fInDebugger:1; // TRUE if debugger console is active
     int  fDebugBreak:1; // TRUE to signal a break into debugger
     int  fParentCon:1;  // TRUE if parent console present (i.e. command prompt)
-    int  fRes4:4;
+    int  fWantDebugBreak : 1; // TRUE if VM wants the main thread to break into debugger
 
     BYTE rgbShiftE[6];  // shift coefficients to convert tick count to E clk
 
