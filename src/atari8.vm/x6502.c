@@ -703,10 +703,17 @@ __inline void SIOCheck(const int iVM)
 
 HANDLER(op00)
 {
-    // !!! Does BRK or any other INT set the interrupt flag? It is not maskable itself, right?
+    // !!! Is BRK maskable like I am assuming?
+
     PackP(iVM);    // we'll be pushing it
-    Interrupt(iVM, TRUE);    // yes, this is a BRK IRQ
-    regPC = cpuPeekW(iVM, 0xFFFE);
+
+    if (!(regP & IBIT))
+    {
+        Interrupt(iVM, TRUE);
+        regPC = cpuPeekW(iVM, 0xFFFE);
+        //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+    }
+    UnpackP(iVM);
     wLeft -= 7;
     HANDLER_END_FLOW();
 }
@@ -3104,7 +3111,7 @@ void __cdecl Go6502(const int iVM)
 #if USE_JUMP_TABLE
         (*jump_tab[READ_CODE(iVM, regPC++)])(iVM);
 #else
-        switch (READ_BYTE(iVM, regPC++))
+        switch (READ_CODE(iVM, regPC++))
         {
         default:
             Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check

@@ -40,7 +40,7 @@ VMINFO const vmi800 =
     FALSE,    // fUsesMouse
     TRUE,    // fUsesJoystick
     // ATR must come first to be the default extension when creating a new disk image
-    "Xformer/SIO2PC Disks\0*.atr;*.xfd;*.sd;*.dd;*.xex;*.bas\0All Files\0*.*\0\0",
+    "Xformer/SIO2PC Disks\0*.atr;*.xfd;*.sd;*.dd;*.xex;*.com;*.bas\0All Files\0*.*\0\0",
     "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",
 
     InstallAtari,

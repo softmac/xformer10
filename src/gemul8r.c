@@ -973,7 +973,7 @@ int CALLBACK WinMain(
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
 
-    //char test[130] = "\"c:\\danny\\8bit\\atari\\XLMule.ATR\"";
+    //char test[130] = "\"c:\\danny\\8bit\\atari\\BAS_COM\\centiped.com\"";
     //lpCmdLine = test;
 
     // assume we're loading the default .ini file
