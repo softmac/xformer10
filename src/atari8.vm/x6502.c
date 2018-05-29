@@ -698,12 +698,30 @@ __inline void SIOCheck(const int iVM)
         Assert(FALSE);  // Wrong VM?
 }
 
+// we hit a KIL instruction and should hang. Try a different VM type
+HANDLER(KIL)
+{
+    vi.fExecuting = FALSE;  // alert the main thread something is up
+
+    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+
+                                        // quit the thread as early as possible
+    wLeft = 0;  // exit the Go6502 loop
+    bp = regPC; // don't do additional scan lines
+
+    HANDLER_END();
+}
+
 
 // BRK
 
 HANDLER(op00)
 {
     // !!! Is BRK maskable like I am assuming?
+
+    // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
+    if (regPC >= 0xc000 && regPC < 0xd000 && mdXLXE == md800)
+        KIL(iVM);
 
     PackP(iVM);    // we'll be pushing it
 
@@ -2789,20 +2807,6 @@ HANDLER(unused)
     regPC--;
     ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, READ_BYTE(iVM, regPC), regPC);
     regPC++;
-    HANDLER_END();
-}
-
-// we hit a KIL instruction and should hang. Try a different VM type
-HANDLER(KIL)
-{
-    vi.fExecuting = FALSE;  // alert the main thread something is up
-
-    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
-    
-    // quit the thread as early as possible
-    wLeft = 0;  // exit the Go6502 loop
-    bp = regPC; // don't do additional scan lines
-
     HANDLER_END();
 }
 
