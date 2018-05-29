@@ -1354,16 +1354,19 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
     if (pvmi == (PVMINFO)VM_CRASHED)
     {
-        // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XE w/o BASIC. If XL/XE breaks, try 800 w/ BASIC.
+        // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XL w/o BASIC. If XL breaks, try XE w/ BASIC.
+        //
+        // Some apps (BountyBob v3) don't run on XE, only XL, and usually an XE only app prompts you that you need 128K
+        // and doesn't crash.
 
         if (type == md800)
         {
-            type = mdXE;
+            type = mdXL;
             initramtop = 0xc000;
         }
         else
         {
-            type = md800;
+            type = mdXE;
             initramtop = 0xa000;
         }
     }
@@ -1617,7 +1620,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;    // delay for banner messages
 
-    fBrakes = TRUE;    // go back to real time
+    //fBrakes = TRUE;    // do not go back to real time, auto-switching tiles keep disrupting turbo mode
     clockMult = 1;    // NYI
     wFrame = 0;
     wScan = 0;    // start at top of screen again
@@ -2737,12 +2740,21 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
                             SwapMem(iVM, bOld ^ bNew, bNew);
                         }
                         else
-                            Assert(FALSE);  // wrong VM? This doesn't seem to get hit
+                        {
+                            vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
+
+                            vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+
+                            // quit the thread as early as possible
+                            wLeft = 0;  // exit the Go6502 loop
+                            bp = regPC; // don't do additional scan lines                    }
+                        }
                     }
                 }
 
-                // PORT B in write mode, being used to attempt to swap out the OS on an 800
-                else if (addr == 1 && mdXLXE == md800 && wPORTB && !(b & 1))
+                // PORT B bit 0 in write mode, being used to attempt to swap out the OS on an 800
+                // 
+                else if (addr == 1 && mdXLXE == md800 && (wPORTB) && !(b & 1))
                 {
                     vi.fExecuting = FALSE;  // alert the main thread something is up
 
