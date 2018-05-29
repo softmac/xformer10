@@ -1987,7 +1987,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 {
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFE);
-                    ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+                    //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
 
                     // check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
                     if (regPC == bp)
@@ -2149,7 +2149,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
             if ((IRQEN & 0x10) && fWant10 && (--fWant10 == 0))
             {
-                ODS("TRIGGER - SEROUT NEEDED\n");
+                //ODS("TRIGGER - SEROUT NEEDED\n");
                 IRQST &= ~0x10;    // it might not be enabled yet
             }
 
@@ -2158,7 +2158,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // (hardb, Eidolon V2, 221B)
             if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8 && (--fWant8 == 0))
             {
-                ODS("TRIGGER - SEROUT COMPLETE\n");
+                //ODS("TRIGGER - SEROUT COMPLETE\n");
                 IRQST &= ~0x08;    // it might not be enabled yet
                 fSERIN = 0;    // abandon any pending transfer from before
 
@@ -2169,7 +2169,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     isectorPos = 0;
                     if (rgSIO[0] == 0x31 && rgSIO[1] == 0x52)
                     {
-                        ODS("DISK READ REQUEST sector %d\n", rgSIO[2] | ((int)rgSIO[3] << 8));
+                        //ODS("DISK READ REQUEST sector %d\n", rgSIO[2] | ((int)rgSIO[3] << 8));
                         bSERIN = 0x41;    // start with ack
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                         if (fSERIN >= NTSCY)
@@ -2177,7 +2177,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     }
                     else if (rgSIO[0] == 0x31 && rgSIO[1] == 0x53)
                     {
-                        ODS("DISK STATUS %02x %02x\n", rgSIO[2], rgSIO[3]);
+                        //ODS("DISK STATUS %02x %02x\n", rgSIO[2], rgSIO[3]);
                         bSERIN = 0x41;    // start with ack
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                         if (fSERIN >= NTSCY)
@@ -2196,7 +2196,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data (19,200 baud expected)
                 if (fSERIN >= NTSCY)
                     fSERIN -= (NTSCY - 1);    // never be 0, that means stop
-                ODS("TRIGGER SERIN\n");
+                //ODS("TRIGGER SERIN\n");
                 IRQST &= ~0x20;
 
 #if 0   // this doesn't help any known app, and kind of breaks hardb
@@ -2623,7 +2623,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             if (PBCTL == 0x34)
             {
                 Assert(cSEROUT < 5);
-                ODS("SEROUT #%d = 0x%02x %04x %03x %02x\n", cSEROUT, b, wFrame, wScan, wLeft);
+                //ODS("SEROUT #%d = 0x%02x %04x %03x %02x\n", cSEROUT, b, wFrame, wScan, wLeft);
                 rgSIO[cSEROUT] = b;
                 cSEROUT++;
 
@@ -2639,7 +2639,7 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
 
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
-            ODS("IRQEN: 0x%02x %04x %03x\n", b, wFrame, wScan);
+            //ODS("IRQEN: 0x%02x %04x %03x\n", b, wFrame, wScan);
 
             // !!! All of the bits they poke ON have to show up instantly OFF in IRQST, but that's not how I do it right now.
             // I don't reset the bit until the interrupt is ready to fire, I treat it as meaning it's triggered not just enabled.
