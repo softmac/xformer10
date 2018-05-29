@@ -926,14 +926,15 @@ void BUS1(int iVM)
         if ((wCOM != 0) && (wCOM != 1))
             break;
 
-        cpuPokeB (iVM, 583, cpuPeekB(iVM, 247) | 1); // tell OS that device 1 is a CIO device
+        // !!! WTF? This breaks Sparta Dos SP32D, because this is the external PIA H/W device bank #
+        //cpuPokeB (iVM, 583, cpuPeekB(iVM, 247) | 1); // tell OS that device 1 is a CIO device
 
         cpuPokeB (iVM, 797,'R');
         cpuPokeB (iVM, 798,0x8F);
         cpuPokeB (iVM, 799,0xE4);
         break;
 
-    case 0x70:  // SIO vector
+    case 0x70:  // SIO vector   !!! What to do?
         break;
 
     case 0x80:  // interrupt vector
