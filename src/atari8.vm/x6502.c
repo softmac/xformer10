@@ -3102,7 +3102,7 @@ void __cdecl Go6502(const int iVM)
 
         // Start executing
 #if USE_JUMP_TABLE
-        (*jump_tab[READ_BYTE(iVM, regPC++)])(iVM);
+        (*jump_tab[READ_CODE(iVM, regPC++)])(iVM);
 #else
         switch (READ_BYTE(iVM, regPC++))
         {
