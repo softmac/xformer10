@@ -706,7 +706,7 @@ HANDLER(KIL)
 
     vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
 
-                                        // quit the thread as early as possible
+    // quit the thread as early as possible
     wLeft = 0;  // exit the Go6502 loop
     bp = regPC; // don't do additional scan lines
 
@@ -1616,14 +1616,42 @@ HANDLER(op6C)
 {
     EA_absW(iVM);
 
-    regPC = READ_WORD(iVM, regEA);
-    
-    // this detects the famous autorun sys (2 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
-    // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
-    if (regEA == 0x2e2 && regPC == 0x0600 && ramtop == 0xc000)
-        if ((rgbMem[regPC + 3] == 0x1a && rgbMem[regPC + 4] == 0x03) || (rgbMem[regPC + 0xa] == 0x21 && rgbMem[regPC + 0xb] == 0x03))
+    if (regEA == 0x2e2)
+    {
+        regPC = READ_WORD(iVM, regEA);
+
+        // this detects the famous autorun sys (2 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
+        // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
+        if (regPC == 0x0600 && ramtop == 0xc000 &&
+            ((rgbMem[regPC + 3] == 0x1a && rgbMem[regPC + 4] == 0x03) || (rgbMem[regPC + 0xa] == 0x21 && rgbMem[regPC + 0xb] == 0x03)))
             KIL(iVM);
-    
+
+        // super hack to let us know every section of code that is loaded by our XEX loader.
+        // Bin1-Bin3 puts the start addr in (47,48) and the end addr in (49,4a), and jumps through ($ffff)
+        // We are then responsible for clearing (0x2e2,0x2e3) and jumping to $7af to continue the loader code
+        if (regPC == 0xffff)
+        {
+            WORD ws = READ_WORD(iVM, 0x47);
+            WORD we = READ_WORD(iVM, 0x49);
+            
+            // we are loading code over top of our loader, that will kill us. Try the alternate loader
+            // that lives in a different place
+            if ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80))
+            {
+                fAltBinLoader = TRUE;
+                KIL(iVM);
+                vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+            }
+            
+            cpuPokeW(iVM, 0x2e2, 0);    // put this back
+            regPC = 0x7af;              // where our handler would like to continue
+        }
+    }
+    else
+    {
+        regPC = READ_WORD(iVM, regEA);
+    }
+
     wLeft -= 5;
 
     SIOCheck(iVM);  // SIO hack
