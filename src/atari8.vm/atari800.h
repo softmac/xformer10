@@ -821,7 +821,7 @@ BOOL __cdecl ExecuteAtari(int, BOOL, BOOL);
 BOOL __cdecl KeyAtari(int, HWND, UINT, WPARAM, LPARAM);
 BOOL __cdecl DumpRegsAtari(int);
 BOOL __cdecl MonAtari(int);
-BYTE __cdecl PeekBAtari(int, ADDR addr);
+BYTE __forceinline __fastcall PeekBAtari(int, ADDR addr);
 WORD __cdecl PeekWAtari(int, ADDR addr);
 ULONG __cdecl PeekLAtari(int, ADDR addr);
 BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
