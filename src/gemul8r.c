@@ -973,7 +973,7 @@ int CALLBACK WinMain(
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
 
-    //char test[130] = "\"c:\\danny\\8bit\\atari\\BAS_COM\\centiped.com\"";
+    //char test[130] = "\"c:\\danny\\8bit\\atari\\_TEST\\HOH1.xex\"";
     //lpCmdLine = test;
 
     // assume we're loading the default .ini file
@@ -1452,9 +1452,11 @@ int CALLBACK WinMain(
 
             for (int i = 0; i < MAX_VM; i++)
             {
-                if (vrgvmi[i].fKillMePlease)
+                // change VM type for exactly == TRUE
+                if (vrgvmi[i].fKillMePlease == TRUE)
                 {
                     vrgvmi[i].fKillMePlease = FALSE;
+
                     // what type are we now?
                     int type = rgvm[i].bfHW;
                     int otype = 0;
@@ -1470,6 +1472,17 @@ int CALLBACK WinMain(
                                 fOK = TRUE;
                     if (!fOK)
                         DeleteVM(v.iVM);
+                    FixAllMenus();
+                }
+                
+                // coldboot only - to switch binary loaders and try a different one
+                else if (vrgvmi[i].fKillMePlease == 2)
+                {
+                    vrgvmi[i].fKillMePlease = FALSE;
+
+                    if (!ColdStart(i))
+                        DeleteVM(v.iVM);
+
                     FixAllMenus();
                 }
                

@@ -314,10 +314,10 @@ typedef struct
     BYTE m_iSwapCart;   // which bank is currently swapped in
 
     WORD m_wFrame, m_wScan;
-    short m_wLeft;        // signed, cycles to go can go <0 finishing the last 6502 instruction
+    short m_wLeft;          // signed, cycles to go can go <0 finishing the last 6502 instruction
     short m_wLastSIOSector; // which sector we read last time
-    BYTE m_WSYNC_Waiting; // do we need to limit the next scan line to the part after WSYNC is released?
-    BYTE pad4B;
+    BYTE m_WSYNC_Waiting;   // do we need to limit the next scan line to the part after WSYNC is released?
+    BYTE m_fAltBinLoader;   // use the alternate binary loader
 
     short m_PSL;        // the value of wLeft last time ProcessScanLine was called
 
@@ -436,7 +436,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wNMI          CANDY_STATE(wNMI)
 #define wCycle        CANDY_STATE(wCycle)
 #define wSIORTS       CANDY_STATE(wSIORTS)
-#define rgbSpecial    CANDY_STATE(rgbSpecial)
+#define fAltBinLoader CANDY_STATE(fAltBinLoader)
 #define rgSIO         CANDY_STATE(rgSIO)
 #define cSEROUT       CANDY_STATE(cSEROUT)
 #define fSERIN        CANDY_STATE(fSERIN)
