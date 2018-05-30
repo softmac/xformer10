@@ -82,13 +82,17 @@
 
 // each type of VM installed into Gem has a function table we can call
 
+typedef unsigned long int  ADDR;
+
 typedef void(__cdecl *PFN) (int x, ...);
 typedef BOOL(__cdecl *PFNL)(int x, ...);
 typedef ULONG(__cdecl *PFNLL)(int x, ...);
 typedef WORD(__cdecl *PFNW)(int x, ...);
-typedef BYTE(__fastcall *PFNB)(const int x, ADDR addr);
+typedef BYTE(__cdecl *PFNB)(int x, ...);
 typedef BYTE *(__cdecl *PFNP)(int x, ...);
 typedef void *(__fastcall *PHNDLR)(void *, long);
+
+typedef BYTE(__fastcall *PFNPEEK)(const int, ADDR);
 
 #include "gemul8r.h"    // build flags
 #include "blocklib\blockdev.h"
@@ -234,7 +238,7 @@ typedef struct _vminfo
     PFNL pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
     
     // these are probably unnecessary - it's between you and your CPU, not the VM manager
-    PFNB pfnReadHWByte;     // reads a byte from the VM
+    PFNPEEK pfnReadHWByte;     // reads a byte from the VM
     PFNW pfnReadHWWord;     // reads a word from the VM
     PFNLL pfnReadHWLong;     // reads a long from the VM
     PFNL pfnWriteHWByte;    // writes a byte to the VM
@@ -254,7 +258,7 @@ typedef struct _vminfo
 
 #ifdef XFORMER
 #ifndef MAKEDLL
-extern VMINFO /* const */ vmi800;
+extern VMINFO const vmi800;
 extern ICpuExec cpi6502;
 #else
 extern _declspec(dllimport) VMINFO vmi800;
