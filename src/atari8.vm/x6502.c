@@ -1617,6 +1617,13 @@ HANDLER(op6C)
     EA_absW(iVM);
 
     regPC = READ_WORD(iVM, regEA);
+    
+    // this detects the famous autorun sys (2 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
+    // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
+    if (regEA == 0x2e2 && regPC == 0x0600 && ramtop == 0xc000)
+        if ((rgbMem[regPC + 3] == 0x1a && rgbMem[regPC + 4] == 0x03) || (rgbMem[regPC + 0xa] == 0x21 && rgbMem[regPC + 0xb] == 0x03))
+            KIL(iVM);
+    
     wLeft -= 5;
 
     SIOCheck(iVM);  // SIO hack

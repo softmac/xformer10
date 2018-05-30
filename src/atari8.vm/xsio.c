@@ -70,7 +70,7 @@ int fXFCable;    // !!! left unitialized
 // already set up for them.
 // Also, there was a bug, if a very short segment was loaded, two different initializations would happen during
 // the same sector JMP ($2E2) and each would DEC CRITIC, so CRITIC was $FF and interrupts were disabled and could hang 
-// the app during the 2nd code portion
+// the app during the 2nd code portion (Ridiculous Reality)
 
 BYTE Bin1[128] = {
     0x00, 0x03, 0x00, 0x07, 0x08, 0x07, 0x18, 0x60, 0xA9, 0x00, 0x8D, 0x44, 0x02, 0xA8, 0x99, 0x80,
