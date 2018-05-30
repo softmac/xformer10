@@ -1281,6 +1281,10 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
     pvmi;
 
+    // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
+    // !!! Once we mix VMs we'll have to do this more often to switch between them, but it's slow right now
+    cpuInit(PeekBAtari, PokeBAtari);
+
     // Install an Atari 8-bit VM
 
     static BOOL fInited;
@@ -1606,9 +1610,6 @@ BOOL __cdecl UninitAtariDisks(int iVM)
 //
 BOOL __cdecl WarmbootAtari(int iVM)
 {
-    // tell the CPU which (done in Execute)
-    //cpuInit(PeekBAtari, PokeBAtari);
-
     //ODS("\n\nWARM START\n\n");
 
     cPasteBuffer = 0;   // stop pasting
@@ -1880,9 +1881,6 @@ BOOL __cdecl DumpHWAtari(int iVM)
 #ifndef NDEBUG
 //    RestoreVideo();
 
-    // tell CPU which HW is running
-    cpuInit(PeekBAtari, PokeBAtari);
-
     printf("NMIEN  %02X IRQEN  %02X SKCTLS %02X SEROUT %02X\n",
         NMIEN, IRQEN, SKCTLS, SEROUT);
     printf("DLISTH %02X DLISTL %02X VSCROL %02X HSCROL %02X\n",
@@ -1930,9 +1928,6 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
  {
     fCont; fStep;
-
-    // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
-    cpuInit(PeekBAtari, PokeBAtari);
 
     fStop = 0;    // do not break out of big loop
 
@@ -2300,7 +2295,7 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
 // only called for addr >= ramtop
 //
 __declspec(noinline)
-BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
+BYTE __forceinline __fastcall PeekBAtari(int iVM, ADDR addr)
 {
     // This is how Bounty Bob bank selects
     if (bCartType == CART_BOB)
@@ -2327,7 +2322,7 @@ BYTE __cdecl PeekBAtari(int iVM, ADDR addr)
         addr &= 0xff03;    // PIA has 4 registers
         break;
     case 0xd4:
-        addr &= 0xff0f;    // ANTIC has 16 registers also shadowed to $D5xx
+        addr &= 0xff0f;    // ANTIC has 16 registers (!!! some say shadowed to $D5 too in a way?)
         break;
     case 0xd5:
         BankCart(iVM, addr & 0xff, 0);    // cartridge banking

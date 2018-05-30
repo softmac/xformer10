@@ -86,7 +86,7 @@ typedef void(__cdecl *PFN) (int x, ...);
 typedef BOOL(__cdecl *PFNL)(int x, ...);
 typedef ULONG(__cdecl *PFNLL)(int x, ...);
 typedef WORD(__cdecl *PFNW)(int x, ...);
-typedef BYTE(__cdecl *PFNB)(int x, ...);
+typedef BYTE(__fastcall *PFNB)(const int x, ADDR addr);
 typedef BYTE *(__cdecl *PFNP)(int x, ...);
 typedef void *(__fastcall *PHNDLR)(void *, long);
 
@@ -254,7 +254,7 @@ typedef struct _vminfo
 
 #ifdef XFORMER
 #ifndef MAKEDLL
-extern VMINFO const vmi800;
+extern VMINFO /* const */ vmi800;
 extern ICpuExec cpi6502;
 #else
 extern _declspec(dllimport) VMINFO vmi800;

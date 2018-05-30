@@ -23,10 +23,6 @@
 PFNB pfnPeekB;
 PFNL pfnPokeB;
 
-// jump tables
-typedef void (__fastcall * PFNOP)(const int iVM);
-PFNOP jump_tab[256];
-
 #if 0
 //////////////////////////////////////////////////////////////////
 //
@@ -76,14 +72,18 @@ int __cdecl xprintf(const char *format, ...)
 }
 #endif
 
+// code is never executing special registers, so we don't need a test for ramtop or anything else
+
 __inline uint8_t READ_CODE(const int iVM, uint32_t ea)
 {
-    Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
     Assert(ea <= 0xffff);
 
     return rgbMem[ea];
 }
 
+#define READ_BYTE read_tab[regEA]
+
+#if 0
 // these private macros decide which needs to be called - special peek/poke above ramtop, or not
 
 __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
@@ -97,6 +97,7 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
     else
         return cpuPeekB(iVM, ea);
 }
+#endif
 
 __inline uint16_t READ_WORD(const int iVM, uint32_t ea)
 {
@@ -176,7 +177,7 @@ void __fastcall Stop6502(const int iVM)
 // this used to not let a scan line end until there's an instruction that affects the PC
 #define HANDLER_END_FLOW() HANDLER_END()
 
-#define HANDLER(opcode) void __fastcall __fastcall opcode (const int iVM) {
+#define HANDLER(opcode) void __fastcall opcode (const int iVM) {
 
 #if 0
     xprintf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X  ", \

@@ -37,7 +37,7 @@ __inline BOOL cpuDisasm(const int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
-__inline BYTE cpuPeekB(const int iVM, ADDR addr)
+BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -47,6 +47,13 @@ __inline BYTE cpuPeekB(const int iVM, ADDR addr)
 extern BOOL ProcessScanLine(int);
 extern void __forceinline __fastcall PackP(const int);
 extern void __forceinline __fastcall UnpackP(const int);
+
+// jump tables
+typedef void(__fastcall * PFNOP)(const int iVM);
+PFNOP jump_tab[256];
+
+typedef BYTE(__fastcall * PFNREAD)(const int iVM, ADDR addr);
+PFNREAD read_tab[65536];
 
 __inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
 {
@@ -87,9 +94,26 @@ __inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
     extern PFNB pfnPeekB;
     extern PFNL pfnPokeB;
 
-    // global - each VM needs to set this every time a VM is Execute'd
+    // !!! To work with more than just ATARI 800, each VM needs to set this every time its VM is Execute'd
+    // but it can't do that now because initializing this table is slow
     pfnPeekB = pvmPeekB;
     pfnPokeB = pvmPokeB;
+
+    for (int i = 0; i < 65536; i++)
+    {
+        if (i >= 0x8ff6 && i <= 0x8ff9)
+            read_tab[i] = *pfnPeekB;
+        else if (i >= 0x9ff6 && i <= 0x9ff9)
+            read_tab[i] = *pfnPeekB;
+        else if ((i & 0xff00) == 0xd0 && !(i & 0x0010))   // D000-D00F and its shadows D020-D02F, etc (NOT D010)
+            read_tab[i] = *pfnPeekB;
+        else if ((i & 0xff00) == 0xd2 && (i & 0x000f) == 0x0d)   // D20D its shadows D21D, etc
+            read_tab[i] = *pfnPeekB;
+        else if ((i & 0xff00) == 0xd4 && ((i & 0x000f) == 0x0a || (i & 0x000f) == 0x0b))   // D40A/B its shadows D41A/B etc.
+            read_tab[i] = *pfnPeekB;
+        else
+            read_tab[i] = cpuPeekB;
+    }
 
     return TRUE;
 }
