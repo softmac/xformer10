@@ -617,42 +617,78 @@ void DoVBI(int iVM)
             MMRESULT mm = joyGetPos(vi.rgjn[joy], &ji);
             if (mm == 0) {
 
-                 int dir = (ji.wXpos - (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / 2);
-                dir /= (int)((vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / wJoySens);
+                if (vi.rgjt[joy] == JT_JOYSTICK)
+                {
+                    int dir = (ji.wXpos - (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / 2);
+                    dir /= (int)((vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / wJoySens);
 
-                BYTE *pB;
-                if (joy < 2)
-                    pB = &rPADATA;    // joy 1 & 2
-                else
-                    pB = &rPBDATA;    // joy 3 & 4
+                    BYTE *pB;
+                    if (joy < 2)
+                        pB = &rPADATA;    // joy 1 & 2
+                    else
+                        pB = &rPBDATA;    // joy 3 & 4
 
-                // joy 1 & 3 are low nibble, 2 & 4 are high nibble
+                    // joy 1 & 3 are low nibble, 2 & 4 are high nibble
 
-                (*pB) |= (12 << ((joy & 1) << 4));                  // assume joystick X centered
+                    (*pB) |= (12 << ((joy & 1) << 4));                  // assume joystick X centered
 
-                if (dir < 0)
-                    (*pB) &= ~(4 << ((joy & 1) << 2));              // left
-                else if (dir > 0)
-                    (*pB) &= ~(8 << ((joy & 1) << 2));              // right
+                    if (dir < 0)
+                        (*pB) &= ~(4 << ((joy & 1) << 2));              // left
+                    else if (dir > 0)
+                        (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
-                dir = (ji.wYpos - (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / 2);
-                dir /= (int)((vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / wJoySens);
+                    dir = (ji.wYpos - (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / 2);
+                    dir /= (int)((vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / wJoySens);
 
-                (*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
+                    (*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
 
-                if (dir < 0)
-                    (*pB) &= ~(1 << ((joy & 1) << 2));              // up
-                else if (dir > 0)
-                    (*pB) &= ~(2 << ((joy & 1) << 2));              // down
+                    if (dir < 0)
+                        (*pB) &= ~(1 << ((joy & 1) << 2));              // up
+                    else if (dir > 0)
+                        (*pB) &= ~(2 << ((joy & 1) << 2));              // down
 
-                UpdatePorts(iVM);
+                    UpdatePorts(iVM);
 
-                pB = &TRIG0;
+                    pB = &TRIG0;
 
-                if (ji.wButtons)
-                    (*(pB + joy)) &= ~1;                // JOY fire button down
-                else
-                    (*(pB + joy)) |= 1;                 // JOY fire button up
+                    if (ji.wButtons)
+                        (*(pB + joy)) &= ~1;                // JOY fire button down
+                    else
+                        (*(pB + joy)) |= 1;                 // JOY fire button up
+                }
+                
+                else if (vi.rgjt[joy] == JT_PADDLE)
+                {
+                    // x value is left paddle, y value is right paddle, scaled to 0-228
+
+                    int x = (ji.wXpos - vi.rgjc[joy].wXmin) * 229 / (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin);
+                    int y = (ji.wYpos - vi.rgjc[joy].wYmin) * 229 / (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin);
+                    if (x == 229) x = 228;  // give 228 a reasonable chance of being chosen
+                    if (y == 229) y = 228;
+
+                    rgbMem[PADDLE0 + (joy << 1)] = (BYTE)x;
+                    rgbMem[PADDLE0 + (joy << 1) + 1] = (BYTE)y;
+
+                    // left paddle button is same as joystick left
+                    // right paddle button is joystick right
+
+                    BYTE *pB;
+                    if (joy < 2)
+                        pB = &rPADATA;    // paddles 0-3
+                    else
+                        pB = &rPBDATA;    // paddles 4-7
+
+                    // paddles 0-1 & 4-5 are low nibble, 2-3 & 6-7 are high nibble
+
+                    (*pB) |= (12 << ((joy & 1) << 4));                  // assume buttons not pressed
+
+                    if (ji.wButtons == 1)
+                        (*pB) &= ~(4 << ((joy & 1) << 2));              // left
+                    else if (ji.wButtons == 2)
+                        (*pB) &= ~(8 << ((joy & 1) << 2));              // right
+
+                    UpdatePorts(iVM);
+                }
             }
         }
     }
@@ -1368,10 +1404,16 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
             type = mdXL;
             initramtop = 0xc000;
         }
-        else
+        else if (type == mdXL)
         {
             type = mdXE;
             initramtop = 0xa000;
+        }
+        // otherwise, if you manually put an 800 only app into an XL or XE VM it reboots infinitely never finding an 800 VM
+        else
+        {
+            type = md800;
+            initramtop = 0xc000;
         }
     }
 
@@ -2136,12 +2178,20 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             wScan = wScan + 1;
 
-            // increment the POT counters once per scan line until they hit 228, in which case say we are done
-            if (POT < 228)
-                POT0 = POT1 = POT2 = POT3 = POT4 = POT5 = POT6 = POT7 = ++POT;
-            if (POT == 228)
-                ALLPOT = 0;
-            
+            // increment the POT counters once per scan line until they hit the actual paddle value, in which case say we are done
+            POT++;
+            if (POT > 228) POT = 228;
+            for (int i = 0; i < 8; i++)
+            {
+                if (POT < rgbMem[PADDLE0 + i])
+                    rgbMem[POT0 + i] = POT;
+                else
+                {
+                    rgbMem[POT0 + i] = rgbMem[PADDLE0 + i];
+                    ALLPOT &= ~(1 << i);    // say this pot is done
+                }
+            }
+
             // we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
             if ((IRQEN & 0x10) && fWant10 && (--fWant10 == 0))
             {

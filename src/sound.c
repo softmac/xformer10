@@ -1033,9 +1033,24 @@ void InitJoysticks()
             mm = joyGetDevCaps(JOYSTICKID1 + i, &jc, sizeof(JOYCAPS));
             if (!mm && jc.wNumButtons > 0)
             {
+                assert(jc.wXmax && jc.wYmax);   // or we /0
+
+                // Clever auto-detect joystick or paddle, because if you get it wrong, you confuse apps populating both registers.
+                // if the initial X & Y positions are exactly centered, it's a joystick
+                // if one of them is off centre, it's a paddle. There's no way both paddles are exactly in the middle
+                // !!! Don't push your joystick while warmstarting. If it's confused, just warmstart again with the joystick centred.
+
                 JOYINFO ji;
+                Sleep(1); // believe it or not, if we call it too soon, we get a default centred position that always looks like a joystick
                 mm = joyGetPos(JOYSTICKID1 + i, &ji);
-                
+
+                ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - ji.wXpos);
+                ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - ji.wYpos);
+                if (ux < 0x80 && uy < 0x80)
+                    vi.rgjt[j] = JT_JOYSTICK;
+                else
+                    vi.rgjt[j] = JT_PADDLE;
+
                 vi.rgjc[j] = jc;    // joy caps
                 vi.rgjn[j++] = i;    // which joystick ID this is
             }

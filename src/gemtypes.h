@@ -596,9 +596,12 @@ typedef struct
     ULONG cbSCSIAlloc;  // current committed size of pvSCSIData
 
 #define NUM_JOYDEVS 16
+#define JT_JOYSTICK 0
+#define JT_PADDLE   1
     JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
     JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
-    int rgjn[NUM_JOYDEVS];    // which handle we use to use that joystick
+    int rgjn[NUM_JOYDEVS];        // which handle we use to talk to that joystick
+    int rgjt[NUM_JOYDEVS];        // type of controller - joystick or paddle
     int njc;            // # of joysticks
 
     PDI  rgpdi[10];     // pointers to DISKINFO structures for disks

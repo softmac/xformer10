@@ -581,14 +581,14 @@ __inline BYTE *_pbshift(int iVM)
 
 #define readPOKEY 0xD200
 
-#define POT0    rgbMem[0xD200]
-#define POT1    rgbMem[0xD201]
-#define POT2    rgbMem[0xD202]
-#define POT3    rgbMem[0xD203]
-#define POT4    rgbMem[0xD204]
-#define POT5    rgbMem[0xD205]
-#define POT6    rgbMem[0xD206]
-#define POT7    rgbMem[0xD207]
+#define POT0    0xD200
+#define POT1    0xD201
+#define POT2    0xD202
+#define POT3    0xD203
+#define POT4    0xD204
+#define POT5    0xD205
+#define POT6    0xD206
+#define POT7    0xD207
 
 #define ALLPOT  rgbMem[0xD208]
 #define KBCODE  rgbMem[0xD209]
@@ -741,6 +741,18 @@ __inline BYTE *_pbshift(int iVM)
 #define NMIEN   rgbMem[0xD15E]
 #define NMIRES  rgbMem[0xD15F]
 
+// POKEY again - actual paddle values that the POT registers are counting up to
+
+#define PADDLE0 0xD160
+#define PADDLE1 0xD161
+#define PADDLE2 0xD162
+#define PADDLE3 0xD163
+#define PADDLE4 0xD164
+#define PADDLE5 0xD165
+#define PADDLE6 0xD166
+#define PADDLE7 0xD167
+
+// D180 is where we put the SIO hack code
 
 //
 // Function prototypes
