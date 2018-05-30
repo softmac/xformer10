@@ -1033,6 +1033,9 @@ void InitJoysticks()
             mm = joyGetDevCaps(JOYSTICKID1 + i, &jc, sizeof(JOYCAPS));
             if (!mm && jc.wNumButtons > 0)
             {
+                JOYINFO ji;
+                mm = joyGetPos(JOYSTICKID1 + i, &ji);
+                
                 vi.rgjc[j] = jc;    // joy caps
                 vi.rgjn[j++] = i;    // which joystick ID this is
             }
