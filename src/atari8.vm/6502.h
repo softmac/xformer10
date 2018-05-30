@@ -41,9 +41,6 @@ BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-    if (addr == 0xd40a)
-        addr = addr;
-
     return rgbMem[addr];
 }
 
@@ -108,6 +105,12 @@ __inline BOOL cpuInit(PFNPEEK pvmPeekB, PFNL pvmPokeB)
             read_tab[i] = pfnPeekB;
         else if (i >= 0x9ff6 && i <= 0x9ff9)
             read_tab[i] = pfnPeekB;
+        else if (i >= 0xd000 && i < 0xd600)
+            read_tab[i] = pfnPeekB;
+        else
+            read_tab[i] = cpuPeekB;
+
+#if 0 // these are the registers I special case, but I need to use the pfnPeekB function for EVERY hw reg to shadow properly
         else if ((i & 0xff00) == 0xd000 && !(i & 0x0010))   // D000-D00F and its shadows D020-D02F, etc (NOT D010)
             read_tab[i] = pfnPeekB;
         else if ((i & 0xff00) == 0xd200 && ((i & 0x000f) == 0x0a || (i & 0x000f) == 0x0d))   // D20A/D and its shadows D21A/D, etc
@@ -118,6 +121,7 @@ __inline BOOL cpuInit(PFNPEEK pvmPeekB, PFNL pvmPokeB)
             read_tab[i] = pfnPeekB;
         else
             read_tab[i] = cpuPeekB;
+#endif
     }
 
     return TRUE;
