@@ -1615,6 +1615,7 @@ HANDLER(op6A)
 HANDLER(op6C)
 {
     EA_absW(iVM);
+
     regPC = READ_WORD(iVM, regEA);
     wLeft -= 5;
 
