@@ -72,15 +72,8 @@ int __cdecl xprintf(const char *format, ...)
 }
 #endif
 
-// code is never executing special registers, so we don't need a test for ramtop or anything else
-
-__inline uint8_t READ_CODE(const int iVM, uint32_t ea)
-{
-    Assert(ea <= 0xffff);
-
-    return rgbMem[ea];
-}
-
+// !!! make sure to only use this macro with regEA
+// this is for when you don't know if you need to do special tricks for a register read or not
 #define READ_BYTE read_tab[regEA]
 
 #if 0
@@ -161,10 +154,10 @@ void __fastcall Stop6502(const int iVM)
 // it's really handy for debugging to see what cycle of the scan line we're on.
 // !!! when wCycle is 0xff, we are passed the end of the scan line, so the next instruction displayed by the monitor
 // may NOT be what was shown, it may be the first instr of an interrupt instead
-#define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[READ_CODE(iVM, regPC++)])(iVM); } }
+#define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[cpuPeekB(iVM, regPC++)])(iVM); } }
 #else
 #if USE_JUMP_TABLE
-#define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[READ_CODE(iVM, regPC++)]; (*p)(iVM); } }
+#define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[cpuPeekB(iVM, regPC++)]; (*p)(iVM); } }
 #else
 // the switch statement only does one instruction at a time (no tail calling) so no need to check wLeft against wNMI
 #define HANDLER_END() { } }
@@ -3148,9 +3141,9 @@ void __cdecl Go6502(const int iVM)
 
         // Start executing
 #if USE_JUMP_TABLE
-        (*jump_tab[READ_CODE(iVM, regPC++)])(iVM);
+        (*jump_tab[cpuPeekB(iVM, regPC++)])(iVM);
 #else
-        switch (READ_CODE(iVM, regPC++))
+        switch (cpuPeekB(iVM, regPC++))
         {
         default:
             Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check
