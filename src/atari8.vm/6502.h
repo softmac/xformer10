@@ -41,6 +41,9 @@ BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
+    if (addr == 0xd40a)
+        addr = addr;
+
     return rgbMem[addr];
 }
 
@@ -89,9 +92,9 @@ __inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
     return TRUE;
 }
 
-__inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
+__inline BOOL cpuInit(PFNPEEK pvmPeekB, PFNL pvmPokeB)
 {
-    extern PFNB pfnPeekB;
+    extern PFNPEEK pfnPeekB;
     extern PFNL pfnPokeB;
 
     // !!! To work with more than just ATARI 800, each VM needs to set this every time its VM is Execute'd
@@ -102,15 +105,17 @@ __inline BOOL cpuInit(PFNB pvmPeekB, PFNL pvmPokeB)
     for (int i = 0; i < 65536; i++)
     {
         if (i >= 0x8ff6 && i <= 0x8ff9)
-            read_tab[i] = *pfnPeekB;
+            read_tab[i] = pfnPeekB;
         else if (i >= 0x9ff6 && i <= 0x9ff9)
-            read_tab[i] = *pfnPeekB;
-        else if ((i & 0xff00) == 0xd0 && !(i & 0x0010))   // D000-D00F and its shadows D020-D02F, etc (NOT D010)
-            read_tab[i] = *pfnPeekB;
-        else if ((i & 0xff00) == 0xd2 && (i & 0x000f) == 0x0d)   // D20D its shadows D21D, etc
-            read_tab[i] = *pfnPeekB;
-        else if ((i & 0xff00) == 0xd4 && ((i & 0x000f) == 0x0a || (i & 0x000f) == 0x0b))   // D40A/B its shadows D41A/B etc.
-            read_tab[i] = *pfnPeekB;
+            read_tab[i] = pfnPeekB;
+        else if ((i & 0xff00) == 0xd000 && !(i & 0x0010))   // D000-D00F and its shadows D020-D02F, etc (NOT D010)
+            read_tab[i] = pfnPeekB;
+        else if ((i & 0xff00) == 0xd200 && ((i & 0x000f) == 0x0a || (i & 0x000f) == 0x0d))   // D20A/D and its shadows D21A/D, etc
+            read_tab[i] = pfnPeekB;
+        else if ((i & 0xff00) == 0xd400 && (i & 0x000f) == 0x0b)   // D40B its shadows D41B etc.
+            read_tab[i] = pfnPeekB;
+        else if ((i & 0xff00) == 0xd500)    // D5xx cartridge bank select
+            read_tab[i] = pfnPeekB;
         else
             read_tab[i] = cpuPeekB;
     }

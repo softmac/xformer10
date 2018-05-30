@@ -103,10 +103,7 @@ __inline uint16_t READ_WORD(const int iVM, uint32_t ea)
 {
     Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
 
-    if (ea >= ramtop)
-        return (*pfnPeekB)(iVM, ea) | ((*pfnPeekB)(iVM, ea + 1) << 8);
-    else
-        return cpuPeekB(iVM, ea) | (cpuPeekB(iVM, ea + 1) << 8);
+    return READ_BYTE(iVM, ea) | (READ_BYTE(iVM, ea + 1) << 8);
 }
 
 __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
@@ -622,7 +619,7 @@ BYTE HELPER(PopByte)
     BYTE b;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    b = READ_BYTE(iVM, regSP);
+    b = cpuPeekB(iVM, regSP);
 
     return b;
 } }
@@ -632,9 +629,9 @@ WORD HELPER(PopWord)
     WORD w;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w = READ_BYTE(iVM, regSP);
+    w = cpuPeekB(iVM, regSP);
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w |= READ_BYTE(iVM, regSP) << 8;
+    w |= cpuPeekB(iVM, regSP) << 8;
 
     return w;
 } }
@@ -2843,7 +2840,7 @@ HANDLER(opFE)
 HANDLER(unused)
 {
     regPC--;
-    ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, READ_BYTE(iVM, regPC), regPC);
+    ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, cpuPeekB(iVM, regPC), regPC);
     regPC++;
     HANDLER_END();
 }
