@@ -617,8 +617,8 @@ void DoVBI(int iVM)
             MMRESULT mm = joyGetPos(vi.rgjn[joy], &ji);
             if (mm == 0) {
 
-                int dir = (ji.wXpos - (vi.rgjc[vi.rgjn[joy]].wXmax - vi.rgjc[vi.rgjn[joy]].wXmin) / 2);
-                dir /= (int)((vi.rgjc[vi.rgjn[joy]].wXmax - vi.rgjc[vi.rgjn[joy]].wXmin) / wJoySens);
+                 int dir = (ji.wXpos - (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / 2);
+                dir /= (int)((vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / wJoySens);
 
                 BYTE *pB;
                 if (joy < 2)
@@ -635,8 +635,8 @@ void DoVBI(int iVM)
                 else if (dir > 0)
                     (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
-                dir = (ji.wYpos - (vi.rgjc[vi.rgjn[joy]].wYmax - vi.rgjc[vi.rgjn[joy]].wYmin) / 2);
-                dir /= (int)((vi.rgjc[vi.rgjn[joy]].wYmax - vi.rgjc[vi.rgjn[joy]].wYmin) / wJoySens);
+                dir = (ji.wYpos - (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / 2);
+                dir /= (int)((vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / wJoySens);
 
                 (*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
 
