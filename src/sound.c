@@ -1038,16 +1038,22 @@ void InitJoysticks()
                 // Clever auto-detect joystick or paddle, because if you get it wrong, you confuse apps populating both registers.
                 // if the initial X & Y positions are exactly centered, it's a joystick
                 // if one of them is off centre, it's a paddle. There's no way both paddles are exactly in the middle
-                // !!! Don't push your joystick while warmstarting. If it's confused, just warmstart again with the joystick centred.
-
+                // !!! This assumes the joystick self-centres,and don't push your joystick while warmstarting!
+                // If it's confused, just warmstart again with the joystick centred.
+                // A driving controller will be detected later after we see the values it returns, but if it's sending the unique
+                // driving controller value right now, we'll know now.
                 JOYINFO ji;
                 Sleep(1); // believe it or not, if we call it too soon, we get a default centred position that always looks like a joystick
                 mm = joyGetPos(JOYSTICKID1 + i, &ji);
 
-                ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - ji.wXpos);
-                ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - ji.wYpos);
-                if (ux < 0x80 && uy < 0x80)
-                    vi.rgjt[j] = JT_JOYSTICK;
+                ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - (ji.wXpos - jc.wXmin));
+                ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - (ji.wYpos - jc.wYmin));
+                ULONG uz = abs((jc.wYmax - jc.wYmin) * 3 / 4 - (ji.wYpos - jc.wYmin));   // only driving controller reports $bfef or so
+
+                if (ux < 0x20 && uy < 0x20)
+                    vi.rgjt[j] = JT_JOYSTICK | JT_DRIVING;  // x & y centred? it's one of these 2
+                else if (ux < 0x20 && (uz < 0x20 || (jc.wYmax - ji.wYpos) < 0x20 || (ji.wYpos - jc.wYmin) < 0x20))
+                    vi.rgjt[j] = JT_DRIVING;    // x centred, y is special value, up or down? Driving controller
                 else
                     vi.rgjt[j] = JT_PADDLE;
 
