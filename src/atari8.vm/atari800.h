@@ -838,7 +838,7 @@ WORD __cdecl PeekWAtari(int, ADDR addr);
 ULONG __cdecl PeekLAtari(int, ADDR addr);
 BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
 BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
-BOOL  __cdecl PokeBAtari(int, ADDR addr, BYTE b);
+BOOL  __forceinline __fastcall PokeBAtari(int, ADDR addr, BYTE b);
 
 
 //

@@ -1058,6 +1058,10 @@ void PSLPrepare(int iVM)
                 // LMS (load memory scan) attached to this line to give start of screen memory
                 if (sl.modehi & 4)
                 {
+                    // stop catching writes to old screen RAM
+                    write_tab[(wAddr & 0xff00) >> 8] = cpuPokeB;
+                    write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+
                     wAddr = cpuPeekB(iVM, DLPC);
                     IncDLPC(iVM);
                     wAddr |= (cpuPeekB(iVM, DLPC) << 8);
@@ -1107,7 +1111,11 @@ void PSLPrepare(int iVM)
             cbWidth |= (cbWidth >> 1);            // WIDE width
             break;
         }
-        
+
+        // catch writes to screen RAM
+        write_tab[(wAddr & 0xff00) >> 8] = PokeBAtari;
+        write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = PokeBAtari;
+
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
         // allow blank mode lines to mean duplicates of previous lines (GR.9++)
@@ -1296,6 +1304,10 @@ void PSLPostpare(int iVM)
         // (save cbWidth from the last valid mode drawn?)
         if (fFetch)
         {
+            // stop catching writes to old screen RAM
+            write_tab[(wAddr & 0xff00) >> 8] = cpuPokeB;
+            write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+
             // ANTIC's PC can't cross a 4K boundary, poor thing
             wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);
         }

@@ -92,7 +92,8 @@ typedef BYTE(__cdecl *PFNB)(int x, ...);
 typedef BYTE *(__cdecl *PFNP)(int x, ...);
 typedef void *(__fastcall *PHNDLR)(void *, long);
 
-typedef BYTE(__fastcall *PFNPEEK)(const int, ADDR);
+typedef BYTE(__fastcall *PFNREAD)(const int, ADDR);
+typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 
 #include "gemul8r.h"    // build flags
 #include "blocklib\blockdev.h"
@@ -238,10 +239,10 @@ typedef struct _vminfo
     PFNL pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
     
     // these are probably unnecessary - it's between you and your CPU, not the VM manager
-    PFNPEEK pfnReadHWByte;     // reads a byte from the VM
+    PFNREAD pfnReadHWByte;     // reads a byte from the VM
     PFNW pfnReadHWWord;     // reads a word from the VM
     PFNLL pfnReadHWLong;     // reads a long from the VM
-    PFNL pfnWriteHWByte;    // writes a byte to the VM
+    PFNWRITE pfnWriteHWByte;    // writes a byte to the VM
     PFNL pfnWriteHWWord;    // writes a word to the VM
     PFNL pfnWriteHWLong;    // writes a long to the VM
     PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
