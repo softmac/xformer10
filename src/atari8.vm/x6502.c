@@ -20,8 +20,8 @@
 
 #include "stdint.h"
 
-PFNB pfnPeekB;
-PFNL pfnPokeB;
+PFNREAD pfnPeekB;
+PFNWRITE pfnPokeB;
 
 #if 0
 //////////////////////////////////////////////////////////////////
@@ -72,9 +72,12 @@ int __cdecl xprintf(const char *format, ...)
 }
 #endif
 
+// these versions of read/write are for when we don't know if we need to do side effects for register read/writes, etc.
+
 // !!! make sure to only use this macro with regEA
 // this is for when you don't know if you need to do special tricks for a register read or not
 #define READ_BYTE read_tab[regEA]
+#define WRITE_BYTE write_tab[regEA >> 8]    // faster way than shifting? use 64K table?
 
 #if 0
 // these private macros decide which needs to be called - special peek/poke above ramtop, or not
@@ -90,42 +93,34 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
     else
         return cpuPeekB(iVM, ea);
 }
-#endif
-
-__inline uint16_t READ_WORD(const int iVM, uint32_t ea)
-{
-    Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
-
-    return READ_BYTE(iVM, ea) | (READ_BYTE(iVM, ea + 1) << 8);
-}
 
 __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
-    Assert(pfnPokeB == (PFNL)PokeBAtari);  // compiler hint
+    Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
-    if (ea >= ramtop)
+    if (ea >= ramtop) // || (ea >= wAddr && ea < (WORD)(wAddr + cbWidth)))
         (*pfnPokeB)(iVM, ea, val);
     else
         cpuPokeB(iVM, ea, val);
 }
+#endif
 
-// we only call this if we know it's < ramtop
+__inline uint16_t READ_WORD(const int iVM, uint32_t ea)
+{
+    Assert(pfnPeekB == PeekBAtari);  // compiler hint
+
+    return READ_BYTE(iVM, ea) | (READ_BYTE(iVM, ea + 1) << 8);
+}
+
 __inline void WRITE_WORD(const int iVM, uint32_t ea, uint16_t val)
 {
-    Assert(pfnPokeB == (PFNL)PokeBAtari);  // compiler hint
+    Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
-    if (ea >= ramtop)
-    {
-        (*pfnPokeB)(iVM, ea, val & 255);
-        (*pfnPokeB)(iVM, ea + 1, ((val >> 8) & 255));
-    }
-    else
-    {
-        cpuPokeB(iVM, ea, val & 255);
-        cpuPokeB(iVM, ea + 1, ((val >> 8) & 255));
-    }
+    WRITE_BYTE(iVM, ea, val & 255);
+    ea++;   // macro only works with ea, not ea + 1
+    WRITE_BYTE(iVM, ea, ((val >> 8) & 255));
 }
 
 // dummy opcode handler to force stop emulating 6502
@@ -191,9 +186,9 @@ void __fastcall Stop6502(const int iVM)
 
 #define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode (const int iVM, arg1, arg2, arg3) {
 
-// For addressing modes where we know we won't be above ramtop and needing special register values, we can directly do a CPU read.
-// Otherwise, our READ_ WRITE_ helper functions will check ramtop, but be one comparison/potential branch slower
-// In general, reading through the PC is safe for using cpuPeekB. Reading through EA isn't unless it's ZP, etc.
+// For addressing modes where we know we won't be above stack memory and needing special register values, we can directly do a CPU read.
+// Otherwise, our READ_ WRITE_ helper functions will check ramtop etc., but be one comparison/potential branch slower
+// In general, reading through the PC is safe for using cpuPeekB. Reading through EA isn't unless it's ZP, or stack
 
 void HELPER(EA_imm)
 {
@@ -353,7 +348,7 @@ void HELPER(LDY_com)
 
 void HELPER1(ST_zp, BYTE x)
 {
-    cpuPokeB(iVM, regEA, x);    // ZP always < ramtop
+    WRITE_BYTE(iVM, regEA, x);    // ZP may hold screen RAM, which we have to trap writes to
 } }
 
 void HELPER1(ST_com, BYTE x)

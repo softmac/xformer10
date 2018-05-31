@@ -37,6 +37,21 @@ __inline BOOL cpuDisasm(const int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
+extern BOOL ProcessScanLine(int);
+
+// jump tables
+typedef void(__fastcall * PFNOP)(const int iVM);
+PFNOP jump_tab[256];
+
+typedef BYTE(__fastcall * PFNREAD)(const int iVM, ADDR addr);
+typedef BOOL(__fastcall * PFNWRITE)(const int iVM, ADDR addr, BYTE b);
+
+PFNREAD read_tab[65536];
+PFNWRITE write_tab[256];
+
+// call these when you want quick read/writes, with no special case registers or other side effects
+// In other words, zero page or stack memory
+
 BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
@@ -44,30 +59,9 @@ BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
     return rgbMem[addr];
 }
 
-extern BOOL ProcessScanLine(int);
-extern void __forceinline __fastcall PackP(const int);
-extern void __forceinline __fastcall UnpackP(const int);
-
-// jump tables
-typedef void(__fastcall * PFNOP)(const int iVM);
-PFNOP jump_tab[256];
-
-typedef BYTE(__fastcall * PFNREAD)(const int iVM, ADDR addr);
-PFNREAD read_tab[65536];
-
-__inline BOOL cpuPokeB(const int iVM, ADDR addr, BYTE b)
+BOOL __forceinline __fastcall cpuPokeB(const int iVM, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
-
-    // !!! controversial perf hit - we are writing into the line of screen RAM that we are current displaying
-    // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
-    // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
-    if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
-    {
-        PackP(iVM);
-        ProcessScanLine(iVM);
-        UnpackP(iVM);
-    }
 
     rgbMem[addr] = (BYTE) b;
     return TRUE;
@@ -80,6 +74,7 @@ __inline WORD cpuPeekW(const int iVM, ADDR addr)
     return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
 }
 
+// not really used, if it ever is, make sure it doesn't need to do any special casing
 __inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
@@ -89,10 +84,10 @@ __inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
     return TRUE;
 }
 
-__inline BOOL cpuInit(PFNPEEK pvmPeekB, PFNL pvmPokeB)
+__inline BOOL cpuInit(PFNREAD pvmPeekB, PFNWRITE pvmPokeB)
 {
-    extern PFNPEEK pfnPeekB;
-    extern PFNL pfnPokeB;
+    extern PFNREAD pfnPeekB;
+    extern PFNWRITE pfnPokeB;
 
     // !!! To work with more than just ATARI 800, each VM needs to set this every time its VM is Execute'd
     // but it can't do that now because initializing this table is slow
@@ -122,6 +117,14 @@ __inline BOOL cpuInit(PFNPEEK pvmPeekB, PFNL pvmPokeB)
         else
             read_tab[i] = cpuPeekB;
 #endif
+    }
+
+    for (int i = 0; i < 256; i++)
+    {
+        if (i >= 0x80)
+            write_tab[i] = pfnPokeB;    // !!! for now, assume ramtop might be as low as $8000
+        else
+            write_tab[i] = cpuPokeB;
     }
 
     return TRUE;

@@ -2539,11 +2539,11 @@ BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 }
 
 // Be efficient! This is one of the most executed functions!
-// Only call this is addr >= ramtop
+// Only call this is addr >= ramtop or otherwise special handling must be done to an address
 // regPC is probably one too high at this moment
 //
 __declspec(noinline)
-BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
+BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
     Assert(addr < 65536);
@@ -2552,9 +2552,14 @@ BOOL __cdecl PokeBAtari(int iVM, ADDR addr, BYTE b)
     printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
 #endif
 
-    // only the monitor uses this, but it seems a safe idea to spend the time to test this
     if (addr < ramtop)
     {
+        // we are writing into the line of screen RAM that we are current displaying
+        // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
+        // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
+        if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+            ProcessScanLine(iVM);
+
         rgbMem[addr] = b;
         return TRUE;
     }
