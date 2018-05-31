@@ -596,8 +596,11 @@ typedef struct
     ULONG cbSCSIAlloc;  // current committed size of pvSCSIData
 
 #define NUM_JOYDEVS 16
-#define JT_JOYSTICK 0
-#define JT_PADDLE   1
+
+#define JT_JOYSTICK 1
+#define JT_PADDLE   2
+#define JT_DRIVING  4   // multiple bits set means we don't know yet, it's one of those choices
+
     JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
     JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
     int rgjn[NUM_JOYDEVS];        // which handle we use to talk to that joystick

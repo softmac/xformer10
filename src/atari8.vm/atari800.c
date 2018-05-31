@@ -614,13 +614,18 @@ void DoVBI(int iVM)
         for (int joy = 0; joy < min(vi.njc, (mdXLXE == md800) ? 4 : 2); joy++)
         {
             JOYINFO ji;
+            JOYCAPS jc = vi.rgjc[joy];
+
             MMRESULT mm = joyGetPos(vi.rgjn[joy], &ji);
+            
+            //ODS("x=%04x y=%04x\n", ji.wXpos, ji.wYpos);
+            
             if (mm == 0) {
 
-                if (vi.rgjt[joy] == JT_JOYSTICK)
+                if (vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING))
                 {
-                    int dir = (ji.wXpos - (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / 2);
-                    dir /= (int)((vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin) / wJoySens);
+                    int dir = (ji.wXpos - (jc.wXmax - jc.wXmin) / 2);
+                    dir /= (int)((jc.wXmax - jc.wXmin) / wJoySens);
 
                     BYTE *pB;
                     if (joy < 2)
@@ -637,15 +642,41 @@ void DoVBI(int iVM)
                     else if (dir > 0)
                         (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
-                    dir = (ji.wYpos - (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / 2);
-                    dir /= (int)((vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin) / wJoySens);
+                    // driving controller special value reports $bfef or so
+                    ULONG uz = abs((jc.wYmax - jc.wYmin) * 3 / 4 - (ji.wYpos - jc.wYmin));
+
+                    // we don't know which it is yet, figure it out
+                    if ((vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING)) == (JT_JOYSTICK | JT_DRIVING))
+                    {
+                        ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - (ji.wXpos - jc.wXmin));
+                        ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - (ji.wYpos - jc.wYmin));
+
+                        // This is a value a driving controller can't return, so we must be an XBox joystick or similar
+                        if (!(ux < 0x20 && (uz < 0x20 || (ji.wYpos - jc.wYmin) < 0x20 || uy < 0x20 || (jc.wYmax - ji.wYpos) < 0x20)))
+                            vi.rgjt[joy] &= ~JT_DRIVING;
+
+                        // If we reached the special driving controller value without any invalid values first, we must be driving!
+                        if (uz < 0x20)
+                            vi.rgjt[joy] &= ~JT_JOYSTICK;
+                    }
+                    
+                    dir = (ji.wYpos - (jc.wYmax - jc.wYmin) / 2);
+                    dir /= (int)((jc.wYmax - jc.wYmin) / wJoySens);
 
                     (*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
 
-                    if (dir < 0)
-                        (*pB) &= ~(1 << ((joy & 1) << 2));              // up
-                    else if (dir > 0)
-                        (*pB) &= ~(2 << ((joy & 1) << 2));              // down
+                    if (vi.rgjt[joy] == JT_DRIVING && uz < 0x20)
+                    {
+                        (*pB) &= ~(1 << ((joy & 1) << 2));              // both up and down
+                        (*pB) &= ~(2 << ((joy & 1) << 2));              //
+                    }
+                    else
+                    {
+                        if (dir < 0)
+                            (*pB) &= ~(1 << ((joy & 1) << 2));          // up
+                        else if (dir > 0)
+                            (*pB) &= ~(2 << ((joy & 1) << 2));          // down
+                    }
 
                     UpdatePorts(iVM);
 
@@ -660,9 +691,8 @@ void DoVBI(int iVM)
                 else if (vi.rgjt[joy] == JT_PADDLE)
                 {
                     // x value is left paddle, y value is right paddle, scaled to 0-228
-
-                    int x = (ji.wXpos - vi.rgjc[joy].wXmin) * 229 / (vi.rgjc[joy].wXmax - vi.rgjc[joy].wXmin);
-                    int y = (ji.wYpos - vi.rgjc[joy].wYmin) * 229 / (vi.rgjc[joy].wYmax - vi.rgjc[joy].wYmin);
+                    int x = (ji.wXpos - jc.wXmin) * 229 / (jc.wXmax - jc.wXmin);
+                    int y = (ji.wYpos - jc.wYmin) * 229 / (jc.wYmax - jc.wYmin);
                     if (x == 229) x = 228;  // give 228 a reasonable chance of being chosen
                     if (y == 229) y = 228;
 
