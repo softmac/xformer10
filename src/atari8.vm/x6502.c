@@ -3138,878 +3138,880 @@ void __cdecl Go6502(const int iVM)
 #if USE_JUMP_TABLE
         (*jump_tab[cpuPeekB(iVM, regPC++)])(iVM);
 #else
-        switch (cpuPeekB(iVM, regPC++))
-        {
-        default:
-            Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check
-            break;
-
-            // There need to be all 256 cases below, 0x00 through 0xFF, since the compiler just optimized away the default case
-
-        case 0x02:
-        case 0x12:
-        case 0x22:
-        case 0x32:
-        case 0x42:
-        case 0x52:
-        case 0x62:
-        case 0x72:
-        case 0x92:
-        case 0xB2:
-        case 0xD2:
-        case 0xF2:
-            KIL(iVM);
-            break;
-
-        case 0x0B:
-        case 0x0F:
-        case 0x1B:
-        case 0x1F:
-        case 0x23:
-        case 0x27:
-        case 0x2B:
-        case 0x37:
-        case 0x3B:
-        case 0x43:
-        case 0x47:
-        case 0x4B:
-        case 0x4F:
-        case 0x53:
-        case 0x5B:
-        case 0x6B:
-        case 0x73:
-        case 0x7A:
-        case 0x7B:
-        case 0x7F:
-        case 0x82:
-        case 0x93:
-        case 0x9B:
-        case 0x9C:
-        case 0xA3:
-        case 0xA7:
-        case 0xB3:
-        case 0xB7:
-        case 0xBB:
-        case 0xBF:
-        case 0xC3:
-        case 0xC7:
-        case 0xCB:
-        case 0xCF:
-        case 0xD7:
-        case 0xDA:
-        case 0xDB:
-        case 0xE3:
-        case 0xEF:
-        case 0xF7:
-        case 0xFB:
-        case 0xFF:
-            unused(iVM);
-            break;
-
-        case 0x00:   // BRK
-            op00(iVM);
-            break;
-
-        case 0x01:   // ORA (zp,X)
-            op01(iVM);
-            break;
-
-        case 0x03:   // UNDOCUMENTED
-            op03(iVM);
-            break;
-
-        case 0x04:   // UNDOCUMENTED
-            op04(iVM);
-            break;
-
-        case 0x05:   // ORA zp
-            op05(iVM);
-            break;
-
-        case 0x06:   // ASL zp
-            op06(iVM);
-            break;
-
-        case 0x07:   // UNDOCUMENTED
-            op07(iVM);
-            break;
-
-        case 0x08:   // PHP
-            op08(iVM);
-            break;
-
-        case 0x09:   // ORA #
-            op09(iVM);
-            break;
-
-        case 0x0A:   // ASL A
-            op0A(iVM);
-            break;
-
-        case 0x0C:   // UNDOCUMENTED
-            op0C(iVM);
-            break;
-
-        case 0x0D:   // ORA abs
-            op0D(iVM);
-            break;
-
-        case 0x0E:   // ASL abs
-            op0E(iVM);
-            break;
-
-        case 0x10:   // BPL rel8
-            op10(iVM);
-            break;
-
-        case 0x11:   // ORA (zp),Y
-            op11(iVM);
-            break;
-
-        case 0x13:   // UNDOCUMENTED
-            op13(iVM);
-            break;
-
-        case 0x14:   // UNDOCUMENTED
-            op14(iVM);
-            break;
-
-        case 0x15:   // ORA zp,Y
-            op15(iVM);
-            break;
-
-        case 0x16:   // ASL zp,Y
-            op16(iVM);
-            break;
-
-        case 0x17:   // UNDOCUMENTED
-            op17(iVM);
-            break;
-
-        case 0x18:   // CLC
-            op18(iVM);
-            break;
-
-        case 0x19:   // ORA abs,Y
-            op19(iVM);
-            break;
-
-        case 0x1A:   // UNDOCUMENTED
-            op1A(iVM);
-            break;
-
-        case 0x1C:   // UNDOCUMENTED
-            op1C(iVM);
-            break;
-
-        case 0x1D:   // ORA abs,X
-            op1D(iVM);
-            break;
-
-        case 0x1E:   // ASL abs,X
-            op1E(iVM);
-            break;
-
-        case 0x20:   // JSR abs
-            op20(iVM);
-            break;
-
-        case 0x21:   // AND (zp,X)
-            op21(iVM);
-            break;
-
-        case 0x24:   // BIT zp
-            op24(iVM);
-            break;
-
-        case 0x25:   // AND zp
-            op25(iVM);
-            break;
-
-        case 0x26:   // ROL zp
-            op26(iVM);
-            break;
-
-        case 0x28:   // PLP
-            op28(iVM);
-            break;
-
-        case 0x29:   // AND #
-            op29(iVM);
-            break;
-
-        case 0x2A:   // ROL A
-            op2A(iVM);
-            break;
-
-        case 0x2C:   // BIT abs
-            op2C(iVM);
-            break;
-
-        case 0x2D:   // AND abs
-            op2D(iVM);
-            break;
-
-        case 0x2E:   // ROL abs
-            op2E(iVM);
-            break;
-
-        case 0x2F:   // UNDOCUMENTED
-            op2F(iVM);
-            break;
-
-        case 0x30:   // BMI rel8
-            op30(iVM);
-            break;
-
-        case 0x31:   // AND (zp),Y
-            op31(iVM);
-            break;
-
-        case 0x33:   // UNDOCUMENTED
-            op33(iVM);
-            break;
-
-        case 0x34:   // UNDOCUMENTED
-            op34(iVM);
-            break;
-
-        case 0x35:   // AND zp,X
-            op35(iVM);
-            break;
-
-        case 0x36:   // ROL zp,X
-            op36(iVM);
-            break;
-
-        case 0x38:   // SEC
-            op38(iVM);
-            break;
-
-        case 0x39:   // AND abs,Y
-            op39(iVM);
-            break;
-
-        case 0x3A:   // UNDOCUMENTED
-            op3A(iVM);
-            break;
-
-        case 0x3C:   // UNDOCUMENTED
-            op3C(iVM);
-            break;
-
-        case 0x3D:   // AND abs,X
-            op3D(iVM);
-            break;
-
-        case 0x3E:   // ROL abs,X
-            op3E(iVM);
-            break;
-
-        case 0x3F:   // UNDOCUMENTED
-            op3F(iVM);
-            break;
-
-        case 0x40:   // RTI
-            op40(iVM);
-            break;
-
-        case 0x41:   // EOR (zp,X)
-            op41(iVM);
-            break;
-
-        case 0x44:   // UNDOCUMENTED
-            op44(iVM);
-            break;
-
-        case 0x45:   // EOR zp
-            op45(iVM);
-            break;
-
-        case 0x46:   // LSR zp
-            op46(iVM);
-            break;
-
-        case 0x48:   // PHA
-            op48(iVM);
-            break;
-
-        case 0x49:   // EOR #
-            op49(iVM);
-            break;
-
-        case 0x4A:   // LSR A
-            op4A(iVM);
-            break;
-
-        case 0x4C:   // JMP abs
-            op4C(iVM);
-            break;
-
-        case 0x4D:   // EOR abs
-            op4D(iVM);
-            break;
-
-        case 0x4E:   // LSR abs
-            op4E(iVM);
-            break;
-
-        case 0x50:   // BVC rel8
-            op50(iVM);
-            break;
-
-        case 0x51:   // EOR (zp),Y
-            op51(iVM);
-            break;
-
-        case 0x54:   // UNDOCUMENTED
-            op54(iVM);
-            break;
-
-        case 0x55:   // EOR zp,X
-            op55(iVM);
-            break;
-
-        case 0x56:   // LSR zp,X
-            op56(iVM);
-            break;
-
-        case 0x57:   // UNDOCUMENTED
-            op57(iVM);
-            break;
-
-        case 0x58:   // CLI
-            op58(iVM);
-            break;
-
-        case 0x59:   // EOR abs,Y
-            op59(iVM);
-            break;
-
-        case 0x5A:   // UNDOCUMENTED
-            op5A(iVM);
-            break;
-
-        case 0x5C:   // UNDOCUMENTED
-            op5C(iVM);
-            break;
-
-        case 0x5D:   // EOR abs,X
-            op5D(iVM);
-            break;
-
-        case 0x5E:   // LSR abs,X
-            op5E(iVM);
-            break;
-
-        case 0x5F:   // UNDOCUMENTED
-            op5F(iVM);
-            break;
-
-        case 0x60:   // RTS
-            op60(iVM);
-            break;
-
-        case 0x61:   // ADC (zp,X)
-            op61(iVM);
-            break;
-
-        case 0x63:   // UNDOCUMENTED
-            op63(iVM);
-            break;
-
-        case 0x64:   // UNDOCUMENTED
-            op64(iVM);
-            break;
-
-        case 0x65:   // ADC zp
-            op65(iVM);
-            break;
-
-        case 0x66:   // ROR zp
-            op66(iVM);
-            break;
-
-        case 0x67:   // UNDOCUMENTED
-            op67(iVM);
-            break;
-
-        case 0x68:   // PLA
-            op68(iVM);
-            break;
-
-        case 0x69:   // ADC #
-            op69(iVM);
-            break;
-
-        case 0x6A:   // ROR A
-            op6A(iVM);
-            break;
-
-        case 0x6C:   // JMP (abs)
-            op6C(iVM);
-            break;
-
-        case 0x6D:   // ADC abs
-            op6D(iVM);
-            break;
-
-        case 0x6E:   // ROR abs
-            op6E(iVM);
-            break;
-
-        case 0x6F:   // UNDOCUMENTED
-            op6F(iVM);
-            break;
-
-        case 0x70:   // BVS rel8
-            op70(iVM);
-            break;
-
-        case 0x71:   // ADC (zp),Y
-            op71(iVM);
-            break;
-
-        case 0x74:   // UNDOCUMENTED
-            op74(iVM);
-            break;
-
-        case 0x75:   // ADC zp,X
-            op75(iVM);
-            break;
-
-        case 0x76:   // ROR zp,X
-            op76(iVM);
-            break;
-
-        case 0x77:   // UNDOCUMENTED
-            op77(iVM);
-            break;
-
-        case 0x78:   // SEI
-            op78(iVM);
-            break;
-
-        case 0x79:   // ADC abs,Y
-            op79(iVM);
-            break;
-
-        case 0x7C:   // UNDOCUMENTED
-            op7C(iVM);
-            break;
-
-        case 0x7D:   // ADC abs,X
-            op7D(iVM);
-            break;
-
-        case 0x7E:   // ROR abs,X
-            op7E(iVM);
-            break;
-
-        case 0x80:   // UNDOCUMENTED
-            op80(iVM);
-            break;
-
-        case 0x81:   // STA (zp),Y
-            op81(iVM);
-            break;
-
-        case 0x83:   // UNDOCUMENTED
-            op83(iVM);
-            break;
-
-        case 0x84:   // STY zp
-            op84(iVM);
-            break;
-
-        case 0x85:   // STA zp
-            op85(iVM);
-            break;
-
-        case 0x86:   // STX zp
-            op86(iVM);
-            break;
-
-        case 0x87:   // UNDOCUMENTED
-            op87(iVM);
-            break;
-
-        case 0x88:   // DEY
-            op88(iVM);
-            break;
-
-        case 0x89:   // UNDOCUMENTED
-            op89(iVM);
-            break;
-
-        case 0x8A:   // TXA
-            op8A(iVM);
-            break;
-
-        case 0x8B:   // UNDOCUMENTED
-            op8B(iVM);
-            break;
-
-        case 0x8C:   // STY abs
-            op8C(iVM);
-            break;
-
-        case 0x8D:   // STA abs
-            op8D(iVM);
-            break;
-
-        case 0x8E:   // STX abs
-            op8E(iVM);
-            break;
-
-        case 0x8F:   // UNDOCUMENTED
-            op8F(iVM);
-            break;
-
-        case 0x90:   // BCC rel8
-            op90(iVM);
-            break;
-
-        case 0x91:   // STA (zp),Y
-            op91(iVM);
-            break;
-
-        case 0x94:   // STY zp,X
-            op94(iVM);
-            break;
-
-        case 0x95:   // STA zp,X
-            op95(iVM);
-            break;
-
-        case 0x96:   // STX zp,X
-            op96(iVM);
-            break;
-
-        case 0x97:   // UNDOCUMENTED
-            op97(iVM);
-            break;
-
-        case 0x98:   // TYA
-            op98(iVM);
-            break;
-
-        case 0x99:   // STA abs,Y
-            op99(iVM);
-            break;
-
-        case 0x9A:   // TXS
-            op9A(iVM);
-            break;
-
-        case 0x9D:   // STA abs,X
-            op9D(iVM);
-            break;
-
-        case 0x9F:   // UNDOCUMENTED
-            op9F(iVM);
-            break;
-
-        case 0xA0:   // LDY #
-            opA0(iVM);
-            break;
-
-        case 0xA1:   // LDA (zp,X)
-            opA1(iVM);
-            break;
-
-        case 0xA2:   // LDX #
-            opA2(iVM);
-            break;
-
-        case 0xA4:   // LDY zp
-            opA4(iVM);
-            break;
-
-        case 0xA5:   // LDA zp
-            opA5(iVM);
-            break;
-
-        case 0xA6:   // LDX zp
-            opA6(iVM);
-            break;
-
-        case 0xA8:   // TAY
-            opA8(iVM);
-            break;
-
-        case 0xA9:   // LDA #
-            opA9(iVM);
-            break;
-
-        case 0xAA:   // TAX
-            opAA(iVM);
-            break;
-
-        case 0xAB:   // UNDOCUMENTED
-            opAB(iVM);
-            break;
-
-        case 0xAC:   // LDY abs
-            opAC(iVM);
-            break;
-
-        case 0xAD:   // LDA abs
-            opAD(iVM);
-            break;
-
-        case 0xAE:   // LDX abs
-            opAE(iVM);
-            break;
-
-        case 0xAF:   // UNDOCUMENTED
-            opAF(iVM);
-            break;
-
-        case 0xB1:   // LDA (zp),Y
-            opB1(iVM);
-            break;
-
-        case 0xB0:   // BCS rel8
-            opB0(iVM);
-            break;
-
-        case 0xB4:   // LDY zp,X
-            opB4(iVM);
-            break;
-
-        case 0xB5:   // LDA zp,X
-            opB5(iVM);
-            break;
-
-        case 0xB6:   // LDX zp,Y
-            opB6(iVM);
-            break;
-
-        case 0xB8:   // CLV
-            opB8(iVM);
-            break;
-
-        case 0xB9:   // LDA abs,Y
-            opB9(iVM);
-            break;
-
-        case 0xBA:   // TSX
-            opBA(iVM);
-            break;
-
-        case 0xBC:   // LDY abs,X
-            opBC(iVM);
-            break;
-
-        case 0xBD:   // LDA abs,X
-            opBD(iVM);
-            break;
-
-        case 0xBE:   // LDX abs,X
-            opBE(iVM);
-            break;
-
-        case 0xC0:   // CPY #
-            opC0(iVM);
-            break;
-
-        case 0xC1:   // CMP (zp,X)
-            opC1(iVM);
-            break;
-
-        case 0xC2:   // UNDOCUMENTED
-            opC2(iVM);
-            break;
-
-        case 0xC4:   // CPY zp
-            opC4(iVM);
-            break;
-
-        case 0xC5:   // CMP zp
-            opC5(iVM);
-            break;
-
-        case 0xC6:   // DEC zp
-            opC6(iVM);
-            break;
-
-        case 0xC8:   // INY
-            opC8(iVM);
-            break;
-
-        case 0xC9:   // CMP #
-            opC9(iVM);
-            break;
-
-        case 0xCA:   // DEX
-            opCA(iVM);
-            break;
-
-        case 0xCC:   // CPY abs
-            opCC(iVM);
-            break;
-
-        case 0xCD:   // CMP abs
-            opCD(iVM);
-            break;
-
-        case 0xCE:   // DEC abs
-            opCE(iVM);
-            break;
-
-        case 0xD0:   // BNE rel8
-            opD0(iVM);
-            break;
-
-        case 0xD1:   // CMP (zp),Y
-            opD1(iVM);
-            break;
-
-        case 0xD3:   // UNDOCUMENTED
-            opD3(iVM);
-            break;
-
-        case 0xD4:   // UNDOCUMENTED
-            opD4(iVM);
-            break;
-
-        case 0xD5:   // CMP zp,X
-            opD5(iVM);
-            break;
-
-        case 0xD6:   // DEC zp,X
-            opD6(iVM);
-            break;
-
-        case 0xD8:   // CLD
-            opD8(iVM);
-            break;
-
-        case 0xD9:   // CMP abs,Y
-            opD9(iVM);
-            break;
-
-        case 0xDC:   // UNDOCUMENTED
-            opDC(iVM);
-            break;
-
-        case 0xDD:   // CMP abs,X
-            opDD(iVM);
-            break;
-
-        case 0xDE:   // DEC abs,X
-            opDE(iVM);
-            break;
-
-        case 0xDF:   // UNDOCUMENTED
-            opDF(iVM);
-            break;
-
-        case 0xE0:   // CPX #
-            opE0(iVM);
-            break;
-
-        case 0xE1:   // SBC (zp,X)
-            opE1(iVM);
-            break;
-
-        case 0xE2:   // UNDOCUMENTED
-            opE2(iVM);
-            break;
-
-        case 0xE4:   // CPX zp
-            opE4(iVM);
-            break;
-
-        case 0xE5:   // SBC zp
-            opE5(iVM);
-            break;
-
-        case 0xE6:   // INC zp
-            opE6(iVM);
-            break;
-
-        case 0xE7:   // UNDOCUMENTED
-            opE7(iVM);
-            break;
-
-        case 0xE8:   // INX
-            opE8(iVM);
-            break;
-
-        case 0xE9:   // SBC #
-            opE9(iVM);
-            break;
-
-        case 0xEA:   // NOP
-            opEA(iVM);
-            break;
-
-        case 0xEB:   // UNDOCUMENTED
-            opEB(iVM);
-            break;
-
-        case 0xEC:   // CPX abs
-            opEC(iVM);
-            break;
-
-        case 0xED:   // SBC abs
-            opED(iVM);
-            break;
-
-        case 0xEE:   // INC abs
-            opEE(iVM);
-            break;
-
-        case 0xF0:   // BEQ rel8
-            opF0(iVM);
-            break;
-
-        case 0xF1:   // SBC (zp),Y
-            opF1(iVM);
-            break;
-
-        case 0xF3:   // ISB (zp),Y
-            opF3(iVM);
-            break;
-
-        case 0xF4:   // NOP zp,X
-            opF4(iVM);
-            break;
-
-        case 0xF5:   // SBC zp,X
-            opF5(iVM);
-            break;
-
-        case 0xF6:   // INC zp,X
-            opF6(iVM);
-            break;
-
-        case 0xF8:   // SED
-            opF8(iVM);
-            break;
-
-        case 0xF9:   // SBC abs,Y
-            opF9(iVM);
-            break;
-
-        case 0xFA:   // UNDOCUMENTED
-            opFA(iVM);
-            break;
-
-        case 0xFC:   // NOP abs,X
-            opFC(iVM);
-            break;
-
-        case 0xFD:   // SBC abs,X
-            opFD(iVM);
-            break;
-
-        case 0xFE:   // INC abs,X
-            opFE(iVM);
-            break;
+        do {
+            switch (cpuPeekB(iVM, regPC++))
+            {
+            default:
+                Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check
+                break;
+
+                // There need to be all 256 cases below, 0x00 through 0xFF, since the compiler just optimized away the default case
+
+            case 0x02:
+            case 0x12:
+            case 0x22:
+            case 0x32:
+            case 0x42:
+            case 0x52:
+            case 0x62:
+            case 0x72:
+            case 0x92:
+            case 0xB2:
+            case 0xD2:
+            case 0xF2:
+                KIL(iVM);
+                break;
+
+            case 0x0B:
+            case 0x0F:
+            case 0x1B:
+            case 0x1F:
+            case 0x23:
+            case 0x27:
+            case 0x2B:
+            case 0x37:
+            case 0x3B:
+            case 0x43:
+            case 0x47:
+            case 0x4B:
+            case 0x4F:
+            case 0x53:
+            case 0x5B:
+            case 0x6B:
+            case 0x73:
+            case 0x7A:
+            case 0x7B:
+            case 0x7F:
+            case 0x82:
+            case 0x93:
+            case 0x9B:
+            case 0x9C:
+            case 0xA3:
+            case 0xA7:
+            case 0xB3:
+            case 0xB7:
+            case 0xBB:
+            case 0xBF:
+            case 0xC3:
+            case 0xC7:
+            case 0xCB:
+            case 0xCF:
+            case 0xD7:
+            case 0xDA:
+            case 0xDB:
+            case 0xE3:
+            case 0xEF:
+            case 0xF7:
+            case 0xFB:
+            case 0xFF:
+                unused(iVM);
+                break;
+
+            case 0x00:   // BRK
+                op00(iVM);
+                break;
+
+            case 0x01:   // ORA (zp,X)
+                op01(iVM);
+                break;
+
+            case 0x03:   // UNDOCUMENTED
+                op03(iVM);
+                break;
+
+            case 0x04:   // UNDOCUMENTED
+                op04(iVM);
+                break;
+
+            case 0x05:   // ORA zp
+                op05(iVM);
+                break;
+
+            case 0x06:   // ASL zp
+                op06(iVM);
+                break;
+
+            case 0x07:   // UNDOCUMENTED
+                op07(iVM);
+                break;
+
+            case 0x08:   // PHP
+                op08(iVM);
+                break;
+
+            case 0x09:   // ORA #
+                op09(iVM);
+                break;
+
+            case 0x0A:   // ASL A
+                op0A(iVM);
+                break;
+
+            case 0x0C:   // UNDOCUMENTED
+                op0C(iVM);
+                break;
+
+            case 0x0D:   // ORA abs
+                op0D(iVM);
+                break;
+
+            case 0x0E:   // ASL abs
+                op0E(iVM);
+                break;
+
+            case 0x10:   // BPL rel8
+                op10(iVM);
+                break;
+
+            case 0x11:   // ORA (zp),Y
+                op11(iVM);
+                break;
+
+            case 0x13:   // UNDOCUMENTED
+                op13(iVM);
+                break;
+
+            case 0x14:   // UNDOCUMENTED
+                op14(iVM);
+                break;
+
+            case 0x15:   // ORA zp,Y
+                op15(iVM);
+                break;
+
+            case 0x16:   // ASL zp,Y
+                op16(iVM);
+                break;
+
+            case 0x17:   // UNDOCUMENTED
+                op17(iVM);
+                break;
+
+            case 0x18:   // CLC
+                op18(iVM);
+                break;
+
+            case 0x19:   // ORA abs,Y
+                op19(iVM);
+                break;
+
+            case 0x1A:   // UNDOCUMENTED
+                op1A(iVM);
+                break;
+
+            case 0x1C:   // UNDOCUMENTED
+                op1C(iVM);
+                break;
+
+            case 0x1D:   // ORA abs,X
+                op1D(iVM);
+                break;
+
+            case 0x1E:   // ASL abs,X
+                op1E(iVM);
+                break;
+
+            case 0x20:   // JSR abs
+                op20(iVM);
+                break;
+
+            case 0x21:   // AND (zp,X)
+                op21(iVM);
+                break;
+
+            case 0x24:   // BIT zp
+                op24(iVM);
+                break;
+
+            case 0x25:   // AND zp
+                op25(iVM);
+                break;
+
+            case 0x26:   // ROL zp
+                op26(iVM);
+                break;
+
+            case 0x28:   // PLP
+                op28(iVM);
+                break;
+
+            case 0x29:   // AND #
+                op29(iVM);
+                break;
+
+            case 0x2A:   // ROL A
+                op2A(iVM);
+                break;
+
+            case 0x2C:   // BIT abs
+                op2C(iVM);
+                break;
+
+            case 0x2D:   // AND abs
+                op2D(iVM);
+                break;
+
+            case 0x2E:   // ROL abs
+                op2E(iVM);
+                break;
+
+            case 0x2F:   // UNDOCUMENTED
+                op2F(iVM);
+                break;
+
+            case 0x30:   // BMI rel8
+                op30(iVM);
+                break;
+
+            case 0x31:   // AND (zp),Y
+                op31(iVM);
+                break;
+
+            case 0x33:   // UNDOCUMENTED
+                op33(iVM);
+                break;
+
+            case 0x34:   // UNDOCUMENTED
+                op34(iVM);
+                break;
+
+            case 0x35:   // AND zp,X
+                op35(iVM);
+                break;
+
+            case 0x36:   // ROL zp,X
+                op36(iVM);
+                break;
+
+            case 0x38:   // SEC
+                op38(iVM);
+                break;
+
+            case 0x39:   // AND abs,Y
+                op39(iVM);
+                break;
+
+            case 0x3A:   // UNDOCUMENTED
+                op3A(iVM);
+                break;
+
+            case 0x3C:   // UNDOCUMENTED
+                op3C(iVM);
+                break;
+
+            case 0x3D:   // AND abs,X
+                op3D(iVM);
+                break;
+
+            case 0x3E:   // ROL abs,X
+                op3E(iVM);
+                break;
+
+            case 0x3F:   // UNDOCUMENTED
+                op3F(iVM);
+                break;
+
+            case 0x40:   // RTI
+                op40(iVM);
+                break;
+
+            case 0x41:   // EOR (zp,X)
+                op41(iVM);
+                break;
+
+            case 0x44:   // UNDOCUMENTED
+                op44(iVM);
+                break;
+
+            case 0x45:   // EOR zp
+                op45(iVM);
+                break;
+
+            case 0x46:   // LSR zp
+                op46(iVM);
+                break;
+
+            case 0x48:   // PHA
+                op48(iVM);
+                break;
+
+            case 0x49:   // EOR #
+                op49(iVM);
+                break;
+
+            case 0x4A:   // LSR A
+                op4A(iVM);
+                break;
+
+            case 0x4C:   // JMP abs
+                op4C(iVM);
+                break;
+
+            case 0x4D:   // EOR abs
+                op4D(iVM);
+                break;
+
+            case 0x4E:   // LSR abs
+                op4E(iVM);
+                break;
+
+            case 0x50:   // BVC rel8
+                op50(iVM);
+                break;
+
+            case 0x51:   // EOR (zp),Y
+                op51(iVM);
+                break;
+
+            case 0x54:   // UNDOCUMENTED
+                op54(iVM);
+                break;
+
+            case 0x55:   // EOR zp,X
+                op55(iVM);
+                break;
+
+            case 0x56:   // LSR zp,X
+                op56(iVM);
+                break;
+
+            case 0x57:   // UNDOCUMENTED
+                op57(iVM);
+                break;
+
+            case 0x58:   // CLI
+                op58(iVM);
+                break;
+
+            case 0x59:   // EOR abs,Y
+                op59(iVM);
+                break;
+
+            case 0x5A:   // UNDOCUMENTED
+                op5A(iVM);
+                break;
+
+            case 0x5C:   // UNDOCUMENTED
+                op5C(iVM);
+                break;
+
+            case 0x5D:   // EOR abs,X
+                op5D(iVM);
+                break;
+
+            case 0x5E:   // LSR abs,X
+                op5E(iVM);
+                break;
+
+            case 0x5F:   // UNDOCUMENTED
+                op5F(iVM);
+                break;
+
+            case 0x60:   // RTS
+                op60(iVM);
+                break;
+
+            case 0x61:   // ADC (zp,X)
+                op61(iVM);
+                break;
+
+            case 0x63:   // UNDOCUMENTED
+                op63(iVM);
+                break;
+
+            case 0x64:   // UNDOCUMENTED
+                op64(iVM);
+                break;
+
+            case 0x65:   // ADC zp
+                op65(iVM);
+                break;
+
+            case 0x66:   // ROR zp
+                op66(iVM);
+                break;
+
+            case 0x67:   // UNDOCUMENTED
+                op67(iVM);
+                break;
+
+            case 0x68:   // PLA
+                op68(iVM);
+                break;
+
+            case 0x69:   // ADC #
+                op69(iVM);
+                break;
+
+            case 0x6A:   // ROR A
+                op6A(iVM);
+                break;
+
+            case 0x6C:   // JMP (abs)
+                op6C(iVM);
+                break;
+
+            case 0x6D:   // ADC abs
+                op6D(iVM);
+                break;
+
+            case 0x6E:   // ROR abs
+                op6E(iVM);
+                break;
+
+            case 0x6F:   // UNDOCUMENTED
+                op6F(iVM);
+                break;
+
+            case 0x70:   // BVS rel8
+                op70(iVM);
+                break;
+
+            case 0x71:   // ADC (zp),Y
+                op71(iVM);
+                break;
+
+            case 0x74:   // UNDOCUMENTED
+                op74(iVM);
+                break;
+
+            case 0x75:   // ADC zp,X
+                op75(iVM);
+                break;
+
+            case 0x76:   // ROR zp,X
+                op76(iVM);
+                break;
+
+            case 0x77:   // UNDOCUMENTED
+                op77(iVM);
+                break;
+
+            case 0x78:   // SEI
+                op78(iVM);
+                break;
+
+            case 0x79:   // ADC abs,Y
+                op79(iVM);
+                break;
+
+            case 0x7C:   // UNDOCUMENTED
+                op7C(iVM);
+                break;
+
+            case 0x7D:   // ADC abs,X
+                op7D(iVM);
+                break;
+
+            case 0x7E:   // ROR abs,X
+                op7E(iVM);
+                break;
+
+            case 0x80:   // UNDOCUMENTED
+                op80(iVM);
+                break;
+
+            case 0x81:   // STA (zp),Y
+                op81(iVM);
+                break;
+
+            case 0x83:   // UNDOCUMENTED
+                op83(iVM);
+                break;
+
+            case 0x84:   // STY zp
+                op84(iVM);
+                break;
+
+            case 0x85:   // STA zp
+                op85(iVM);
+                break;
+
+            case 0x86:   // STX zp
+                op86(iVM);
+                break;
+
+            case 0x87:   // UNDOCUMENTED
+                op87(iVM);
+                break;
+
+            case 0x88:   // DEY
+                op88(iVM);
+                break;
+
+            case 0x89:   // UNDOCUMENTED
+                op89(iVM);
+                break;
+
+            case 0x8A:   // TXA
+                op8A(iVM);
+                break;
+
+            case 0x8B:   // UNDOCUMENTED
+                op8B(iVM);
+                break;
+
+            case 0x8C:   // STY abs
+                op8C(iVM);
+                break;
+
+            case 0x8D:   // STA abs
+                op8D(iVM);
+                break;
+
+            case 0x8E:   // STX abs
+                op8E(iVM);
+                break;
+
+            case 0x8F:   // UNDOCUMENTED
+                op8F(iVM);
+                break;
+
+            case 0x90:   // BCC rel8
+                op90(iVM);
+                break;
+
+            case 0x91:   // STA (zp),Y
+                op91(iVM);
+                break;
+
+            case 0x94:   // STY zp,X
+                op94(iVM);
+                break;
+
+            case 0x95:   // STA zp,X
+                op95(iVM);
+                break;
+
+            case 0x96:   // STX zp,X
+                op96(iVM);
+                break;
+
+            case 0x97:   // UNDOCUMENTED
+                op97(iVM);
+                break;
+
+            case 0x98:   // TYA
+                op98(iVM);
+                break;
+
+            case 0x99:   // STA abs,Y
+                op99(iVM);
+                break;
+
+            case 0x9A:   // TXS
+                op9A(iVM);
+                break;
+
+            case 0x9D:   // STA abs,X
+                op9D(iVM);
+                break;
+
+            case 0x9F:   // UNDOCUMENTED
+                op9F(iVM);
+                break;
+
+            case 0xA0:   // LDY #
+                opA0(iVM);
+                break;
+
+            case 0xA1:   // LDA (zp,X)
+                opA1(iVM);
+                break;
+
+            case 0xA2:   // LDX #
+                opA2(iVM);
+                break;
+
+            case 0xA4:   // LDY zp
+                opA4(iVM);
+                break;
+
+            case 0xA5:   // LDA zp
+                opA5(iVM);
+                break;
+
+            case 0xA6:   // LDX zp
+                opA6(iVM);
+                break;
+
+            case 0xA8:   // TAY
+                opA8(iVM);
+                break;
+
+            case 0xA9:   // LDA #
+                opA9(iVM);
+                break;
+
+            case 0xAA:   // TAX
+                opAA(iVM);
+                break;
+
+            case 0xAB:   // UNDOCUMENTED
+                opAB(iVM);
+                break;
+
+            case 0xAC:   // LDY abs
+                opAC(iVM);
+                break;
+
+            case 0xAD:   // LDA abs
+                opAD(iVM);
+                break;
+
+            case 0xAE:   // LDX abs
+                opAE(iVM);
+                break;
+
+            case 0xAF:   // UNDOCUMENTED
+                opAF(iVM);
+                break;
+
+            case 0xB1:   // LDA (zp),Y
+                opB1(iVM);
+                break;
+
+            case 0xB0:   // BCS rel8
+                opB0(iVM);
+                break;
+
+            case 0xB4:   // LDY zp,X
+                opB4(iVM);
+                break;
+
+            case 0xB5:   // LDA zp,X
+                opB5(iVM);
+                break;
+
+            case 0xB6:   // LDX zp,Y
+                opB6(iVM);
+                break;
+
+            case 0xB8:   // CLV
+                opB8(iVM);
+                break;
+
+            case 0xB9:   // LDA abs,Y
+                opB9(iVM);
+                break;
+
+            case 0xBA:   // TSX
+                opBA(iVM);
+                break;
+
+            case 0xBC:   // LDY abs,X
+                opBC(iVM);
+                break;
+
+            case 0xBD:   // LDA abs,X
+                opBD(iVM);
+                break;
+
+            case 0xBE:   // LDX abs,X
+                opBE(iVM);
+                break;
+
+            case 0xC0:   // CPY #
+                opC0(iVM);
+                break;
+
+            case 0xC1:   // CMP (zp,X)
+                opC1(iVM);
+                break;
+
+            case 0xC2:   // UNDOCUMENTED
+                opC2(iVM);
+                break;
+
+            case 0xC4:   // CPY zp
+                opC4(iVM);
+                break;
+
+            case 0xC5:   // CMP zp
+                opC5(iVM);
+                break;
+
+            case 0xC6:   // DEC zp
+                opC6(iVM);
+                break;
+
+            case 0xC8:   // INY
+                opC8(iVM);
+                break;
+
+            case 0xC9:   // CMP #
+                opC9(iVM);
+                break;
+
+            case 0xCA:   // DEX
+                opCA(iVM);
+                break;
+
+            case 0xCC:   // CPY abs
+                opCC(iVM);
+                break;
+
+            case 0xCD:   // CMP abs
+                opCD(iVM);
+                break;
+
+            case 0xCE:   // DEC abs
+                opCE(iVM);
+                break;
+
+            case 0xD0:   // BNE rel8
+                opD0(iVM);
+                break;
+
+            case 0xD1:   // CMP (zp),Y
+                opD1(iVM);
+                break;
+
+            case 0xD3:   // UNDOCUMENTED
+                opD3(iVM);
+                break;
+
+            case 0xD4:   // UNDOCUMENTED
+                opD4(iVM);
+                break;
+
+            case 0xD5:   // CMP zp,X
+                opD5(iVM);
+                break;
+
+            case 0xD6:   // DEC zp,X
+                opD6(iVM);
+                break;
+
+            case 0xD8:   // CLD
+                opD8(iVM);
+                break;
+
+            case 0xD9:   // CMP abs,Y
+                opD9(iVM);
+                break;
+
+            case 0xDC:   // UNDOCUMENTED
+                opDC(iVM);
+                break;
+
+            case 0xDD:   // CMP abs,X
+                opDD(iVM);
+                break;
+
+            case 0xDE:   // DEC abs,X
+                opDE(iVM);
+                break;
+
+            case 0xDF:   // UNDOCUMENTED
+                opDF(iVM);
+                break;
+
+            case 0xE0:   // CPX #
+                opE0(iVM);
+                break;
+
+            case 0xE1:   // SBC (zp,X)
+                opE1(iVM);
+                break;
+
+            case 0xE2:   // UNDOCUMENTED
+                opE2(iVM);
+                break;
+
+            case 0xE4:   // CPX zp
+                opE4(iVM);
+                break;
+
+            case 0xE5:   // SBC zp
+                opE5(iVM);
+                break;
+
+            case 0xE6:   // INC zp
+                opE6(iVM);
+                break;
+
+            case 0xE7:   // UNDOCUMENTED
+                opE7(iVM);
+                break;
+
+            case 0xE8:   // INX
+                opE8(iVM);
+                break;
+
+            case 0xE9:   // SBC #
+                opE9(iVM);
+                break;
+
+            case 0xEA:   // NOP
+                opEA(iVM);
+                break;
+
+            case 0xEB:   // UNDOCUMENTED
+                opEB(iVM);
+                break;
+
+            case 0xEC:   // CPX abs
+                opEC(iVM);
+                break;
+
+            case 0xED:   // SBC abs
+                opED(iVM);
+                break;
+
+            case 0xEE:   // INC abs
+                opEE(iVM);
+                break;
+
+            case 0xF0:   // BEQ rel8
+                opF0(iVM);
+                break;
+
+            case 0xF1:   // SBC (zp),Y
+                opF1(iVM);
+                break;
+
+            case 0xF3:   // ISB (zp),Y
+                opF3(iVM);
+                break;
+
+            case 0xF4:   // NOP zp,X
+                opF4(iVM);
+                break;
+
+            case 0xF5:   // SBC zp,X
+                opF5(iVM);
+                break;
+
+            case 0xF6:   // INC zp,X
+                opF6(iVM);
+                break;
+
+            case 0xF8:   // SED
+                opF8(iVM);
+                break;
+
+            case 0xF9:   // SBC abs,Y
+                opF9(iVM);
+                break;
+
+            case 0xFA:   // UNDOCUMENTED
+                opFA(iVM);
+                break;
+
+            case 0xFC:   // NOP abs,X
+                opFC(iVM);
+                break;
+
+            case 0xFD:   // SBC abs,X
+                opFD(iVM);
+                break;
+
+            case 0xFE:   // INC abs,X
+                opFE(iVM);
+                break;
             }
+        } while (wLeft > wNMI);
 #endif
 
         // if we hit a breakpoint, and an NMI is about to fire, just do the NMI, let the breakpoint get hit after the RTI
