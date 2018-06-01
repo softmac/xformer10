@@ -940,6 +940,8 @@ BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
     // we are writing into the line of screen RAM that we are current displaying
     // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
     // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
+    Assert(addr < ramtop);
+
     if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
         ProcessScanLine(iVM);
 
@@ -1073,8 +1075,12 @@ void PSLPrepare(int iVM)
                 if (sl.modehi & 4)
                 {
                     // stop catching writes to old screen RAM
-                    write_tab[iVM][(wAddr & 0xff00) >> 8] = cpuPokeB;
-                    write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+                    BYTE b1 = (wAddr & 0xff00) >> 8;
+                    BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
+                    if ((ramtop >> 8) > b1)
+                        write_tab[iVM][b1] = cpuPokeB;
+                    if ((ramtop >> 8) > b2)
+                        write_tab[iVM][b2] = cpuPokeB;
 
                     wAddr = cpuPeekB(iVM, DLPC);
                     IncDLPC(iVM);
@@ -1127,8 +1133,12 @@ void PSLPrepare(int iVM)
         }
 
         // catch writes to screen RAM
-        write_tab[iVM][(wAddr & 0xff00) >> 8] = PokeBAtariDL;
-        write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = PokeBAtariDL;
+        BYTE b1 = (wAddr & 0xff00) >> 8;
+        BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
+        if ((ramtop >> 8) > b1)
+            write_tab[iVM][b1] = PokeBAtariDL;
+        if ((ramtop >> 8) > b2)
+            write_tab[iVM][b2] = PokeBAtariDL;
 
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...

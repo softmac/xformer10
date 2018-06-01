@@ -1378,29 +1378,27 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
     pvmi;
 
-    // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
-    // !!! Once we mix VMs we'll have to do this more often to switch between them, but it's slow right now
-    // obsolete
-    //cpuInit(PeekBAtari, PokeBAtari);
+#if USE_JUMP_TABLE
 
     // set up the function tables
     for (int i = 0; i < 256; i++)
     {
-        if (i == 0x8f)      // i >= 0x8ff6 && i <= 0x8ff9)
-            read_tab[iVM][i] = PeekBAtariBB;
-        else if (i == 0x9f) // i >= 0x9ff6 && i <= 0x9ff9)
-            read_tab[iVM][i] = PeekBAtariBB;
-        else if (i == 0xd0 || i == 0xd2 || i == 0xd3 || i == 0xd4)
-            read_tab[iVM][i] = PeekBAtariHW;
+        // This is the initial setup. BountyBob cart will modify this to bank select
+
+        if (i == 0xd0 || i == 0xd2 || i == 0xd3 || i == 0xd4)
+            read_tab[iVM][i] = PeekBAtariHW;    // hw registers
         else if (i == 0xd5)
-            read_tab[iVM][i] = PeekBAtariBS;
+            read_tab[iVM][i] = PeekBAtariBS;    // cartridge bank select
         else
             read_tab[iVM][i] = cpuPeekB;
     }
 
     for (int i = 0; i < 256; i++)
     {
-        // between $8000 and $c000, ramtop will set the correct values
+        // This is the initial setup. Ramtop being set will set up $8000-$c000
+        // So will Bounty Bob cartridge for bank selecting.
+        // So will ANTIC to look for modifying the current screen RAM
+
         if (i >= 0xc0 && i < 0xd0)
             write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
         else if (i >= 0xd0 && i < 0xd5)
@@ -1414,6 +1412,14 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         else if (i < 0x80)
             write_tab[iVM][i] = cpuPokeB;       // always RAM
     }
+
+#else
+
+    // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
+    // !!! Once we mix VMs we'll have to do this more often to switch between them
+    cpuInit(PeekBAtari, PokeBAtari);
+
+#endif
 
     // Install an Atari 8-bit VM
 
@@ -2464,6 +2470,7 @@ BYTE __forceinline __fastcall PeekBAtariBS(int iVM, ADDR addr)
 }
 
 // this is for shadowing the HW registers at $d0, $d2, $d3 and $d4
+// !!! Why all the noinline? Let's be consistent
 __declspec(noinline)
 BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
 {
@@ -2588,6 +2595,31 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
     return cpuPeekB(iVM, addr);
 }
 
+// the non-jump table version of the code just switches the proper routine
+BYTE __forceinline __fastcall PeekBAtari(int iVM, ADDR addr)
+{
+    switch (addr >> 8)
+    {
+    default:
+        return cpuPeekB(iVM, addr);
+
+    case 0xd0:
+    case 0xd2:
+    case 0xd3:
+    case 0xd4:
+        return PeekBAtariHW(iVM, addr);
+
+    case 0xd5:
+        return PeekBAtariBS(iVM, addr);
+
+    case 0x8f:
+    case 0x9f:
+        if (bCartType == CART_BOB)
+            return PeekBAtariBB(iVM, addr);
+        return cpuPeekB(iVM, addr);
+    }
+}
+
 // currently not used, and can't be
 //
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
@@ -2635,7 +2667,8 @@ BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
     // we are writing into the line of screen RAM that we are current displaying
     // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
     // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
-    if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+    Assert(addr < ramtop);
+    if (addr < ramtop && addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
         ProcessScanLine(iVM);
 
     cpuPokeB(iVM, addr, b);
@@ -3082,6 +3115,98 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
     }
 
     return TRUE;
+}
+
+// the non-jump table version just switches to the right function
+BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
+{
+    BYTE ba = (BYTE)(addr >> 8);
+    switch (ba)
+    {
+    default:
+        if (addr < ramtop)
+            if (write_tab[iVM][ba] == PokeBAtariDL)
+                return PokeBAtariDL(iVM, addr, b);
+            else
+                return cpuPokeB(iVM, addr, b);
+        else if (bCartType == CART_BOB && (ba == 0x8f || ba == 0x9f))
+            return PokeBAtariBB(iVM, addr, b);
+        else
+            return TRUE;
+
+    case 0xc0:
+    case 0xc1:
+    case 0xc2:
+    case 0xc3:
+    case 0xc4:
+    case 0xc5:
+    case 0xc6:
+    case 0xc7:
+    case 0xc8:
+    case 0xc9:
+    case 0xca:
+    case 0xcb:
+    case 0xcc:
+    case 0xcd:
+    case 0xce:
+    case 0xcf:
+        return PokeBAtariOS(iVM, addr, b);
+
+    case 0xd0:
+    case 0xd1:
+    case 0xd2:
+    case 0xd3:
+    case 0xd4:
+        return PokeBAtariHW(iVM, addr, b);
+
+    case 0xd5:
+        return PokeBAtariBS(iVM, addr, b);
+
+    case 0xd6:
+    case 0xd7:
+        return TRUE;
+
+    case 0xd8:
+    case 0xd9:
+    case 0xda:
+    case 0xdb:
+    case 0xdc:
+    case 0xdd:
+    case 0xde:
+    case 0xdf:
+    case 0xe0:
+    case 0xe1:
+    case 0xe2:
+    case 0xe3:
+    case 0xe4:
+    case 0xe5:
+    case 0xe6:
+    case 0xe7:
+    case 0xe8:
+    case 0xe9:
+    case 0xea:
+    case 0xeb:
+    case 0xec:
+    case 0xed:
+    case 0xee:
+    case 0xef:
+    case 0xf1:
+    case 0xf2:
+    case 0xf3:
+    case 0xf4:
+    case 0xf5:
+    case 0xf6:
+    case 0xf7:
+    case 0xf8:
+    case 0xf9:
+    case 0xfa:
+    case 0xfb:
+    case 0xfc:
+    case 0xfd:
+    case 0xfe:
+    case 0xff:
+        return PokeBAtariOS(iVM, addr, b);
+    }
 }
 
 #endif // XFORMER

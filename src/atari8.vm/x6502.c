@@ -74,24 +74,21 @@ int __cdecl xprintf(const char *format, ...)
 
 // these versions of read/write are for when we don't know if we need to do side effects for register read/writes, etc.
 
+#if USE_JUMP_TABLE
 // !!! make sure to only use this macro with regEA
-// this is for when you don't know if you need to do special tricks for a register read or not
+// this is for when you don't know if you need to do special tricks for a register or not
 #define READ_BYTE read_tab[iVM][regEA >> 8]
 #define WRITE_BYTE write_tab[iVM][regEA >> 8]
 
-#if 0
-// these private macros decide which needs to be called - special peek/poke above ramtop, or not
-
+#else
+// this is for when you don't know if you need to do special tricks for a register or not
 __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
-    Assert(pfnPeekB == (PFNB)PeekBAtari);  // compiler hint
+    Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
-    if (ea >= ramtop)
-        return (*pfnPeekB)(iVM, ea);
-    else
-        return cpuPeekB(iVM, ea);
+    return (*pfnPeekB)(iVM, ea);
 }
 
 __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
@@ -100,10 +97,7 @@ __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 
     Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
-    if (ea >= ramtop) // || (ea >= wAddr && ea < (WORD)(wAddr + cbWidth)))
-        (*pfnPokeB)(iVM, ea, val);
-    else
-        cpuPokeB(iVM, ea, val);
+    (*pfnPokeB)(iVM, ea, val);
 }
 #endif
 
@@ -135,14 +129,6 @@ void __fastcall Stop6502(const int iVM)
 // Macro definitions
 //
 //////////////////////////////////////////////////////////////////
-
-#if defined(_M_ARM) || defined(_M_ARM64)
-// Use the switch table based interpreter for ARM/ARM64 builds as that utilizes the extra registers better
-#define USE_JUMP_TABLE (0)
-#else
-// Use the jump table dispatch interpreter for X86/X64 builds which take advantage of tail-call optimizations
-#define USE_JUMP_TABLE (1)
-#endif
 
 // in debug, stop on a breakpoint or if tracing
 #ifndef NDEBUG
