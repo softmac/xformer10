@@ -275,8 +275,10 @@ void DisplayStatus(int iVM)
 
     strcat(rgch0, rgch);
 
+#define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=1sec
+
     // are we running at normal speed or turbo speed
-    sprintf(rgch, " (%s-%lli%%) %u Hz, %u renders %u ms last render cost", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * 60ull * 100ull / uExecSpeed) : 0, v.vRefresh, renders, lastRenderCost);
+    sprintf(rgch, " (%s-%lli%%) %u Hz, %u renders %u ms last render cost", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * CPUAVG * 100ull / uExecSpeed) : 0, v.vRefresh, renders, lastRenderCost);
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -1528,7 +1530,7 @@ int CALLBACK WinMain(
 
         if (uExecSpeed)
         {
-            uExecSpeed = (uExecSpeed * 59) / 60;
+            uExecSpeed = (uExecSpeed * (CPUAVG - 1)) / CPUAVG;
             uExecSpeed += (FrameEnd - FrameBegin);
         }
         else
@@ -1536,7 +1538,7 @@ int CALLBACK WinMain(
             // the first reading (after boot or making your 1st VM) starts the average off
             // hopefully close to the real number so it will settle quicker
             // (otherwise you have to wait 6s or so to get numbers close to reality)
-            uExecSpeed = (FrameEnd - FrameBegin) * 60;
+            uExecSpeed = (FrameEnd - FrameBegin) * CPUAVG;
         }
 
         #if 0

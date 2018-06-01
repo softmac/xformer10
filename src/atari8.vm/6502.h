@@ -12,6 +12,14 @@
 
 ***************************************************************************/
 
+#if defined(_M_ARM) || defined(_M_ARM64)
+// Use the switch table based interpreter for ARM/ARM64 builds as that utilizes the extra registers better
+#define USE_JUMP_TABLE (0)
+#else
+// Use the jump table dispatch interpreter for X86/X64 builds which take advantage of tail-call optimizations
+#define USE_JUMP_TABLE (1)
+#endif
+
 //
 // 6502 specific implementation of the CPU API
 //

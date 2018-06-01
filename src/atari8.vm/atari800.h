@@ -844,18 +844,22 @@ ULONG __cdecl PeekLAtari(int, ADDR addr);
 BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
 BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
 
-// all the possible PEEK routines, based on address
+// all the possible PEEK routines, based on address, for the jump table version
 BYTE __forceinline __fastcall PeekBAtariHW(int, ADDR addr); // d0, d2, d3, d4
 BYTE __forceinline __fastcall PeekBAtariBB(int, ADDR addr); // 8f, 9f for BountyBob bank select
 BYTE __forceinline __fastcall PeekBAtariBS(int, ADDR addr); // d5 for other cartridge bank select
 
-// all the possible POKE routines, based on address
+BYTE __forceinline __fastcall PeekBAtari(int, ADDR addr);   // non-jump table single entry point
+
+// all the possible POKE routines, based on address, for the jump table version
 BOOL  __forceinline __fastcall PokeBAtariDL(int, ADDR, BYTE);   // screen RAM
 BOOL  __forceinline __fastcall PokeBAtariBB(int, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
 BOOL  __forceinline __fastcall PokeBAtariNULL(int, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
 BOOL  __forceinline __fastcall PokeBAtariOS(int, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
 BOOL  __forceinline __fastcall PokeBAtariHW(int, ADDR, BYTE);   // d000-d4ff
 BOOL  __forceinline __fastcall PokeBAtariBS(int, ADDR, BYTE);   // d500-d5ff
+
+BOOL  __forceinline __fastcall PokeBAtari(int, ADDR, BYTE);     // non-jump table single entry point
 
 //
 // Map C runtime file i/o calls to appropriate 32-bit calls
