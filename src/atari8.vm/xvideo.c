@@ -1074,6 +1074,7 @@ void PSLPrepare(int iVM)
                 // LMS (load memory scan) attached to this line to give start of screen memory
                 if (sl.modehi & 4)
                 {
+#if USE_JUMP_TABLE
                     // stop catching writes to old screen RAM
                     BYTE b1 = (wAddr & 0xff00) >> 8;
                     BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
@@ -1081,6 +1082,7 @@ void PSLPrepare(int iVM)
                         write_tab[iVM][b1] = cpuPokeB;
                     if ((ramtop >> 8) > b2)
                         write_tab[iVM][b2] = cpuPokeB;
+#endif
 
                     wAddr = cpuPeekB(iVM, DLPC);
                     IncDLPC(iVM);
@@ -1132,6 +1134,7 @@ void PSLPrepare(int iVM)
             break;
         }
 
+#if USE_JUMP_TABLE
         // catch writes to screen RAM
         BYTE b1 = (wAddr & 0xff00) >> 8;
         BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
@@ -1139,6 +1142,7 @@ void PSLPrepare(int iVM)
             write_tab[iVM][b1] = PokeBAtariDL;
         if ((ramtop >> 8) > b2)
             write_tab[iVM][b2] = PokeBAtariDL;
+#endif
 
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
@@ -1328,9 +1332,16 @@ void PSLPostpare(int iVM)
         // (save cbWidth from the last valid mode drawn?)
         if (fFetch)
         {
+
+#if USE_JUMP_TABLE
             // stop catching writes to old screen RAM
-            write_tab[iVM][(wAddr & 0xff00) >> 8] = cpuPokeB;
-            write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+            BYTE b1 = (wAddr & 0xff00) >> 8;
+            BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
+            if ((ramtop >> 8) > b1)
+                write_tab[iVM][b1] = cpuPokeB;
+            if ((ramtop >> 8) > b2)
+                write_tab[iVM][b2] = cpuPokeB;
+#endif
 
             // ANTIC's PC can't cross a 4K boundary, poor thing
             wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);
