@@ -4320,7 +4320,7 @@ break;
                 int cb;
                 if (FSaveStateVM(v.iVM, &pCandy, &cb))
                 {
-                    pCandy += 16 + 65536 + 38;    // yet I think including atari.h is too hacky :-) Works for 32 and x64
+                    // !!! I put ramtop at the top of the candy structure
                     WORD *ramtop = (WORD *)pCandy;
                     if (*ramtop == 0xC000)
                         *ramtop = 0xA000;

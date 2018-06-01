@@ -837,8 +837,10 @@ void UpdatePorts(int iVM)
 // let the jump table know which POKE routine to use based on where RAMTOP is
 void AlterRamtop(int iVM, WORD addr)
 {
-    int i;
     ramtop = addr;
+
+#if USE_JUMP_TABLE
+    int i;
     for (i = 0x80; i < (ramtop >> 8); i++)
     {
         write_tab[iVM][i] = cpuPokeB;
@@ -849,6 +851,7 @@ void AlterRamtop(int iVM, WORD addr)
         write_tab[iVM][i] = PokeBAtariNULL;
         read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
     }
+#endif
 }
 
 // Read in the cartridge. Are we initializing and using the default bank, or restoring a saved state to the last bank used?
@@ -1121,6 +1124,7 @@ void InitCart(int iVM)
         _fmemcpy(&rgbMem[0x9000], pb + 16384, 4096);
         AlterRamtop(iVM, 0x8000);
 
+#if USE_JUMP_TABLE
         // default ramtop jump table setting is not right... set up jump table to handle bank selecting
         write_tab[iVM][0x8f] = PokeBAtariBB;
         write_tab[iVM][0x9f] = PokeBAtariBB;
@@ -1128,6 +1132,7 @@ void InitCart(int iVM)
         // and the read jump table too
         read_tab[iVM][0x8f] = PeekBAtariBB;
         read_tab[iVM][0x9f] = PeekBAtariBB;
+#endif
     }
     // 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
     else if (bCartType == CART_ATARIMAX1)
@@ -2620,6 +2625,12 @@ BYTE __forceinline __fastcall PeekBAtari(int iVM, ADDR addr)
     }
 }
 
+// for some reason the monitor can't call the __fastcall __forceinline version
+BYTE PeekBAtariMON(int iVM, ADDR addr)
+{
+    return PeekBAtari(iVM, addr);
+}
+
 // currently not used, and can't be
 //
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
@@ -3125,10 +3136,12 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
     {
     default:
         if (addr < ramtop)
-            if (write_tab[iVM][ba] == PokeBAtariDL)
-                return PokeBAtariDL(iVM, addr, b);
-            else
-                return cpuPokeB(iVM, addr, b);
+        {
+            // writes to screen memory being drawn right now need to be trapped (Turmoil)
+            if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+                ProcessScanLine(iVM);
+            return cpuPokeB(iVM, addr, b);
+        }
         else if (bCartType == CART_BOB && (ba == 0x8f || ba == 0x9f))
             return PokeBAtariBB(iVM, addr, b);
         else
@@ -3190,6 +3203,7 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xed:
     case 0xee:
     case 0xef:
+    case 0xf0:
     case 0xf1:
     case 0xf2:
     case 0xf3:
@@ -3207,6 +3221,12 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
     case 0xff:
         return PokeBAtariOS(iVM, addr, b);
     }
+}
+
+// for some reason the monitor can't call the __fastcall __forceinline version
+BOOL PokeBAtariMON(int iVM, ADDR addr, BYTE b)
+{
+    return PokeBAtari(iVM, addr, b);
 }
 
 #endif // XFORMER

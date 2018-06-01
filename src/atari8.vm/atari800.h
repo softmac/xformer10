@@ -18,6 +18,14 @@
 
 #include "common.h"
 
+#if defined(_M_ARM) || defined(_M_ARM64)
+// Use the switch table based interpreter for ARM/ARM64 builds as that utilizes the extra registers better
+#define USE_JUMP_TABLE (0)
+#else
+// Sorry, never use the jump table dispatch interpreter. X86 refuses to tail call. X64 is slower than no jump tables
+#define USE_JUMP_TABLE (0)
+#endif
+
 #define STARTSCAN 8    // scan line ANTIC starts drawing at
 #define NTSCY 262    // ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
                     // the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
@@ -111,10 +119,12 @@ BYTE rgPMGMap[65536];
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
 int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800), set at Install
 
+#if USE_JUMP_TABLE
 // !!! This is a memory hit
 // quickly peek and poke to the right page w/o branching using jump tables
 PFNREAD read_tab[MAX_VM][256];
 PFNWRITE write_tab[MAX_VM][256];
+#endif
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
@@ -295,38 +305,44 @@ typedef struct
 
 typedef struct
 {
-    // 6502 register context - BELONGS IN CPU NOT HERE !!!
+    // most ofen accessed variables go first!
 
+    WORD m_ramtop;
+
+    // 6502 register context - BELONGS IN CPU NOT HERE !!!
     WORD m_regPC, m_regSP;
     BYTE m_regA, m_regY, m_regX, m_regP;
     WORD m_regEA;
 
-    WORD m_fKeyPressed;     // xkey.c
+    short m_wLeft;          // signed, cycles to go can go <0 finishing the last 6502 instruction
+    short m_wNMI;    // keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
+    BYTE m_fTrace;
     WORD m_bp;             // breakpoint
-    BOOL m_wShiftChanged;// xkey.c
+    WORD m_wCycle;      // the cycle of the scan line we're about to execute (0 - 113)
 
     // 6502 address space
     BYTE m_rgbMem[65536];
+
+    // !!! For efficiency, the above variables used in the tight 6502 loop need to be at the front of this structure
+
+    WORD m_fKeyPressed;     // xkey.c
+    BOOL m_wShiftChanged;// xkey.c
 
     // fTrace:  non-zero for single opcode execution
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
     // cntTick: mode display countdown timer (18 Hz ticks)
 
-    BYTE m_fTrace;
     BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
     BYTE m_mdXLXE, m_cntTick;
 
     BYTE m_iSwapCart;   // which bank is currently swapped in
 
     WORD m_wFrame, m_wScan;
-    short m_wLeft;          // signed, cycles to go can go <0 finishing the last 6502 instruction
     short m_wLastSIOSector; // which sector we read last time
     BYTE m_WSYNC_Waiting;   // do we need to limit the next scan line to the part after WSYNC is released?
     BYTE m_fAltBinLoader;   // use the alternate binary loader
 
     short m_PSL;        // the value of wLeft last time ProcessScanLine was called
-
-    short m_wNMI;    // keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
 
     BYTE m_rgSIO[5];    // holds the SIO command frame
     BYTE m_cSEROUT;        // how many bytes we've gotten so far of the 5
@@ -338,10 +354,6 @@ typedef struct
     BYTE m_fWant10;        // we'd like the SEROUT NEEDED IRQ10
 
     BYTE m_fHitBP;        // anybody changing the PC outside of Go6502 needs to check and set this
-
-    // size of RAM ($A000 or $C000)
-
-    WORD FAR m_ramtop;
 
     WORD m_fStop;
     WORD m_wStartScan;
@@ -355,7 +367,6 @@ typedef struct
 
     WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
 
-    WORD m_wCycle;      // the cycle of the scan line we're about to execute (0 - 113)
     WORD m_wSIORTS;     // return value of the SIO routine, used in monitor
 
     WORD pad6W;
@@ -851,6 +862,8 @@ BYTE __forceinline __fastcall PeekBAtariBS(int, ADDR addr); // d5 for other cart
 
 BYTE __forceinline __fastcall PeekBAtari(int, ADDR addr);   // non-jump table single entry point
 
+BYTE PeekBAtariMON(int, ADDR addr);   // something the monitor is allowed to call
+
 // all the possible POKE routines, based on address, for the jump table version
 BOOL  __forceinline __fastcall PokeBAtariDL(int, ADDR, BYTE);   // screen RAM
 BOOL  __forceinline __fastcall PokeBAtariBB(int, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
@@ -860,6 +873,8 @@ BOOL  __forceinline __fastcall PokeBAtariHW(int, ADDR, BYTE);   // d000-d4ff
 BOOL  __forceinline __fastcall PokeBAtariBS(int, ADDR, BYTE);   // d500-d5ff
 
 BOOL  __forceinline __fastcall PokeBAtari(int, ADDR, BYTE);     // non-jump table single entry point
+
+BOOL  PokeBAtariMON(int, ADDR, BYTE); // something the monitor is allowed to call
 
 //
 // Map C runtime file i/o calls to appropriate 32-bit calls

@@ -398,7 +398,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                     {
                         if (uMemDump <= 0xffff)
                         {
-                            BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = read_tab[iVM][uMemDump >> 8](iVM, uMemDump));
+                            BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtariMON(iVM, uMemDump));
                             rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
                         }
 
@@ -462,7 +462,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 {
                     // if space was next, then another good number
                     while (FSkipSpace() == TRUE && FGetByte(&u2) && u1 < 0x10000)
-                        write_tab[iVM][u1 >> 8](iVM, u1++, (BYTE)u2);
+                        PokeBAtariMON(iVM, u1++, (BYTE)u2);
                 }
             }
 
