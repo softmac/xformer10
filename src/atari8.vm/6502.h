@@ -46,9 +46,6 @@ PFNOP jump_tab[256];
 typedef BYTE(__fastcall * PFNREAD)(const int iVM, ADDR addr);
 typedef BOOL(__fastcall * PFNWRITE)(const int iVM, ADDR addr, BYTE b);
 
-PFNREAD read_tab[65536];
-PFNWRITE write_tab[256];
-
 // call these when you want quick read/writes, with no special case registers or other side effects
 // In other words, zero page or stack memory
 
@@ -84,6 +81,7 @@ __inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
     return TRUE;
 }
 
+// !!! This is obsolete with jump tables using many possible functions
 __inline BOOL cpuInit(PFNREAD pvmPeekB, PFNWRITE pvmPokeB)
 {
     extern PFNREAD pfnPeekB;
@@ -93,39 +91,6 @@ __inline BOOL cpuInit(PFNREAD pvmPeekB, PFNWRITE pvmPokeB)
     // but it can't do that now because initializing this table is slow
     pfnPeekB = pvmPeekB;
     pfnPokeB = pvmPokeB;
-
-    for (int i = 0; i < 65536; i++)
-    {
-        if (i >= 0x8ff6 && i <= 0x8ff9)
-            read_tab[i] = pfnPeekB;
-        else if (i >= 0x9ff6 && i <= 0x9ff9)
-            read_tab[i] = pfnPeekB;
-        else if (i >= 0xd000 && i < 0xd600)
-            read_tab[i] = pfnPeekB;
-        else
-            read_tab[i] = cpuPeekB;
-
-#if 0 // these are the registers I special case, but I need to use the pfnPeekB function for EVERY hw reg to shadow properly
-        else if ((i & 0xff00) == 0xd000 && !(i & 0x0010))   // D000-D00F and its shadows D020-D02F, etc (NOT D010)
-            read_tab[i] = pfnPeekB;
-        else if ((i & 0xff00) == 0xd200 && ((i & 0x000f) == 0x0a || (i & 0x000f) == 0x0d))   // D20A/D and its shadows D21A/D, etc
-            read_tab[i] = pfnPeekB;
-        else if ((i & 0xff00) == 0xd400 && (i & 0x000f) == 0x0b)   // D40B its shadows D41B etc.
-            read_tab[i] = pfnPeekB;
-        else if ((i & 0xff00) == 0xd500)    // D5xx cartridge bank select
-            read_tab[i] = pfnPeekB;
-        else
-            read_tab[i] = cpuPeekB;
-#endif
-    }
-
-    for (int i = 0; i < 256; i++)
-    {
-        if (i >= 0x80)
-            write_tab[i] = pfnPokeB;    // !!! for now, assume ramtop might be as low as $8000
-        else
-            write_tab[i] = cpuPokeB;
-    }
 
     return TRUE;
 }

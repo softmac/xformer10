@@ -933,6 +933,20 @@ short ShiftBitsAtATime(int iVM)
     return i;
 }
 
+// !!! Why can't this live in atari800.c ?
+__declspec(noinline)
+BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
+{
+    // we are writing into the line of screen RAM that we are current displaying
+    // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
+    // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
+    if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+        ProcessScanLine(iVM);
+
+    return cpuPokeB(iVM, addr, b);
+}
+
+
 // THEORY OF OPERATION
 //
 // scans is the number of scan lines this graphics mode has, minus 1. So, 7 for GR.0
@@ -1059,8 +1073,8 @@ void PSLPrepare(int iVM)
                 if (sl.modehi & 4)
                 {
                     // stop catching writes to old screen RAM
-                    write_tab[(wAddr & 0xff00) >> 8] = cpuPokeB;
-                    write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+                    write_tab[iVM][(wAddr & 0xff00) >> 8] = cpuPokeB;
+                    write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
 
                     wAddr = cpuPeekB(iVM, DLPC);
                     IncDLPC(iVM);
@@ -1113,8 +1127,8 @@ void PSLPrepare(int iVM)
         }
 
         // catch writes to screen RAM
-        write_tab[(wAddr & 0xff00) >> 8] = PokeBAtari;
-        write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = PokeBAtari;
+        write_tab[iVM][(wAddr & 0xff00) >> 8] = PokeBAtariDL;
+        write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = PokeBAtariDL;
 
         // time to stop vscrol, this line doesn't use it.
         // !!! Stop if the mode is different than the mode when we started scrolling? I don't think so...
@@ -1305,8 +1319,8 @@ void PSLPostpare(int iVM)
         if (fFetch)
         {
             // stop catching writes to old screen RAM
-            write_tab[(wAddr & 0xff00) >> 8] = cpuPokeB;
-            write_tab[((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
+            write_tab[iVM][(wAddr & 0xff00) >> 8] = cpuPokeB;
+            write_tab[iVM][((wAddr + cbWidth - 1) & 0xff00) >> 8] = cpuPokeB;
 
             // ANTIC's PC can't cross a 4K boundary, poor thing
             wAddr = (wAddr & 0xF000) | ((wAddr + cbWidth) & 0x0FFF);

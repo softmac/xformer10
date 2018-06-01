@@ -60,10 +60,10 @@ VMINFO const vmi800 =
     DumpRegsAtari,
     DumpHWAtari,
     MonAtari,
-    PeekBAtari,
+    PeekBAtariHW,     // !!! this is obsolete now
     PeekWAtari,
     PeekLAtari,
-    PokeBAtari,
+    PokeBAtariHW,   // !!! this is obsolete now
     PokeWAtari,
     PokeLAtari,
     NULL,
@@ -727,6 +727,7 @@ void DoVBI(int iVM)
     if (iVM == LightPenVM)
     {
         // For some reason, although the left side of the screen is colour clock 27, you need to report it as 67 + (27/2)
+        // !!! X could use calibrating - different lights pens and apps behaved differently
         PENH = (BYTE)(LightPenX / 2 + 67 + 27 / 2);
         PENV = (BYTE)((LightPenY + 8) / 2);
 
@@ -831,6 +832,23 @@ void UpdatePorts(int iVM)
     }
     else
         PORTB = wPBDDIR;
+}
+
+// let the jump table know which POKE routine to use based on where RAMTOP is
+void AlterRamtop(int iVM, WORD addr)
+{
+    int i;
+    ramtop = addr;
+    for (i = 0x80; i < (ramtop >> 8); i++)
+    {
+        write_tab[iVM][i] = cpuPokeB;
+        read_tab[iVM][i] = cpuPeekB;
+    }
+    for (; i < 0xc0; i++)
+    {
+        write_tab[iVM][i] = PokeBAtariNULL;
+        read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
+    }
 }
 
 // Read in the cartridge. Are we initializing and using the default bank, or restoring a saved state to the last bank used?
@@ -1052,6 +1070,9 @@ exitCart:
 //
 void InitCart(int iVM)
 {
+    // every code path must call AlterRamtop, to set the jump tables correctly for that address space
+    // (possibly un-doing the BountyBob bank select)
+
     // no cartridge
     if (!(rgvm[iVM].rgcart.fCartIn) || !bCartType)
     {
@@ -1059,8 +1080,10 @@ void InitCart(int iVM)
         if (rgvm[iVM].bfHW == vmAtari48 && ramtop <= 0xA000)
         {
             _fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
-            ramtop = 0xA000;
+            AlterRamtop(iVM, 0xa000);
         }
+        else
+            AlterRamtop(iVM, ramtop);   // every code path must call this
         return;
     }
 
@@ -1071,24 +1094,24 @@ void InitCart(int iVM)
     if (bCartType == CART_8K)
     {
         _fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
-        ramtop = 0xA000;
+        AlterRamtop(iVM, 0xa000);
     }
     else if (bCartType == CART_16K)
     {
         _fmemcpy(&rgbMem[0x8000], pb, 16384);
-        ramtop = 0x8000;
+        AlterRamtop(iVM, 0x8000);
     }
     // main bank is the last one
     else if (bCartType == CART_OSSA)
     {
         _fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
-        ramtop = 0xA000;
+        AlterRamtop(iVM, 0xa000);
     }
     // main bank is the first one
     else if (bCartType == CART_OSSB)
     {
         _fmemcpy(&rgbMem[0xB000], pb, 4096);
-        ramtop = 0xA000;
+        AlterRamtop(iVM, 0xa000);
     }
     // 8K main bank is the last one, and init the $8000 and $9000 banks to their bank 0's
     else if (bCartType == CART_BOB)
@@ -1096,27 +1119,35 @@ void InitCart(int iVM)
         _fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
         _fmemcpy(&rgbMem[0x8000], pb, 4096);
         _fmemcpy(&rgbMem[0x9000], pb + 16384, 4096);
-        ramtop = 0x8000;
+        AlterRamtop(iVM, 0x8000);
+
+        // default ramtop jump table setting is not right... set up jump table to handle bank selecting
+        write_tab[iVM][0x8f] = PokeBAtariBB;
+        write_tab[iVM][0x9f] = PokeBAtariBB;
+
+        // and the read jump table too
+        read_tab[iVM][0x8f] = PeekBAtariBB;
+        read_tab[iVM][0x9f] = PeekBAtariBB;
     }
     // 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
     else if (bCartType == CART_ATARIMAX1)
     {
         if (iSwapCart == 0x10)
-            ramtop = 0xc000;    // RAM is in right now
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
             _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
-            ramtop = 0xa000;
+            AlterRamtop(iVM, 0xa000);
         }
     }
     else if (bCartType == CART_ATARIMAX8)
     {
         if (iSwapCart == 0x80)
-            ramtop = 0xc000;    // RAM is in right now
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
             _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
-            ramtop = 0xa000;
+            AlterRamtop(iVM, 0xa000);
         }
 
     }
@@ -1129,7 +1160,7 @@ void InitCart(int iVM)
         // It's probably not zero, or cold start would crash.
         if (rgbMem[0x9ffc] == 0)
             rgbMem[0x9ffc] = 0xff;
-        ramtop = 0x8000;
+        AlterRamtop(iVM, 0x8000);
     }
 
     return;
@@ -1219,7 +1250,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
                 _fmemcpy(&rgbMem[0xA000], pb + iSwapCart * 8192, 8192);
                 _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
             }
-            ramtop = 0xc000;
+            AlterRamtop(iVM, 0xc000);
             iSwapCart = iBank;
         }
         else if (iBank <= mask)
@@ -1239,7 +1270,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
                 _fmemcpy(pb + iBank * 8192, swap, 8192);
 
                 iSwapCart = iBank;    // what bank is in there now
-                ramtop = 0xa000;
+                AlterRamtop(iVM, 0xa000);
             }
         }
     }
@@ -1349,7 +1380,40 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
     // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
     // !!! Once we mix VMs we'll have to do this more often to switch between them, but it's slow right now
-    cpuInit(PeekBAtari, PokeBAtari);
+    // obsolete
+    //cpuInit(PeekBAtari, PokeBAtari);
+
+    // set up the function tables
+    for (int i = 0; i < 256; i++)
+    {
+        if (i == 0x8f)      // i >= 0x8ff6 && i <= 0x8ff9)
+            read_tab[iVM][i] = PeekBAtariBB;
+        else if (i == 0x9f) // i >= 0x9ff6 && i <= 0x9ff9)
+            read_tab[iVM][i] = PeekBAtariBB;
+        else if (i == 0xd0 || i == 0xd2 || i == 0xd3 || i == 0xd4)
+            read_tab[iVM][i] = PeekBAtariHW;
+        else if (i == 0xd5)
+            read_tab[iVM][i] = PeekBAtariBS;
+        else
+            read_tab[iVM][i] = cpuPeekB;
+    }
+
+    for (int i = 0; i < 256; i++)
+    {
+        // between $8000 and $c000, ramtop will set the correct values
+        if (i >= 0xc0 && i < 0xd0)
+            write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
+        else if (i >= 0xd0 && i < 0xd5)
+            write_tab[iVM][i] = PokeBAtariHW;   // HW registers
+        else if (i == 0xd5)
+            write_tab[iVM][i] = PokeBAtariBS;   // cartridge line for bank select
+        else if (i >= 0xd6 && i < 0xd8)
+            write_tab[iVM][i] = PokeBAtariNULL; // empty
+        else if (i >= 0xd8)
+            write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
+        else if (i < 0x80)
+            write_tab[iVM][i] = cpuPokeB;       // always RAM
+    }
 
     // Install an Atari 8-bit VM
 
@@ -1506,7 +1570,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
     else
         return FALSE;
 
-    ramtop = initramtop;    // if we needed to set this to something in particular
+    AlterRamtop(iVM, initramtop);    // if we needed to set this to something in particular
 
     // candy must be set up first (above)
     TimeTravelInit(iVM);
@@ -1544,7 +1608,7 @@ BOOL __cdecl InitAtari(int iVM)
     // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
     // Install may have a preference and set this already, in which case, don't change it
     if (!ramtop)
-        ramtop = (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000;
+        AlterRamtop(iVM, (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000);
     
     wStartScan = STARTSCAN;    // this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
 
@@ -1894,7 +1958,7 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
             _fmemcpy(swap, &rgbMem[0xa000], 8192);
             _fmemcpy(&rgbMem[0xA000], rgbSwapCart[iVM] + iSwapCart * 8192, 8192);
             _fmemcpy(rgbSwapCart[iVM] + iSwapCart * 8192, swap, 8192);
-            ramtop = 0xc000;
+            AlterRamtop(iVM, 0xc000);
             fCartNeedsSwap = TRUE;  // next Execute, swap it back (assumes caller is done with it by then)
         }
         
@@ -2010,7 +2074,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         _fmemcpy(swap, &rgbMem[0xa000], 8192);
         _fmemcpy(&rgbMem[0xa000], rgbSwapCart[iVM] + iSwapCart * 8192, 8192);
         _fmemcpy(rgbSwapCart[iVM] + iSwapCart * 8192, swap, 8192);
-        ramtop = 0xa000;
+        AlterRamtop(iVM, 0xa000);
         fCartNeedsSwap = FALSE;
     }
 
@@ -2371,144 +2435,168 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
-
-// only called for addr >= ramtop
 //
-__declspec(noinline)
-BYTE __forceinline __fastcall PeekBAtari(int iVM, ADDR addr)
-{
-    // This is how Bounty Bob bank selects
-    if (bCartType == CART_BOB)
-    {
-        if (addr >= 0x8ff6 && addr <= 0x8ff9)
-            BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
-        if (addr >= 0x9ff6 && addr <= 0x9ff9)
-            BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
-    }
+// here are our various PEEK routines, based on address
+//
 
+
+// This is how Bounty Bob bank selects
+BYTE __forceinline __fastcall PeekBAtariBB(int iVM, ADDR addr)
+{
+    Assert(bCartType == CART_BOB);
+
+    if (addr >= 0x8ff6 && addr <= 0x8ff9)
+        BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
+    if (addr >= 0x9ff6 && addr <= 0x9ff9)
+        BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
+
+    return cpuPeekB(iVM, addr);
+}
+
+// This is how other cartridges bank select
+BYTE __forceinline __fastcall PeekBAtariBS(int iVM, ADDR addr)
+{
+    Assert((addr & 0xff00) == 0xd500);
+
+    BankCart(iVM, addr & 0xff, 0);    // cartridge banking
+    
+    return TRUE;
+}
+
+// this is for shadowing the HW registers at $d0, $d2, $d3 and $d4
+__declspec(noinline)
+BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
+{
     // implement SHADOW or MIRROR registers instantly yet quickly without any memcpy!
 
     switch ((addr >> 8) & 255)
     {
+    default:
+        Assert(FALSE);  // help the compiler
+        break;
+
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
         if (addr < 0xd010)
             ProcessScanLine(iVM);   // reading collision registers needs cycle accuracy
         break;
+    
     case 0xd2:
         addr &= 0xff0f;    // POKEY has 16 registers
+
+        // RANDOM and its shadows
+        // we've been asked for a random number. How many times would the poly counter have advanced? (same clock freq as CPU)
+        if (addr == 0xD20A) {
+            int cur = (wFrame * NTSCY * HCLOCKS + wScan * HCLOCKS + DMAMAP[wLeft - 1]);
+            int delta = (int)(cur - random17last);
+            random17last = cur;
+            random17pos = (random17pos + delta) % 0x1ffff;
+            rgbMem[addr] = poly17[random17pos];
+        }
+
+        else if (addr == 0xd20d)
+        {
+            if (!fSERIN)
+            {
+                ODS("UNEXPECTED SERIN\n");
+                return 0;
+            }
+
+            IRQST |= 0x20;    // don't do another IRQ yet, we have to emulate a slow BAUD rate (VBI will turn back on)
+
+            BYTE rv = bSERIN;
+
+            // remember, the data in the sector can be the same as the ack, complete or checksum
+
+            // status responses are 4 bytes long, sector reads are 128
+            BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
+
+            if (isectorPos > 0 && isectorPos < iLastSector)
+            {
+                //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
+                bSERIN = sectorSIO[iVM][isectorPos];
+                isectorPos++;
+            }
+            else if (isectorPos == iLastSector)
+            {
+                //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
+                bSERIN = checksum;
+                isectorPos++;
+            }
+            else if (isectorPos > iLastSector)
+            {
+                //ODS("CHECKSUM = 0x%02x\n", bSERIN);
+                fSERIN = FALSE;    // all done
+                isectorPos = 0;
+            }
+            else if (bSERIN == 0x41)    // ack
+            {
+                bSERIN = 0x43;    // complete
+                                  //ODS("ACK\n");
+            }
+            else if (bSERIN == 0x43)
+            {
+                //ODS("COMPLETE\n");
+                if (rgSIO[1] == 0x52)
+                {
+                    checksum = SIOReadSector(iVM);
+                }
+                // this is how I think you properly respond to a status request, I hope
+                else if (rgSIO[1] == 0x53)
+                {
+                    checksum = 0xe0;
+                    sectorSIO[iVM][0] = 0x0;
+                    sectorSIO[iVM][1] = 0xff;
+                    sectorSIO[iVM][2] = 0xe0;
+                    sectorSIO[iVM][3] = 0x00;
+                }
+                bSERIN = sectorSIO[iVM][0];
+                isectorPos = 1;    // next byte will be this one
+            }
+            return rv;
+        }
+
         break;
+
     case 0xd3:
         addr &= 0xff03;    // PIA has 4 registers
         break;
+
     case 0xd4:
         addr &= 0xff0f;    // ANTIC has 16 registers (!!! some say shadowed to $D5 too in a way?)
+
+        // VCOUNT - by clock 111 VCOUNT increments
+        // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
+        if (addr == 0xD40B)
+        {
+            // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
+            // - 1 for 0-based. - 3 for the last cycle. + 1 to see what the next cycle is (which might be blocked, so the next instruction
+            // could start arbitrarily further than the end of the last instruction).
+            if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 111)
+                return (BYTE)(wScan >> 1);
+            // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
+            else if (wScan == 261 && wLeft <= 5)
+                return 0;
+            else
+                return (BYTE)((wScan + 1) >> 1);
+        }
+
         break;
-    case 0xd5:
-        BankCart(iVM, addr & 0xff, 0);    // cartridge banking
-        break;
     }
 
-    // RANDOM and its shadows
-    // we've been asked for a random number. How many times would the poly counter have advanced? (same clock freq as CPU)
-    if (addr == 0xD20A) {
-        int cur = (wFrame * NTSCY * HCLOCKS + wScan * HCLOCKS + DMAMAP[wLeft - 1]);
-        int delta = (int)(cur - random17last);
-        random17last = cur;
-        random17pos = (random17pos + delta) % 0x1ffff;
-        rgbMem[addr] = poly17[random17pos];
-    }
-
-    // VCOUNT - by clock 111 VCOUNT increments
-    // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
-    else if (addr == 0xD40B)
-    {
-        // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
-        // - 1 for 0-based. - 3 for the last cycle. + 1 to see what the next cycle is (which might be blocked, so the next instruction
-        // could start arbitrarily further than the end of the last instruction).
-        if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 111)
-            return (BYTE)(wScan >> 1);
-        // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
-        else if (wScan == 261 && wLeft <= 5)
-            return 0;
-        else
-            return (BYTE)((wScan + 1) >> 1);
-    }
-
-    else if (addr == 0xd20d)
-    {
-        if (!fSERIN)
-        {
-            ODS("UNEXPECTED SERIN\n");
-            return 0;
-        }
-
-        IRQST |= 0x20;    // don't do another IRQ yet, we have to emulate a slow BAUD rate (VBI will turn back on)
-
-        BYTE rv = bSERIN;
-
-        // remember, the data in the sector can be the same as the ack, complete or checksum
-        
-        // status responses are 4 bytes long, sector reads are 128
-        BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
-        
-        if (isectorPos > 0 && isectorPos < iLastSector)
-        {
-            //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
-            bSERIN = sectorSIO[iVM][isectorPos];
-            isectorPos++;
-        }
-        else if (isectorPos == iLastSector)
-        {
-            //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
-            bSERIN = checksum;
-            isectorPos++;
-        }
-        else if (isectorPos > iLastSector)
-        {
-            //ODS("CHECKSUM = 0x%02x\n", bSERIN);
-            fSERIN = FALSE;    // all done
-            isectorPos = 0;
-        }
-        else if (bSERIN == 0x41)    // ack
-        {
-            bSERIN = 0x43;    // complete
-            //ODS("ACK\n");
-        }
-        else if (bSERIN == 0x43)
-        {
-            //ODS("COMPLETE\n");
-            if (rgSIO[1] == 0x52)
-            {
-                checksum = SIOReadSector(iVM);
-            }
-            // this is how I think you properly respond to a status request, I hope
-            else if (rgSIO[1] == 0x53)
-            {
-                checksum = 0xe0;
-                sectorSIO[iVM][0] = 0x0;
-                sectorSIO[iVM][1] = 0xff;
-                sectorSIO[iVM][2] = 0xe0;
-                sectorSIO[iVM][3] = 0x00;
-            }
-            bSERIN = sectorSIO[iVM][0];
-            isectorPos = 1;    // next byte will be this one
-        }
-        return rv;
-    }
-
+    // return the actual register no matter what shadow they accessed
     return cpuPeekB(iVM, addr);
-
 }
 
-// currently not used
+// currently not used, and can't be
 //
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
 {
+    iVM; addr;
     Assert(addr >= ramtop);
     Assert(FALSE); // I'm curious when this happens
 
-    return PeekBAtari(iVM, addr) | (PeekBAtari(iVM, addr + 1) << 8);
+    return 0;
 }
 
 ULONG __cdecl PeekLAtari(int iVM, ADDR addr)
@@ -2525,99 +2613,91 @@ BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
     return TRUE;
 }
 
-// currently not used
+// not used, and can never be
 //
 BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 {
+    w;
     Assert(addr >= ramtop);
     Assert(FALSE);    // I'm curious if this ever happens
-
-    PokeBAtari(iVM, addr, w & 255);
-    PokeBAtari(iVM, addr + 1, w >> 8);
 
     return TRUE;
 }
 
-// Be efficient! This is one of the most executed functions!
-// Only call this is addr >= ramtop or otherwise special handling must be done to an address
-// regPC is probably one too high at this moment
 //
+// Here are the various POKE functions depending on the address space, that we directly jump to to avoid branching tests on the address
+//
+
+#if 0   // !!! Why can't this live here?
 __declspec(noinline)
-BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
+BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
+{
+    // we are writing into the line of screen RAM that we are current displaying
+    // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
+    // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
+    if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
+        ProcessScanLine(iVM);
+
+    cpuPokeB(iVM, addr, b);
+}
+#endif
+
+BOOL __fastcall PokeBAtariBB(int iVM, ADDR addr, BYTE b)
+{
+    Assert(bCartType == CART_BOB);
+    b;
+
+    // This is how Bounty Bob bank selects
+    if (addr >= 0x8ff6 && addr <= 0x8ff9)
+        BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
+    if (addr >= 0x9ff6 && addr <= 0x9ff9)
+        BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
+    
+    return TRUE;
+}
+
+BOOL __fastcall PokeBAtariOS(int iVM, ADDR addr, BYTE b)
+{
+    // the OS is swapped out so allow writes to those locations
+    if (mdXLXE != md800 && !(wPBDATA & 1))
+    {
+        // write to XL/XE RAM under ROM
+        Assert((addr >= 0xc000 && addr < 0xD000) || addr >= 0xD800);
+
+        return cpuPokeB(iVM, addr, b);
+    }
+    return TRUE;
+}
+
+// dead cartridge space before $c000
+BOOL __fastcall PokeBAtariNULL(int iVM, ADDR addr, BYTE b)
+{
+    iVM; addr; b;
+    return TRUE;
+}
+
+// cartridge line for bank select
+BOOL __fastcall PokeBAtariBS(int iVM, ADDR addr, BYTE b)
+{
+    //printf("addr = %04X, b = %02X\n", addr, b);
+    BankCart(iVM, addr & 0xff, b);
+    
+    return TRUE;
+}
+
+// used for $d0 - $d4
+__declspec(noinline)
+BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 {
     BYTE bOld;
     Assert(addr < 65536);
 
-#if 0
-    printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
-#endif
+    //printf("write: addr:%04X, b:%02X, PC:%04X\n", addr, b & 255, regPC - 1); // PC is one too high when we're called
 
-    if (addr < ramtop)
-    {
-        // we are writing into the line of screen RAM that we are current displaying
-        // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
-        // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
-        if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
-            ProcessScanLine(iVM);
-
-        rgbMem[addr] = b;
-        return TRUE;
-    }
-
-    // This is how Bounty Bob bank selects
-    if (bCartType == CART_BOB)
-    {
-        if (addr >= 0x8ff6 && addr <= 0x8ff9)
-            BankCart(iVM, 0, (BYTE)(addr - 0x8ff6));
-        if (addr >= 0x9ff6 && addr <= 0x9ff9)
-            BankCart(iVM, 1, (BYTE)(addr - 0x9ff6));
-    }
-
-    switch ((addr >> 8) & 255)
+    switch (addr >> 8)
     {
     default:
-
-        // above RAMTOP (but not into a special register) does nothing on an 800
-        if (mdXLXE == md800)
-            break;
-
-        // writing to XL/XE memory !!! what is this?
-
-        if (addr == 0xD1FF)
-        {
-            static const unsigned char rgbSIOR[] =
-                {
-                0x00, 0x00, 0x04, 0x80, 0x00, 0x4C, 0x70, 0xD7,
-                0x4C, 0x80, 0xD7, 0x91, 0x00, 0x00, 0xD7, 0x10,
-                0xD7, 0x20, 0xD7, 0x30, 0xD7, 0x40, 0xD7, 0x50,
-                0xD7, 0x4C, 0x60, 0xD7
-                };
-
-            if (b & 1)
-            {
-                // swap in XE BUS device 1 (R: handler)
-
-                memcpy(&rgbMem[0xD800], rgbSIOR, sizeof(rgbSIOR));
-            }
-            else
-            {
-                // swap out XE BUS device 1 (R: handler)
-
-                memcpy(&rgbMem[0xD800], (unsigned char const *)rgbXLXED800, sizeof(rgbSIOR));
-            }
-        }
-
-        // the OS is swapped out so allow writes to those locations
-        if (!(wPBDATA & 1) && (addr >= 0xC000))
-        {
-            // write to XL/XE RAM under ROM
-
-            if ((addr < 0xD000) || (addr >= 0xD800))
-                cpuPokeB(iVM, addr, b);
-
-            break;
-        }
-
+        Assert(FALSE);  // help the compiler
         break;
 
     case 0xD0:      // GTIA
@@ -2671,6 +2751,33 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
                 {
                 // toggle speaker state (mask out lowest bit?)
                 }
+        }
+        break;
+
+    case 0xD1:  // XL CIO R: hack, Darek ???
+
+        if (mdXLXE != md800 && addr == 0xD1FF)
+        {
+            static const unsigned char rgbSIOR[] =
+            {
+                0x00, 0x00, 0x04, 0x80, 0x00, 0x4C, 0x70, 0xD7,
+                0x4C, 0x80, 0xD7, 0x91, 0x00, 0x00, 0xD7, 0x10,
+                0xD7, 0x20, 0xD7, 0x30, 0xD7, 0x40, 0xD7, 0x50,
+                0xD7, 0x4C, 0x60, 0xD7
+            };
+
+            if (b & 1)
+            {
+                // swap in XE BUS device 1 (R: handler)
+
+                memcpy(&rgbMem[0xD800], rgbSIOR, sizeof(rgbSIOR));
+            }
+            else
+            {
+                // swap out XE BUS device 1 (R: handler)
+
+                memcpy(&rgbMem[0xD800], (unsigned char const *)rgbXLXED800, sizeof(rgbSIOR));
+            }
         }
         break;
 
@@ -2971,11 +3078,6 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
 
             NMIST = 0x1F;
         }
-        break;
-
-    case 0xD5:      // Cartridge bank select
-//        printf("addr = %04X, b = %02X\n", addr, b);
-        BankCart(iVM, addr & 0xff, b);
         break;
     }
 

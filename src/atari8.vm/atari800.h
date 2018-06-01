@@ -111,6 +111,11 @@ BYTE rgPMGMap[65536];
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
 int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800), set at Install
 
+// !!! This is a memory hit
+// quickly peek and poke to the right page w/o branching using jump tables
+PFNREAD read_tab[MAX_VM][256];
+PFNWRITE write_tab[MAX_VM][256];
+
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
 #define SIO_DELAY 6                // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
@@ -833,13 +838,24 @@ BOOL __cdecl ExecuteAtari(int, BOOL, BOOL);
 BOOL __cdecl KeyAtari(int, HWND, UINT, WPARAM, LPARAM);
 BOOL __cdecl DumpRegsAtari(int);
 BOOL __cdecl MonAtari(int);
-BYTE __forceinline __fastcall PeekBAtari(int, ADDR addr);
+
 WORD __cdecl PeekWAtari(int, ADDR addr);
 ULONG __cdecl PeekLAtari(int, ADDR addr);
 BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
 BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
-BOOL  __forceinline __fastcall PokeBAtari(int, ADDR addr, BYTE b);
 
+// all the possible PEEK routines, based on address
+BYTE __forceinline __fastcall PeekBAtariHW(int, ADDR addr); // d0, d2, d3, d4
+BYTE __forceinline __fastcall PeekBAtariBB(int, ADDR addr); // 8f, 9f for BountyBob bank select
+BYTE __forceinline __fastcall PeekBAtariBS(int, ADDR addr); // d5 for other cartridge bank select
+
+// all the possible POKE routines, based on address
+BOOL  __forceinline __fastcall PokeBAtariDL(int, ADDR, BYTE);   // screen RAM
+BOOL  __forceinline __fastcall PokeBAtariBB(int, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
+BOOL  __forceinline __fastcall PokeBAtariNULL(int, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
+BOOL  __forceinline __fastcall PokeBAtariOS(int, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
+BOOL  __forceinline __fastcall PokeBAtariHW(int, ADDR, BYTE);   // d000-d4ff
+BOOL  __forceinline __fastcall PokeBAtariBS(int, ADDR, BYTE);   // d500-d5ff
 
 //
 // Map C runtime file i/o calls to appropriate 32-bit calls
