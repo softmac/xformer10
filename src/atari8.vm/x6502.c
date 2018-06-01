@@ -76,8 +76,8 @@ int __cdecl xprintf(const char *format, ...)
 
 // !!! make sure to only use this macro with regEA
 // this is for when you don't know if you need to do special tricks for a register read or not
-#define READ_BYTE read_tab[regEA]
-#define WRITE_BYTE write_tab[regEA >> 8]    // faster way than shifting? use 64K table?
+#define READ_BYTE read_tab[iVM][regEA >> 8]
+#define WRITE_BYTE write_tab[iVM][regEA >> 8]
 
 #if 0
 // these private macros decide which needs to be called - special peek/poke above ramtop, or not
@@ -109,14 +109,14 @@ __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 
 __inline uint16_t READ_WORD(const int iVM, uint32_t ea)
 {
-    Assert(pfnPeekB == PeekBAtari);  // compiler hint
+    //Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
     return READ_BYTE(iVM, ea) | (READ_BYTE(iVM, ea + 1) << 8);
 }
 
 __inline void WRITE_WORD(const int iVM, uint32_t ea, uint16_t val)
 {
-    Assert(pfnPokeB == PokeBAtari);  // compiler hint
+    //Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
     WRITE_BYTE(iVM, ea, val & 255);
     ea++;   // macro only works with ea, not ea + 1
