@@ -351,7 +351,10 @@ DWORD WINAPI VMThread(LPVOID l)
         WaitForSingleObject(hGoEvent[iVM], INFINITE);
 
         if (fKillThread[iVM])
+        {
+            SetEvent(hDoneEvent[iVM]);
             return 0;
+        }
 
         vrgvmi[iVM].fWantDebugger = !FExecVM(iVM, FALSE, TRUE);
 
@@ -684,13 +687,19 @@ void FixAllMenus()
 }
 
 
-// Put the next filename in lpCmdLine into sFile. A space is the delimiter, but there can be spaces inside quotes
+// Put the next filename in lpCmdLine into sFile. A space is the delimiter, but there can be spaces inside quotes that aren't.
 // return the position of the first character of the next filename, or NULL
 // If quotes surround the name, remove them.
 //
+// Also, if the next filename is a directory, replace it with all of the contents of that directory so every file in every
+// subdirectory is tried.
+//
 // Also return the type of VM that can support this file (or -1 if none) and what kind of media it is, disk or cart (1 or 2)
 //
-char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
+// To avoid mallocs, we are also passed a string to keep re-using to store directory entries we traverse and its size
+// which we update if we grow it.
+//
+char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **lpCmdLineStart, int *szCmdLine, int *VMtype, int *MEDIAtype)
 {
     char *lpF = sFile;    // where the filename we found will be
 
@@ -715,11 +724,89 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *VMtype, int *MEDIAtype)
     if (c == '\"')
         lpCmdLine++;    // skip the closing quote
 
-    lpCmdLine++;    // skip the space
+    if (*lpCmdLine)
+        lpCmdLine++;    // skip the space, but not past end of string
 
     // this particular filename is not looking real, move along
     if (!lpF || !*lpF || strlen(lpF) < 5)
         return lpCmdLine;
+
+    // is this a directory?
+    DWORD dwa = GetFileAttributes(lpF);
+    while (dwa != -1 && (dwa & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        // now add \* to the directory name to search the files inside it
+        *sFile++ = '\\';
+        *sFile++ = '*';
+        *sFile++ = 0;
+
+        WIN32_FIND_DATA ffd;
+        BOOL fFirst = TRUE;
+        int dirlen = 0;
+
+        HANDLE hFind = FindFirstFile(lpF, &ffd);
+
+        if (hFind == INVALID_HANDLE_VALUE || !ffd.cFileName[0])
+            break;
+
+        do
+        {
+            if (ffd.cFileName[0] == '.')
+                continue;
+
+            int len = strlen(ffd.cFileName);
+
+            // the first one we find becomes a candidate to be returned
+            if (fFirst)
+            {
+                // copy over the * with the returned filename to create the filespec
+                dirlen = strlen(lpF) - 1;   // how long the dir name is, without the trailing *
+                strcpy(lpF + dirlen, ffd.cFileName);
+                fFirst = FALSE;
+                sFile += len - 2;   // (we removed the * and the NULL)
+            }
+            else
+            {
+                // put all the rest at the end of the list
+                if (len)
+                {
+                    // realloc if we need to to make room
+                    if (*szCmdLineUsed + dirlen + len + 3 > *szCmdLine)    // room for quotes and a NULL
+                    {
+                        int off = lpCmdLine - *lpCmdLineStart;  // where in the buffer we are
+                        *lpCmdLineStart = realloc(*lpCmdLineStart, *szCmdLineUsed + 65536);
+                        if (!(*lpCmdLineStart))
+                        {
+                            lpCmdLine = NULL;
+                            break;
+                        }
+                        lpCmdLine = *lpCmdLineStart + off;  // point to the same place in the moved buffer
+                        *szCmdLine = *szCmdLineUsed + 65536;
+                    }
+
+                    // add the file to our list, which may have spaces in it, so we need to put quotes around the filespec
+                    if (*szCmdLineUsed != lpCmdLine - *lpCmdLineStart) // don't begin list of remaining files with a space, only between them
+                    {
+                        *(*lpCmdLineStart + *szCmdLineUsed) = ' ';  // change NULL to space
+                        (*szCmdLineUsed)++;
+                    }
+                    *(*lpCmdLineStart + *szCmdLineUsed) = '\"'; // "
+                    (*szCmdLineUsed)++;
+                    strncpy(*lpCmdLineStart + *szCmdLineUsed, lpF, dirlen); // copy the dir name and the '\'
+                    strcpy(*lpCmdLineStart + *szCmdLineUsed + dirlen, ffd.cFileName);    // append the filename
+                    *(*lpCmdLineStart + *szCmdLineUsed + dirlen + len) = '\"';    // close "
+                    (*szCmdLineUsed) += dirlen + len + 1;
+                    *(*lpCmdLineStart + *szCmdLineUsed) = 0; // NULL
+                    //(*szCmdLineUsed)++;
+                }
+            }
+        } while (FindNextFile(hFind, &ffd) != 0);
+        
+        if (!lpCmdLine)
+            break;      // realloc failed
+
+        dwa = GetFileAttributes(lpF); // recurse? Is the first file in the dir another dir?
+    }
 
     // what extension is this?
     char ext[4];
@@ -965,15 +1052,10 @@ int CALLBACK WinMain(
             );
 #endif // ATARIST
 
-    // Create all our thread events before starting to load things
-    for (int iVM = 0; iVM < MAX_VM; iVM++)
-    {
-        hGoEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
-        hDoneEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
-    }
-
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
+
+    //MessageBox(vi.hWnd, "HI", NULL, MB_OK);
 
     //char test[130] = "\"c:\\danny\\8bit\\atari\\_TEST\\HOH1.xex\"";
     //lpCmdLine = test;
@@ -981,7 +1063,22 @@ int CALLBACK WinMain(
     // assume we're loading the default .ini file
     char *lpLoad = NULL;
 
-    // what if more than one VM type supports the same file extension?
+    // load all of the files dragged onto us, including those in all subdirectories of directories!
+
+    // make a copy of the cmd line parameters (and remember its starting point) so we can grow it to add dir contents
+    int szCmdLineUsed = strlen(lpCmdLine);  // used portion of buffer, not including NULL
+    int szCmdLine;          // size of buffer
+    LPSTR lpCmdLineStart = NULL;   // beginning of buffer
+    if (szCmdLineUsed)
+    {
+        szCmdLine = max(65536, szCmdLineUsed + 1);  // size of buffer
+        lpCmdLineStart = malloc(szCmdLine);    // beginning of buffer
+        strcpy(lpCmdLineStart, lpCmdLine);
+        lpCmdLine = lpCmdLineStart;  // current position in buffer as we read filenames
+    }
+
+    // !!! what if more than one VM type supports the same file extension?
+    
     if (lpCmdLine && lpCmdLine[0])
     {
         char sFile[MAX_PATH];
@@ -989,11 +1086,12 @@ int CALLBACK WinMain(
         size_t len;
         BOOL f;
 
-        while (lpCmdLine && strlen(lpCmdLine) > 4)
+        while (lpCmdLine && strlen(lpCmdLine) > 4 && v.cVM < MAX_VM)
         {
-            // parse the next filename out of the list, removing quotes if there
-            // and tell us what VM can handle this kind of file, and what kind of media it is
-            lpCmdLine = GetNextFilename(sFile, lpCmdLine, &VMtype, &MEDIAtype);
+            // parse the next filename out of the list and tell us what VM can handle this kind of file, and what kind of media it is
+            // directory names will be replaced with all of the files in them, recursively.
+            // 
+            lpCmdLine = GetNextFilename(sFile, lpCmdLine, &szCmdLineUsed, &lpCmdLineStart, &szCmdLine, &VMtype, &MEDIAtype);
 
             len = strlen(sFile);
 
@@ -1009,7 +1107,7 @@ int CALLBACK WinMain(
                     {
                         f = ColdStart(iVM);
                         if (f && vi.hdc)
-                            CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
                     }
                     if (f)
                     {
@@ -1018,7 +1116,7 @@ int CALLBACK WinMain(
                         fSkipLoad = TRUE;
                     }
                     else
-                        DeleteVM(iVM);
+                        DeleteVM(iVM, TRUE);
 
                 }    // using drag/drop, just move on with our lives if there's an error
             }
@@ -1035,7 +1133,7 @@ int CALLBACK WinMain(
                     {
                         f = ColdStart(iVM);
                         if (f && vi.hdc)
-                            CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
                     }
                     if (f)
                     {
@@ -1044,7 +1142,7 @@ int CALLBACK WinMain(
                         fSkipLoad = TRUE;
                     }
                     else
-                        DeleteVM(iVM);    // bad cartridge? Don't show an empty VM, just kill it
+                        DeleteVM(iVM, TRUE);    // bad cartridge? Don't show an empty VM, just kill it
 
                 }    // using drag/drop, just move on with our lives if there's an error
             }
@@ -1059,14 +1157,18 @@ int CALLBACK WinMain(
                 for (int z = 0; z < MAX_VM; z++)
                 {
                     if (rgvm[z].fValidVM)
-                        DeleteVM(z);
+                        DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
                 }
+                FixAllMenus();
 
                 lpLoad = sFile;    // load this .gem file
                 break;    // stop loading more files
             }
         }
     }
+
+    if (szCmdLineUsed)
+        free(lpCmdLineStart);
 
     // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
     // Otherwise, keep the last global settings
@@ -1355,8 +1457,33 @@ int CALLBACK WinMain(
         // open up, everything you grow will be black, but that's not a big deal like making the whole window go black was.
         if (fNeedTiledBitmap)
         {
-            CreateTiledBitmap(); // !!! error check
-            fNeedTiledBitmap = FALSE;
+            if (CreateTiledBitmap())
+                fNeedTiledBitmap = FALSE;
+            else
+            {
+                // This is catastrophic, but instead of closing the app dramatically, just kill a few VMs until
+                // things start working again. That way dragging a zillion apps onto our icon will show as many as it
+                // can instead of failing to do anything
+                if (!v.fMyVideoCardSucks)
+                {
+                    int ix = 0;
+                    BOOL fx;
+                    do
+                    {
+                        for (; ix < MAX_VM; ix++)
+                        {
+                            if (rgvm[ix].fValidVM)
+                            {
+                                DeleteVM(ix, FALSE);    // sorry, you are the sacrifice
+                                break;
+                            }
+                        }
+                    } while ((fx = CreateTiledBitmap()) == FALSE && v.cVM);
+                    FixAllMenus();
+                    if (fx)
+                        fNeedTiledBitmap = FALSE;
+                }
+            }
         }
         ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
 
@@ -1473,7 +1600,7 @@ int CALLBACK WinMain(
                             if (ColdStart(i))
                                 fOK = TRUE;
                     if (!fOK)
-                        DeleteVM(v.iVM);
+                        DeleteVM(v.iVM, TRUE);
                     FixAllMenus();
                 }
                 
@@ -1483,7 +1610,7 @@ int CALLBACK WinMain(
                     vrgvmi[i].fKillMePlease = FALSE;
 
                     if (!ColdStart(i))
-                        DeleteVM(v.iVM);
+                        DeleteVM(v.iVM, TRUE);
 
                     FixAllMenus();
                 }
@@ -2597,7 +2724,8 @@ void RenderBitmap()
             }
 
             // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
-            BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
+            if (vi.hdcTiled)
+                BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
         }
     }
 
@@ -2761,6 +2889,7 @@ BOOL ColdStart(int iVM)
     //PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
 #endif
 
+#if 0   // this makes the title bar go crazy as any of a 1,000 VMs might self-reboot when crashing
 #if _ENGLISH
         SetWindowText(vi.hWnd, "Rebooting...");
 #elif _NEDERLANDS
@@ -2771,6 +2900,7 @@ BOOL ColdStart(int iVM)
         SetWindowText(vi.hWnd, "Redimarrer le GEM...");
 #elif
 #error
+#endif
 #endif
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -3404,9 +3534,10 @@ LRESULT CALLBACK WndProc(
             {
                 BOOL fC = CreateNewBitmap(ii);
                 if (!fC)
-                    DeleteVM(ii);
+                    DeleteVM(ii, FALSE);   // this is painfully slow recreating thousands of menu items each time
             }
         }
+        FixAllMenus();
 
         // if we were saved in fullscreen mode, then actually go into fullscreen
         if (v.fFullScreen) {
@@ -3503,9 +3634,14 @@ LRESULT CALLBACK WndProc(
         for (int ii = 0; ii < MAX_VM; ii++)
         {
             if (rgvm[ii].fValidVM)
-                CreateNewBitmap(ii);    // fix every instance's bitmap !!! error check
-            CreateTiledBitmap();        // !!! error check
+                if (!CreateNewBitmap(ii))    // fix every instance's bitmap
+                    DeleteVM(ii, FALSE);
         }
+        FixAllMenus();
+
+        if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
+            fNeedTiledBitmap = TRUE;
+
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
         {
@@ -3723,7 +3859,9 @@ break;
             UninitDrawing(TRUE);
             vi.fInDirectXMode = FALSE;
 
-            CreateNewBitmap(v.iVM);
+            // !!! is this necessary?
+            if (!CreateNewBitmap(v.iVM))
+                DeleteVM(v.iVM, TRUE);
         }
 
         break;
@@ -3957,7 +4095,9 @@ break;
                 // Enable title bar and menu. Remember if we didn't used to be maximized before
                 BOOL fR = (v.swWindowState == SW_SHOWNORMAL);
                 ULONG l = GetWindowLong(vi.hWnd, GWL_STYLE);
+                vi.hMenu = LoadMenu(vi.hInst, MAKEINTRESOURCE(IDR_GEMMENU));
                 SetMenu(vi.hWnd, vi.hMenu);
+
                 SetWindowLong(vi.hWnd, GWL_STYLE, l | (WS_CAPTION | WS_SYSMENU | WS_SIZEBOX));
                 // put it back the way we found it
                 if (fR)
@@ -3981,7 +4121,8 @@ break;
             // which tile appears in the top left? There are often more tiles than fit, so to give everybody a chance,
             // we'll start with the current instance, not always the first one.
             v.fTiling = !v.fTiling;
-            CreateTiledBitmap();
+            if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
+                fNeedTiledBitmap = TRUE;
             uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             if (v.cVM && v.fTiling)
             {
@@ -4072,7 +4213,7 @@ break;
 
             assert(v.iVM != -1);
             if (v.iVM != -1)
-                DeleteVM(v.iVM);
+                DeleteVM(v.iVM, TRUE);
             break;
 
         case IDM_NEW:
@@ -4081,8 +4222,9 @@ break;
             for (int z = 0; z < MAX_VM; z++)
             {
                 if (rgvm[z].fValidVM)
-                    DeleteVM(z);
+                    DeleteVM(z, FALSE);
             }
+            FixAllMenus();
 
             // now try to make the default ones
             CreateAllVMs();
@@ -4139,10 +4281,10 @@ break;
             {
                 fA = ColdStart(vmNew);
                 if (fA && vi.hdc)
-                    CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do !!! error check
+                    fA = CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
             }
             if (!fA)
-                DeleteVM(vmNew);
+                DeleteVM(vmNew, TRUE);
             else
                 // even if we're tiling, what the heck
                 SelectInstance(vmNew);
@@ -4176,7 +4318,7 @@ break;
                 if (f && ColdStart(v.iVM))
                     FixAllMenus();
                 else
-                    DeleteVM(v.iVM);
+                    DeleteVM(v.iVM, TRUE);
             }
             break;
 
@@ -4198,7 +4340,7 @@ break;
                         f = TRUE;
 
                 if (!f)
-                    DeleteVM(v.iVM);
+                    DeleteVM(v.iVM, TRUE);
 
                 FixAllMenus();
             }
@@ -4296,7 +4438,7 @@ break;
                                     fOK = TRUE;
                         if (!fOK)
                         {
-                            DeleteVM(v.iVM);
+                            DeleteVM(v.iVM, TRUE);
                         }
                         FixAllMenus();
                         break;
@@ -4330,7 +4472,7 @@ break;
             }
 
             if (!ColdStart(v.iVM))
-                DeleteVM(v.iVM);
+                DeleteVM(v.iVM, TRUE);
             // does not affect menus
             break;
 #endif
@@ -4340,7 +4482,7 @@ break;
 
             if (v.iVM >= 0)
                 if (!ColdStart(v.iVM))
-                    DeleteVM(v.iVM);
+                    DeleteVM(v.iVM, TRUE);
             break;
 
         // F10
@@ -4348,7 +4490,7 @@ break;
 
             if (v.iVM >= 0)
                 if (!FWarmbootVM(v.iVM))
-                    DeleteVM(v.iVM);
+                    DeleteVM(v.iVM, TRUE);
             break;
 
         // cycle through all the instances - isn't allowed during tiling
@@ -5009,8 +5151,9 @@ break;
         for (int z = 0; z < MAX_VM; z++)
         {
             if (rgvm[z].fValidVM)
-                DeleteVM(z);
+                DeleteVM(z, FALSE);
         }
+        FixAllMenus();
 
         for (int ii = 0; ii < MAX_VM; ii++)
         {
