@@ -113,7 +113,7 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 1584
+#define MAX_VM 4096
 
 #define wJoySens  3         // set higher for smaller dead zone, no lower than 3
 
