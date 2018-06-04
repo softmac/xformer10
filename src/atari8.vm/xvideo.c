@@ -1075,7 +1075,7 @@ void PSLPrepare(int iVM)
                 // LMS (load memory scan) attached to this line to give start of screen memory
                 if (sl.modehi & 4)
                 {
-#if USE_JUMP_TABLE
+#if USE_POKE_TABLE
                     // stop catching writes to old screen RAM
                     BYTE b1 = (wAddr & 0xff00) >> 8;
                     BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
@@ -1135,7 +1135,7 @@ void PSLPrepare(int iVM)
             break;
         }
 
-#if USE_JUMP_TABLE
+#if USE_POKE_TABLE
         // catch writes to screen RAM
         BYTE b1 = (wAddr & 0xff00) >> 8;
         BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;
@@ -1334,7 +1334,7 @@ void PSLPostpare(int iVM)
         if (fFetch)
         {
 
-#if USE_JUMP_TABLE
+#if USE_POKE_TABLE
             // stop catching writes to old screen RAM
             BYTE b1 = (wAddr & 0xff00) >> 8;
             BYTE b2 = ((wAddr + cbWidth - 1) & 0xff00) >> 8;

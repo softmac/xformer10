@@ -25,6 +25,8 @@
 // Sorry, never use the jump table dispatch interpreter. X86 refuses to tail call. X64 is slower than no jump tables
 #define USE_JUMP_TABLE (0)
 #endif
+#define USE_PEEK_TABLE (0)
+#define USE_POKE_TABLE (0)
 
 #define STARTSCAN 8    // scan line ANTIC starts drawing at
 #define NTSCY 262    // ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
@@ -119,10 +121,12 @@ BYTE rgPMGMap[65536];
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
 int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800), set at Install
 
-#if USE_JUMP_TABLE
+#if USE_PEEK_TABLE
 // !!! This is a memory hit
 // quickly peek and poke to the right page w/o branching using jump tables
 PFNREAD read_tab[MAX_VM][256];
+#endif
+#if USE_POKE_TABLE
 PFNWRITE write_tab[MAX_VM][256];
 #endif
 
