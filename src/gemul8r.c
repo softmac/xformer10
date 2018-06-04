@@ -238,7 +238,7 @@ void DisplayStatus(int iVM)
     if (iVM >= 0)
         CreateInstanceName(iVM, pInst);
 
-    sprintf(rgch0, "%s - %s", vi.szAppName, pInst);
+    sprintf(rgch0, "%s (%d VM%s) ", vi.szAppName, v.cVM, v.cVM == 1 ? "" : "s");
 #endif
 
 #if 0
@@ -278,7 +278,8 @@ void DisplayStatus(int iVM)
 #define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=1sec
 
     // are we running at normal speed or turbo speed
-    sprintf(rgch, " (%s-%lli%%) %u Hz, %u renders %u ms last render cost", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIF * CPUAVG * 100ull / uExecSpeed) : 0, v.vRefresh, renders, lastRenderCost);
+    sprintf(rgch, "(%s-%lli%%) %s %uHz, %u/%ums renders", fBrakes ? "1.8 MHz" : "Turbo",
+                uExecSpeed ? (JIF * CPUAVG * 100ull / uExecSpeed) : 0, pInst, v.vRefresh, renders, lastRenderCost);
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -508,10 +509,11 @@ void CreateVMMenu()
         SetMenuItemInfo(vi.hMenu, fNeedNextKey ? (IDM_VM1 - iFound + 1) : IDM_VM1, FALSE, &mii);
     }
 
-    // in case we're fixing the menus because one was deleted, this will still be hanging around
+    // in case we're fixing the menus because some were deleted, these might still be hanging around
     // never delete our anchor!
     if (v.cVM > 0)
-        DeleteMenu(vi.hMenu, IDM_VM1 - v.cVM, 0);
+        for (z = v.cVM; z < MAX_VM; z++)
+            DeleteMenu(vi.hMenu, IDM_VM1 - z, 0);
     else
     {
         mii.fMask = MIIM_STRING;
@@ -683,7 +685,8 @@ void FixAllMenus()
     }
 
     // something that changed the menus probably changes the title bar
-    DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
+    // we update every second anyway - this just makes a rebooting VM make the title bar look erratic
+    //DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
 }
 
 
@@ -1116,7 +1119,7 @@ int CALLBACK WinMain(
                         fSkipLoad = TRUE;
                     }
                     else
-                        DeleteVM(iVM, TRUE);
+                        DeleteVM(iVM, FALSE);
 
                 }    // using drag/drop, just move on with our lives if there's an error
             }
@@ -1142,7 +1145,7 @@ int CALLBACK WinMain(
                         fSkipLoad = TRUE;
                     }
                     else
-                        DeleteVM(iVM, TRUE);    // bad cartridge? Don't show an empty VM, just kill it
+                        DeleteVM(iVM, FALSE);    // bad cartridge? Don't show an empty VM, just kill it
 
                 }    // using drag/drop, just move on with our lives if there's an error
             }
@@ -1159,7 +1162,6 @@ int CALLBACK WinMain(
                     if (rgvm[z].fValidVM)
                         DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
                 }
-                FixAllMenus();
 
                 lpLoad = sFile;    // load this .gem file
                 break;    // stop loading more files
@@ -2984,7 +2986,6 @@ BOOL ColdStart(int iVM)
     }
 #endif
     
-    FixAllMenus();
     return f;
 }
 
@@ -4139,7 +4140,6 @@ break;
                         {
                             sVM = s;        // the current tile in focus (may be -1)
                             v.iVM = sVM;    // the "current" vm, the main untiled one, or if tiled, the one in focus
-                            FixAllMenus();    // new active VM changes things
                         }
                     }
             } else if (v.cVM) {
@@ -4472,8 +4472,11 @@ break;
             }
 
             if (!ColdStart(v.iVM))
+            {
                 DeleteVM(v.iVM, TRUE);
-            // does not affect menus
+                FixAllMenus();
+            }
+            // does not otherwise affect menus
             break;
 #endif
 
@@ -4482,7 +4485,10 @@ break;
 
             if (v.iVM >= 0)
                 if (!ColdStart(v.iVM))
+                {
                     DeleteVM(v.iVM, TRUE);
+                    FixAllMenus();
+                }
             break;
 
         // F10
@@ -4490,7 +4496,10 @@ break;
 
             if (v.iVM >= 0)
                 if (!FWarmbootVM(v.iVM))
+                {
                     DeleteVM(v.iVM, TRUE);
+                    FixAllMenus();
+                }
             break;
 
         // cycle through all the instances - isn't allowed during tiling

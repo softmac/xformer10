@@ -130,7 +130,11 @@ int AddVM(int type)
 #pragma warning(disable:4152) // function/data pointer conversion
         // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
         if (!hGoEvent[iVM] || !hDoneEvent[iVM] ||
+#ifdef NDEBUG
+                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[iVM], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#else   // debug needs twice the stack
                     !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[iVM], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#endif
         {
             if (hGoEvent[iVM])
             {
@@ -221,9 +225,9 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         RenderBitmap(); // draw black to make the last image go away
     }
 
-    //if (fFixMenus)    // !!! I would love to avoid this painfully slow step, but the menus break if you don't
-                        // fix them after each and every deletion of a VM.
-        FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
+    // OK, we're not doing a bunch of deletes in a row, take the possibly slow step of fixing the menus
+    if (fFixMenus)
+        FixAllMenus();
 }
 
 //
@@ -451,7 +455,11 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 #pragma warning(disable:4152) // function/data pointer conversion
                     // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                     if (!hGoEvent[i] || !hDoneEvent[i] ||
+#ifdef NDEBUG
+                        !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#else   // debug needs twice the stack
                         !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#endif
                     {
                         if (hGoEvent[i])
                         {
