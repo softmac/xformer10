@@ -839,19 +839,25 @@ void AlterRamtop(int iVM, WORD addr)
 {
     ramtop = addr;
 
-#if USE_JUMP_TABLE
     int i;
     for (i = 0x80; i < (ramtop >> 8); i++)
     {
+#if USE_POKE_TABLE
         write_tab[iVM][i] = cpuPokeB;
+#endif
+#if USE_PEEK_TABLE
         read_tab[iVM][i] = cpuPeekB;
+#endif
     }
     for (; i < 0xc0; i++)
     {
+#if USE_POKE_TABLE
         write_tab[iVM][i] = PokeBAtariNULL;
-        read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
-    }
 #endif
+#if USE_PEEK_TABLE
+        read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
+#endif
+    }
 }
 
 // Read in the cartridge. Are we initializing and using the default bank, or restoring a saved state to the last bank used?
@@ -1124,11 +1130,12 @@ void InitCart(int iVM)
         _fmemcpy(&rgbMem[0x9000], pb + 16384, 4096);
         AlterRamtop(iVM, 0x8000);
 
-#if USE_JUMP_TABLE
+#if USE_POKE_TABLE
         // default ramtop jump table setting is not right... set up jump table to handle bank selecting
         write_tab[iVM][0x8f] = PokeBAtariBB;
         write_tab[iVM][0x9f] = PokeBAtariBB;
-
+#endif
+#if USE_PEEK_TABLE
         // and the read jump table too
         read_tab[iVM][0x8f] = PeekBAtariBB;
         read_tab[iVM][0x9f] = PeekBAtariBB;
@@ -1383,7 +1390,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 {
     pvmi;
 
-#if USE_JUMP_TABLE
+#if USE_PEEK_TABLE
 
     // set up the function tables
     for (int i = 0; i < 256; i++)
@@ -1397,6 +1404,9 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         else
             read_tab[iVM][i] = cpuPeekB;
     }
+#endif
+
+#if USE_POKE_TABLE
 
     for (int i = 0; i < 256; i++)
     {
@@ -1417,8 +1427,9 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         else if (i < 0x80)
             write_tab[iVM][i] = cpuPokeB;       // always RAM
     }
+#endif
 
-#else
+#if !USE_PEEK_TABLE || !USE_POKE_TABLE
 
     // tell the 6502 which HW it is running this time (will be necessary when we support multiple 6502 platforms)
     // !!! Once we mix VMs we'll have to do this more often to switch between them

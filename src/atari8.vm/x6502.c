@@ -74,11 +74,11 @@ int __cdecl xprintf(const char *format, ...)
 
 // these versions of read/write are for when we don't know if we need to do side effects for register read/writes, etc.
 
-#if USE_JUMP_TABLE
+#if USE_PEEK_TABLE
+
 // !!! make sure to only use this macro with regEA
 // this is for when you don't know if you need to do special tricks for a register or not
 #define READ_BYTE read_tab[iVM][regEA >> 8]
-#define WRITE_BYTE write_tab[iVM][regEA >> 8]
 
 #else
 // this is for when you don't know if you need to do special tricks for a register or not
@@ -90,7 +90,13 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 
     return (*pfnPeekB)(iVM, ea);
 }
+#endif
 
+#if USE_POKE_TABLE
+
+#define WRITE_BYTE write_tab[iVM][regEA >> 8]
+
+#else
 __inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
