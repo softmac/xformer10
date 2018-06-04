@@ -1788,7 +1788,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
 
     // unused new starting positions of PMGs must be huge, since 0 and some negative numbers are valid locations
     for (BYTE i = 0; i < 4; i++)
-        pmg.hpospPixNewStart[i] = 512;  // should be NTSCx
+        pmg.hpospPixNewStart[i] = 512;  // !!! should be NTSCx, we can't access that constant
 
     return TRUE;
 }
@@ -2879,6 +2879,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         }
         else if (addr <= 8)
         {
+            if (addr == 8 && (b & 6))
+                ODS("HIGH PASS FILTER NYI!\n");
+
             // AUDFx, AUDCx or AUDCTL have changed - write some sound
             // we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
             int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 / NTSCY;

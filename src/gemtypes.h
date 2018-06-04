@@ -113,7 +113,7 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 1584 // 99 or 396
+#define MAX_VM 1584
 
 #define wJoySens  3         // set higher for smaller dead zone, no lower than 3
 
@@ -1016,7 +1016,7 @@ BOOL LoadProperties(char *, BOOL);
 BOOL SaveProperties(char *);
 BOOL CreateAllVMs();
 int AddVM(int type);
-void DeleteVM(int);
+void DeleteVM(int, BOOL);
 
 // romcard.c
 void ListROMs(HWND, ULONG wf);

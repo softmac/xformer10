@@ -686,8 +686,9 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
                 *pq |= c;
         }
 
-        // If we finished drawing a PMG, see if there's a new location or GRAF data for for it
-        if ((short)z == pmg.hpospPixStop[i])
+        // If we finished drawing a PMG (fully, or we stopped early because we're done the line), see if there's
+        // a new location or GRAF data for for it. We can't leave the new position unprocessed even if it won't be drawn
+        if ((short)z == pmg.hpospPixStop[i] || z >= wSLEnd)
         {
             // one a PMG finishes, we update the pending new data to use next time
             if (pmg.newGRAFp[i])
@@ -1759,7 +1760,6 @@ if (sl.modelo < 2 || iTop > i)
         // GR.0 and descended character GR.0
     case 2:
     case 3:
-        {
         BYTE vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
 
         // mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
@@ -2056,8 +2056,7 @@ if (sl.modelo < 2 || iTop > i)
             }
         }
         break;
-        }
-
+        
     case 5:
         vpix = iscan >> 1;    // extra thick, use screen data twice for 2 output lines
     case 4:
@@ -2780,6 +2779,7 @@ if (sl.modelo < 2 || iTop > i)
             DWORD colpmX = colpmXNorm;
 
             // use the special version in hires modes with PF1 present
+            // !!! avoiding this if made perf worse but so did obvious improvements. Caching must be hiding the truth?
             if (pmg.fHiRes && (b & bfPF1))
             {
                 // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
@@ -2787,7 +2787,7 @@ if (sl.modelo < 2 || iTop > i)
                 colpf3 = colpf3Spec;
 
                 // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
-                // !!! if PRIOR = 0, I will show PF2 chroma instead of PMG chroma, is that right?
+                // !!! if PRIOR = 0, it used to show PF2 chroma instead of PMG chroma, but now it doesn't ?!?
                 colpmX = colpmXSpec;
             }
 

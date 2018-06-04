@@ -25,7 +25,7 @@
 #define IDM_DEBUGGER                    40210
 #define IDM_EXIT                        40220
 
-#define IDM_VM1                         41999    // leave lots of room for many more before this one (thousands)
+#define IDM_VM1                         65530    // !!! leave lots of room for many more before this one (thousands)
 
 #define IDM_FULLSCREEN                  40231
 #define IDM_STRETCH                     40232

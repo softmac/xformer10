@@ -123,43 +123,71 @@ int AddVM(int type)
         iThreadVM[iVM] = iVM;
         fKillThread[iVM] = FALSE;
 
+        hGoEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
+        hDoneEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
 #pragma warning(push)
 #pragma warning(disable:4152) // function/data pointer conversion
-
-        // default stack size of 1M is unnecessary
-        if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[iVM], 0, NULL))
+        // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+        if (!hGoEvent[iVM] || !hDoneEvent[iVM] ||
+                    !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[iVM], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+        {
+            if (hGoEvent[iVM])
+            {
+                CloseHandle(hGoEvent[iVM]);
+                hGoEvent[iVM] = NULL;
+            }
+            if (hDoneEvent[iVM])
+            {
+                CloseHandle(hDoneEvent[iVM]);
+                hDoneEvent[iVM] = NULL;
+            }
+            FUnInstallVM(iVM);
             f = FALSE;
-
+        }
 #pragma warning(pop)
-
     }
 
     if (f)
+    {
         v.cVM++;
 
-    rgvm[iVM].fValidVM = f;
+        rgvm[iVM].fValidVM = f;
 
-    // always enable these, why not?
-    rgvm[iVM].fSound = TRUE;
-    rgvm[iVM].fJoystick = TRUE;
+        // always enable these, why not?
+        rgvm[iVM].fSound = TRUE;
+        rgvm[iVM].fJoystick = TRUE;
 
-    // if this is our first VM...
-    if (v.cVM == 1)
-        CreateTiledBitmap();
+        // if this is our first VM...
+        if (v.cVM == 1)
+            fNeedTiledBitmap = TRUE;    // it might be too early to create it without a DC
+    }    
+    else
+    {
+        Assert(rgvm[iVM].fValidVM == FALSE);
+        iVM = -1;   // return error
+    }
 
     return iVM;
 }
 
 // This will Uninit and delete the VM, freeing it's bitmap, etc.
 //
-void DeleteVM(int iVM)
+void DeleteVM(int iVM, BOOL fFixMenus)
 {
     if (!rgvm[iVM].fValidVM)
         return;
 
+    Assert(hGoEvent[iVM] != NULL);
+    Assert(hDoneEvent[iVM] != NULL);
+
     // kill the thread executing this event before deleting any of its objects
     fKillThread[iVM] = TRUE;
     SetEvent(hGoEvent[iVM]);
+    WaitForSingleObject(hDoneEvent[iVM], INFINITE);
+
+    hGoEvent[iVM] = NULL;
+    hDoneEvent[iVM] = NULL;
 
     if (vrgvmi[iVM].hdcMem)
     {
@@ -193,7 +221,9 @@ void DeleteVM(int iVM)
         RenderBitmap(); // draw black to make the last image go away
     }
 
-    FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
+    //if (fFixMenus)    // !!! I would love to avoid this painfully slow step, but the menus break if you don't
+                        // fix them after each and every deletion of a VM.
+        FixAllMenus(); // we can only remove one VM menu item at a time so fix it now or it won't be fixable later
 }
 
 //
@@ -208,6 +238,7 @@ void InitProperties()
 
     v.cb = sizeof(PROPS);
     v.wMagic = 0x82201233; // some unique value
+    v.iVM = -1;     // no valid current instance
 
     // all fields default to 0 or fFalse except for these...
 
@@ -250,10 +281,10 @@ BOOL CreateAllVMs()
             {
                 f = ColdStart(vmNew);
                 if (f && vi.hdc)
-                    CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
+                    f = CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
             }
             if (!f)
-                DeleteVM(vmNew);
+                DeleteVM(vmNew, TRUE);
             else
             {
                 if (!fSelected)
@@ -322,8 +353,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         for (int z = 0; z < MAX_VM; z++)
         {
             if (rgvm[z].fValidVM)
-                DeleteVM(z);
+                DeleteVM(z, FALSE);
         }
+        FixAllMenus();
         assert(v.cVM == 0);
 
         //The important part about a saved .GEM file is the VMs in it, not the global state at the time.
@@ -406,28 +438,46 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 
                 // make the screen buffer. If it's too soon (initial start up instead of Load through menu)
                 // it will happen when our window is created
-                if (f && vi.hdc)
-                    f = CreateNewBitmap(i);
                 if (f)
                 {
                     // create a thread to execute this VM
                     iThreadVM[i] = i;
                     fKillThread[i] = FALSE;
 
+                    hGoEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+                    hDoneEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
 #pragma warning(push)
 #pragma warning(disable:4152) // function/data pointer conversion
-
-                    // default stack size of 1M is unnecessary
-                    if (!CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[i], 0, NULL))
+                    // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+                    if (!hGoEvent[i] || !hDoneEvent[i] ||
+                        !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    {
+                        if (hGoEvent[i])
+                        {
+                            CloseHandle(hGoEvent[i]);
+                            hGoEvent[i] = NULL;
+                        }
+                        if (hDoneEvent[i])
+                        {
+                            CloseHandle(hDoneEvent[i]);
+                            hDoneEvent[i] = NULL;
+                        }
+                        FUnInitVM(i);
+                        FUnInstallVM(i);
                         f = FALSE;
-
+                    }
 #pragma warning(pop)
-
+                    v.cVM++;
+                    if (f && vi.hdc)
+                        f = CreateNewBitmap(i);
+                    if (!f)
+                        // with v.cVM upated, fValidVM set and the bitmap created, this function will now work
+                        // and it's needed to destroy the thread properly
+                        DeleteVM(i, TRUE);
                 }
             }
-            if (f)
-                v.cVM++;
-            else
+            if (!f)
             {
                 memset(&rgvm[i], 0, sizeof(VM));    // clean it
                 rgvm[i].cbSize = sizeof(VM);    // init the size for validity
@@ -482,8 +532,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         for (int z = 0; z < MAX_VM; z++)
         {
             if (rgvm[z].fValidVM)
-                DeleteVM(z);
+                DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
         }
+        FixAllMenus();
         return FALSE;
     }
 
