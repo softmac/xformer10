@@ -89,8 +89,9 @@ PVMINFO DetermineVMType(int type)
 // It will Install only... the caller needs to set a disk or cartridge image after this
 // before calling Init, ColdStart and CreateNewBitmap
 //
+// fAll says whether we need to fix the menus and threads, or if that would be too slow and unnecessary right now
 
-int AddVM(int type)
+int AddVM(int type, BOOL fAll)
 {
     int iVM;
 
@@ -119,41 +120,6 @@ int AddVM(int type)
 
     if (f)
     {
-        // Make a thread for this VM and tell it which VM it is
-        iThreadVM[iVM] = iVM;
-        fKillThread[iVM] = FALSE;
-
-        hGoEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
-        hDoneEvent[iVM] = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-#pragma warning(push)
-#pragma warning(disable:4152) // function/data pointer conversion
-        // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
-        if (!hGoEvent[iVM] || !hDoneEvent[iVM] ||
-#ifdef NDEBUG
-                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[iVM], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
-#else   // debug needs twice the stack
-                    !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[iVM], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
-#endif
-        {
-            if (hGoEvent[iVM])
-            {
-                CloseHandle(hGoEvent[iVM]);
-                hGoEvent[iVM] = NULL;
-            }
-            if (hDoneEvent[iVM])
-            {
-                CloseHandle(hDoneEvent[iVM]);
-                hDoneEvent[iVM] = NULL;
-            }
-            FUnInstallVM(iVM);
-            f = FALSE;
-        }
-#pragma warning(pop)
-    }
-
-    if (f)
-    {
         v.cVM++;
 
         rgvm[iVM].fValidVM = f;
@@ -165,6 +131,12 @@ int AddVM(int type)
         // if this is our first VM...
         if (v.cVM == 1)
             fNeedTiledBitmap = TRUE;    // it might be too early to create it without a DC
+
+        if (fAll)
+        {
+            FixAllMenus(TRUE);
+            InitThreads();
+        }
     }    
     else
     {
@@ -176,22 +148,13 @@ int AddVM(int type)
 }
 
 // This will Uninit and delete the VM, freeing it's bitmap, etc.
+// The BOOL tells us whether to do slow things that should only be done after calling this a bunch of times in a row,
+// but needn't happen every time
 //
 void DeleteVM(int iVM, BOOL fFixMenus)
 {
     if (!rgvm[iVM].fValidVM)
         return;
-
-    Assert(hGoEvent[iVM] != NULL);
-    Assert(hDoneEvent[iVM] != NULL);
-
-    // kill the thread executing this event before deleting any of its objects
-    fKillThread[iVM] = TRUE;
-    SetEvent(hGoEvent[iVM]);
-    WaitForSingleObject(hDoneEvent[iVM], INFINITE);
-
-    hGoEvent[iVM] = NULL;
-    hDoneEvent[iVM] = NULL;
 
     if (vrgvmi[iVM].hdcMem)
     {
@@ -215,19 +178,19 @@ void DeleteVM(int iVM, BOOL fFixMenus)
     sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
     sVM = -1;    // the one in focus may be gone
 
-    if (v.cVM)
-    {
-        SelectInstance(v.iVM);    // better find a new valid current instance
-    }
-    else
+    if (!v.cVM)
     {
         v.iVM = -1;
         RenderBitmap(); // draw black to make the last image go away
     }
 
-    // OK, we're not doing a bunch of deletes in a row, take the possibly slow step of fixing the menus
+    // OK, we're not doing a bunch of deletes in a row, take the possibly slow steps
     if (fFixMenus)
-        FixAllMenus();
+    {
+        SelectInstance(v.iVM);
+        FixAllMenus(TRUE);
+        InitThreads();
+    }
 }
 
 //
@@ -277,7 +240,7 @@ BOOL CreateAllVMs()
 
         if (pvmi)
         {
-            if ((vmNew = AddVM(zz)) == -1)
+            if ((vmNew = AddVM(zz, TRUE)) == -1)
                 return FALSE;
 
             f = FALSE;
@@ -300,7 +263,7 @@ BOOL CreateAllVMs()
         }
     }
 
-    FixAllMenus();
+    FixAllMenus(TRUE);
 
     return f;
 }
@@ -359,7 +322,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE);
         }
-        FixAllMenus();
+        FixAllMenus(TRUE);
+        InitThreads();  // do these 2 things after calling DeleteVM(,FALSE) a bunch of times
+
         assert(v.cVM == 0);
 
         //The important part about a saved .GEM file is the VMs in it, not the global state at the time.
@@ -444,38 +409,6 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 // it will happen when our window is created
                 if (f)
                 {
-                    // create a thread to execute this VM
-                    iThreadVM[i] = i;
-                    fKillThread[i] = FALSE;
-
-                    hGoEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
-                    hDoneEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-#pragma warning(push)
-#pragma warning(disable:4152) // function/data pointer conversion
-                    // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
-                    if (!hGoEvent[i] || !hDoneEvent[i] ||
-#ifdef NDEBUG
-                        !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)&iThreadVM[i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
-#else   // debug needs twice the stack
-                        !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)&iThreadVM[i], STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
-#endif
-                    {
-                        if (hGoEvent[i])
-                        {
-                            CloseHandle(hGoEvent[i]);
-                            hGoEvent[i] = NULL;
-                        }
-                        if (hDoneEvent[i])
-                        {
-                            CloseHandle(hDoneEvent[i]);
-                            hDoneEvent[i] = NULL;
-                        }
-                        FUnInitVM(i);
-                        FUnInstallVM(i);
-                        f = FALSE;
-                    }
-#pragma warning(pop)
                     v.cVM++;
                     if (f && vi.hdc)
                         f = CreateNewBitmap(i);
@@ -542,7 +475,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
         }
-        FixAllMenus();
+        FixAllMenus(TRUE);
+        InitThreads();
         return FALSE;
     }
 

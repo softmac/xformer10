@@ -42,7 +42,7 @@ typedef struct
     ULONG cb;   // size of file when mode == MD_FILE*
 } DRIVE;
 
-#define MAX_DRIVES 8
+#define MAX_DRIVES 2
 
 DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 

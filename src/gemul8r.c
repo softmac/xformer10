@@ -34,6 +34,8 @@
 //
 // To change out a cartridge, UnInit, then Init again. To change the VM type (eg. 800 to XL), UnInstall and Install again
 //
+// There are a number of threads equal to the number of visible tiles, each one to run that VM.
+//
 // While all the VMs are running, the main loop will tell each thread to GO, then wait for them all to be DONE.
 // If 1/60s hasn't passed yet and we're not in turbo mode, wait until it has. Repeat.
 //
@@ -238,7 +240,11 @@ void DisplayStatus(int iVM)
     if (iVM >= 0)
         CreateInstanceName(iVM, pInst);
 
-    sprintf(rgch0, "%s (%d VM%s) ", vi.szAppName, v.cVM, v.cVM == 1 ? "" : "s");
+    if (v.iVM == -1)
+        sprintf(rgch0, "%s (%d VM%s) ", vi.szAppName, v.cVM, v.cVM == 1 ? "" : "s");
+    else
+        sprintf(rgch0, "%s (%d/%d VM%s) ", vi.szAppName, v.iVM, v.cVM, v.cVM == 1 ? "" : "s");
+
 #endif
 
 #if 0
@@ -345,25 +351,217 @@ ULONGLONG GetMs()
 //
 DWORD WINAPI VMThread(LPVOID l)
 {
-    int iVM = *(int *)l;
+    int iV = (int)l;
 
     while (1)
     {
-        WaitForSingleObject(hGoEvent[iVM], INFINITE);
+        WaitForSingleObject(ThreadStuff[iV].hGoEvent, INFINITE);
 
-        if (fKillThread[iVM])
+        if (ThreadStuff[iV].fKillThread)
         {
-            SetEvent(hDoneEvent[iVM]);
+            SetEvent(hDoneEvent[iV]);
             return 0;
         }
 
-        vrgvmi[iVM].fWantDebugger = !FExecVM(iVM, FALSE, TRUE);
+        vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger = !FExecVM(ThreadStuff[iV].iThreadVM, FALSE, TRUE);
 
-        if (vrgvmi[iVM].fWantDebugger)
+        if (vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger)
             vi.fExecuting = FALSE;    // we only reset, never set it
 
-        SetEvent(hDoneEvent[iVM]);
+        SetEvent(hDoneEvent[iV]);
     }
+}
+
+// something failed, rather than exit the app, let's sacrifice a random VM for the greater good and see if we can keep things running
+// Does not fix menus or threads, just quickly deletes. Caller is responsible for calling FixAllMenus and InitThreads
+void SacrificeVM()
+{
+    for (int ix = 0; ix < MAX_VM; ix++)
+    {
+        if (rgvm[ix].fValidVM)
+        {
+            DeleteVM(ix, FALSE);    // sorry, you are the sacrifice
+            break;
+        }
+    }
+}
+
+// Must be called every time the size of the window or the display changes, or sWheelOffset moves, or a VM is created or destroyed
+// Figure out which tiles are visible and set up that many threads
+//
+BOOL InitThreads()
+{
+    //ODS("InitThreads\n");
+    BOOL fNeedFix = FALSE;
+
+ThreadTry:
+
+    for (int ii = 0; ii < cThreads; ii++)
+    {
+        if (ThreadStuff[ii].hGoEvent)
+        {
+            // kill the thread executing this event before deleting any of its objects
+            ThreadStuff[ii].fKillThread = TRUE;
+            if (ThreadStuff[ii].hGoEvent)
+            {
+                SetEvent(ThreadStuff[ii].hGoEvent);
+                if (hDoneEvent[ii])
+                    WaitForSingleObject(hDoneEvent[ii], INFINITE);
+            }
+
+            if (ThreadStuff[ii].hGoEvent)
+                CloseHandle(ThreadStuff[ii].hGoEvent);
+            if (hDoneEvent[ii])
+                CloseHandle(hDoneEvent[ii]);
+        }
+    }
+
+    if (ThreadStuff)
+        free(ThreadStuff);
+    ThreadStuff = NULL;
+    if (hDoneEvent)
+        free(hDoneEvent);
+    hDoneEvent = NULL;
+
+    cThreads = 0;
+
+    if (v.cVM)
+    {
+        if (v.fTiling)
+        {
+            ThreadStuff = malloc(v.cVM * sizeof(ThreadStuffS));
+            hDoneEvent = malloc(v.cVM * sizeof(HANDLE));
+            if (!ThreadStuff || !hDoneEvent)
+                goto ThreadFail;
+
+            RECT rect;
+            GetClientRect(vi.hWnd, &rect);
+
+            // find the VM at the top of the page
+            int iVM = nFirstTile;
+            while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
+                iVM++;
+
+            int x, y, iDone = iVM;
+
+            // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
+            int nx = (rect.right * 10 / rgvm[iVM].pvmi->uScreenX + 5) / 10; // how many fit across (if 1/2 showing counts)?
+
+            for (y = sWheelOffset; y < rect.bottom; y += rgvm[iVM].pvmi->uScreenY /* * vi.fYscale*/)
+            {
+                for (x = 0; x < nx * (int)rgvm[iVM].pvmi->uScreenX; x += rgvm[iVM].pvmi->uScreenX /* * vi.fXscale*/)
+                {
+                    // Don't consider tiles completely off screen
+                    if (y + (int)rgvm[iVM].pvmi->uScreenY > 0 && y < rect.bottom)
+                    {
+                        ThreadStuff[cThreads].fKillThread = FALSE;
+                        ThreadStuff[cThreads].iThreadVM = iVM;
+                        ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+                        hDoneEvent[cThreads] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+#pragma warning(push)
+#pragma warning(disable:4152) // function/data pointer conversion
+                        // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+                        if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
+#ifdef NDEBUG
+                            !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#else   // debug needs twice the stack
+                            !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)cThreads, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#endif
+#pragma warning(pop)
+                        {
+                            // don't leave the events existing if the thread doesn't... we might try to wait on it
+                            if (ThreadStuff[cThreads].hGoEvent)
+                            {
+                                CloseHandle(ThreadStuff[cThreads].hGoEvent);
+                                ThreadStuff[cThreads].hGoEvent = NULL;
+                            }
+                            if (hDoneEvent[cThreads])
+                            {
+                                CloseHandle(hDoneEvent[cThreads]);
+                                hDoneEvent[cThreads] = NULL;
+                            }
+                            goto ThreadFail;
+                        }
+                        cThreads++;
+                    }
+
+                    // advance to the next valid bitmap
+                    do
+                    {
+                        iVM = (iVM + 1) % MAX_VM;
+                    } while (!rgvm[iVM].fValidVM);
+
+                    // we've considered them all
+                    if (iDone == iVM)
+                        break;
+                }
+                if (iDone == iVM)
+                    break;
+            }
+
+            if (cThreads < v.cVM)
+            {
+                ThreadStuff = realloc(ThreadStuff, cThreads * sizeof(ThreadStuffS));
+                hDoneEvent = realloc(hDoneEvent, cThreads * sizeof(HANDLE));
+                if (cThreads && (!ThreadStuff || !hDoneEvent))
+                    goto ThreadFail;
+            }
+        }
+
+        // NOT TILING - only 1 VM to worry about
+        else if (v.iVM > -1)
+        {
+            ThreadStuff = malloc(sizeof(ThreadStuffS));
+            hDoneEvent = malloc(sizeof(HANDLE));
+            if (!ThreadStuff || !hDoneEvent)
+                goto ThreadFail;
+
+            ThreadStuff[0].fKillThread = FALSE;
+            ThreadStuff[0].iThreadVM = v.iVM;
+            
+            ThreadStuff[0].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+            hDoneEvent[0] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+#pragma warning(push)
+#pragma warning(disable:4152) // function/data pointer conversion
+            // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+            if (!ThreadStuff[0].hGoEvent || !hDoneEvent[0] ||
+#ifdef NDEBUG
+                !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#else   // debug needs twice the stack
+                !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+#endif
+#pragma warning(pop)
+            {
+                // don't leave the events existing if the thread doesn't... we might try to wait on it
+                if (ThreadStuff[0].hGoEvent)
+                {
+                    CloseHandle(ThreadStuff[0].hGoEvent);
+                    ThreadStuff[0].hGoEvent = NULL;
+                }
+                if (hDoneEvent[0])
+                {
+                    CloseHandle(hDoneEvent[0]);
+                    hDoneEvent[0] = NULL;
+                }
+                goto ThreadFail;
+            }
+            cThreads = 1;
+        }
+    }
+    
+    // we deleted something, the menus need fixing, but it's slow so don't always do it
+    if (fNeedFix)
+        FixAllMenus(TRUE);
+
+    return TRUE;
+
+    // something went wrong. Rather than exiting the app, try again with fewer VMs until it works
+ThreadFail:
+    SacrificeVM();
+    fNeedFix = TRUE;
+    goto ThreadTry;
 }
 
 void CreateDebuggerWindow()
@@ -510,11 +708,11 @@ void CreateVMMenu()
     }
 
     // in case we're fixing the menus because some were deleted, these might still be hanging around
-    // never delete our anchor!
-    if (v.cVM > 0)
-        for (z = v.cVM; z < MAX_VM; z++)
-            DeleteMenu(vi.hMenu, IDM_VM1 - z, 0);
-    else
+    // never delete our anchor #0!
+    for (z = max(1, v.cVM); z < MAX_VM; z++)
+        DeleteMenu(vi.hMenu, IDM_VM1 - z, 0);
+
+    if (v.cVM == 0)
     {
         mii.fMask = MIIM_STRING;
         mii.dwTypeData = mNew;
@@ -526,8 +724,9 @@ void CreateVMMenu()
 }
 
 // Something changed that affects the menus. Set all the menus up right.
+// fVM is whether or not to do the slow process of filling in potentially thousands of VM names
 //
-void FixAllMenus()
+void FixAllMenus(BOOL fVM)
 {
     // use the active tile or if not tiled, the main instance. If tiled without anything active, don't allow anything
     int inst = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
@@ -662,8 +861,9 @@ void FixAllMenus()
         EnableMenuItem(vi.hMenu, IDM_NOCART, MF_GRAYED);
     }
 
-    // Now fix the FILE menu's list of all valid VM's
-    CreateVMMenu();
+    // Now fix the FILE menu's list of all valid VM's - if necessary (slow)
+    if (fVM)
+        CreateVMMenu();
 
     // populate the menu with all the relevant choices of VM types they can make
 
@@ -1055,6 +1255,9 @@ int CALLBACK WinMain(
             );
 #endif // ATARIST
 
+    // this is slow, so only do it once ever. And do it now before we fill memory with VMs and they end up having to be silent
+    InitSound();
+
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
 
@@ -1101,7 +1304,7 @@ int CALLBACK WinMain(
             // a disk
             if (VMtype != -1 && MEDIAtype == 1)
             {
-                if ((iVM = AddVM(VMtype)) != -1)    // does the FInstalVM for us
+                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
                 {
                     strcpy(rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
                     rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
@@ -1127,7 +1330,7 @@ int CALLBACK WinMain(
             // a cartridge
             else if (VMtype != -1 && MEDIAtype == 2)
             {
-                if ((iVM = AddVM(VMtype)) != -1)    // does the FInstalVM for us
+                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
                 {
                     strcpy(rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
                     rgvm[iVM].rgcart.fCartIn = TRUE;
@@ -1216,7 +1419,8 @@ int CALLBACK WinMain(
 
     vi.fExecuting = TRUE;    // OK, go! This will get reset when a VM hits a breakpoint, or otherwise fails
 
-    FixAllMenus();
+    FixAllMenus(TRUE);
+    // our first WM_SIZE will init the threads
 
     // DirectX can fragment address space, so only preload if user wants to
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
@@ -1468,20 +1672,13 @@ int CALLBACK WinMain(
                 // can instead of failing to do anything
                 if (!v.fMyVideoCardSucks)
                 {
-                    int ix = 0;
                     BOOL fx;
                     do
                     {
-                        for (; ix < MAX_VM; ix++)
-                        {
-                            if (rgvm[ix].fValidVM)
-                            {
-                                DeleteVM(ix, FALSE);    // sorry, you are the sacrifice
-                                break;
-                            }
-                        }
+                        SacrificeVM();
                     } while ((fx = CreateTiledBitmap()) == FALSE && v.cVM);
-                    FixAllMenus();
+                    FixAllMenus(TRUE);
+                    InitThreads();
                     if (fx)
                         fNeedTiledBitmap = FALSE;
                 }
@@ -1504,70 +1701,22 @@ int CALLBACK WinMain(
 
         ULONGLONG FrameBegin = GetCycles();
 
-        HANDLE hVD[MAX_VM];
-        int iV = 0;
-
         // Tell the thread(s) to go.
-        if (v.cVM && v.fTiling)
+        if (v.cVM && v.fTiling && cThreads)
         {
-            RECT rect;
-            GetClientRect(vi.hWnd, &rect);
-
-            // Don't waste time executing tiles we can't see. Pause them for performance.
-
-            // find the VM at the top of the page
-            int iVM = nFirstTile;
-            while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-                iVM++;
-
-            int x, y, iDone = iVM;
-
-            // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-            int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
-
-            for (y = sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
-            {
-                for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
-                {
-                    // Don't consider tiles completely off screen
-                    if (y + vvmhw[iVM].ypix > 0 && y < rect.bottom)
-                    {
-                        SetEvent(hGoEvent[iVM]);    // found one, tell the thread to go now!
-                        hVD[iV++] = hDoneEvent[iVM];
-                    }
-
-                    // advance to the next valid bitmap
-                    do
-                    {
-                        iVM = (iVM + 1) % MAX_VM;
-                    } while (!rgvm[iVM].fValidVM);
-
-                    // we've considered them all
-                    if (iDone == iVM)
-                        break;
-                }
-                if (iDone == iVM)
-                    break;
-            }
+            for (int ii = 0; ii < cThreads; ii++)
+                SetEvent(ThreadStuff[ii].hGoEvent);
 
             // wait for them to complete one frame
-            WaitForMultipleObjects(iV, hVD, TRUE, INFINITE);
+            WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
         }
+        // not tiled. Tell the only thread to go
         else if (v.iVM >= 0)
         {
             assert(v.cVM);
-            SetEvent(hGoEvent[v.iVM]);
-            WaitForSingleObject(hDoneEvent[v.iVM], INFINITE);
+            SetEvent(ThreadStuff[0].hGoEvent);
+            WaitForSingleObject(hDoneEvent[0], INFINITE);
         }
-
-#if 0
-        static ULONGLONG cErr;          // how much we missed being exactly 1/60s apart
-        static BYTE cJifTally;          // how many jiffies have gone by
-        static ULONGLONG uDrawSpeed;     // how long it takes to render
-        static ULONG cDrawSpeed;        // # of times measured, for averaging
-        static BOOL fExecSpeedValid;    // need to calculate how long Execute() takes
-        static ULONG cExecSpeed;        // # of times measured, for averaging
-#endif
 
         // some thread asked us to break into the debugger
         if (vi.fWantDebugBreak)
@@ -1603,7 +1752,7 @@ int CALLBACK WinMain(
                                 fOK = TRUE;
                     if (!fOK)
                         DeleteVM(v.iVM, TRUE);
-                    FixAllMenus();
+                    FixAllMenus(!v.fTiling); // don't do unnecessary slow stuff when tiled
                 }
                 
                 // coldboot only - to switch binary loaders and try a different one
@@ -1614,7 +1763,7 @@ int CALLBACK WinMain(
                     if (!ColdStart(i))
                         DeleteVM(v.iVM, TRUE);
 
-                    FixAllMenus();
+                    FixAllMenus(FALSE);
                 }
                
                 else if (vrgvmi[i].fWantDebugger)    // we also stopped because a different VM wants the debugger, so don't lose that
@@ -2648,7 +2797,7 @@ void RenderBitmap()
             // don't do this if we're resizing, the bitmap is out of date!
             if (sVM > -1 && !fNeedTiledBitmap)
             {
-                // get the rect of the current tile and its width & height
+                // get the rect of the current tile
                 RECT rectB;
                 int ycur = 0;
                 GetPosFromTile(sVM, &rectB);
@@ -2843,9 +2992,11 @@ void SelectInstance(int iVM)
 
     v.iVM = iVM;                    // current VM #
 
-    // a menu or title bar might need to change.
+    FixAllMenus(TRUE);
+
+    // The active thread needs to change
     if (!v.fTiling)
-        FixAllMenus();
+        InitThreads();
 
     // Enforce minimum window size for this type of VM
     if (v.swWindowState == SW_SHOWNORMAL)
@@ -3119,6 +3270,8 @@ void ScrollTiles()
     if (sWheelOffset < bottom * -1)
         sWheelOffset = bottom * -1;
 
+    InitThreads();  // now that sWheelOffset is stable
+
     // now where would our mouse be after this scroll?
     POINT pt;
     if (GetCursorPos(&pt))
@@ -3128,7 +3281,7 @@ void ScrollTiles()
             if (s != sVM)
             {
                 sVM = s;
-                FixAllMenus();
+                FixAllMenus(FALSE); // VM list is greyed when tiled
             }
         }
 }
@@ -3535,10 +3688,11 @@ LRESULT CALLBACK WndProc(
             {
                 BOOL fC = CreateNewBitmap(ii);
                 if (!fC)
-                    DeleteVM(ii, FALSE);   // this is painfully slow recreating thousands of menu items each time
+                    DeleteVM(ii, FALSE);   // this is painfully slow recreating thousands of menu items and many threads each time
             }
         }
-        FixAllMenus();
+        FixAllMenus(TRUE);
+        //InitThreads(); our window size is not valid yet, do not call yet!
 
         // if we were saved in fullscreen mode, then actually go into fullscreen
         if (v.fFullScreen) {
@@ -3548,9 +3702,6 @@ LRESULT CALLBACK WndProc(
             // and other stuff isn't set up yet, so don't Send the message immediately, Post it.
             PostMessage(hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
         }
-
-        // this is slow, so only do it once ever
-        InitSound();
 
         //TrayMessage(hWnd, NIM_ADD, 0, LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), NULL);
 
@@ -3615,6 +3766,8 @@ LRESULT CALLBACK WndProc(
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
         }
 
+        InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
+
         break;
 
     case WM_DISPLAYCHANGE:
@@ -3638,10 +3791,13 @@ LRESULT CALLBACK WndProc(
                 if (!CreateNewBitmap(ii))    // fix every instance's bitmap
                     DeleteVM(ii, FALSE);
         }
-        FixAllMenus();
+        FixAllMenus(TRUE);
+        InitThreads();
 
         if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
             fNeedTiledBitmap = TRUE;
+
+        InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
 
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
@@ -3990,7 +4146,7 @@ break;
             {
                 BOOL fWP = FWriteProtectDiskVM(v.iVM, 0, FALSE, FALSE); // get old state
                 FWriteProtectDiskVM(v.iVM, 0, TRUE, !fWP);  // try to set new state to opposite
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
 
@@ -3999,7 +4155,7 @@ break;
             {
                 BOOL fWP = FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE); // get old state
                 FWriteProtectDiskVM(v.iVM, 1, TRUE, !fWP);  // try to set new state to opposite
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
             
@@ -4037,7 +4193,7 @@ break;
                             if (!FMountDiskVM(v.iVM, disk))
                                 SendMessage(vi.hWnd, WM_COMMAND, IDM_D1U + disk, 0);
                             //FWriteProtectDiskVM(v.iVM, disk, TRUE, FALSE); // write enable it
-                            FixAllMenus();
+                            FixAllMenus(FALSE);
                         }
                     }
                     _close(h);
@@ -4107,14 +4263,14 @@ break;
                     ShowWindow(vi.hWnd, SW_SHOWMAXIMIZED);
             }
 
-            FixAllMenus();
+            FixAllMenus(FALSE);
             return 0; // return or windows chimes
 
         // toggle stretch/letterbox mode
         case IDM_STRETCH:
             v.fZoomColor = !v.fZoomColor;
             DisplayStatus(v.iVM); // affects title bar
-            FixAllMenus();
+            FixAllMenus(FALSE);
             break;
 
         // toggle tile mode
@@ -4145,19 +4301,20 @@ break;
             } else if (v.cVM) {
                 SelectInstance(v.iVM >= 0 ? v.iVM : nFirstTile);    // bring the one with focus up if it exists, else the top one
             }
-            FixAllMenus();
+            FixAllMenus(TRUE);
+            InitThreads();
             break;
 
         // toggle TURBO mode
         case IDM_TURBO:
             fBrakes = !fBrakes;
             uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
-            FixAllMenus();
+            FixAllMenus(FALSE);
             break;
 
         case IDM_AUTOLOAD:
             v.fSaveOnExit = !v.fSaveOnExit;
-            FixAllMenus();
+            FixAllMenus(FALSE);
             break;
 
         case IDM_TIMETRAVEL:
@@ -4196,7 +4353,7 @@ break;
         // toggle how sensitive the mouse wheel is
         case IDM_WHEELSENS:
             v.fWheelSensitive = !v.fWheelSensitive;
-            FixAllMenus();
+            FixAllMenus(FALSE);
             break;
 
         // toggle whether to do 1 BitBlt or multiple in tiled mode
@@ -4205,7 +4362,7 @@ break;
         // WORST PERF - every tile has its own memory bitmap, with up to 99 video blits
         case IDM_MYVIDEOCARDSUCKS:
             v.fMyVideoCardSucks = !v.fMyVideoCardSucks;
-            FixAllMenus();
+            FixAllMenus(FALSE);
             break;
 
         // Delete this instance, and choose another
@@ -4224,7 +4381,8 @@ break;
                 if (rgvm[z].fValidVM)
                     DeleteVM(z, FALSE);
             }
-            FixAllMenus();
+            FixAllMenus(TRUE);
+            InitThreads();
 
             // now try to make the default ones
             CreateAllVMs();
@@ -4274,7 +4432,7 @@ break;
             int vmNew;
 
             // create a new VM of the appropriate type
-            vmNew = AddVM(vmType);
+            vmNew = AddVM(vmType, TRUE);
 
             BOOL fA = FALSE;
             if (vmNew != -1 && FInitVM(vmNew))
@@ -4291,7 +4449,7 @@ break;
 
             // !!! what about error?
             assert(v.cVM);
-            FixAllMenus();
+            FixAllMenus(TRUE);
             break;
 
         // choose a cartridge to use
@@ -4316,7 +4474,7 @@ break;
                 }
 
                 if (f && ColdStart(v.iVM))
-                    FixAllMenus();
+                    FixAllMenus(FALSE);
                 else
                     DeleteVM(v.iVM, TRUE);
             }
@@ -4342,7 +4500,7 @@ break;
                 if (!f)
                     DeleteVM(v.iVM, TRUE);
 
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
 
             break;
@@ -4359,7 +4517,7 @@ break;
                 if (!FMountDiskVM(v.iVM, 0))
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_D1U, 0);
 
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
 
@@ -4374,7 +4532,7 @@ break;
                 if (!FMountDiskVM(v.iVM, 1))
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_D2U, 0);
 
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
 
@@ -4389,7 +4547,7 @@ break;
                 FUnmountDiskVM(v.iVM, 0);    // do this before tampering
                 strcpy(rgvm[v.iVM].rgvd[0].sz, "");
                 rgvm[v.iVM].rgvd[0].dt = DISK_NONE;
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
 
@@ -4401,7 +4559,7 @@ break;
                 FUnmountDiskVM(v.iVM, 1);    // do this before tampering
                 strcpy(rgvm[v.iVM].rgvd[1].sz, "");
                 rgvm[v.iVM].rgvd[1].dt = DISK_NONE;
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             break;
 
@@ -4440,7 +4598,7 @@ break;
                         {
                             DeleteVM(v.iVM, TRUE);
                         }
-                        FixAllMenus();
+                        FixAllMenus(TRUE);
                         break;
 
                     }
@@ -4474,7 +4632,7 @@ break;
             if (!ColdStart(v.iVM))
             {
                 DeleteVM(v.iVM, TRUE);
-                FixAllMenus();
+                FixAllMenus(FALSE);
             }
             // does not otherwise affect menus
             break;
@@ -4487,7 +4645,7 @@ break;
                 if (!ColdStart(v.iVM))
                 {
                     DeleteVM(v.iVM, TRUE);
-                    FixAllMenus();
+                    FixAllMenus(FALSE);
                 }
             break;
 
@@ -4498,7 +4656,7 @@ break;
                 if (!FWarmbootVM(v.iVM))
                 {
                     DeleteVM(v.iVM, TRUE);
-                    FixAllMenus();
+                    FixAllMenus(FALSE);
                 }
             break;
 
@@ -4510,7 +4668,6 @@ break;
         case IDM_PREVVM:
             SelectInstance(-1);    // go backwards
             break;
-
 
         char chFN[MAX_PATH];
         BOOL f;
@@ -4534,10 +4691,9 @@ break;
 
             sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
             sVM = -1;    // the one in focus may be gone
-            FixAllMenus();
-
+            FixAllMenus(TRUE);
+            InitThreads();
             break;
-
 
 #ifndef NDEBUG
         case IDM_DEBUGGER:
@@ -4805,7 +4961,7 @@ break;
         short int offset = GET_WHEEL_DELTA_WPARAM(uParam) * (v.fWheelSensitive ? 8 : 1); // must be short to catch the sign
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
-        if (fZoom)
+        if (fZoom && v.cVM)
         {
             if (offset > 0)    // zoom in
             {
@@ -4829,7 +4985,7 @@ break;
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
             }
         }
-        else
+        else if (!fZoom && v.fTiling && v.cVM)
         {
             sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
             ScrollTiles();
@@ -5048,7 +5204,7 @@ break;
                 sVM = s;        // the tile in focus
                 v.iVM = sVM;    // "current" VM is now this
 
-                FixAllMenus();
+                FixAllMenus(FALSE); // VM list is greyed out when tiling
             }
 
             if (s > -1)
@@ -5162,15 +5318,8 @@ break;
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE);
         }
-        FixAllMenus();
-
-        for (int ii = 0; ii < MAX_VM; ii++)
-        {
-            if (hGoEvent[ii])
-                CloseHandle(hGoEvent[ii]);
-            if (hDoneEvent[ii])
-                CloseHandle(hDoneEvent[ii]);
-        }
+        FixAllMenus(TRUE);
+        InitThreads();  // this will kill them and not init any new ones
 
         if (vi.hdcTiled)
         {

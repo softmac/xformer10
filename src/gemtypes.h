@@ -113,7 +113,7 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 4096
+#define MAX_VM 8192
 
 #define wJoySens  3         // set higher for smaller dead zone, no lower than 3
 
@@ -153,14 +153,20 @@ WORD LightPenX;
 WORD LightPenY;
 
 // 
-// We will make one thread per VM 
+// We will make one thread per visible VM 
 //
-HANDLE hGoEvent[MAX_VM];    // please execute
-HANDLE hDoneEvent[MAX_VM];    // I'm done executing
-BOOL fKillThread[MAX_VM];    // time to die
-int iThreadVM[MAX_VM];        // which VM a thread is
 DWORD WINAPI VMThread(LPVOID l); // thread proc
 
+typedef struct
+{
+    HANDLE hGoEvent;    // please execute
+    BOOL fKillThread;   // time to die
+    int iThreadVM;      // which VM a thread is
+} ThreadStuffS;
+
+ThreadStuffS *ThreadStuff;
+HANDLE *hDoneEvent;    // I'm done executing. WaitForMultipleObjects needs this to be a separate array
+int cThreads;           // how many VMs are visible right now
 
 //
 // Helper routines for manipulating bit vectors
@@ -985,7 +991,8 @@ void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();
 //BOOL OpenThePath(HWND hWnd, char *psz);
 BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int type);
-void FixAllMenus();
+void FixAllMenus(BOOL);
+BOOL InitThreads();
 BOOL ColdStart(int);
 void SelectInstance(int);
 ULONG QueryTickCtr();
@@ -1015,7 +1022,7 @@ void InitProperties(void);
 BOOL LoadProperties(char *, BOOL);
 BOOL SaveProperties(char *);
 BOOL CreateAllVMs();
-int AddVM(int type);
+int AddVM(int, BOOL);
 void DeleteVM(int, BOOL);
 
 // romcard.c
