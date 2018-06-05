@@ -440,22 +440,20 @@ BOOL fDumpHW;
 // get ready for time travel!
 BOOL TimeTravelInit(unsigned iVM)
 {
-    BOOL fI = TRUE;
-
     // Initialize Time Travel
     for (unsigned i = 0; i < 3; i++)
     {
         if (!Time[iVM][i])
-            Time[iVM][i] = malloc(candysize[iVM]);
+            Time[iVM][i] = malloc(vrgcandy[iVM]->m_dwSize);
         if (!Time[iVM][i])
-            fI = FALSE;
-        _fmemset(Time[iVM][i], 0, candysize[iVM]);
+        {
+            TimeTravelFree(iVM);
+            return FALSE;
+        }
+        _fmemset(Time[iVM][i], 0, vrgcandy[iVM]->m_dwSize);
     }
 
-    if (!fI)
-        TimeTravelFree(iVM);
-
-    return fI;
+    return TRUE;
 }
 
 // all done with time traveling, I'm exhausted
@@ -491,10 +489,10 @@ BOOL TimeTravelPrepare(unsigned iVM)
     {
         f = SaveStateAtari(iVM, &pPersist, &cbPersist);
 
-        if (!f || cbPersist != candysize[iVM] || Time[iVM][cTimeTravelPos[iVM]] == NULL)
+        if (!f || cbPersist != vrgcandy[iVM]->m_dwSize || Time[iVM][cTimeTravelPos[iVM]] == NULL)
             return FALSE;
 
-        _fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, candysize[iVM]);
+        _fmemcpy(Time[iVM][cTimeTravelPos[iVM]], pPersist, vrgcandy[iVM]->m_dwSize);
 
         // Do NOT remember that shift, ctrl or alt were held down.
         // If we cold boot using Ctrl-F10, almost every time travel with think the ctrl key is still down
@@ -520,7 +518,7 @@ BOOL TimeTravel(unsigned iVM)
         return FALSE;
 
     // Two 5-second snapshots ago will be from 10-15 seconds back in time
-    f = LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], candysize[iVM]);    // restore our snapshot, and create a new anchor point here
+    f = LoadStateAtari(iVM, Time[iVM][cTimeTravelPos[iVM]], vrgcandy[iVM]->m_dwSize);    // restore our snapshot, and create a new anchor point here
 
     // lift up the control and ALT keys, do NOT remember their state from before (or we start continuous firing, etc.)
     ControlKeyUp8(iVM);
@@ -561,7 +559,7 @@ BOOL TimeTravelReset(unsigned iVM)
 
     BOOL f = SaveStateAtari(iVM, &pPersist, &cbPersist);    // get our current state
 
-    if (!f || cbPersist != candysize[iVM])
+    if (!f || cbPersist != vrgcandy[iVM]->m_dwSize)
         return FALSE;
 
     // initialize all our saved states to now, so that going back in time takes us back here.
@@ -570,7 +568,7 @@ BOOL TimeTravelReset(unsigned iVM)
         if (Time[iVM][i] == NULL)
             return FALSE;
 
-        _fmemcpy(Time[iVM][i], pPersist, candysize[iVM]);
+        _fmemcpy(Time[iVM][i], pPersist, vrgcandy[iVM]->m_dwSize);
 
         ullTimeTravelTime[iVM] = GetCycles();    // time stamp it
     }
@@ -1579,28 +1577,28 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
     // how big is our persistable structure?
 
-    candysize[iVM] = sizeof(CANDYHW);
+    int candysize = sizeof(CANDYHW);
     if (rgvm[iVM].bfHW != vmAtari48)
-        candysize[iVM] += (2048 + 4096 + 10240);    // extended XL/XE RAM
+        candysize += (2048 + 4096 + 10240);    // extended XL/XE RAM
     if (rgvm[iVM].bfHW == vmAtariXE)
-        candysize[iVM] += (16384 * 4);            // extended XE RAM
+        candysize += (16384 * 4);            // extended XE RAM
 
-    vrgcandy[iVM] = malloc(candysize[iVM]);
+    vrgcandy[iVM] = malloc(candysize);
 
     if (vrgcandy[iVM])
-        _fmemset(vrgcandy[iVM], 0, candysize[iVM]); // don't think the time travel pointers are valid
+        _fmemset(vrgcandy[iVM], 0, candysize); // don't think the time travel pointers are valid
     else
         return FALSE;
 
-    AlterRamtop(iVM, initramtop);    // if we needed to set this to something in particular
+    vrgcandy[iVM]->m_dwSize = candysize;
 
-    // candy must be set up first (above)
-    TimeTravelInit(iVM);
+    AlterRamtop(iVM, initramtop);    // if we needed to set this to something in particular
 
     // init breakpoint. JMP $0 happens, so the only safe address that won't ever execute is $FFFF
     bp = 0xffff;
 
-    return TRUE;
+    // candy must be set up first (above)
+    return TimeTravelInit(iVM);
 }
 
 // all done
@@ -1988,7 +1986,7 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
     }
     
     if (pcbPersist)
-        *pcbPersist = candysize[iVM];
+        *pcbPersist = vrgcandy[iVM]->m_dwSize;
     return TRUE;
 }
 
@@ -1998,7 +1996,7 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
 //
 BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 {
-    if (cbPersist != candysize[iVM] || pPersist == NULL)
+    if (cbPersist != vrgcandy[iVM]->m_dwSize || pPersist == NULL)
         return FALSE;
 
     // load our state

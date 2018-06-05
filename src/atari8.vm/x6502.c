@@ -88,7 +88,10 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 
     Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
-    return (*pfnPeekB)(iVM, ea);
+//    if ((0x04000000u >> (ea >> 11)) & 1)
+        return (*pfnPeekB)(iVM, ea);
+//    else
+//        return cpuPeekB(iVM, ea);
 }
 #endif
 

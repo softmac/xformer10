@@ -119,7 +119,6 @@ BYTE rgPMGMap[65536];
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
-int candysize[MAX_VM];        // how big our persistable data is (bigger for XL/XE than 800), set at Install
 
 #if USE_PEEK_TABLE
 // !!! This is a memory hit
@@ -309,9 +308,11 @@ typedef struct
 
 typedef struct
 {
-    // most ofen accessed variables go first!
-
+    // !!! THIS MUST STAY AT THE TIPPY TOP
     WORD m_ramtop;
+
+    // most ofen accessed variables go first!
+    int m_dwSize;
 
     // 6502 register context - BELONGS IN CPU NOT HERE !!!
     WORD m_regPC, m_regSP;
@@ -434,6 +435,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 // make sure your local variable iVM is set to the instance you are before using
 #define CANDY_STATE(name) vrgcandy[iVM]->m_##name
 
+//#define dwSize        CANDY_STATE(dwSize)
 #define rgbMem        CANDY_STATE(rgbMem)
 #define regPC         CANDY_STATE(regPC)
 #define regSP         CANDY_STATE(regSP)

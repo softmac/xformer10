@@ -87,9 +87,15 @@ BEGIN
         MENUITEM "&Load Session...", IDM_LOAD
         MENUITEM "&Save Session As...", IDM_SAVEAS
         MENUITEM SEPARATOR
+        MENUITEM "&Restore Last Session on Startup", IDM_AUTOLOAD
+        MENUITEM SEPARATOR
         MENUITEM "E&xit", IDM_EXIT
         MENUITEM SEPARATOR
-        MENUITEM "M.U.L.E.", IDM_VM1
+        POPUP "&Choose VM"
+        BEGIN
+            MENUITEM "M.U.L.E.", IDM_VM1
+        END
+    
     // next populate with a separator and all open instances
 
         //MENUITEM "&Auto Configure...",          IDM_AUTOCONFIG
@@ -113,21 +119,19 @@ BEGIN
     END
     POPUP "&VM"
     BEGIN
-        MENUITEM "&Warm Start VM\tF10", IDM_WARMSTART
-        MENUITEM "&Cold Start VM\tCtrl+F10", IDM_COLDSTART
+        MENUITEM "&Warm Start\tF10", IDM_WARMSTART
+        MENUITEM "&Cold Start\tCtrl+F10", IDM_COLDSTART
         // this is VM specific and handled magically, there is no actual IDM_TOGGLEBASIC message handler
         MENUITEM "Toggle &BASIC\tShift+F10", IDM_TOGGLEBASIC
-        MENUITEM "Change VM &Type\tAlt+F10", IDM_CHANGEVM
+        MENUITEM "Change &Type\tAlt+F10", IDM_CHANGEVM
         MENUITEM "Debug &Monitor\tPause", IDM_DEBUGGER
         MENUITEM SEPARATOR
-        MENUITEM "Time Tra&vel VM (13s)\tPg Up", IDM_TIMETRAVEL
+        MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL
         MENUITEM SEPARATOR
-        MENUITEM "Switch VM &Monitor\tShift+F12", IDM_COLORMONO
+        MENUITEM "Switch &Monitor\tShift+F12", IDM_COLORMONO
         MENUITEM SEPARATOR
         MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
         MENUITEM "&Paste Text as ATASCII", IDM_PASTEATASCII
-        MENUITEM SEPARATOR
-        MENUITEM "&Restore Last Session on Startup", IDM_AUTOLOAD
     END
     POPUP "&Disk/Cartridge"
     BEGIN

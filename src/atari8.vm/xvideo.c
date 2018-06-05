@@ -2699,6 +2699,7 @@ if (sl.modelo < 2 || iTop > i)
         // We didn't waste time initializing the array if we weren't going to use it
         memset(rgFifth, 0, sizeof(rgFifth));
 
+        // !!! precompute?
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
             qch = vi.pTiledBits;
