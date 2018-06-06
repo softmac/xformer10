@@ -319,6 +319,16 @@ typedef struct
     BYTE m_regA, m_regY, m_regX, m_regP;
     WORD m_regEA;
 
+    // the 8 status bits must be together and in the same order as in the 6502
+    unsigned char     m_srN;
+    unsigned char    m_srV;
+    unsigned char    m_srB;
+    unsigned char    m_srD;
+    unsigned char    m_srI;
+    unsigned char    m_srZ;
+    unsigned char    m_srC;
+    unsigned char    m_pad;
+
     short m_wLeft;          // signed, cycles to go can go <0 finishing the last 6502 instruction
     short m_wNMI;    // keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
     BYTE m_fTrace;
@@ -331,13 +341,12 @@ typedef struct
     // !!! For efficiency, the above variables used in the tight 6502 loop need to be at the front of this structure
 
     WORD m_fKeyPressed;     // xkey.c
-    BOOL m_wShiftChanged;// xkey.c
-
-    // fTrace:  non-zero for single opcode execution
-    // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
-    // cntTick: mode display countdown timer (18 Hz ticks)
+    BOOL m_wShiftChanged;   // xkey.c
 
     BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
+
+    // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
+    // cntTick: mode display countdown timer (18 Hz ticks)
     BYTE m_mdXLXE, m_cntTick;
 
     BYTE m_iSwapCart;   // which bank is currently swapped in
@@ -349,71 +358,54 @@ typedef struct
 
     short m_PSL;        // the value of wLeft last time ProcessScanLine was called
 
+    // bare bones SIO support
     BYTE m_rgSIO[5];    // holds the SIO command frame
-    BYTE m_cSEROUT;        // how many bytes we've gotten so far of the 5
-    WORD m_fSERIN;        // we're executing a disk read command
-    BYTE m_bSERIN;        // byte to return in SERIN
-    BYTE m_isectorPos;    // where in the buffer are we?
+    BYTE m_cSEROUT;     // how many bytes we've gotten so far of the 5
+    WORD m_fSERIN;      // we're executing a disk read command
+    BYTE m_bSERIN;      // byte to return in SERIN
+    BYTE m_isectorPos;  // where in the buffer are we?
     BYTE m_checksum;    // buffer checksum
-    BYTE m_fWant8;        // we'd like the SEROUT DONE IRQ8
-    BYTE m_fWant10;        // we'd like the SEROUT NEEDED IRQ10
+    BYTE m_fWant8;      // we'd like the SEROUT DONE IRQ8
+    BYTE m_fWant10;     // we'd like the SEROUT NEEDED IRQ10
 
-    BYTE m_fHitBP;        // anybody changing the PC outside of Go6502 needs to check and set this
+    BYTE m_fHitBP;      // anybody changing the PC outside of Go6502 needs to check and set this
 
     WORD m_fStop;
     WORD m_wStartScan;
     BYTE m_fRedoPoke;
     
-    BYTE m_POT;             // current paddle potentiometer reading, counts from 0 to 228
+    BYTE m_POT;         // current paddle potentiometer reading, counts from 0 to 228
 
-    WORD m_wLiveShift;    // do we look at the shift key live as we process keys, or are we pasting and we want a specific value?
-
-    WORD m_fJoy, m_fSoundOn, m_fAutoStart;
+    WORD m_wLiveShift;  // do we look at the shift key live as we process keys, or are we pasting and we want a specific value?
 
     WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
 
     WORD m_wSIORTS;     // return value of the SIO routine, used in monitor
 
-    WORD pad6W;
-
-    // clock multiplier
-    ULONG m_clockMult;
-
+    // ANTIC stuff (xvideo.c)
     PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
     SL m_sl;            // current scan line display info
     WORD m_cbWidth, m_cbDisp;
     WORD m_hshift;
-
     BYTE m_iscan;
     BYTE m_scans;
     WORD m_wAddr;
-
     BYTE m_fWait;       // wait until next VBI
     BYTE m_fFetch;      // fetch next DL instruction
-    BYTE pad7B;
-
-    WORD m_wAddrOff;      // because of HSCROL, how many bytes forward to actually start the scan line
-    WORD pad8W;
+    WORD m_wAddrOff;    // because of HSCROL, how many bytes forward to actually start the scan line
 
     BYTE m_bCartType;   // type of cartridge
-    BYTE m_btickByte;   // current value of 18 Hz timer
     BYTE m_bshftByte;   // current value of shift state
 
-    BYTE pad9B;
+    LONG m_irqPokey[4]; // POKEY h/w timers, how many cycles to go
 
-    // the 8 status bits must be together and in the same order as in the 6502
-    unsigned char     m_srN;
-    unsigned char    m_srV;
-    unsigned char    m_srB;
-    unsigned char    m_srD;
-    unsigned char    m_srI;
-    unsigned char    m_srZ;
-    unsigned char    m_srC;
-    unsigned char    m_pad;
+    int m_iXESwap;      // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
-    LONG m_irqPokey[4];    // POKEY h/w timers, how many cycles to go
-
-    int m_iXESwap;            // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
+    // !!! Not really used anymore, candidates for removal
+    WORD m_fJoy, m_fSoundOn, m_fAutoStart;
+    ULONG m_clockMult;
+    BYTE m_btickByte;   // current value of 18 Hz timer
+    //
 
     char m_rgbXLExtMem;        // beginning of XL extended memory
 

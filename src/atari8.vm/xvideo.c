@@ -1195,24 +1195,6 @@ void PSLPrepare(int iVM)
             hshift &= 7;    // now only consider the part < 8
         }
 
-#if 0
-        // !!! Looking at the screen RAM should be cycle granular. Turmoil fills it as its drawing, so
-        // fetching at the beginning of the scanline doesn't work
-
-        if (((wAddr + j) & 0xFFF) < 0xFD0)  // even wide playfield won't wrap a 4K boundary
-        {
-            // tough to avoid memcpy if we support wrapping on a 4K boundary below
-            _fmemcpy(sl.rgb, &rgbMem[wAddr + j], cbWidth);
-            rgbSpecial = rgbMem[wAddr + j - 1];    // the byte just offscreen to the left may be needed if scrolling
-        }
-        else
-        {
-            for (int i = 0; i < cbWidth; i++)
-                sl.rgb[i] = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + i + j) & 0x0FFF));
-            rgbSpecial = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + j - 1) & 0x0FFF));    // ditto
-        }
-#endif
-
         // Other things we only need once per scan line
 
         sl.chactl = CHACTL & 7; // !!! cycle granularity?
@@ -1818,8 +1800,8 @@ if (sl.modelo < 2 || iTop > i)
                     // use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
                     vpix23 = (vpix >= 8 && (b1 & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
-                    // CHBASE must be on an even page boundary
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7f) << 3) + vpix23);
+                    // sl.chbase is already on a proper page boundary
+                    vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7f) << 3) + vpix23);
                 }
                 // we ARE in the blank part
                 else {
@@ -1861,8 +1843,8 @@ if (sl.modelo < 2 || iTop > i)
                         // use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
                         vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
-                        // CHBASE must be on an even page boundary
-                        vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((rgb & 0x7f) << 3) + vpix23);
+                        // sl.chbase is on a proper page boundary
+                        vv = cpuPeekB(iVM, (sl.chbase << 8) + ((rgb & 0x7f) << 3) + vpix23);
                     }
                     // we ARE in the blank part
                     else {
@@ -1891,12 +1873,12 @@ if (sl.modelo < 2 || iTop > i)
             else
             {
                 if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
-                    // !!! was 0xFC, not 0xFE
-                    b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+                    // use sl.chbase not CHBASE because its already anded with $fc or $fe
+                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
-                    b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 else if ((vpix >= 8) && ((b1 & 0x7F) >= 0x60))
-                    b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
+                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
                 else
                     b2 = 0;
 
@@ -2081,13 +2063,13 @@ if (sl.modelo < 2 || iTop > i)
 
                 // see comments for modes 2 & 3
 
-                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+                vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 u = vv;
 
                 if (hshift % 8)
                 {
                     int index = 1;
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) +
+                    vv = cpuPeekB(iVM, (sl.chbase << 8) +
                                 ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x7f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
@@ -2095,7 +2077,7 @@ if (sl.modelo < 2 || iTop > i)
                 b2 = (BYTE)(u >> hshift);
             }
             else
-                b2 = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x7F) << 3) + vpix);
+                b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
 
             for (j = 0; j < 4; j++)
             {
@@ -2166,13 +2148,13 @@ if (sl.modelo < 2 || iTop > i)
 
                 // see comments for modes 2 & 3
                
-                vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) + ((b1 & 0x3F) << 3) + vpix);
+                vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x3F) << 3) + vpix);
                 u = vv;
 
                 if (hshift % 8)
                 {
                     int index = 1;
-                    vv = cpuPeekB(iVM, ((sl.chbase & 0xFE) << 8) +
+                    vv = cpuPeekB(iVM, (sl.chbase << 8) +
                                 ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x3f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
