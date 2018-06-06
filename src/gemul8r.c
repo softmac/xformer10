@@ -1679,6 +1679,7 @@ int CALLBACK WinMain(
                     } while ((fx = CreateTiledBitmap()) == FALSE && v.cVM);
                     FixAllMenus(TRUE);
                     InitThreads();
+                    SelectInstance(v.iVM);  // current one might have gone away
                     if (fx)
                         fNeedTiledBitmap = FALSE;
                 }
@@ -3688,10 +3689,11 @@ LRESULT CALLBACK WndProc(
             {
                 BOOL fC = CreateNewBitmap(ii);
                 if (!fC)
-                    DeleteVM(ii, FALSE);   // this is painfully slow recreating thousands of menu items and many threads each time
+                    DeleteVM(ii, FALSE);   // don't do the slow parts
             }
         }
         FixAllMenus(TRUE);
+        SelectInstance(v.iVM);  // current instance might have gone away
         //InitThreads(); our window size is not valid yet, do not call yet!
 
         // if we were saved in fullscreen mode, then actually go into fullscreen
@@ -3792,7 +3794,7 @@ LRESULT CALLBACK WndProc(
                     DeleteVM(ii, FALSE);
         }
         FixAllMenus(TRUE);
-        InitThreads();
+        SelectInstance(v.iVM); // current instance might have gone away
 
         if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
             fNeedTiledBitmap = TRUE;
@@ -5318,7 +5320,7 @@ break;
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE);
         }
-        FixAllMenus(TRUE);
+        //  FixAllMenus(TRUE); SelectInstance(v.iVM); we're dying anyway
         InitThreads();  // this will kill them and not init any new ones
 
         if (vi.hdcTiled)

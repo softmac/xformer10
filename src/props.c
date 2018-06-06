@@ -188,6 +188,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
     if (fFixMenus)
     {
         SelectInstance(v.iVM);
+        DisplayStatus(v.iVM);    // or name of last VM erased would stay on title bar
         FixAllMenus(TRUE);
         InitThreads();
     }
