@@ -882,8 +882,8 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
 
         cb = _lseek(h, 0L, SEEK_END);
 
-        // valid sizes are 8K - 1024K with or without a 16 byte header
-        if (cb > MAX_CART_SIZE || (cb & ~0x1fe010))
+        // valid sizes are 4K or 8-1024K in multiples of 8K, with or without a 16 byte header
+        if (cb > MAX_CART_SIZE || ((cb & ~0x1fe010) && cb & ~0x1010))
         {
             _close(h);
             goto exitCart;
@@ -935,6 +935,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
     //{ name: 'Atarimax 128 KB cartridge', id : 41 },
     //{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
+    // id: 58, 4K cartridge
 
     // !!! I support these, but not the part where they can switch out to RAM yet
 
@@ -969,12 +970,11 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //{ name: 'SIC! 512 KB cartridge', id : 56 },
     //{ name: 'MegaCart 1024 KB cartridge', id : 32 },
 
-    if (cb < 8192)
-        goto exitCart;
+    if ((type == 58 || !type) && cb == 4096)
+        bCartType = CART_4K;
 
     else if (type == 1 || (!type && cb == 8192))
         bCartType = CART_8K;
-
 
     else if (cb == 16384)
     {
@@ -1098,6 +1098,11 @@ void InitCart(int iVM)
     unsigned int cb = pcart->cbData;
     BYTE *pb = rgbSwapCart[iVM];
 
+    if (bCartType == CART_4K)
+    {
+        _fmemcpy(&rgbMem[0xb000], pb, 4096);
+        AlterRamtop(iVM, 0xa000);   // even though cart starts at 0xb000
+    }
     if (bCartType == CART_8K)
     {
         _fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
