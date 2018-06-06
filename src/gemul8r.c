@@ -65,7 +65,6 @@ const ULONGLONG JIF = 29830;    // 1789790 / 60
 // and our other globals
 
 BOOL fDebug;
-int nFirstTile; // at which instance does tiling start?
 int sVM = -1;    // the tile with focus
 
 static ULONG renders;
@@ -351,8 +350,8 @@ ULONGLONG GetMs()
 //
 DWORD WINAPI VMThread(LPVOID l)
 {
-    int iV = (int)l;
-
+    int iV = (int)l;    // remember which visible tile # we are
+    
     while (1)
     {
         WaitForSingleObject(ThreadStuff[iV].hGoEvent, INFINITE);
@@ -438,11 +437,12 @@ ThreadTry:
             GetClientRect(vi.hWnd, &rect);
 
             // find the VM at the top of the page
-            int iVM = nFirstTile;
+            int iVM = 0;
             while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
                 iVM++;
 
             int x, y, iDone = iVM;
+            BOOL fFirst = TRUE;
 
             // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
             int nx = (rect.right * 10 / rgvm[iVM].pvmi->uScreenX + 5) / 10; // how many fit across (if 1/2 showing counts)?
@@ -454,6 +454,12 @@ ThreadTry:
                     // Don't consider tiles completely off screen
                     if (y + (int)rgvm[iVM].pvmi->uScreenY > 0 && y < rect.bottom)
                     {
+                        if (fFirst)
+                        {
+                            nFirstVisibleTile = iVM;    // hint to quickly find tile positions later
+                            fFirst = FALSE;
+                        }
+
                         ThreadStuff[cThreads].fKillThread = FALSE;
                         ThreadStuff[cThreads].iThreadVM = iVM;
                         ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -2738,7 +2744,7 @@ void RenderBitmap()
         {
 
             // find a valid VM we can use
-            iVM = nFirstTile; // we're asked to start tiling at this point
+            iVM = 0; // start tiling at VM 0
             while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
                 iVM++;
 
@@ -3156,14 +3162,23 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
 
     int x, y, iVM;
 
-    iVM = nFirstTile;
-    while (iVM < 0 || !rgvm[iVM].fValidVM)
-        iVM = ((iVM + 1) % MAX_VM);
-    int fDone = iVM;
+    iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
+    Assert(rgvm[iVM].fValidVM);
+
+//    while (iVM < 0 || !rgvm[iVM].fValidVM)
+//        iVM = ((iVM + 1) % MAX_VM);
+
+    int fDone = 0;
 
     int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+    
+    // first tile position, may be a huge negative number
+    y = rect.top + sWheelOffset;
 
-    for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix * vi.fYscale)
+    int row = abs(y) / vvmhw[iVM].ypix;   // how many rows down until the bottom of the rect will be > 0?
+    y += row * vvmhw[iVM].ypix;           // top of nFirstTileVisible
+
+    for (; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale */)
     {
         for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
         {
@@ -3176,7 +3191,7 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
                 return;
             }
 
-            // advance to the next valid bitmap
+            // advance to the next valid bitmap ie valid VM
             do
             {
                 iVM = (iVM + 1) % MAX_VM;
@@ -3208,7 +3223,7 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 
     int x, y;
 
-    int iVM = nFirstTile;
+    int iVM = 0;
     while (iVM < 0 || !rgvm[iVM].fValidVM)
         iVM = ((iVM + 1) % MAX_VM);
     int fDone = iVM;
@@ -4301,7 +4316,7 @@ break;
                         }
                     }
             } else if (v.cVM) {
-                SelectInstance(v.iVM >= 0 ? v.iVM : nFirstTile);    // bring the one with focus up if it exists, else the top one
+                SelectInstance(v.iVM >= 0 ? v.iVM : 0);    // bring the one with focus up if it exists, else the top one
             }
             FixAllMenus(TRUE);
             InitThreads();

@@ -165,8 +165,9 @@ typedef struct
 } ThreadStuffS;
 
 ThreadStuffS *ThreadStuff;
-HANDLE *hDoneEvent;    // I'm done executing. WaitForMultipleObjects needs this to be a separate array
+HANDLE *hDoneEvent;     // I'm done executing. WaitForMultipleObjects needs this to be a separate array
 int cThreads;           // how many VMs are visible right now
+int nFirstVisibleTile;  // hint to quickly find tile positions
 
 //
 // Helper routines for manipulating bit vectors
