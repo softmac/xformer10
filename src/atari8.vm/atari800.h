@@ -117,6 +117,8 @@ BYTE rgPMGMap[65536];
 #define CART_ATARIMAX1 8
 #define CART_ATARIMAX8 9
 #define CART_4K      10
+#define CART_ATRAX   11
+#define CART_ATARIMAX1_OR_ATRAX 12
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
