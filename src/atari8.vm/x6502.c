@@ -3181,6 +3181,7 @@ void __cdecl Go6502(const int iVM)
                 case 0x93:
                 case 0x9B:
                 case 0x9C:
+                case 0x9E:
                 case 0xA3:
                 case 0xA7:
                 case 0xB3:
