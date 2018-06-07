@@ -936,6 +936,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //{ name: 'Atarimax 128 KB cartridge', id : 41 },
     //{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
     // id: 58, 4K cartridge
+    // id: 17 Atrax 128K
 
     // !!! I support these, but not the part where they can switch out to RAM yet
 
@@ -1022,8 +1023,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     }
 
     // 128K and 1st bank is the main one - ATARIMAX
-    else if (type == 41 || (type == 0 && cb == 131072 && *(pb + 8188) == 0 &&
-        ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
+    else if (type == 41)
     {
         bCartType = CART_ATARIMAX1;
 
@@ -1043,6 +1043,26 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
+    // 128K and 1st bank is the main one - ATRAX
+    else if (type == 17)
+    {
+        bCartType = CART_ATRAX;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
+    }
+
+    // 128K and 1st bank is the main one - could be either CART_ATRAX or CART_ATARIMAX1. We'll detect later based on banking style
+    else if (type == 0 && cb == 131072 && *(pb + 8188) == 0 &&
+        ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
+    {
+        bCartType = CART_ATARIMAX1_OR_ATRAX;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
+    }
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
     else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 &&
         (((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
@@ -1144,8 +1164,9 @@ void InitCart(int iVM)
         read_tab[iVM][0x9f] = PeekBAtariBB;
 #endif
     }
-    // 8K main bank is the first one (rumours are, in some old 1M carts, it's the last)
-    else if (bCartType == CART_ATARIMAX1)
+    // 8K main bank is the first one for ATARIMAX1 (rumours are, in some old 1M carts, it's the last)
+    // if we're not sure yet, then iSwapCart won't be the special value
+    else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1_OR_ATRAX)
     {
         if (iSwapCart == 0x10)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
@@ -1166,6 +1187,17 @@ void InitCart(int iVM)
         }
 
     }
+    // 8K main bank is the first one
+    else if (bCartType == CART_ATRAX)
+    {
+        if (iSwapCart >= 0x80)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
     // 8K main bank is the last one
     else if (bCartType == CART_XEGS)
     {
@@ -1181,6 +1213,45 @@ void InitCart(int iVM)
     return;
 }
 
+// helper function to swap either a ROM bank or RAM in
+void SwapRAMCart(int iVM, BYTE *pb, BYTE iBank, BOOL fRAM)
+{
+    BYTE swap[8192];
+
+    if (fRAM)
+    {
+        // want RAM - currently ROM - exchange with last bank used
+        if (ramtop == 0xa000)
+        {
+            _fmemcpy(swap, &rgbMem[0xa000], 8192);
+            _fmemcpy(&rgbMem[0xA000], pb + iSwapCart * 8192, 8192);
+            _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
+        }
+        AlterRamtop(iVM, 0xc000);
+        iSwapCart = iBank;
+    }
+    else
+    {
+        // want ROM, currently different ROM? First exchange with last bank used
+        if (ramtop == 0xa000 && iBank != iSwapCart)
+        {
+            _fmemcpy(swap, &rgbMem[0xa000], 8192);
+            _fmemcpy(&rgbMem[0xa000], pb + iSwapCart * 8192, 8192);
+            _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
+        }
+        // now exchange with current bank
+        if (ramtop == 0xc000 || iBank != iSwapCart)
+        {
+            _fmemcpy(swap, &rgbMem[0xa000], 8192);
+            _fmemcpy(&rgbMem[0xa000], pb + iBank * 8192, 8192);
+            _fmemcpy(pb + iBank * 8192, swap, 8192);
+
+            iSwapCart = iBank;    // what bank is in there now
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
+}
+
 // Swap out cartridge banks
 //
 void BankCart(int iVM, BYTE iBank, BYTE value)
@@ -1189,11 +1260,25 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     unsigned int cb = pcart->cbData;
     int i;
     BYTE *pb = rgbSwapCart[iVM];
-    BYTE swap[8192];
 
     // we are not a banking cartridge
     if (!(rgvm[iVM].rgcart.fCartIn) || bCartType <= CART_16K)
         return;
+
+    // we aren't sure yet, figure it out based on type of banking attempted
+    if (bCartType == CART_ATARIMAX1_OR_ATRAX)
+    {
+        if (value > 0x0f && value < 0x80)
+            bCartType = CART_ATARIMAX1; // ATRAX bank# is in value, and would never be 16-127
+        else if (iBank > 0)
+            bCartType = CART_ATARIMAX1; // ATRAX would never use an address != 0xd500 (I hope)
+        else if (iBank == 0 && value > 0 && (value <= 0x0f || value >= 0x80))
+            bCartType = CART_ATRAX;     // ATRAX asks for non-zero bank#, better respond to it and hope for the best
+        
+        // otherwise, we're just asking for bank 0 which we already have, so delay our decision
+    }
+
+    // Bank based on CART TYPE
 
     // banks are 0, 3, 4, main
     if (bCartType == CART_OSSA)
@@ -1257,37 +1342,18 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             mask = 0x7f;
 
         if (iBank == (mask + 1))
-        {
-            // want RAM - currently ROM - exchange with last bank used
-            if (ramtop == 0xa000)
-            {
-                _fmemcpy(swap, &rgbMem[0xa000], 8192);
-                _fmemcpy(&rgbMem[0xA000], pb + iSwapCart * 8192, 8192);
-                _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
-            }
-            AlterRamtop(iVM, 0xc000);
-            iSwapCart = iBank;
-        }
+            SwapRAMCart(iVM, pb, iBank, TRUE);
         else if (iBank <= mask)
-        {
-            // want ROM, currently different ROM? First exchange with last bank used
-            if (ramtop == 0xa000 && iBank != iSwapCart)
-            {
-                _fmemcpy(swap, &rgbMem[0xa000], 8192);
-                _fmemcpy(&rgbMem[0xa000], pb + iSwapCart * 8192, 8192);
-                _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
-            }
-            // now exchange with current bank
-            if (ramtop == 0xc000 || iBank != iSwapCart)
-            {
-                _fmemcpy(swap, &rgbMem[0xa000], 8192);
-                _fmemcpy(&rgbMem[0xa000], pb + iBank * 8192, 8192);
-                _fmemcpy(pb + iBank * 8192, swap, 8192);
+            SwapRAMCart(iVM, pb, iBank, FALSE);
+    }
 
-                iSwapCart = iBank;    // what bank is in there now
-                AlterRamtop(iVM, 0xa000);
-            }
-        }
+    // Byte is bank #, 8K that goes into $A000. Any bank >=0x80 means RAM
+    else if (bCartType == CART_ATRAX)
+    {
+        if (value >= 0x80)
+            SwapRAMCart(iVM, pb, value, TRUE);
+        else
+            SwapRAMCart(iVM, pb, value, FALSE);
     }
 
     // 8k banks, given as contents, not the address
