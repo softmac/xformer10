@@ -1026,8 +1026,9 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         bCartType = CART_BOB;    // unique Bounty Bob cart
     }
 
-    // 128K and 1st bank is the main one - ATARIMAX
-    else if (type == 41)
+    // 128K and 1st bank is the main one - ATARIMAX with default bank 0
+    else if (type == 41 && *(pb + 8188) == 0 &&
+        ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX1;
 
@@ -1036,9 +1037,19 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
+    // I assume this is the variant where the last bank is the default one
+    else if (type == 41)
+    {
+        bCartType = CART_ATARIMAX1L;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
+    }
+
     // 1M, 8K banks and first bank is the main one - ATARIMAX127
-    else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + 8188) == 0 &&
-        ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
+    else if ((type == 42 || type == 0) && cb == 1048576 && *(pb + 8188) == 0 &&
+        ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX8;
 
@@ -1047,7 +1058,16 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
-    // 128K and 1st bank is the main one - ATRAX
+    // I assume this is the variation where the last bank is the default
+    else if (type == 42)
+    {
+        bCartType = CART_ATARIMAX8L;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
+    }
+    // ATRAX - 128K and 1st bank is the main one
     else if (type == 17)
     {
         bCartType = CART_ATRAX;
@@ -1182,7 +1202,7 @@ void InitCart(int iVM)
         read_tab[iVM][0x9f] = PeekBAtariBB;
 #endif
     }
-    // 8K main bank is the first one for ATARIMAX1 (rumours are, in some old 1M carts, it's the last)
+    // 8K main bank is the first one for ATARIMAX1
     // if we're not sure yet, then iSwapCart won't be the special value
     else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1_OR_ATRAX)
     {
@@ -1190,20 +1210,42 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
-            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0, 8192); // starts with bank 0
             AlterRamtop(iVM, 0xa000);
         }
     }
+    // old version where the initial bank is the last one
+    else if (bCartType == CART_ATARIMAX1L)
+    {
+        if (iSwapCart == 0x80)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0x0f, 8192); // last 8K bank of 128K is bank 0x0f
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
+    // initial bank is the first one
     else if (bCartType == CART_ATARIMAX8)
     {
         if (iSwapCart == 0x80)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
-            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0, 8192); // start with bank 0
             AlterRamtop(iVM, 0xa000);
         }
-
+    }
+    // old version where the initial bank is the last one
+    else if (bCartType == CART_ATARIMAX8L)
+    {
+        if (iSwapCart == 0x80)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0x7f, 8192); // last 8K bank of 1MB is bank 0x7f
+            AlterRamtop(iVM, 0xa000);
+        }
     }
     // 8K main bank is the first one
     else if (bCartType == CART_ATRAX)
@@ -1212,7 +1254,7 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
-            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192); // this bank is in right now
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0, 8192); // start with bank 0
             AlterRamtop(iVM, 0xa000);
         }
     }
@@ -1223,7 +1265,7 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
-            _fmemcpy(&rgbMem[0x8000], pb + 0x4000 * iSwapCart, 0x4000); // this bank is in right now
+            _fmemcpy(&rgbMem[0x8000], pb + 0x4000 * 0, 0x4000); // start with bank 0
             AlterRamtop(iVM, 0x8000);
         }
     }
@@ -1368,7 +1410,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     }
 
     // Address is bank #, 8K that goes into $A000. Bank top + 1 is RAM
-    else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8)
+    else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8 || bCartType == CART_ATARIMAX1L || bCartType == CART_ATARIMAX8L)
     {
         int mask;
 
@@ -1379,7 +1421,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
 
         if (iBank == (mask + 1))
             SwapRAMCart(iVM, FALSE, pb, iBank, TRUE);
-        else if (iBank <= mask)
+        else if (iBank <= mask) // !!! or mask it?
             SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
     }
 
@@ -1388,7 +1430,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         if (value >= 0x80)
             SwapRAMCart(iVM, FALSE, pb, value, TRUE);
-        else
+        else if (value <0xf)    // !!! or mask it?
             SwapRAMCart(iVM, FALSE, pb, value, FALSE);
     }
 
@@ -1397,7 +1439,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         if (value >= 0x80)
             SwapRAMCart(iVM, TRUE, pb, value, TRUE);
-        else
+        else  // !!! will crash since I don't know valid range      
             SwapRAMCart(iVM, TRUE, pb, value, FALSE);
     }
 
@@ -2130,7 +2172,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
     if (!f)
         return f;
 
-    // If our saved state had a cartridge, load it back in
+    // If our saved state had a cartridge, load it back in, do not reset to original bank
     ReadCart(iVM, FALSE);
     InitCart(iVM);
 

@@ -47,7 +47,8 @@ typedef struct
 #ifdef XFORMER
 
 static int sCurBuf = -1;    // which buffer is the current one we're filling
-static int sOldSample = 0; // how much of the buffer is full already
+static int sOldSample; // how much of the buffer is full already
+static WORD sOldFrame;  // last frame we saw
 
 typedef struct {
     int pos;    // how far along the width of the pulse are we?
@@ -123,6 +124,11 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
     // We only switch VMs when all threads are asleep
     if (v.fTiling && sVM != (int)iVM)
         return;
+
+    // if we have reset since last we were called, init this variable again
+    if (wFrame < sOldFrame)
+        sOldSample = 0;
+    sOldFrame = wFrame;
 
     // 8 bit code
     if (!FIsAtari68K(rgvm[iVM].bfHW)) {
