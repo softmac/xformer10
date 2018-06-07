@@ -1689,8 +1689,10 @@ int CALLBACK WinMain(
                     if (fx)
                         fNeedTiledBitmap = FALSE;
                 }
+
             }
         }
+        
         ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
 
         static ULONGLONG lastRenderMs;
@@ -3777,13 +3779,14 @@ LRESULT CALLBACK WndProc(
         sWheelOffset = 0;
 
         // Don't make a tiled bitmap of the new size yet, that blanks out our window as we resize.
-        if (v.fTiling)
+        // don't try and re-make a zero size window either
+        // !!! This will waste time doing stuff while minimized
+        if (v.fTiling && v.swWindowState != SW_SHOWMINIMIZED)
         {
             fNeedTiledBitmap = TRUE;
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
+            InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
         }
-
-        InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
 
         break;
 
