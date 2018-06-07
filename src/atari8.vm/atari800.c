@@ -929,14 +929,21 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //{name: 'XEGS 32 KB cartridge', id : 12 },
     //{name: 'XEGS 64 KB cartridge', id : 13 },
     //{name: 'XEGS 128 KB cartridge', id : 14 },
+    // Atrax 128K, id : 17
+    //{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
     //{name: 'XEGS 256 KB cartridge', id : 23 },
     //{name: 'XEGS 512 KB cartridge', id : 24 },
     //{ name: 'XEGS 1024 KB cartridge', id : 25 },
-    //{name: 'Bounty Bob Strikes Back 40 KB cartridge', id : 18 },
+    //{ name: 'MegaCart 16 KB cartridge', id : 26 },
+    //{ name: 'MegaCart 32 KB cartridge', id : 27 },
+    //{ name: 'MegaCart 64 KB cartridge', id : 28 },
+    //{ name: 'MegaCart 128 KB cartridge', id : 29 },
+    //{ name: 'MegaCart 256 KB cartridge', id : 30 },
+    //{ name: 'MegaCart 512 KB cartridge', id : 31 },
+    //{ name: 'MegaCart 1024 KB cartridge', id : 32 },
     //{ name: 'Atarimax 128 KB cartridge', id : 41 },
     //{name: 'Atarimax 1 MB Flash cartridge', id : 42 },
-    // id: 58, 4K cartridge
-    // id: 17 Atrax 128K
+    // 4K cartridge, id : 58
 
     // !!! I support these, but not the part where they can switch out to RAM yet
 
@@ -953,23 +960,16 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     // types I don't support yet, or at least not deliberately
 
     //{ name: 'OSS 8 KB cartridge', id : 44 },
-    //{ name: 'MegaCart 16 KB cartridge', id : 26 },
     //{ name: 'Blizzard 16 KB cartridge', id : 40 },
     //{ name: '32 KB Williams cartridge', id : 22 },
-    //{ name: 'MegaCart 32 KB cartridge', id : 27 },
     //{ name: '64 KB Williams cartridge', id : 8 },
     //{ name: 'Express 64 KB cartridge ', id : 9 },
     //{ name: 'Diamond 64 KB cartridge', id : 10 },
     //{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
-    //{ name: 'MegaCart 64 KB cartridge', id : 28 },
-    //{ name: 'MegaCart 128 KB cartridge', id : 29 },
     //{ name: 'SpartaDOS X 128 KB cartridge', id : 43 },
     //{ name: 'SIC! 128 KB cartridge', id : 54 },
-    //{ name: 'MegaCart 256 KB cartridge', id : 30 },
     //{ name: 'SIC! 256 KB cartridge', id : 55 },
-    //{ name: 'MegaCart 512 KB cartridge', id : 31 },
     //{ name: 'SIC! 512 KB cartridge', id : 56 },
-    //{ name: 'MegaCart 1024 KB cartridge', id : 32 },
 
     if ((type == 58 || !type) && cb == 4096)
         bCartType = CART_4K;
@@ -979,8 +979,12 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
 
     else if (cb == 16384)
     {
+        // allows RAM to be swapped in instead
+        if (type == 26)
+            bCartType = CART_MEGACART;
+
         // copies of the INIT address and the CART PRESENT byte appear in both cartridge areas - not banked
-        if (type == 2 || (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0))
+        else if (type == 2 || (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0))
             bCartType = CART_16K;
 
         // INIT area is in the lower half which wouldn't exist yet if we were banked
@@ -1032,7 +1036,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
-    // 1M and first bank is the main one - ATARIMAX127
+    // 1M, 8K banks and first bank is the main one - ATARIMAX127
     else if (type == 42 || (type == 0 && cb == 1048576 && *(pb + 8188) == 0 &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0))))
     {
@@ -1053,7 +1057,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
-    // 128K and 1st bank is the main one - could be either CART_ATRAX or CART_ATARIMAX1. We'll detect later based on banking style
+    // 128K, 8K banks and 1st bank is the main one - could be either CART_ATRAX or CART_ATARIMAX1. We'll detect later based on banking style
     else if (type == 0 && cb == 131072 && *(pb + 8188) == 0 &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
@@ -1063,6 +1067,20 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         if (fDefaultBank)
             iSwapCart = 0;
     }
+
+    // 32K-1MB, 16K banks and 1st bank is the main one - MEGACART
+    else if ((type >= 27 && type <= 32) || (type == 0 && 
+            (cb == 0x8000 || cb == 0x10000 || cb == 0x20000 || cb == 0x40000 || cb == 0x80000 || cb == 0x100000) &&
+            *(pb + 0x3ffc) == 0 &&
+            ((*(pb + 0x3fff) >= 0x80 && *(pb + 0x3fff) < 0xC0) || (*(pb + 0x3ffb) >= 0x80 && *(pb + 0x3ffb) < 0xC0))))
+    {
+        bCartType = CART_MEGACART;
+
+        // tell InitCart to use the default bank
+        if (fDefaultBank)
+            iSwapCart = 0;
+    }
+
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
     else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 &&
         (((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
@@ -1198,6 +1216,17 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xa000);
         }
     }
+    // 16K main bank is the first one
+    else if (bCartType == CART_MEGACART)
+    {
+        if (iSwapCart >= 0x80)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0x8000], pb + 0x4000 * iSwapCart, 0x4000); // this bank is in right now
+            AlterRamtop(iVM, 0x8000);
+        }
+    }
     // 8K main bank is the last one
     else if (bCartType == CART_XEGS)
     {
@@ -1213,19 +1242,26 @@ void InitCart(int iVM)
     return;
 }
 
-// helper function to swap either a ROM bank or RAM in
-void SwapRAMCart(int iVM, BYTE *pb, BYTE iBank, BOOL fRAM)
+// helper function to swap either a ROM bank or RAM in (8K or 16K banks)
+void SwapRAMCart(int iVM, BOOL f16, BYTE *pb, BYTE iBank, BOOL fRAM)
 {
-    BYTE swap[8192];
+    WORD size;
+
+    if (!f16)
+        size = 0x2000;
+    else
+        size = 0x4000;
+
+    BYTE swap[0x4000];  // big enough for 16K
 
     if (fRAM)
     {
         // want RAM - currently ROM - exchange with last bank used
-        if (ramtop == 0xa000)
+        if (ramtop == 0xc000 - size)
         {
-            _fmemcpy(swap, &rgbMem[0xa000], 8192);
-            _fmemcpy(&rgbMem[0xA000], pb + iSwapCart * 8192, 8192);
-            _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
+            _fmemcpy(pb + iSwapCart * size, swap, size);
         }
         AlterRamtop(iVM, 0xc000);
         iSwapCart = iBank;
@@ -1233,21 +1269,21 @@ void SwapRAMCart(int iVM, BYTE *pb, BYTE iBank, BOOL fRAM)
     else
     {
         // want ROM, currently different ROM? First exchange with last bank used
-        if (ramtop == 0xa000 && iBank != iSwapCart)
+        if (ramtop == (0xc000 - size) && iBank != iSwapCart)
         {
-            _fmemcpy(swap, &rgbMem[0xa000], 8192);
-            _fmemcpy(&rgbMem[0xa000], pb + iSwapCart * 8192, 8192);
-            _fmemcpy(pb + iSwapCart * 8192, swap, 8192);
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
+            _fmemcpy(pb + iSwapCart * size, swap, size);
         }
         // now exchange with current bank
         if (ramtop == 0xc000 || iBank != iSwapCart)
         {
-            _fmemcpy(swap, &rgbMem[0xa000], 8192);
-            _fmemcpy(&rgbMem[0xa000], pb + iBank * 8192, 8192);
-            _fmemcpy(pb + iBank * 8192, swap, 8192);
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iBank * size, size);
+            _fmemcpy(pb + iBank * size, swap, size);
 
             iSwapCart = iBank;    // what bank is in there now
-            AlterRamtop(iVM, 0xa000);
+            AlterRamtop(iVM, 0xc000 - size);
         }
     }
 }
@@ -1342,18 +1378,27 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             mask = 0x7f;
 
         if (iBank == (mask + 1))
-            SwapRAMCart(iVM, pb, iBank, TRUE);
+            SwapRAMCart(iVM, FALSE, pb, iBank, TRUE);
         else if (iBank <= mask)
-            SwapRAMCart(iVM, pb, iBank, FALSE);
+            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
     }
 
     // Byte is bank #, 8K that goes into $A000. Any bank >=0x80 means RAM
     else if (bCartType == CART_ATRAX)
     {
         if (value >= 0x80)
-            SwapRAMCart(iVM, pb, value, TRUE);
+            SwapRAMCart(iVM, FALSE, pb, value, TRUE);
         else
-            SwapRAMCart(iVM, pb, value, FALSE);
+            SwapRAMCart(iVM, FALSE, pb, value, FALSE);
+    }
+
+    // Byte is bank #, 16K that goes into $8000. Any bank >=0x80 means RAM
+    else if (bCartType == CART_MEGACART)
+    {
+        if (value >= 0x80)
+            SwapRAMCart(iVM, TRUE, pb, value, TRUE);
+        else
+            SwapRAMCart(iVM, TRUE, pb, value, FALSE);
     }
 
     // 8k banks, given as contents, not the address
