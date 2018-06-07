@@ -2328,6 +2328,18 @@ HANDLER(opC2)
     HANDLER_END();
 }
 
+// DCP (zp,x) (decrement and compare)
+
+HANDLER(opC3)
+{
+    EA_zpXindW(iVM);
+    DEC_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    CMP_com(iVM, regA);
+    wLeft -= 6;     // best guess
+    HANDLER_END();
+}
+
 // CPY zp
 
 HANDLER(opC4)
@@ -3025,7 +3037,7 @@ PFNOP jump_tab[256] =
     opC0,
     opC1,
     opC2,
-    unused,
+    opC3,
     opC4,
     opC5,
     opC6,
@@ -3188,7 +3200,6 @@ void __cdecl Go6502(const int iVM)
                 case 0xB7:
                 case 0xBB:
                 case 0xBF:
-                case 0xC3:
                 case 0xC7:
                 case 0xCB:
                 case 0xCF:
@@ -3817,6 +3828,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xC2:   // UNDOCUMENTED
                     opC2(iVM);
+                    break;
+
+                case 0xC3:   // UNDOCUMENTED
+                    opC3(iVM);
                     break;
 
                 case 0xC4:   // CPY zp

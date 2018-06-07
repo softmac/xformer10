@@ -114,12 +114,15 @@ BYTE rgPMGMap[65536];
 #define CART_OSSB    5  // Mac65
 #define CART_XEGS    6
 #define CART_BOB     7
-#define CART_ATARIMAX1 8
-#define CART_ATARIMAX8 9
-#define CART_4K      10
-#define CART_ATRAX   11
-#define CART_ATARIMAX1_OR_ATRAX 12
-#define CART_MEGACART 13    // 16K through 1MB
+#define CART_ATARIMAX1  8
+#define CART_ATARIMAX8  9
+#define CART_ATRAX      10
+#define CART_ATARIMAX1_OR_ATRAX 11
+#define CART_ATARIMAX1L 12
+#define CART_ATARIMAX8L 13
+#define CART_MEGACART   14  // 16K through 1MB
+#define CART_4K         15
+
 //#define CART_MEGACART_LAST 19 for now, I don't seem to need to remember which size megacart it is
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
