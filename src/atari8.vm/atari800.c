@@ -1354,7 +1354,8 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             bCartType = CART_ATARIMAX1; // ATRAX bank# is in value, and would never be 16-127
         else if (iBank > 0)
             bCartType = CART_ATARIMAX1; // ATRAX would never use an address != 0xd500 (I hope)
-        else if (iBank == 0 && value > 0 && (value <= 0x0f || value >= 0x80))
+        // !!! 0xfe is hack for Loderunner 2010 TURBOSOFT which is identical behaviour to ATARIMAX1
+        else if (iBank == 0 && value > 0 && (value <= 0x0f || value >= 0x80) && value != 0xfe)
             bCartType = CART_ATRAX;     // ATRAX asks for non-zero bank#, better respond to it and hope for the best
 
         // otherwise, we're just asking for bank 0 which we already have, so delay our decision
