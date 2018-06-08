@@ -683,13 +683,16 @@ __inline void SIOCheck(const int iVM)
 // we hit a KIL instruction and should hang. Try a different VM type
 HANDLER(KIL)
 {
-    vi.fExecuting = FALSE;  // alert the main thread something is up
+    if (v.fAutoKill)
+    {
+        vi.fExecuting = FALSE;  // alert the main thread something is up
 
-    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
 
-    // quit the thread as early as possible
-    wLeft = 0;  // exit the Go6502 loop
-    bp = regPC; // don't do additional scan lines
+        // quit the thread as early as possible
+        wLeft = 0;  // exit the Go6502 loop
+        bp = regPC; // don't do additional scan lines
+    }
 
     HANDLER_END();
 }
@@ -1616,7 +1619,7 @@ HANDLER(op6C)
             WORD we = READ_WORD(iVM, 0x49);
             
             // we are loading code over top of our loader, that will kill us. Try the alternate loader
-            // that lives in a different place
+            // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
             if ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80))
             {
                 fAltBinLoader = TRUE;

@@ -216,6 +216,7 @@ void InitProperties()
     v.fZoomColor = FALSE; // make the window large
     v.fNoMono = TRUE;  // in case user is running an ATI video card
     v.fSaveOnExit = TRUE;  // automatically save settings on exit
+    v.fAutoKill = TRUE; // auto-detect VM type and reboot
 
 #if defined (ATARIST) || defined (SOFTMAC)
     // Initialize default ROM directory to current directory
