@@ -125,6 +125,7 @@ BYTE rgPMGMap[65536];
 #define CART_MEGACART   16  // 16K through 1MB
 #define CART_4K      17
 #define CART_OSSBX   18  // 091M
+#define CART_OSSBY   19  // 019M
 
 //#define CART_MEGACART_LAST 19 for now, I don't seem to need to remember which size megacart it is
 
