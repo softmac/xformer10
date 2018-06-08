@@ -120,8 +120,9 @@ BYTE rgPMGMap[65536];
 #define CART_ATARIMAX1_OR_ATRAX 11
 #define CART_ATARIMAX1L 12
 #define CART_ATARIMAX8L 13
-#define CART_MEGACART   14  // 16K through 1MB
-#define CART_4K         15
+#define CART_XEGS_OR_ATARIMAX8L  14
+#define CART_MEGACART   15  // 16K through 1MB
+#define CART_4K         16
 
 //#define CART_MEGACART_LAST 19 for now, I don't seem to need to remember which size megacart it is
 

@@ -1105,7 +1105,10 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 &&
         (((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
     {
-        bCartType = CART_XEGS;
+        if (cb == 0x100000)
+            bCartType = CART_XEGS_OR_ATARIMAX8L; // actually, it could be either of these
+        else
+            bCartType = CART_XEGS;
     }
     else
         bCartType = 0;
@@ -1237,7 +1240,8 @@ void InitCart(int iVM)
         }
     }
     // old version where the initial bank is the last one
-    else if (bCartType == CART_ATARIMAX8L)
+    // or we're not sure, so let $8000-$a000 be RAM for now in case it's ATARIMAX8L
+    else if (bCartType == CART_ATARIMAX8L || bCartType == CART_XEGS_OR_ATARIMAX8L)
     {
         if (iSwapCart == 0x80)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
@@ -1352,9 +1356,29 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             bCartType = CART_ATARIMAX1; // ATRAX would never use an address != 0xd500 (I hope)
         else if (iBank == 0 && value > 0 && (value <= 0x0f || value >= 0x80))
             bCartType = CART_ATRAX;     // ATRAX asks for non-zero bank#, better respond to it and hope for the best
-        
+
         // otherwise, we're just asking for bank 0 which we already have, so delay our decision
     }
+    
+    // we aren't sure between these
+    else if (bCartType == CART_XEGS_OR_ATARIMAX8L)
+    {
+        if (iBank > 0)
+            bCartType = CART_ATARIMAX8L; // XEGS would never use an address != 0xd500 (I hope)
+        else if (iBank == 0 && value > 0)
+        {
+            bCartType = CART_XEGS;      // XEGS asks for non-zero bank#, better respond to it and hope for the best
+         
+            AlterRamtop(iVM, 0x8000);   // XEGS uses 16K not 8K
+            
+            // right cartridge present bit must float high if it is not RAM and not part of this bank
+            // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
+            // It's probably not zero, or cold start would crash.
+            if (rgbMem[0x9ffc] == 0)
+                rgbMem[0x9ffc] = 0xff;
+        }
+    }
+
 
     // Bank based on CART TYPE
 
@@ -1414,7 +1438,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         int mask;
 
-        if (bCartType == CART_ATARIMAX1)
+        if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1L)
             mask = 0x0f;
         else
             mask = 0x7f;
