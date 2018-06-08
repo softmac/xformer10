@@ -759,6 +759,7 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
+    CheckMenuItem(vi.hMenu, IDM_AUTOKILL, v.fAutoKill ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
@@ -4370,6 +4371,12 @@ break;
 
             break;
 
+        // toggle if we auto-detect VM type by rebooting into a different VM
+        case IDM_AUTOKILL:
+            v.fAutoKill = !v.fAutoKill;
+            FixAllMenus(FALSE);
+            break;
+            
         // toggle how sensitive the mouse wheel is
         case IDM_WHEELSENS:
             v.fWheelSensitive = !v.fWheelSensitive;

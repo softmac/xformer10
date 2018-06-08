@@ -113,7 +113,9 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "Tur&bo Mode\tCtrl+F12", IDM_TURBO
         MENUITEM SEPARATOR
-        MENUITEM "Mouse &Wheel Sensitivity High\tAlt+F12", IDM_WHEELSENS
+        MENUITEM "&Auto-detect VM Type", IDM_AUTOKILL
+        MENUITEM SEPARATOR
+        MENUITEM "Mouse &Wheel Sensitivity High", IDM_WHEELSENS
         MENUITEM SEPARATOR
         MENUITEM "My &Video Cards Sucks", IDM_MYVIDEOCARDSUCKS
     END
@@ -242,18 +244,19 @@ END
 
 IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
 BEGIN
-    VK_F5,          IDM_STRETCH,            VIRTKEY, NOINVERT
-    VK_RETURN,        IDM_FULLSCREEN,            VIRTKEY, CONTROL, NOINVERT
+    VK_F5,             IDM_STRETCH,             VIRTKEY, NOINVERT
+    VK_RETURN,         IDM_FULLSCREEN,          VIRTKEY, CONTROL, NOINVERT
     VK_F11,            IDM_TILE,                VIRTKEY, NOINVERT
-    VK_F11,            IDM_NEXTVM,                VIRTKEY, CONTROL, NOINVERT
-    VK_F11,            IDM_PREVVM,                VIRTKEY, SHIFT, CONTROL, NOINVERT
-    VK_F10,            IDM_WARMSTART,            VIRTKEY, NOINVERT
-    VK_F10,            IDM_TOGGLEBASIC,        VIRTKEY, SHIFT, NOINVERT
-    VK_F10,            IDM_COLDSTART,            VIRTKEY, CONTROL, NOINVERT
+    VK_F11,            IDM_NEXTVM,              VIRTKEY, CONTROL, NOINVERT
+    VK_F11,            IDM_PREVVM,              VIRTKEY, SHIFT, CONTROL, NOINVERT
+    VK_F10,            IDM_WARMSTART,           VIRTKEY, NOINVERT
+    VK_F10,            IDM_TOGGLEBASIC,         VIRTKEY, SHIFT, NOINVERT
+    VK_F10,            IDM_COLDSTART,           VIRTKEY, CONTROL, NOINVERT
     VK_F10,            IDM_CHANGEVM,            VIRTKEY, ALT, NOINVERT
-    VK_F12,            IDM_TURBO,                VIRTKEY, CONTROL, NOINVERT
-    VK_F12,            IDM_COLORMONO,            VIRTKEY, SHIFT, NOINVERT
-    VK_PAUSE,        IDM_DEBUGGER,            VIRTKEY, NOINVERT
+    VK_F12,            IDM_TURBO,               VIRTKEY, CONTROL, NOINVERT
+    VK_F12,            IDM_COLORMONO,           VIRTKEY, SHIFT, NOINVERT
+//    VK_F12,            IDM_WHEELSENS,           VIRTKEY, ALT, NOINVERT
+    VK_PAUSE,          IDM_DEBUGGER,            VIRTKEY, NOINVERT
 
     // legacy
     //VK_F11,         IDM_F11,                VIRTKEY, NOINVERT

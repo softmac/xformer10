@@ -3201,13 +3201,16 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                         }
                         else
                         {
-                            vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
+                            if (v.fAutoKill)
+                            {
+                                vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
 
-                            vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+                                vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
 
-                            // quit the thread as early as possible
-                            wLeft = 0;  // exit the Go6502 loop
-                            bp = regPC; // don't do additional scan lines                    }
+                                // quit the thread as early as possible
+                                wLeft = 0;  // exit the Go6502 loop
+                                bp = regPC; // don't do additional scan lines                    }
+                            }
                         }
                     }
                 }
@@ -3216,13 +3219,16 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 // 
                 else if (addr == 1 && mdXLXE == md800 && (wPORTB) && !(b & 1))
                 {
-                    vi.fExecuting = FALSE;  // alert the main thread something is up
+                    if (v.fAutoKill)
+                    {
+                        vi.fExecuting = FALSE;  // alert the main thread something is up
 
-                    vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+                        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
 
-                    // quit the thread as early as possible
-                    wLeft = 0;  // exit the Go6502 loop
-                    bp = regPC; // don't do additional scan lines
+                        // quit the thread as early as possible
+                        wLeft = 0;  // exit the Go6502 loop
+                        bp = regPC; // don't do additional scan lines
+                    }
                 }
             }
             else

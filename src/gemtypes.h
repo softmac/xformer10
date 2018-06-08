@@ -417,19 +417,32 @@ typedef struct
     unsigned cb;            // size of this structure
     unsigned wMagic;        // magic word (for versioning)
 
-    // ROM card and OS settings
-
-    unsigned ioBaseAddr;    // base i/o port address of ROM card(s)
-    unsigned cCards;        // number of ROM cards
-    
-    // to big for general properties, the appropriate VM must persist this as part of its data
-    //OSINFO   rgosinfo[MAXOS];
-    //unsigned cOS;           // count of valid OSes, or 0
-
     // VMs
 
     int iVM;           // our current instance, which must be valid, or -1
     int cVM;           // total number of valid VM entries
+
+    BOOL     fMyVideoCardSucks : 1;    // asynchronous slow blits, so do 99 blits instead of 1 in tiled mode
+    BOOL     fSaveOnExit : 1; // 0 = normal, 1 = save INI file on exit
+    BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
+    BOOL     fZoomColor : 1;  // 0 = normal, 1 = zoom low rez and medium rez
+    BOOL     fFullScreen : 1; // 0 = normal, 1 = display in full screen mode
+    BOOL     fWheelSensitive : 8;  // should we scroll tile mode faster for mouse wheels that aren't sensitive?
+    BOOL     fAutoKill : 8;  // should we scroll tile mode faster for mouse wheels that aren't sensitive?
+    BOOL     vRefresh : 8;    // monitor refresh rate
+    int      swWindowState;    // were we restored? maximized? minimized?
+    RECT     rectWinPos;    // saved window pos (want top left corner only)
+
+    // referenced, but not used
+    BOOL     fNoMono : 1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
+
+    //////////////////////////////////////////////////
+    // BELOW THIS LINE ARE THINGS NOT USED BY ATARI800
+    //////////////////////////////////////////////////
+
+    // ROM card and OS settings
+    unsigned ioBaseAddr;    // base i/o port address of ROM card(s)
+    unsigned cCards;        // number of ROM cards
 
     // obsolete Atari ST/STE specific settings used as placeholders now
 
@@ -462,28 +475,18 @@ typedef struct
 
     BOOL     fSkipStartup:8;// bit 0 = skip splash, bit 1 = one time unhybernate
     BOOL     fNoQckBoot:8;  // 0 = don't skip hardware check in BIOS
-    BOOL     fNoMono:1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
-    BOOL     fMyVideoCardSucks:1;    // asynchronous slow blits, so do 99 blits instead of 1 in tiled mode
-    BOOL     fSaveOnExit:1; // 0 = normal, 1 = save INI file on exit
     BOOL     fHibrOnExit:1; // 0 = normal, 1 = hibernate on exit
-    BOOL     fTiling : 1;     // 0 = normal, 1 - tile the display (was RESERVED)
-    BOOL     fZoomColor:1;  // 0 = normal, 1 = zoom low rez and medium rez
-    BOOL     fFullScreen:1; // 0 = normal, 1 = display in full screen mode
     BOOL     fCPUID:1;      // 0 = old,    1 = CPUID values are valid
     BOOL     fPrivate:8;    // set to indicate we're using private VM settings
 
     BOOL     fDebugMode:8;  // NOT USED: 1 = put CPU into debug mode
     BOOL     fNoSCSI:8;     // 1 = disables SCSI support
-    BOOL     fWheelSensitive:8;  // should we scroll tile mode faster for mouse wheels that aren't sensitive?
+
     BOOL     fNoTwoBut:8;   // 1 = disables use of two mouse buttons (force F11)
 
     BOOL    _mdCPU:8;       // -1 = Auto, 0 = 68000, 1 = 68010, 2 = 68020, etc.
     BOOL     fNoDDraw:8;    // 1 = no preload of DirectX, 2 = disable DirectX
-    BOOL     vRefresh:8;    // monitor refresh rate
     BOOL     fNoJit:8;      // 1 = disable jitter
-
-    int         swWindowState;    // were we restored? maximized? minimized?
-    RECT     rectWinPos;    // saved window pos (want top left corner only)
 
 } PROPS;
 
