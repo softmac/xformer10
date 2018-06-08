@@ -1090,10 +1090,10 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
-    // 32K-1MB, 16K banks and 1st bank is the main one - MEGACART
+    // 32K-1MB, 16K banks and 1st bank is the main one and last bank NOT valid 8K segment like XEGS (Star Raiders II) - MEGACART
     else if ((type >= 27 && type <= 32) || (type == 0 && 
             (cb == 0x8000 || cb == 0x10000 || cb == 0x20000 || cb == 0x40000 || cb == 0x80000 || cb == 0x100000) &&
-            *(pb + 0x3ffc) == 0 &&
+            !(*(pb + 0x3ffc)) && (*(pb + cb - 4) || *(pb + cb - 1) < 0xa0 || *(pb + cb - 1) >= 0xc0) &&
             ((*(pb + 0x3fff) >= 0x80 && *(pb + 0x3fff) < 0xC0) || (*(pb + 0x3ffb) >= 0x80 && *(pb + 0x3ffb) < 0xC0))))
     {
         bCartType = CART_MEGACART;
@@ -1110,6 +1110,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     }
 
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
+    // last 8K bank goes from $a000-$c000 and other 8K banks get swapped into $8000-$a000
     else if ( ((type >= 12 && type <= 14) || (type >=23 && type <=25) || (type >= 33 && type <= 38)) || (type == 0 &&
         (((*(pb + cb - 1) >= 0x80 && *(pb + cb - 1) < 0xC0) || (*(pb + cb - 5) >= 0x80 && *(pb + cb - 1) < 0xC0)) && *(pb + cb - 4) == 0)))
     {
@@ -1499,7 +1500,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         if (value >= 0x80)
             SwapRAMCart(iVM, TRUE, pb, value, TRUE);
-        else  // !!! will crash since I don't know valid range      
+        else if (value < 0x40)  // !!! can still crash since I don't know valid range
             SwapRAMCart(iVM, TRUE, pb, value, FALSE);
     }
 
