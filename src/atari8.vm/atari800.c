@@ -999,12 +999,16 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         // last bank is the main bank, other banks are 0, 4, 3.
         else if (type == 45 ||
             (type == 0 && pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 4 && pb[12287] == 3))
-            bCartType = CART_OSSA;
+            bCartType = CART_OSSAX;
 
         // first bank is the main bank, other banks are 0, 9 1.
         else if (type == 15 ||
                 (type == 0 && pb[4095] >= 0x80 && pb[4095] < 0xC0 && pb[4092] == 0 && pb[8191] == 0 && pb[12287] == 9 && pb[16383] == 1))
             bCartType = CART_OSSB;
+
+        // last bank is the main bank, other banks are 0, 9 1.
+        else if (type == 0 && pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[4095] == 0 && pb[8191] == 9 && pb[12287] == 1)
+            bCartType = CART_OSSBX;
 
         // valid L slot INIT address OR RUN address, and CART PRESENT byte - assume a 16K cartridge
         // Computer War has its INIT procedure inside the OS! Others don't have a run address.
@@ -1184,7 +1188,7 @@ void InitCart(int iVM)
         AlterRamtop(iVM, 0x8000);
     }
     // main bank is the last one
-    else if (bCartType == CART_OSSA)
+    else if (bCartType == CART_OSSA || bCartType == CART_OSSAX || bCartType == CART_OSSBX)
     {
         _fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
         AlterRamtop(iVM, 0xa000);
@@ -1440,10 +1444,27 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         if (!(iBank & 8) && !(iBank & 1))
             i = 1;
-        else if (!(iBank & 8) && (iBank & 1))
+        else if (!(iBank & 8) && (iBank & 1))   // may ask for bank 1 with iBank == 3
             i = 3;
         else if ((iBank & 8) && (iBank & 1))
             i = 2;
+        else
+            i = -1;     //!!! swapping OSS A & B cartridge out to RAM not supported
+
+        Assert(i != -1);
+        if (i != -1)
+            _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+    }
+
+    // banks are 0, 9, 1, main
+    else if (bCartType == CART_OSSBX)
+    {
+        if (!(iBank & 8) && !(iBank & 1))
+            i = 0;
+        else if (!(iBank & 8) && (iBank & 1))   // may ask for bank 1 with iBank == 3
+            i = 2;
+        else if ((iBank & 8) && (iBank & 1))
+            i = 1;
         else
             i = -1;     //!!! swapping OSS A & B cartridge out to RAM not supported
 
@@ -3215,9 +3236,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                     }
                 }
 
-                // PORT B bit 0 in write mode, being used to attempt to swap out the OS on an 800
+                // PORT B bit 0 being used to attempt to swap out the OS on an 800?
+                // Unfortunately, the XL OS boot sequence leaves PORTB in write mode, and the 800 OS obviously doesn't,
+                // so I can't actually tell if somebody is trying to swap out the OS, I have to assume.
+                // (They won't always put PORTB in write mode explicitly)
+                // I at least protect against clearing memory with zeros thinking that's an attempt to swap out the OS
+                // by insisting b be non-zero
                 // 
-                else if (addr == 1 && mdXLXE == md800 && (wPORTB) && !(b & 1))
+                else if (addr == 1 && mdXLXE == md800 && b && !(b & 1))
                 {
                     if (v.fAutoKill)
                     {
