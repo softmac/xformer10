@@ -109,9 +109,9 @@ BYTE rgPMGMap[65536];
 
 #define CART_8K      1    // 0 for invalid
 #define CART_16K     2
-#define CART_OSSA    3  // Action
-#define CART_OSSAX   4  // 0 4 3 version
-#define CART_OSSB    5  // Mac65
+#define CART_OSSA    3  // 034M
+#define CART_OSSAX   4  // 043M version
+#define CART_OSSB    5  // M091
 #define CART_XEGS    6
 #define CART_BOB     7
 #define CART_ATARIMAX1  8
@@ -123,7 +123,8 @@ BYTE rgPMGMap[65536];
 #define CART_XEGS_OR_ATARIMAX8L  14
 #define CART_XEGS_OR_ATARIMAX1L  15
 #define CART_MEGACART   16  // 16K through 1MB
-#define CART_4K         17
+#define CART_4K      17
+#define CART_OSSBX   18  // 091M
 
 //#define CART_MEGACART_LAST 19 for now, I don't seem to need to remember which size megacart it is
 
