@@ -1026,7 +1026,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         bCartType = CART_BOB;    // unique Bounty Bob cart
     }
 
-    // 128K and 1st bank is the main one - ATARIMAX with default bank 0
+    // ATARIMAX1 - 128K and 1st bank is the main one
     else if (type == 41 && *(pb + 8188) == 0 &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
@@ -1047,7 +1047,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             iSwapCart = 0;
     }
 
-    // 1M, 8K banks and first bank is the main one - ATARIMAX127
+    // 1M, 8K banks and first bank is the main one - ATARIMAX8
     else if ((type == 42 || type == 0) && cb == 1048576 && *(pb + 8188) == 0 &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
@@ -1067,6 +1067,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         if (fDefaultBank)
             iSwapCart = 0;
     }
+    
     // ATRAX - 128K and 1st bank is the main one
     else if (type == 17)
     {
@@ -1076,9 +1077,10 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         if (fDefaultBank)
             iSwapCart = 0;
     }
-
-    // 128K, 8K banks and 1st bank is the main one - could be either CART_ATRAX or CART_ATARIMAX1. We'll detect later based on banking style
-    else if (type == 0 && cb == 131072 && *(pb + 8188) == 0 &&
+    
+    // 128K, 8K banks, 1st bank is the main one, last bank isn't valid - either CART_ATRAX or CART_ATARIMAX1.
+    // (I assume it can't be ATRAX if last bank is valid but it might be XEGS)
+    else if (type == 0 && cb == 131072 && !(*(pb + 8188)) && (*(pb + 131068) || *(pb + 131071) < 0xa0 || *(pb + 131071) >= 0xc0) && 
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX1_OR_ATRAX;
@@ -1099,6 +1101,12 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         // tell InitCart to use the default bank
         if (fDefaultBank)
             iSwapCart = 0;
+    }
+
+    // both first and last 8K of 128K are valid... could be ATARIMAX1L or XEGS
+    else if (type == 0 && cb == 0x20000 && !(*(pb + 0x1ffc)) && !(*(pb + 0x1fffc)))
+    {
+        bCartType = CART_XEGS_OR_ATARIMAX1L; // actually, it could be either of these
     }
 
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
@@ -1218,7 +1226,7 @@ void InitCart(int iVM)
         }
     }
     // old version where the initial bank is the last one
-    else if (bCartType == CART_ATARIMAX1L)
+    else if (bCartType == CART_ATARIMAX1L || bCartType == CART_XEGS_OR_ATARIMAX1L)
     {
         if (iSwapCart == 0x80)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
@@ -1380,6 +1388,31 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         }
     }
 
+    // we aren't sure between these
+    else if (bCartType == CART_XEGS_OR_ATARIMAX1L)
+    {
+        if (iBank > 0)
+            bCartType = CART_ATARIMAX1L; // XEGS would never use an address != 0xd500 (I hope)
+        else if (iBank == 0 && value > 0 && value < 0xf)
+        {
+            bCartType = CART_XEGS;      // XEGS asks for non-zero bank#, better respond to it and hope for the best
+
+            AlterRamtop(iVM, 0x8000);   // XEGS uses 16K not 8K
+
+            // right cartridge present bit must float high if it is not RAM and not part of this bank
+            // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
+            // It's probably not zero, or cold start would crash.
+            if (rgbMem[0x9ffc] == 0)
+                rgbMem[0x9ffc] = 0xff;
+        }
+        // actually, we appear to really want bank 0, which means we're neither, but probably ATARIMAX1
+        else if (iBank == 0)
+        {
+            bCartType = CART_ATARIMAX1L; // XEGS would never use an address != 0xd500 (I hope)
+            // !!! hack for Pacman Arcade Demo Playable
+            _fmemcpy(&rgbMem[0xa000], pb, 8192); // we wanted the first bank initially all along, oops
+        }
+    }
 
     // Bank based on CART TYPE
 
@@ -1448,6 +1481,8 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             SwapRAMCart(iVM, FALSE, pb, iBank, TRUE);
         else if (iBank <= mask) // !!! or mask it?
             SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
+        else
+            iBank = iBank;  // !!! some Space Harriers are broken
     }
 
     // Byte is bank #, 8K that goes into $A000. Any bank >=0x80 means RAM
