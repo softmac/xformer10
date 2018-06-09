@@ -472,10 +472,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
                 cLines = (chCom == 'T') ? 20 : ((chCom == 'A') ? 1000000000 : 1);
                 
-                if (!wSIORTS)
-                    fTrace = (chCom != 'G');
-                else if (chCom == 'G')
-                    fTrace = FALSE;     // otherwise don't mess with it, it depends if we're in an interrupt or not
+                fTrace = (chCom != 'G');
 
                 if (FGetWord(&u1))
                 {
@@ -491,14 +488,17 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 }
 
                 do { // do at least 1 thing, don't get stuck at the breakpoint
-                    FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+                    
+                    do {
+                        FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+                    } while (wSIORTS && !fTrace); // we don't want to exit this, but we will at the end of frame, so go back in
+
                     RenderBitmap();
-                    if (!wSIORTS || fTrace)   // hide instructions inside our hacky SIO delay
-                    {
-                        w = regPC;
-                        CchDisAsm(iVM, &w);          // show the next instruction that will run
-                        CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
-                    }
+
+                    w = regPC;
+                    CchDisAsm(iVM, &w);          // show the next instruction that will run
+                    CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
+
                     if (GetAsyncKeyState(VK_END) & 0x8000)
                         break;
                 } while ((--cLines) && (regPC > 0) && (regPC != bp) && (regPC != bpT));
