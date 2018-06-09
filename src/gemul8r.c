@@ -1360,10 +1360,12 @@ int CALLBACK WinMain(
                 }    // using drag/drop, just move on with our lives if there's an error
             }
 
-            // found a .gem file. Ignore everything else and just load this
+            // found a .gem file. Only notice it if it's the first thing being dragged.
+            // One .gem file in a thousand other files keeping them all from loading would really aggravate a person.
 
-            else if (_stricmp(sFile + len - 3, "gem") == 0)
+            else if (_stricmp(sFile + len - 3, "gem") == 0 && fSkipLoad == FALSE)
             {
+#if 0
                 fSkipLoad = FALSE;    // changed our mind, loading this .gem file
 
                 // delete all of our VMs we accidently made before we found the .gem file
@@ -1372,6 +1374,7 @@ int CALLBACK WinMain(
                     if (rgvm[z].fValidVM)
                         DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
                 }
+#endif
 
                 lpLoad = sFile;    // load this .gem file
                 break;    // stop loading more files
