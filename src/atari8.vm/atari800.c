@@ -12,7 +12,6 @@
 
 ***************************************************************************/
 
-
 #include "atari800.h"
 
 //
@@ -41,7 +40,7 @@ VMINFO const vmi800 =
     TRUE,    // fUsesJoystick
     // ATR must come first to be the default extension when creating a new disk image
     "Xformer/SIO2PC Disks\0*.atr;*.xfd;*.sd;*.dd;*.xex;*.exe;*.com;*.bas\0All Files\0*.*\0\0",
-    "Xformer Cartridge\0*.bin;*.rom;*.car\0All Files\0*.*\0\0",
+    "Xformer Cartridge\0*.bin;*.rom;*.car;*.x28;*.x64;*.x32\0All Files\0*.*\0\0",
 
     InstallAtari,
     UnInstallAtari,
@@ -926,6 +925,8 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //
     //{name: 'Standard 8k cartridge', id : 1 },
     //{name: 'Standard 16k cartridge', id : 2 },
+    //{ name: 'Diamond 64 KB cartridge', id : 10 },
+    //{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
     //{name: 'XEGS 32 KB cartridge', id : 12 },
     //{name: 'XEGS 64 KB cartridge', id : 13 },
     //{name: 'XEGS 128 KB cartridge', id : 14 },
@@ -964,8 +965,6 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //{ name: '32 KB Williams cartridge', id : 22 },
     //{ name: '64 KB Williams cartridge', id : 8 },
     //{ name: 'Express 64 KB cartridge ', id : 9 },
-    //{ name: 'Diamond 64 KB cartridge', id : 10 },
-    //{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
     //{ name: 'SpartaDOS X 128 KB cartridge', id : 43 },
     //{ name: 'SIC! 128 KB cartridge', id : 54 },
     //{ name: 'SIC! 256 KB cartridge', id : 55 },
@@ -1028,6 +1027,20 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         // bad cartridge?
         else
             bCartType = 0;
+    }
+
+    // unique DIAMOND cartridge - every 8K segment is valid with 5 as the boot byte, 1st segment is the main one
+    else if (type == 10 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 5 && 
+                !pb[0x3ffc] && pb[0x3ffd] == 5 && !pb[0xfffc] && pb[0xfffd] == 5))
+    {
+        bCartType = CART_DIAMOND;    // unique DIAMOND cart
+    }
+    
+    // unique SPARTA cartridge - every 8K segment is valid with 1 as the boot byte
+    else if (type == 11 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 1 &&
+        !pb[0x3ffc] && pb[0x3ffd] == 1 && !pb[0xfffc] && pb[0xfffd] == 1))
+    {
+        bCartType = CART_SPARTA;    // unique SPARTA cart
     }
 
     // unique 40K Bounty Bob cartridge - check for last bank being valid?
@@ -1205,6 +1218,19 @@ void InitCart(int iVM)
         _fmemcpy(&rgbMem[0xB000], pb, 4096);
         AlterRamtop(iVM, 0xa000);
     }
+    
+    // 8K main bank is the first one
+    else if (bCartType == CART_DIAMOND || bCartType == CART_SPARTA)
+    {
+        if (iSwapCart == 8)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xA000], pb, 8192);
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
+    
     // 8K main bank is the last one, and init the $8000 and $9000 banks to their bank 0's
     else if (bCartType == CART_BOB)
     {
@@ -1494,6 +1520,31 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         Assert(i != -1);
         if (i != -1)
             _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
+    }
+
+    // $d5d7 through $d5d0 is bank 0-7. $d5d8 through $d5df is RAM
+    else if (bCartType == CART_DIAMOND)
+    {
+        if (iBank >= 0xd0 && iBank <= 0xd7)
+        {
+            iBank = 0xd7 - iBank;
+            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
+        }
+        else if (iBank >= 0xd8 && iBank <= 0xdf)
+            SwapRAMCart(iVM, FALSE, pb, 8, TRUE);
+    }
+
+    // $d5e7 through $d5e0 is bank 0-7. $d5e8 through $d5ef is RAM, I hope
+    // !!! 2nd cartridge not supported
+    else if (bCartType == CART_SPARTA)
+    {
+        if (iBank >= 0xe0 && iBank <= 0xe7)
+        {
+            iBank = 0xe7 - iBank;
+            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
+        }
+        else if (iBank >= 0xe8 && iBank <= 0xef)
+            SwapRAMCart(iVM, FALSE, pb, 8, TRUE);
     }
 
     // Bounty Bob - bank 0 is $8000-$9000, 4 choices starting at beginning of file
