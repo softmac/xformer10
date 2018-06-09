@@ -1814,10 +1814,27 @@ HANDLER(op7E)
     HANDLER_END();
 }
 
-// NOP #imm
+// NOP imm
 
 HANDLER(op80)
 {
+    // BINARY LOADER HACK #2
+    // we just ran some INIT code, and our loader assumed $300-$30b weren't touched, but they were (Click)
+    // put them back
+    if (regPC == 0x724 || regPC == 0x4a4)   // our two versions of the loader
+    {
+        rgbMem[0x300] = 0x31;
+        rgbMem[0x301] = 0x1;
+        rgbMem[0x302] = 0x52;
+        rgbMem[0x303] = 0x01;
+        rgbMem[0x304] = 0x00;
+        rgbMem[0x305] = regPC == 0x724 ? 0x0a : 0x04;    // correct buffer for this version
+        rgbMem[0x306] = 0x06;
+        rgbMem[0x308] = 0x80;
+        rgbMem[0x309] = 0x00;
+        rgbMem[0x30a] = regPC == 0x724 ? rgbMem[0xa7e] : rgbMem[0x47e]; // correct buffer for this version
+        rgbMem[0x30b] = regPC == 0x724 ? rgbMem[0xa7d] : rgbMem[0x47d];
+    }
     regPC++;
     wLeft -= 2;
     HANDLER_END();
