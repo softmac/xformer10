@@ -694,6 +694,7 @@ HANDLER(KIL)
         bp = regPC; // don't do additional scan lines
     }
 
+    wLeft -= 2; // Must be non-zero! Or we stack fault in long BRK chains that call this
     HANDLER_END();
 }
 
@@ -1600,7 +1601,19 @@ HANDLER(op6C)
 {
     EA_absW(iVM);
 
-    if (regEA == 0x2e2)
+    // if a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
+    // load address of the last segment in $47/48. We can try that.
+    if (regEA == 0x2e0)
+    {
+        if (!rgbMem[0x2e0] && !rgbMem[0x2e1])
+        {
+            rgbMem[0x2e0] = rgbMem[0x47];
+            rgbMem[0x2e1] = rgbMem[0x48];
+        }
+        regPC = READ_WORD(iVM, regEA);
+    }
+
+    else if (regEA == 0x2e2)
     {
         regPC = READ_WORD(iVM, regEA);
 
@@ -1617,13 +1630,19 @@ HANDLER(op6C)
         {
             WORD ws = READ_WORD(iVM, 0x47);
             WORD we = READ_WORD(iVM, 0x49);
-            
+      
             // we are loading code over top of our loader, that will kill us. Try the alternate loader
             // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
             if ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80))
             {
-                fAltBinLoader = TRUE;
-                KIL(iVM);
+                fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere, this is never reset
+                                        // (we're about to do a cold start, so we can't reset it there)
+
+                // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
+                vi.fExecuting = FALSE;  // alert the main thread something is up
+                // quit the thread as early as possible
+                wLeft = 0;  // exit the Go6502 loop
+                bp = regPC; // don't do additional scan lines
                 vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
             }
             
@@ -3111,6 +3130,10 @@ PFNOP jump_tab[256] =
 
 void __cdecl Go6502(const int iVM)
 {
+    // trying to execute in register space is a bad sign (except our SIO hack lives there) - doesn't appear to help
+    //if ((regPC >= 0xd000 && regPC < 0xd180) || (regPC >= 0xd1a0 && regPC < 0xd800))
+    //    KIL(iVM);
+
     //ODS("Scan %04x : %02x %02x\n", wScan, wLeft, wNMI);
     if (wLeft <= wNMI)    // we're starting past the NMI point, so just do the rest of the line
         wNMI = 0;

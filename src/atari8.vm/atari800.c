@@ -2098,6 +2098,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     wLeft = 0;
     wCycle = 0;
     PSL = 0;
+    wSIORTS = 0;    // stop avoiding printing in the monitor
 
     // SIO init
     cSEROUT = 0;
