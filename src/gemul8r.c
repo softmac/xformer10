@@ -5235,6 +5235,9 @@ break;
                 v.iVM = sVM;    // "current" VM is now this
 
                 FixAllMenus(FALSE); // VM list is greyed out when tiling
+                
+                // don't wait 1sec for the new instance data to show up
+                DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
             }
 
             if (s > -1)
