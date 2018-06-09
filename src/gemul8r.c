@@ -4629,6 +4629,7 @@ break;
                             DeleteVM(v.iVM, TRUE);
                         }
                         FixAllMenus(TRUE);
+                        DisplayStatus(v.iVM);
                         break;
 
                     }
