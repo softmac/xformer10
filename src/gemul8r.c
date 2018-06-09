@@ -1065,8 +1065,8 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
 
                     szF++;    // skip the .
 
-                    // get the ext
-                    while (*szF && ((*szF >= 'A' && *szF <= 'Z') || (*szF >= 'a' && *szF <= 'z')))
+                    // get the ext - allow letters or numbers
+                    while (*szF && ((*szF >= 'A' && *szF <= 'Z') || (*szF >= 'a' && *szF <= 'z') || (*szF >= '0' && *szF <= '9')))
                         *pextV++ = *szF++;
                     *pextV = 0;
 
