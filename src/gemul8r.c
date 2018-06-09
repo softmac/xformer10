@@ -3006,7 +3006,7 @@ void SelectInstance(int iVM)
     v.iVM = iVM;                    // current VM #
 
     FixAllMenus(TRUE);
-
+    
     // The active thread needs to change
     if (!v.fTiling)
         InitThreads();
