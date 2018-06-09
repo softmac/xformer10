@@ -1629,19 +1629,19 @@ HANDLER(op6C)
             KIL(iVM);
 
         // super hack to let us know every section of code that is loaded by our XEX loader.
-        // Bin1-Bin3 puts the start addr in (47,48) and the end addr in (49,4a), and jumps through ($ffff)
-        // We are then responsible for clearing (0x2e2,0x2e3) and jumping to $7af to continue the loader code
+        // Bin1-Bin3 puts the start addr in (43,44) and the end addr in (45,46), and jumps through ($ffff)
+        // We are then responsible for clearing (0x2e2,0x2e3) and jumping to $87c to continue the loader code
         if (regPC == 0xffff)
         {
-            WORD ws = READ_WORD(iVM, 0x47);
-            WORD we = READ_WORD(iVM, 0x49);
+            WORD ws = READ_WORD(iVM, 0x43);
+            WORD we = READ_WORD(iVM, 0x45);
       
             // we are loading code over top of our loader, that will kill us. Try the alternate loader
             // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
-            if ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80))
+
+            if (!fAltBinLoader && ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80)))
             {
-                fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere, this is never reset
-                                        // (we're about to do a cold start, so we can't reset it there)
+                fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere
 
                 // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
                 vi.fExecuting = FALSE;  // alert the main thread something is up
@@ -1649,10 +1649,29 @@ HANDLER(op6C)
                 wLeft = 0;  // exit the Go6502 loop
                 bp = regPC; // don't do additional scan lines
                 vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+                regPC = 0x87c;          // where our handler would like to continue
             }
-            
+
+            else if (fAltBinLoader && ((ws >= 0x400 && ws < 0x600) || (we >= 0x400 && we < 0x0600)))
+            {
+                fAltBinLoader = FALSE;  // try the other loaded relocated elsewhere
+
+                // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
+                vi.fExecuting = FALSE;  // alert the main thread something is up
+                // quit the thread as early as possible
+                wLeft = 0;  // exit the Go6502 loop
+                bp = regPC; // don't do additional scan lines
+                vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+                regPC = 0x5fc;          // where our handler would like to continue
+            }
+            else
+                regPC = fAltBinLoader ? 0x5fc : 0x87c;              // where our handler would like to continue
+
+            // also, remember the start address of the most recent segment loaded for the $2e0 hack above
+            rgbMem[0x47] = rgbMem[0x43];
+            rgbMem[0x48] = rgbMem[0x44];
+
             cpuPokeW(iVM, 0x2e2, 0);    // put this back
-            regPC = 0x7af;              // where our handler would like to continue
         }
     }
     else
