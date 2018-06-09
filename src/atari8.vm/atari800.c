@@ -579,6 +579,10 @@ BOOL TimeTravelReset(unsigned iVM)
 //
 void Interrupt(int iVM, BOOL b)
 {
+    // if we were hit by an interrupt while hiding loop code, we have to show the code again
+    if (wSIORTS)
+        fTrace = TRUE;
+
     // the only time regB is used is to say if an IRQ was a BRK or not
     // is what is pushed on the stack at this time
     if (!b)

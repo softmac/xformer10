@@ -1242,6 +1242,10 @@ HANDLER(op40)
     UnpackP(iVM);
     regPC = PopWord(iVM);
 
+    // if we were hiding SIO hack loop code, but an interrupt hit so we where showing code again, now hide it again that it's done
+    if (wSIORTS)
+        fTrace = FALSE;
+
     wLeft -= 6;
     HANDLER_END_FLOW();
 }
@@ -1487,10 +1491,11 @@ HANDLER(op60)
 
 #ifndef NDEBUG
     // resume tracing after skipping our hacky delay code
-    if (vi.fInDebugger && !vi.fExecuting && !fTrace && regPC == wSIORTS)
+    if (vi.fInDebugger && !fTrace && regPC == wSIORTS)
     {
-        fTrace = TRUE;
         wSIORTS = 0;
+        if (!vi.fExecuting) // if we did a 'G' command during SIO delay, don't start tracing now
+            fTrace = TRUE;
     }
 #endif
 
