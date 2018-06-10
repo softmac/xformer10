@@ -2779,6 +2779,18 @@ HANDLER(opEE)
     HANDLER_END();
 }
 
+// ISB abs
+
+HANDLER(opEF)
+{
+    EA_absW(iVM);
+    INC_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    SBC_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // BEQ rel8
 
 HANDLER(opF0)
@@ -3144,7 +3156,7 @@ PFNOP jump_tab[256] =
     opEC,
     opED,
     opEE,
-    unused,
+    opEF,
     opF0,
     opF1,
     KIL,
@@ -3274,7 +3286,6 @@ void __cdecl Go6502(const int iVM)
                 case 0xDA:
                 case 0xDB:
                 case 0xE3:
-                case 0xEF:
                 case 0xF7:
                 case 0xFB:
                 case 0xFF:
@@ -4039,6 +4050,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xEE:   // INC abs
                     opEE(iVM);
+                    break;
+
+                case 0xEF:   // ISB abs
+                    opEF(iVM);
                     break;
 
                 case 0xF0:   // BEQ rel8
