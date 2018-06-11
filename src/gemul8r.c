@@ -622,6 +622,7 @@ void CreateVMMenu()
     BOOL fNeedNextKey = FALSE;
     BOOL fNeedPrevKey = FALSE;
     int zLast = -1;
+    BOOL fOK = TRUE;
 
     int iFound = 0;
     for (z = MAX_VM - 1; z >= 0; z--)
@@ -665,7 +666,10 @@ void CreateVMMenu()
                 }
 
                 DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);    // erase the old one
-                InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii); // insert before the one we last did.
+                // insert before the one we last did - failure means potentially thousands of subsequent inserts based on this one will go
+                // in the main menu bar instead! so better stop
+                if (fOK)
+                    fOK = InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
                 CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
                 EnableMenuItem(vi.hMenu, IDM_VM1 - iFound, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
                 zLast = z;
@@ -714,16 +718,22 @@ void CreateVMMenu()
     }
 
     // in case we're fixing the menus because some were deleted, these might still be hanging around
-    // never delete our anchor #0!
+    // never delete our anchor #0! Delete everything if something failed
+    int first = max(1, v.cVM);
+    if (!fOK)
+        first = 1;
     for (z = max(1, v.cVM); z < MAX_VM; z++)
         DeleteMenu(vi.hMenu, IDM_VM1 - z, 0);
 
-    if (v.cVM == 0)
+    if (v.cVM == 0 || !fOK)
     {
         mii.fMask = MIIM_STRING;
         mii.dwTypeData = mNew;
         mii.cch = sizeof(mNew);
-        strcpy(mNew, "<NO VMs loaded>");
+        if (!fOK)
+            strcpy(mNew, "<OUT OF MEMORY>");
+        else
+            strcpy(mNew, "<NO VMs loaded>");
         SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
         CheckMenuItem(vi.hMenu, IDM_VM1, MF_UNCHECKED);
     }
