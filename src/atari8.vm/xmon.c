@@ -497,7 +497,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
                     w = regPC;
                     CchDisAsm(iVM, &w);          // show the next instruction that will run
-                    CchShowRegs(iVM);            // !!! when interrupted, this will show the results of the first interrupt instruction!
+                    CchShowRegs(iVM);
 
                     if (GetAsyncKeyState(VK_END) & 0x8000)
                         break;

@@ -1006,7 +1006,7 @@ void PSLPrepare(int iVM)
             //ODS("scan %04x FETCH %02x %02x\n", wScan, sl.modehi, sl.modelo);
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
-            //sl.modehi |= (sl.modelo << 4);   // hide original mode up here !!! technically correct?
+            //sl.modehi |= (sl.modelo << 4);   // hide original mode up here (technically correct?)
             IncDLPC(iVM);
 
             fFetch = FALSE;
@@ -1112,7 +1112,7 @@ void PSLPrepare(int iVM)
             cbDisp = cbWidth;
             break;
         case 1: // narrow playfield
-            //sl.modelo = sl.modehi >> 4; // restore the mode !!! technically correct
+            //sl.modelo = sl.modehi >> 4; // restore the mode (technically correct?)
             cbWidth = mpMdBytes[sl.modelo];        // cbDisp: use NARROW number of bytes per graphics mode line, eg. 32
             cbDisp = cbWidth;
             if ((sl.modehi & 1) && (sl.modelo >= 2)) // hor. scrolling, cbWidth mimics NORMAL
@@ -1207,7 +1207,7 @@ void PSLPrepare(int iVM)
             pmg.pmbase = PMBASE & 0xFC;
 
         // enable PLAYER DMA and enable players?
-        // !!! GRACTL ON but DMA OFF seems to produce randomly changing PMG data, so I'll just use the value of GRAFPx
+        // GRACTL ON but DMA OFF seems to produce randomly changing PMG data, so I'll just use the value of GRAFPx
         if (sl.dmactl & 0x08 && GRACTL & 2)
         {
             // single line resolution
@@ -1491,7 +1491,7 @@ void PSLReadRegs(int iVM, short start, short stop)
             }
 
             // OK to update HPOS and GRAF
-            // !! No it's not. If we're in the middle of the new pos, we should wait until the beginning of the next time it's drawn,
+            // !!! No it's not. If we're in the middle of the new pos, we should wait until the beginning of the next time it's drawn,
             // but we can only do that if the old place is drawing GRAF != 0
             // !!! No it's not #2. If we're in the middle of drawing GRAF=0, there's no way to delay GRAF <= non-0
             // until it's finished drawing, but hopefully no app does this

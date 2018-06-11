@@ -81,14 +81,13 @@ __inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
     return TRUE;
 }
 
-// !!! This is obsolete with jump tables using many possible functions
+// !!! This can't be used in the jump tables version that uses many possible functions - another reason not to use them
 __inline BOOL cpuInit(PFNREAD pvmPeekB, PFNWRITE pvmPokeB)
 {
     extern PFNREAD pfnPeekB;
     extern PFNWRITE pfnPokeB;
 
     // !!! To work with more than just ATARI 800, each VM needs to set this every time its VM is Execute'd
-    // but it can't do that now because initializing this table is slow
     pfnPeekB = pvmPeekB;
     pfnPokeB = pvmPokeB;
 

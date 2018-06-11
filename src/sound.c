@@ -187,14 +187,14 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
             (AUDC4 & 0x0f) == 0 && rgvoice[3].volume > 0)
         {
             rgvoice[3].volume = AUDC4 & 0x0f;
-            return;    // !!! app hack for MULE, which sends a single sample of noise every frame which needs to be ignored
+            return;    // app hack for MULE, which sends a single sample of noise every frame which needs to be ignored
         }
 
         if (iCurSample == SAMPLES_PER_VOICE && sOldSample == SAMPLES_PER_VOICE - 1 && (AUDC4 & 0x0f) > 0 && rgvoice[3].volume > 0
             // stereo version && *(pb - 4) == 0 && *(pb - 3) == 0)
             && *(pb - 2) == 0)    // mono version
         {
-            rgvoice[3].volume = 0;    // !!! app hack for MULE, the single bad sample is at the end of the buffer
+            rgvoice[3].volume = 0;    // app hack for MULE, the single bad sample is at the end of the buffer
         }
 
         if (rgvm[iVM].fSound) {

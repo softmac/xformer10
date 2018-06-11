@@ -61,9 +61,9 @@ DRIVE rgDrives[MAX_VM][MAX_DRIVES];
 #define MD_FILEBIN 12       // a PC file that is an ATARI binary, mounted as an ATARI DOS file and also as an auto-boot
 #define MD_FILEBAS 13       // a PC file that is maybe an ATARI BASIC file, mounted in ATARI DOS and auto-booting
 
-// scary globals
-int wCOM;        // !!! doesn't seem to be used
-int fXFCable;    // !!! left unitialized
+// !!! scary globals that don't seem to be used anymore
+int wCOM;
+int fXFCable;
 
 // This code is borrowed from an old exe loader, but doesn't show the menu and let you select an exe, it auto-loads
 // the first one, and doesn't alter the display list since some apps don't make their own DL but assume GR.0 is
@@ -699,7 +699,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             l = l << 4;
             rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
 
-            // !!! support 512 byte sector .ATR files
+            // !!! do I need to support 512 byte sector .ATR files?
 
             if (sc == 256)
             {
@@ -729,8 +729,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
         {
             // assume it's a Xformer Cable created image
             // so just check for density
-            // !!! Error if it's not extension .XFD or always try it out?
-
+       
             rgDrives[iVM][i].ofs = 0;
 
             if (l == 368640)
@@ -805,6 +804,7 @@ Lbadfile:
 #define HEAVY_TRANSLATION 16
 
 
+// !!! What is this?
 // XL/XE serial I/O handler
 //
 void BUS1(int iVM)
@@ -812,7 +812,7 @@ void BUS1(int iVM)
     WORD wRetStat = 1;
     WORD wStat = 0;
 
-    // !!! statics. CIO won't work
+    // !!! statics. CIO won't work!
     static BYTE oldstat = 0;
     static BYTE mdTranslation = NO_TRANSLATION;
     static BYTE fConcurrent = FALSE;
@@ -820,7 +820,7 @@ void BUS1(int iVM)
 //    printf("in bus handler, regPC = %04X\n", regPC);
 
     switch (regPC & 0x00F0)
-        {
+    {
     default:
         break;
 
@@ -1019,7 +1019,7 @@ void BUS1(int iVM)
 
     case 0x80:  // interrupt vector
         break;
-        }
+    }
 
     cpuPokeB (iVM, 0x343,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
@@ -1324,8 +1324,9 @@ lNAK:
             else if (pdrive->ofs)
                 {
                 lcbSector = 256L;
-                if (pdrive->cb == 184720)    // !!! 400 byte header instead of 16
+                if (pdrive->cb == 184720)    // !!! 400 byte header instead of 16, what is this?
                     cbSIO2PCFudge += 384;
+
                 // the first 3 sectors were compacted
                 else if (md == MD_DD_OLD_ATR2)
                 {

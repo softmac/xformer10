@@ -424,7 +424,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 
                 wShiftChanged = (*pbshift & wAnyShift);
 
-                // !!! this would prevent graphics characters from being typed
+                // this would prevent graphics characters from being typed
                 //*pbshift &= ~wCtrl; // on German keyboards, right Alt is same as Ctrl+Alt
 
                 switch (msg.wParam)
@@ -541,7 +541,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
 
         UpdatePorts(iVM);
 
-        // !!! Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee, Archon, etc.)
+        // Unfortunately, we can't have the arrow keys work without CTRL being pressed, as some games (Bruce Lee, Archon, etc.)
         // pause the game on any keystroke! Playing without a joystick and using the arrow keys would
         // continuously pause/unpause the game. Let's NOT pass
         // the arrow keys to Atari if RIGHT control is pressed. That will always work for joystick fire without
