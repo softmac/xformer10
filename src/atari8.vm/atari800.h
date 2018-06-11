@@ -93,8 +93,6 @@ BYTE rgPMGMap[65536];
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 
-// !!! Why do I take 92/130 cycles in mode 0/2 with 9 RAM refresh cycles?
-
 // for testing, # of jiffies it takes a real 800 to do FOR Z=1 TO 1000 in these graphics modes (+16 to eliminate mode 2 parts):
 //   88-89      125                 102 101     86  87  89      92          100         121     121
 //   0          2 GR.0              6 GR.1/2    8               11 GR.6     13 GR.7     15      GTIA
@@ -135,7 +133,6 @@ BYTE rgPMGMap[65536];
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
 
 #if USE_PEEK_TABLE
-// !!! This is a memory hit
 // quickly peek and poke to the right page w/o branching using jump tables
 PFNREAD read_tab[MAX_VM][256];
 #endif
@@ -429,7 +426,7 @@ typedef struct
     //char m_rgbSwapC000[4096];
     //char m_rgbSwapD800[10240];
     //
-    //char HUGE m_rgbXEMem[4][16384];    // !!! doesn't need to be HUGE anymore?
+    //char m_rgbXEMem[4][16384];
     //
 
 } CANDYHW;
@@ -806,8 +803,7 @@ void CchDisAsm(int, WORD *puMem);
 void CchShowRegs(int);
 void ControlKeyUp8(int);
 
-extern int fXFCable;    // !!! left uninitialized and used
-
+//extern int fXFCable;    // appears to be unused
 //int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
 //void ReadROMs();
 //void ReadJoy(void);

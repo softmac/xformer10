@@ -59,10 +59,10 @@ VMINFO const vmi800 =
     DumpRegsAtari,
     DumpHWAtari,
     MonAtari,
-    PeekBAtariHW,     // !!! this is obsolete now
+    PeekBAtariHW,
     PeekWAtari,
     PeekLAtari,
-    PokeBAtariHW,   // !!! this is obsolete now
+    PokeBAtariHW,
     PokeWAtari,
     PokeLAtari,
     NULL,
@@ -1450,7 +1450,6 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         else if (iBank == 0)
         {
             bCartType = CART_ATARIMAX1L; // XEGS would never use an address != 0xd500 (I hope)
-            // !!! hack for Pacman Arcade Demo Playable
             _fmemcpy(&rgbMem[0xa000], pb, 8192); // we wanted the first bank initially all along, oops
         }
     }
@@ -1581,8 +1580,6 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             SwapRAMCart(iVM, FALSE, pb, iBank, TRUE);
         else if (iBank <= mask) // !!! or mask it?
             SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
-        else
-            iBank = iBank;  // !!! some Space Harriers are broken
     }
 
     // Byte is bank #, 8K that goes into $A000. Any bank >=0x80 means RAM

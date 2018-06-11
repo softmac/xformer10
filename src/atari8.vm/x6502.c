@@ -142,8 +142,8 @@ void __fastcall Stop6502(const int iVM)
 // in debug, stop on a breakpoint or if tracing
 #ifndef NDEBUG
 // it's really handy for debugging to see what cycle of the scan line we're on.
-// !!! when wCycle is 0xff, we are passed the end of the scan line, so the next instruction displayed by the monitor
-// may NOT be what was shown, it may be the first instr of an interrupt instead
+// !!! when wCycle is 0xff, we have passed the end of the scan line, so the next instruction displayed by the monitor
+// may NOT be what actually executes, it may be the first instr of an interrupt instead
 #define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[rgbMem[regPC++]])(iVM); } }
 #else
 #if USE_JUMP_TABLE
@@ -290,7 +290,7 @@ void HELPER(EA_absYW)
 #define SUB_OVFL_VEC(diff, op1, op2) \
   (((op1) ^ (op2)) & ((op1) ^ (diff)))
 
-// !!! BUG - in decimal mode, N is set based on what the answer would have been in binary mode
+// !!! 6502 BUG - in decimal mode, N is set based on what the answer would have been in binary mode
 // POLEPOSITION relies on this
 void HELPER1(update_NZ, BYTE reg)
 {

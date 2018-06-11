@@ -1703,7 +1703,6 @@ int CALLBACK WinMain(
         // Catch 22 - First execute a frame of code, then render it. But we need to know if we're going to render before
         // the code executes so we can save time (eg. only do collision detection, no actual rendering)
 
-        // !!! Speed things up by not doing this when in the console, or at least make it actually update the screen
         // Throttle the rendering to no more than 70 Hz because anything higher renders too many duplicate guest frames
         fRenderThisTime = FALSE;
         if ((GetTickCount64() - lastRenderMs) >= (1000 / (min(70, (v.vRefresh + 1)))))
@@ -1832,27 +1831,6 @@ int CALLBACK WinMain(
             uExecSpeed = (FrameEnd - FrameBegin) * CPUAVG;
         }
 
-        #if 0
-        // the first Execute after each jiffy gets timed (in turbo we execute many times per jiffy)
-        if (!fExecSpeedValid)
-        {
-            // What % of the time not spent drawing did this Exec take? (averaged)
-            // if we draw only 30fps, use 1/2 the draw time as the average time spent drawing per jiffy
-            ULONGLONG curexec = cCur * 1000000 / (JIF - ((v.vRefresh > 1 && v.vRefresh < 60) ? uDrawSpeed / 2 : uDrawSpeed));
-            uExecSpeed = (uExecSpeed * cExecSpeed + curexec) / (cExecSpeed + 1);
-            cExecSpeed++;
-            //ODS("EXEC %llu ", cCur);
-            fExecSpeedValid = TRUE;
-        }
-
-        // we're emulating original speed (fBrakes) so slow down to let real time catch up (1/60th sec)
-        // don't let errors propogate
-        while (fBrakes && ((JIF - cErr) > cCur)) {
-            Sleep(1);
-            cCur = GetCycles() - cLastJif;
-        }
-#endif
-
         // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th sec)
         // Don't allow guest time drift to propagate by more than one extra guest second.
 
@@ -1874,32 +1852,6 @@ int CALLBACK WinMain(
             cLastJif = GetCycles();
         }
 
-#if 0
-        // it's been 1/60th of a second, either because we waited, or eventually (in turbo mode)
-        if (cCur >= JIF - cErr)
-        {
-            // Don't render more often than max(60, refresh rate of the monitor)
-            // for 30 or 40fps monitors, only draw 30fps
-            cJifTally++;
-            if ((cJifTally & 1) || v.vRefresh <= 1 || v.vRefresh >= 60) // 0 and 1 mean default !!! figure out the default
-            {
-                ULONGLONG cc = GetCycles();
-                RenderBitmap();
-                uDrawSpeed = (uDrawSpeed * cDrawSpeed + (GetCycles() - cc)) / (cDrawSpeed + 1);
-                cDrawSpeed++;
-                //ODS("DRAW %llu\n", uDrawSpeed);
-
-            }
-
-            // don't let errors propagate
-            cErr = cCur - (JIF - cErr);
-            if (cErr > JIF)
-                cErr = JIF;    // don't race forever to catch up if game paused, just carry on (also, it's unsigned)
-
-            fExecSpeedValid = FALSE;    // time Execute() again, which will NOT include drawing time
-        }
-#endif
-
         // every second, update our clock speed indicator
         // When tiling, only show the name of the one you're hovering over, otherwise it changes constantly
         // report back how long it took
@@ -1911,13 +1863,6 @@ int CALLBACK WinMain(
 
             int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
             DisplayStatus(ids);
-
-#if 0
-            cDrawSpeed = 0;  // every second, start a new average
-            uDrawSpeed = 0;
-            cExecSpeed = 0;
-            uExecSpeed = 0;
-#endif
         }
 
 #ifndef NDEBUG
@@ -1933,7 +1878,7 @@ int CALLBACK WinMain(
             for (int iVM = 0; iVM < MAX_VM; iVM++)
             {
                 // user wants the "current" inst broken into, or a VM wants itself broken into
-                // !!! You can probably quickly change "current" VMs before this code executes
+                // !!! Can you quickly change "current" VM before this code executes?
                 if ((vi.fDebugBreak && iVM == v.iVM) || (rgvm[iVM].fValidVM && vrgvmi[iVM].fWantDebugger))
                     if (!FMonVM(iVM)) // somebody wants to quit
                         break;
@@ -2176,7 +2121,7 @@ BOOL SetBitmapColors(int iVM)
 // CreateTiledBitmap
 // Make a big bitmap for the tiles they all share so there's only 1 BitBlt
 // !!! Almost a duplicate of CreateNewBitmap, only differs by size of bitmap.
-// !!! TODO - only use 1 giant bitmap and get rid of the 1,000 VM bitmaps
+// !!! TODO - don't both create a big bitmap plus 1,000 little bitmaps, only do one based on fMyVideoCardSucks
 //
 BOOL CreateTiledBitmap()
 {
@@ -3521,7 +3466,7 @@ void ShowAbout()
 #elif defined(_M_ARM64)
         "ARM64",
 #else
-        "",        // !!! unknown
+        "",        // unknown
 #endif
 //        oi.dwMajorVersion, oi.dwMinorVersion,
 //        oi.dwBuildNumber & 65535,
@@ -3697,7 +3642,7 @@ LRESULT CALLBACK WndProc(
         
         v.vRefresh = GetDeviceCaps(vi.hdc, VREFRESH);   // monitor refresh rate
         if (v.vRefresh <= 1)
-            v.vRefresh = 60;    // some drivers return 0 or 1 for default, assume that means 60. !!! What does it mean?
+            v.vRefresh = 60;    // some drivers return 0 or 1 for default, assume that means 60. !!! What *does* default mean?
 
         SetTextAlign(vi.hdc, TA_NOUPDATECP);
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
@@ -3789,7 +3734,7 @@ LRESULT CALLBACK WndProc(
         {
             fNeedTiledBitmap = TRUE;
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
-            InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
+            InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
         }
 
         break;
@@ -7581,7 +7526,7 @@ LRESULT CALLBACK About(
 #elif defined(_M_ARM64)
                 "ARM64",
 #else
-                "",        // !!! unknown
+                "",        // unknown
 #endif
                 oi.dwMajorVersion, oi.dwMinorVersion,
                 oi.dwBuildNumber & 65535,
