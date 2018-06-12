@@ -4943,12 +4943,15 @@ break;
         break;
 
     case WM_MOUSEWHEEL:
-        {
         short int offset = GET_WHEEL_DELTA_WPARAM(uParam) * (v.fWheelSensitive ? 8 : 1); // must be short to catch the sign
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
-        if (fZoom && v.cVM)
+        static ULONGLONG ullZoomJif;    // last time a zoom was done
+        ULONGLONG ullJif = GetJiffies();
+        // don't do more than one zoom level at a time, require 10 jiffy delay
+        if (fZoom && v.cVM && ullJif - ullZoomJif >10)
         {
+
             if (offset > 0)    // zoom in
             {
                 POINT pt;
@@ -4964,11 +4967,22 @@ break;
                         SelectInstance(iVM);
                     }
                 }
+                else if (!v.fTiling && !v.fFullScreen)
+                    SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way to enter fullscreen
+                                                                            // no need to enter fullscreen in tiled mode
             }
             else if (offset < 0) // zoom out
             {
                 if (!v.fTiling)
-                    SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+                {
+                    if (v.fFullScreen)
+                        SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way out of fullscreen
+                    else
+                        SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+                }
+
+                else  if (v.fFullScreen)    // don't let a tablet get stuck in fullscreen mode
+                    SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
             }
         }
         else if (!fZoom && v.fTiling && v.cVM)
@@ -4976,8 +4990,11 @@ break;
             sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
             ScrollTiles();
         }
+        
+        ullZoomJif = ullJif;
+
         break;
-        }
+        
     case WM_GESTURENOTIFY:
         {
         // !!! why is pan with intertia broken, as well as the GID_PAN and GC_PAN combination?
@@ -4997,6 +5014,9 @@ break;
 
         static int iPanBegin; // where we first touched the screen
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
+        
+        static ULONGLONG ullGestJif;    // don't allow more than one zoom level at a time
+        ullJif = GetJiffies();
 
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
         if (bResult)
@@ -5021,7 +5041,8 @@ break;
                 {
                     iZoomBegin = gi.ullArguments; // how far apart our fingers start
                 }
-                else
+                // don't do more than one zoom level at a time, require 10 jiffy delay
+                else if (ullJif - ullGestJif > 10)  // 
                 {
                     int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
 
@@ -5040,13 +5061,29 @@ break;
                                 SelectInstance(iVM);
                             }
                         }
+                        else if (!v.fTiling && !v.fFullScreen)
+                            SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way to enter fullscreen
+                                                                                    // no need to enter fullscreen in tiled mode
+                    
+                        ullGestJif = ullJif;
                     }
                     else if (iZoom < -100) // zoom out
                     {
                         if (!v.fTiling)
-                            SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+                        {
+                            if (v.fFullScreen)
+                                SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way out of fullscreen
+                            else
+                                SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+                        }
+
+                        else  if (v.fFullScreen)    // don't let a tablet get stuck in fullscreen mode
+                            SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+                
+                        ullGestJif = ullJif;
                     }
                 }
+                
                 return 0;
             }    // GID_ZOOM
         }
