@@ -689,9 +689,9 @@ void DoVBI(int iVM)
                         (*(pB + joy)) |= 1;                 // JOY fire button up
 
 					// extra buttons become START SELECT OPTION for tablet mode
-					if (!fJoyCONSOL && ji.wButtons >= 2 && ji.wButtons <= 4)
+                    if (!fJoyCONSOL && ji.wButtons >= 2 && ji.wButtons <= 8)
 					{
-						CONSOL &= ~(1 << (ji.wButtons - 2));	// button goes down
+						CONSOL &= ~(ji.wButtons >> 1);	// button goes down
 						fJoyCONSOL = TRUE;				// we were the cause
 					}
 					else if (fJoyCONSOL && ji.wButtons == 0)
@@ -700,7 +700,7 @@ void DoVBI(int iVM)
 						fJoyCONSOL = FALSE;
 					}
                 }
-                
+                if (JOY_BUTTON4);
                 else if (vi.rgjt[joy] == JT_PADDLE)
                 {
                     // x value is left paddle, y value is right paddle, scaled to 0-228
