@@ -1012,6 +1012,8 @@ void InitMIDI(int iVM)
 // #endif
 }
 
+// Do not call when a joystick might be moved, or we'll think it's a paddle. (For instance, when a VM reboots itself while
+// you're playing a game in another tile, or during going back in time)
 void InitJoysticks()
 {
 // #if !defined(_M_ARM)

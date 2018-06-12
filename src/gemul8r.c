@@ -3258,6 +3258,7 @@ void ScrollTiles()
             if (s != sVM)
             {
                 sVM = s;
+				v.iVM = s;	// !!! They are always in sync, so get rid of sVM!
                 FixAllMenus(FALSE); // VM list is greyed when tiled
             }
         }
@@ -3643,6 +3644,8 @@ LRESULT CALLBACK WndProc(
 
     // which is the "current" VM? (the tiled one with focus, or the main one when not tiled) or -1 if tiled and nothing in focus
     v.iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);    // use the active tile if there is one
+
+	assert(v.iVM == sVM); // let's find out if I really need 2 variables
 
     switch (message)
     {
@@ -4256,13 +4259,15 @@ break;
 
         // toggle tile mode
         case IDM_TILE:
-            // which tile appears in the top left? There are often more tiles than fit, so to give everybody a chance,
-            // we'll start with the current instance, not always the first one.
-            v.fTiling = !v.fTiling;
-            if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
+            
+			v.fTiling = !v.fTiling;
+            
+			if (!CreateTiledBitmap())   // what can we do on error besides try again later?
                 fNeedTiledBitmap = TRUE;
-            uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
-            if (v.cVM && v.fTiling)
+            
+			uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
+            
+			if (v.cVM && v.fTiling)
             {
                 //nFirstTile = v.iVM;    // show the current VM as the top left one - that's annoying
                 //sWheelOffset = 0;    // start at the top - also annoying
@@ -5027,7 +5032,7 @@ break;
             {
                 if (gi.dwFlags & GF_BEGIN)
                     iPanBegin = gi.ptsLocation.y;    // where were we when we stated gesturing?
-                else
+               else
                 {
                     sWheelOffset += (gi.ptsLocation.y - iPanBegin);
                     ScrollTiles();
