@@ -1036,7 +1036,8 @@ void InitJoysticks()
         vi.rgji[i].dwSize = sizeof(JOYINFOEX);
         vi.rgji[i].dwFlags = JOY_RETURNBUTTONS | JOY_RETURNX | JOY_RETURNY;
 
-        if (joyGetPosEx(JOYSTICKID1 + i, &vi.rgji[i]) != JOYERR_UNPLUGGED)
+        mm = joyGetPosEx(JOYSTICKID1 + i, &vi.rgji[i]);
+        if (mm != JOYERR_UNPLUGGED)
         {
             mm = joyGetDevCaps(JOYSTICKID1 + i, &jc, sizeof(JOYCAPS));
             if (!mm && jc.wNumButtons > 0)
