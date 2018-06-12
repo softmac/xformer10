@@ -5041,8 +5041,9 @@ break;
                 {
                     iZoomBegin = gi.ullArguments; // how far apart our fingers start
                 }
-                // don't do more than one zoom level at a time, require 10 jiffy delay
-                else if (ullJif - ullGestJif > 10)  // 
+                // don't do more than one zoom level at a time, require 20 jiffy delay
+				// which is different than the trackpad pinch delay that works best
+                else if (ullJif - ullGestJif > 20)  // 
                 {
                     int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
 
