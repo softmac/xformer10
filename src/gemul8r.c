@@ -1275,6 +1275,11 @@ int CALLBACK WinMain(
     // this is slow, so only do it once ever. And do it now before we fill memory with VMs and they end up having to be silent
     InitSound();
 
+	// INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
+	// to allow hot-plugging
+	InitJoysticks();
+	CaptureJoysticks();
+
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
 
@@ -3645,7 +3650,7 @@ LRESULT CALLBACK WndProc(
     // which is the "current" VM? (the tiled one with focus, or the main one when not tiled) or -1 if tiled and nothing in focus
     v.iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);    // use the active tile if there is one
 
-	assert(v.iVM == sVM); // let's find out if I really need 2 variables
+	assert(!v.fTiling || v.iVM == sVM); // find out if we need 2 variables
 
     switch (message)
     {
