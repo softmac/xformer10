@@ -683,10 +683,22 @@ void DoVBI(int iVM)
 
                     pB = &TRIG0;
 
-                    if (ji.wButtons)
+                    if (ji.wButtons == 1)
                         (*(pB + joy)) &= ~1;                // JOY fire button down
                     else
                         (*(pB + joy)) |= 1;                 // JOY fire button up
+
+					// extra buttons become START SELECT OPTION for tablet mode
+					if (!fJoyCONSOL && ji.wButtons >= 2 && ji.wButtons <= 4)
+					{
+						CONSOL &= ~(1 << (ji.wButtons - 2));	// button goes down
+						fJoyCONSOL = TRUE;				// we were the cause
+					}
+					else if (fJoyCONSOL && ji.wButtons == 0)
+					{
+						CONSOL |= 7;						// don't lift up buttons we didn't press
+						fJoyCONSOL = FALSE;
+					}
                 }
                 
                 else if (vi.rgjt[joy] == JT_PADDLE)
@@ -2444,7 +2456,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 #endif // DEBUG
 
             // if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
-            if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0)
+			// (unless the joystick wants it pressed right now)
+            if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0 && !fJoyCONSOL)
                 CONSOL |= 4;
 
             // IRQ's, like key presses, SIO or POKEY timers. VBI and DLIST interrupts are NMI's.

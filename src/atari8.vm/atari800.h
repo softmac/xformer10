@@ -412,6 +412,8 @@ typedef struct
 
     int m_iXESwap;      // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
+	BOOL m_fJoyCONSOL;	// joystick is the reason for the CONSOL key being pressed
+
     // !!! Not really used anymore, candidates for removal
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
     ULONG m_clockMult;
@@ -510,6 +512,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define bshftByte     CANDY_STATE(bshftByte)
 #define irqPokey      CANDY_STATE(irqPokey)
 #define iXESwap       CANDY_STATE(iXESwap)
+#define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 
 // if present, here is where these would be
