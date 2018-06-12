@@ -5025,8 +5025,6 @@ break;
             {
                 if (gi.dwFlags & GF_BEGIN)
                     iPanBegin = gi.ptsLocation.y;    // where were we when we stated gesturing?
-                else if (gi.dwFlags & GF_INERTIA)
-                    iPanBegin = iPanBegin;    // !!! I'll have to handle this myself, it's broken
                 else
                 {
                     sWheelOffset += (gi.ptsLocation.y - iPanBegin);
