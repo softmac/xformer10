@@ -2108,9 +2108,6 @@ BOOL __cdecl WarmbootAtari(int iVM)
     fWant8 = 0;
     fWant10 = 0;
 
-    InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
-    CaptureJoysticks();
-
     // unused new starting positions of PMGs must be huge, since 0 and some negative numbers are valid locations
     for (BYTE i = 0; i < 4; i++)
         pmg.hpospPixNewStart[i] = 512;  // !!! should be NTSCx, we can't access that constant
@@ -2129,7 +2126,15 @@ BOOL __cdecl ColdbootAtari(int iVM)
     if (!WarmbootAtari(iVM))
         return FALSE;
 
-    BOOL f = InitAtariDisks(iVM);
+	// A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
+	// or we'll think it's a paddle
+	if (iVM == v.iVM)
+	{
+		InitJoysticks();    // let somebody hot plug a joystick in and it will work the next cold boot
+		CaptureJoysticks();
+	}
+
+	BOOL f = InitAtariDisks(iVM);
 
     if (!f)
         return FALSE;
@@ -2333,12 +2338,6 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
     // If our saved state had a cartridge, load it back in, do not reset to original bank
     ReadCart(iVM, FALSE);
     InitCart(iVM);
-
-    // too slow to do anytime but app startup
-    //InitSound();    // Need to reset and queue audio buffers
-
-    InitJoysticks(); // let somebody hot plug a joystick in and it will work the next warm/cold start of any instance
-    CaptureJoysticks();
 
     // Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
     f = TimeTravelReset(iVM); // state is now a valid anchor point
