@@ -1732,8 +1732,8 @@ int CALLBACK WinMain(
             // wait for them to complete one frame
             WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
         }
-        // not tiled. Tell the only thread to go
-        else if (v.iVM >= 0)
+        // not tiled. Tell the only thread to go.
+        else if (!v.fTiling && v.iVM >= 0)
         {
             assert(v.cVM);
             SetEvent(ThreadStuff[0].hGoEvent);
@@ -3735,7 +3735,9 @@ LRESULT CALLBACK WndProc(
             GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
         // If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
-        sWheelOffset = 0;
+        // If we're not tiling, doing this would make it so coming back to tiled mode loses your place
+        if (v.fTiling)
+            sWheelOffset = 0;
 
         // Don't make a tiled bitmap of the new size yet, that blanks out our window as we resize.
         // don't try and re-make a zero size window either
