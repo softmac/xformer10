@@ -2092,8 +2092,8 @@ BOOL __cdecl UnmountAtariDisk(int iVM, int i)
 {
     PVD pvd = &rgvm[iVM].rgvd[i];
 
-        if (pvd->dt == DISK_IMAGE)
-            DeleteDrive(iVM, i);
+    if (pvd->dt == DISK_IMAGE)
+        DeleteDrive(iVM, i);
 
     return TRUE;
 }
