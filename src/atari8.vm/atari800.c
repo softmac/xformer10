@@ -467,11 +467,31 @@ void TimeTravelFree(unsigned iVM)
     }
 }
 
-
-// call this constantly every frame, it will save a state every 5 seconds
-//
-BOOL TimeTravelPrepare(unsigned iVM)
+// use this specific spot to time travel to from now on
+BOOL TimeTravelFixPoint(unsigned iVM)
 {
+    // Turn on this feature if not on. This is not part of the VM save state, it's a GEM global, so it doesn't matter when we do it
+    v.fTimeTravelFixed = TRUE;
+
+    FixAllMenus(FALSE); // GEM might not know this happened
+
+    // we go back 3 save points, so save 3 times and then we will go back to this moment.
+    if (TimeTravelPrepare(iVM, TRUE))   // force save state now
+        if (TimeTravelPrepare(iVM, TRUE))
+            if (TimeTravelPrepare(iVM, TRUE))
+                return TRUE;
+
+    return FALSE;
+}
+
+// call this constantly every frame, it will save a state every 5 seconds, unless forced to now
+//
+BOOL TimeTravelPrepare(unsigned iVM, BOOL fForce)
+{
+    // we aren't saving periodically for the time being, we have a fixed point
+    if (v.fTimeTravelFixed && !fForce)
+        return TRUE;
+
     BOOL f = TRUE;
 
     const ULONGLONG s5 = 29830 * 60 * 5;    // 5 seconds
@@ -483,8 +503,8 @@ BOOL TimeTravelPrepare(unsigned iVM)
     ULONGLONG cCur = GetCycles();
     ULONGLONG cTest = cCur - ullTimeTravelTime[iVM];
 
-    // time to save a snapshot (every 5 seconds)
-    if (cTest >= s5)
+    // time to save a snapshot (every 5 seconds, or maybe we're forcing it)
+    if (fForce || cTest >= s5)
     {
         f = SaveStateAtari(iVM, &pPersist, &cbPersist);
 
@@ -505,7 +525,6 @@ BOOL TimeTravelPrepare(unsigned iVM)
     }
     return f;
 }
-
 
 // Omega13 - go back in time 13 seconds
 //
@@ -700,7 +719,7 @@ void DoVBI(int iVM)
 						fJoyCONSOL = FALSE;
 					}
                 }
-                if (JOY_BUTTON4);
+                
                 else if (vi.rgjt[joy] == JT_PADDLE)
                 {
                     // x value is left paddle, y value is right paddle, scaled to 0-228
@@ -2112,6 +2131,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     wCycle = 0;
     PSL = 0;
     wSIORTS = 0;    // stop avoiding printing in the monitor
+    v.fTimeTravelFixed = FALSE;   // start periodically saving again
 
     // SIO init
     cSEROUT = 0;
@@ -2743,7 +2763,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         // we process the audio after the whole frame is done
         if (wScan >= NTSCY)
         {
-            TimeTravelPrepare(iVM);        // periodically call this to enable TimeTravel
+            TimeTravelPrepare(iVM, FALSE);        // periodically call this to enable TimeTravel
 
             SoundDoneCallback(iVM, vi.rgwhdr, SAMPLES_PER_VOICE);    // finish this buffer and send it
 

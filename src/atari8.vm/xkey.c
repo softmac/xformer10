@@ -563,7 +563,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
         ch = 0xE0;      // End
         break;
 
-    case 0x149:         // Page Up
+    case 0x149:         // Page Up - Time Travel
 
         if (fDown)
         {
@@ -576,20 +576,16 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
                 clockMult = 1;
 
             printf("clock multiplier = %u\n", clockMult);
-#endif
             //SendMessage(hwnd, WM_COMMAND, IDM_TURBO, 0); // toggle real time or fast as possible
+#endif
             TimeTravel(iVM);
         }
         return FALSE;    // don't let ATARI see this
 
-#if 0
-    case 0x151:         // Page Dn
+    case 0x151:         // Page Dn - toggle using a fixed point in time or saving periodically
         if (fDown)
-            TRIG0 &= ~1;                // JOY 0 fire button down
-        else
-            TRIG0 |= 1;                 // JOY 0 fire button up
-        return FALSE;
-#endif
+            TimeTravelFixPoint(iVM);
+        return FALSE;   // don't let ATARI see this either
 
     case 0x85:
         scan = 0x60;    // U.K. backslash

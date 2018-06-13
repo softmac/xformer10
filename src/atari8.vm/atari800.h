@@ -160,14 +160,15 @@ ULONGLONG random17last;    // cycle count last time a random number was asked fo
 // Time Travel stuff
 
 BOOL TimeTravel(unsigned);
-BOOL TimeTravelPrepare(unsigned);
+BOOL TimeTravelPrepare(unsigned, BOOL);
 BOOL TimeTravelReset(unsigned);
 BOOL TimeTravelInit(unsigned);
 void TimeTravelFree(unsigned);
+BOOL TimeTravelFixPoint(unsigned);
 
 ULONGLONG ullTimeTravelTime[MAX_VM];    // the time stamp of a snapshot
-char cTimeTravelPos[MAX_VM];    // which is the current snapshot?
-char *Time[MAX_VM][3];        // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
+char cTimeTravelPos[MAX_VM]; // which is the current snapshot?
+char *Time[MAX_VM][3];       // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
 
 //
 // Scan line structure

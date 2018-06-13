@@ -773,12 +773,15 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, v.fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
 
     // some menu items not appropriate if tiling, but there's no current tile to do anything to
     // it could do it on
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLORMONO, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLDSTART, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_WARMSTART, (inst >= 0) ? 0 : MF_GRAYED);
@@ -4308,9 +4311,10 @@ break;
             FixAllMenus(FALSE);
             break;
 
+        // travel back in time
         case IDM_TIMETRAVEL:
 
-            // until we make a way to communicate this to our VM, the VM has to handle it themselves
+            // !!! until we make a way to communicate this to our VM, the VM has to handle it themselves
             // by seeing the keystroke
 
             // send the to active tile
@@ -4326,6 +4330,37 @@ break;
             else
                 FWinMsgVM(v.iVM, vi.hWnd, WM_KEYDOWN, 0x21, 0x01490001);
 
+            break;
+
+        // instead of periodically saving a point in time, use this point for a while
+        // this will automatically turn fixed points on
+        case IDM_TIMETRAVELFIXPOINT:
+
+            // !!! until we make a way to communicate this to our VM, the VM has to handle it themselves
+            // by seeing the keystroke and toggling v.fTimeTravelFixed itself, and resetting it on warm start.
+            // Right now we pass the accelerator key press straight to the VM so it has to call FixAllMenus too. Ugh.
+
+            // send the to active tile
+            if (v.fTiling && sVM >= 0)
+            {
+                FWinMsgVM(sVM, vi.hWnd, WM_KEYDOWN, 0x22, 0x01510001);    // PAGE DOWN
+            }
+            // nobody to send it to
+            else if (v.fTiling)
+                ;
+
+            // send it to our own and only place
+            else
+                FWinMsgVM(v.iVM, vi.hWnd, WM_KEYDOWN, 0x22, 0x01510001);
+
+            break;
+
+        // toggle whether or not to use fixed time travel points
+        // turning it on does NOT set a fixed point, it means the last thing saved a few seconds ago is the last thing it will
+        // automatically save
+        case IDM_USETIMETRAVELFIXPOINT:
+            v.fTimeTravelFixed = !v.fTimeTravelFixed;
+            FixAllMenus(FALSE);
             break;
 
         // toggle COLOR/B&W
@@ -4640,22 +4675,28 @@ break;
         case IDM_COLDSTART:
 
             if (v.iVM >= 0)
+            {
                 if (!ColdStart(v.iVM))
                 {
                     DeleteVM(v.iVM, TRUE);
-                    FixAllMenus(FALSE);
                 }
+
+                FixAllMenus(FALSE);
+            }
             break;
 
         // F10
         case IDM_WARMSTART:
 
             if (v.iVM >= 0)
+            {
                 if (!FWarmbootVM(v.iVM))
                 {
                     DeleteVM(v.iVM, TRUE);
-                    FixAllMenus(FALSE);
                 }
+
+                FixAllMenus(FALSE);
+            }
             break;
 
         // cycle through all the instances - isn't allowed during tiling
