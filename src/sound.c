@@ -1021,7 +1021,7 @@ void InitJoysticks()
     MMRESULT mm;
     JOYCAPS jc;
 
-    ReleaseJoysticks();
+    //ReleaseJoysticks();
 
     if ((nj = joyGetNumDevs()) == 0)
         return;
@@ -1037,7 +1037,7 @@ void InitJoysticks()
         vi.rgji[i].dwFlags = JOY_RETURNBUTTONS | JOY_RETURNX | JOY_RETURNY;
 
         mm = joyGetPosEx(JOYSTICKID1 + i, &vi.rgji[i]);
-        if (mm != JOYERR_UNPLUGGED)
+        if (!mm)
         {
             mm = joyGetDevCaps(JOYSTICKID1 + i, &jc, sizeof(JOYCAPS));
             if (!mm && jc.wNumButtons > 0)
@@ -1075,6 +1075,7 @@ void InitJoysticks()
 // #endif
 }
 
+#if 0
 // globals, each warm and cold start will glitch the other VMs
 //
 void CaptureJoysticks()
@@ -1087,9 +1088,9 @@ void CaptureJoysticks()
     if (joyGetNumDevs() == 0)
         return;
 
-    for (i = 0; i < NUM_JOYDEVS; i++)
+    for (i = 0; i < vi.njc; i++)
         {
-        mm = joySetThreshold(JOYSTICKID1 + i, (vi.rgjc[i].wXmax - vi.rgjc[i].wXmin) / 8);
+        mm = joySetThreshold(JOYSTICKID1 + vi.rgjn[i], (vi.rgjc[i].wXmax - vi.rgjc[i].wXmin) / 8);
         //mm = joySetCapture(vi.hWnd, JOYSTICKID1+i, 100, TRUE); // doesn't work, so we just poll
     }
 // #endif
@@ -1104,3 +1105,4 @@ void ReleaseJoysticks()
 
 // #endif
 }
+#endif
