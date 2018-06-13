@@ -659,6 +659,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
     if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
         _close(rgDrives[iVM][i].h);
+    rgDrives[iVM][i].h = -1;
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
