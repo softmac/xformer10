@@ -2744,6 +2744,7 @@ if (sl.modelo < 2 || iTop > i)
 
         // In hi-res mode PMG colours use the luma of PF1 when PF1 present (special)
         const DWORD colpmXNorm = pmg.colpmX;
+        //const DWORD colpmXNorm = 0xf5f5f5f5;    // testing - make all PMG bright orange
         const DWORD colpmXSpec = (pmg.colpmX & 0xF0F0F0F0) | (0x01010101 * (sl.colpf1 & 0x0f));
 
         const BYTE * __restrict pb = &rgpix[((NTSCx - X8) >> 1)];

@@ -89,7 +89,14 @@ WORD rgPIXELMap[HCLOCKS];
 BYTE rgPMGMap[65536];
 
 // this mess is how we properly index all of those arrays
-#define DMAMAP rgDMAMap[sl.modelo][(DMACTL & 0x20) >> 5][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][(DMACTL & 0x8) >> 3][((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
+// [mode number], which we've set to 0 for before and after visible scan area (<8 or >= 248)
+// [PF DMA on?], plus must be in a valid range of scan lines or ANTIC won't do it anyway
+// [0=narrow 1=normal 2=wide]
+// [first scan line of this mode?], which we indicate by setting iScan == sl.vscrol
+// [P DMA on?] !!! double check GRACTL doesn't have to be on too
+// [M DMA on?] which is automatically enabled if P DMA is enabled
+// [LMS?] which happens if the right bit is set on valid modes 
+#define DMAMAP rgDMAMap[sl.modelo][((DMACTL & 0x20) >> 5) && wScan >= wStartScan && wScan < wStartScan + Y8][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][((DMACTL & 0x8) >> 3) && wScan >= wStartScan && wScan < wStartScan + Y8][(((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)) && wScan >= wStartScan && wScan < wStartScan + Y8][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 
@@ -105,29 +112,28 @@ BYTE rgPMGMap[65536];
 #define X8 352u       // screen width
 #define Y8 240u       // screen height
 
-#define CART_8K      1    // 0 for invalid
-#define CART_16K     2
-#define CART_OSSA    3  // 034M
-#define CART_OSSAX   4  // 043M version
-#define CART_OSSB    5  // M091
-#define CART_XEGS    6
-#define CART_BOB     7
-#define CART_ATARIMAX1  8
-#define CART_ATARIMAX8  9
-#define CART_ATRAX      10
-#define CART_ATARIMAX1_OR_ATRAX 11
-#define CART_ATARIMAX1L 12
-#define CART_ATARIMAX8L 13
-#define CART_XEGS_OR_ATARIMAX8L  14
-#define CART_XEGS_OR_ATARIMAX1L  15
-#define CART_MEGACART   16  // 16K through 1MB
-#define CART_4K      17
-#define CART_OSSBX   18  // 091M
-#define CART_OSSBY   19  // 019M
-#define CART_DIAMOND 20
-#define CART_SPARTA  21
-
-//#define CART_MEGACART_LAST 19 for now, I don't seem to need to remember which size megacart it is
+#define CART_4K      1  // 0 for invalid
+#define CART_8K      2
+#define CART_16K     3
+    // numbers above 3 are bank select types
+#define CART_OSSA    4  // 034M
+#define CART_OSSAX   5  // 043M version
+#define CART_OSSB    6  // M091
+#define CART_XEGS    7
+#define CART_BOB     8
+#define CART_ATARIMAX1  9
+#define CART_ATARIMAX8  10
+#define CART_ATRAX      11
+#define CART_ATARIMAX1_OR_ATRAX 12
+#define CART_ATARIMAX1L 13
+#define CART_ATARIMAX8L 14
+#define CART_XEGS_OR_ATARIMAX8L  15
+#define CART_XEGS_OR_ATARIMAX1L  16
+#define CART_MEGACART   17  // 16K through 1MB
+#define CART_OSSBX      18  // 091M
+#define CART_OSSBY      19  // 019M
+#define CART_DIAMOND    20
+#define CART_SPARTA     21
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
@@ -407,6 +413,9 @@ typedef struct
     WORD m_wAddrOff;    // because of HSCROL, how many bytes forward to actually start the scan line
 
     BYTE m_bCartType;   // type of cartridge
+    BYTE m_fRAMCart;    // does this cartridge type have a RAM bank?
+    WORD m_iBankSize;   // how big banks are on this cartridge
+    BYTE m_iNumBanks;   // how many banks in this cartridge?
     BYTE m_bshftByte;   // current value of shift state
 
     LONG m_irqPokey[4]; // POKEY h/w timers, how many cycles to go
@@ -509,6 +518,9 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fFetch        CANDY_STATE(fFetch)
 #define POT           CANDY_STATE(POT)
 #define bCartType     CANDY_STATE(bCartType)
+#define fRAMCart      CANDY_STATE(fRAMCart)
+#define iBankSize     CANDY_STATE(iBankSize)
+#define iNumBanks     CANDY_STATE(iNumBanks)
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define irqPokey      CANDY_STATE(irqPokey)
@@ -516,12 +528,12 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 
-// if present, here is where these would be
 #define SELF_SIZE 2048
 #define C000_SIZE 4096
 #define D800_SIZE 10240
 #define XE_SIZE 16384
 
+// if present, here is where these would be
 #define rgbSwapSelf   &CANDY_STATE(rgbXLExtMem)
 #define rgbSwapC000   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE)
 #define rgbSwapD800   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE)
