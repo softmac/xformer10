@@ -126,8 +126,10 @@ BEGIN
         // this is VM specific and handled magically, there is no actual IDM_TOGGLEBASIC message handler
         MENUITEM "Toggle &BASIC\tShift+F10", IDM_TOGGLEBASIC
         MENUITEM "Change &Type\tAlt+F10", IDM_CHANGEVM
-        MENUITEM "Debug &Monitor\tPause", IDM_DEBUGGER
+        MENUITEM "&Debug Monitor\tPause", IDM_DEBUGGER
         MENUITEM SEPARATOR
+        MENUITEM "&Use Fixed Time Travel Points", IDM_USETIMETRAVELFIXPOINT
+        MENUITEM "Set Time Travel &Fixed Point\tPg Down", IDM_TIMETRAVELFIXPOINT
         MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL
         MENUITEM SEPARATOR
         MENUITEM "Switch &Monitor\tShift+F12", IDM_COLORMONO

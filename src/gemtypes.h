@@ -432,6 +432,7 @@ typedef struct
     BOOL     vRefresh : 8;    // monitor refresh rate
     int      swWindowState;    // were we restored? maximized? minimized?
     RECT     rectWinPos;    // saved window pos (want top left corner only)
+    BOOL     fTimeTravelFixed; // we chose a point to go back to, so stop saving periodically
 
     // referenced, but not used
     BOOL     fNoMono : 1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
