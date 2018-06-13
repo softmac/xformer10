@@ -2143,7 +2143,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 	if (iVM == v.iVM)
 	{
 		InitJoysticks();    // let somebody hot plug a joystick in and it will work the next cold boot
-		CaptureJoysticks();
+		//CaptureJoysticks();
 	}
 
 	BOOL f = InitAtariDisks(iVM);

@@ -1278,7 +1278,7 @@ int CALLBACK WinMain(
 	// INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
 	// to allow hot-plugging
 	InitJoysticks();
-	CaptureJoysticks();
+	//CaptureJoysticks();
 
     // In case we start up with a parameter on the cmd line
     BOOL fSkipLoad = FALSE;
@@ -5330,7 +5330,7 @@ break;
         SetMenu(vi.hWnd, vi.hMenu); // so that it gets freed
 
         UninitSound();
-        ReleaseJoysticks();
+        //ReleaseJoysticks();
 
 #if defined(ATARIST) || defined(SOFTMAC)
         // release DirectX mode
