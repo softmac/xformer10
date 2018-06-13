@@ -685,6 +685,7 @@ HANDLER(KIL)
 {
     if (v.fAutoKill)
     {
+        ODS("KIL OPCODE!\n");
         vi.fExecuting = FALSE;  // alert the main thread something is up
 
         vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
@@ -1351,6 +1352,18 @@ HANDLER(op4E)
 {
     EA_absW(iVM);
     LSR_mem(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
+// SRE abs
+
+HANDLER(op4F)
+{
+    EA_absW(iVM);
+    LSR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2912,6 +2925,7 @@ HANDLER(unused)
     regPC--;
     ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, cpuPeekB(iVM, regPC), regPC);
     regPC++;
+    wLeft -= 2; // must be non-zero or we could stack fault
     HANDLER_END();
 }
 
@@ -2996,7 +3010,7 @@ PFNOP jump_tab[256] =
     op4C,
     op4D,
     op4E,
-    unused,
+    op4F,
     op50,
     op51,
     KIL,
@@ -3260,7 +3274,6 @@ void __cdecl Go6502(const int iVM)
                 case 0x43:
                 case 0x47:
                 case 0x4B:
-                case 0x4F:
                 case 0x53:
                 case 0x5B:
                 case 0x6B:
@@ -3538,6 +3551,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x4E:   // LSR abs
                     op4E(iVM);
+                    break;
+
+                case 0x4F:   // SRE abs
+                    op4F(iVM);
                     break;
 
                 case 0x50:   // BVC rel8

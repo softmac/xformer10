@@ -902,10 +902,9 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     int cb = 0, cb2;
     BYTE type = 0, *pb;
 
-    bCartType = 0;
-
     if (!pch || !rgvm[iVM].rgcart.fCartIn)
     {
+        bCartType = 0;
         return TRUE;    // nothing to do, all OK
     }
 
@@ -920,6 +919,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         if (cb > MAX_CART_SIZE || ((cb & ~0x1fe010) && cb & ~0x1010))
         {
             _close(h);
+            bCartType = 0;
             goto exitCart;
         }
 
@@ -937,6 +937,7 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             if (cb2 != 16)
             {
                 _close(h);
+                bCartType = 0;
                 goto exitCart;
             }
             cb -= 16;
@@ -952,9 +953,21 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         rgvm[iVM].rgcart.fCartIn = TRUE;
     }
     else
+    {
+        bCartType = 0;
         goto exitCart;
+    }
 
     _close(h);
+
+    // we're restoring - we already know the cart type! And we might not be able to figure it out again if we tried
+    if (!fDefaultBank)
+        goto exitCart;
+
+    // figure out the cart type
+    bCartType = 0;
+
+    // every type that is a RAM cart must also set its default bank #, and tell us the bank size and # of banks
 
     // what kind of cartridge is it? Here are the possibilites
     //
@@ -1015,7 +1028,13 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     {
         // allows RAM to be swapped in instead
         if (type == 26)
+        {
             bCartType = CART_MEGACART;
+            fRAMCart = TRUE;
+            iSwapCart = 0;
+            iBankSize = 0x4000;
+            iNumBanks = 1;
+        }
 
         // copies of the INIT address and the CART PRESENT byte appear in both cartridge areas - not banked
         else if (type == 2 || (pb[16383] >= 0x80 && pb[16383] < 0xC0 && pb[16380] == 0 && pb[8191] >= 0x80 && pb[8191] < 0xC0 && pb[8188] == 0))
@@ -1064,11 +1083,15 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             bCartType = 0;
     }
 
-    // unique DIAMOND cartridge - every 8K segment is valid with 5 as the boot byte, 1st segment is the main one
+    // unique DIAMOND cartridge - all 8 8K segments are valid with 5 as the boot byte, 1st segment is the main one
     else if (type == 10 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 5 && 
                 !pb[0x3ffc] && pb[0x3ffd] == 5 && !pb[0xfffc] && pb[0xfffd] == 5))
     {
         bCartType = CART_DIAMOND;    // unique DIAMOND cart
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 8;
     }
     
     // unique SPARTA cartridge - every 8K segment is valid with 1 as the boot byte
@@ -1076,6 +1099,10 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         !pb[0x3ffc] && pb[0x3ffd] == 1 && !pb[0xfffc] && pb[0xfffd] == 1))
     {
         bCartType = CART_SPARTA;    // unique SPARTA cart
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 8;
     }
 
     // unique 40K Bounty Bob cartridge - check for last bank being valid?
@@ -1084,25 +1111,25 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         bCartType = CART_BOB;    // unique Bounty Bob cart
     }
 
-    // ATARIMAX1 - 128K and 1st bank is the main one
+    // ATARIMAX1 - 128K and 1st 8K bank is the main one
     else if (type == 41 && *(pb + 8188) == 0 &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX1;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 16;
     }
 
     // I assume this is the variant where the last bank is the default one
     else if (type == 41)
     {
         bCartType = CART_ATARIMAX1L;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0xf;
+        iBankSize = 0x2000;
+        iNumBanks = 16;
     }
 
     // 1M, 8K banks and first bank is the main one - ATARIMAX8
@@ -1110,30 +1137,30 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX8;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 128;
     }
 
     // I assume this is the variation where the last bank is the default
     else if (type == 42)
     {
         bCartType = CART_ATARIMAX8L;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 127;
+        iBankSize = 0x2000;
+        iNumBanks = 128;
     }
     
-    // ATRAX - 128K and 1st bank is the main one
+    // ATRAX - 128K and 1st 8K bank is the main one
     else if (type == 17)
     {
         bCartType = CART_ATRAX;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 16;
     }
     
     // 128K, 8K banks, 1st bank is the main one, last bank isn't valid - either CART_ATRAX or CART_ATARIMAX1.
@@ -1142,10 +1169,10 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX1_OR_ATRAX;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x2000;
+        iNumBanks = 16;
     }
 
     // 32K-1MB, 16K banks and 1st bank is the main one and last bank NOT valid 8K segment like XEGS (Star Raiders II) - MEGACART
@@ -1155,16 +1182,20 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             ((*(pb + 0x3fff) >= 0x80 && *(pb + 0x3fff) < 0xC0) || (*(pb + 0x3ffb) >= 0x80 && *(pb + 0x3ffb) < 0xC0))))
     {
         bCartType = CART_MEGACART;
-
-        // tell InitCart to use the default bank
-        if (fDefaultBank)
-            iSwapCart = 0;
+        fRAMCart = TRUE;
+        iSwapCart = 0;
+        iBankSize = 0x4000;
+        iNumBanks = (BYTE)(cb / 0x4000);
     }
 
-    // both first and last 8K of 128K are valid... could be ATARIMAX1L or XEGS
+    // both first and last 8K of 128K are valid... could be ATARIMAX1L or XEGS (main bank is the last one in each)
     else if (type == 0 && cb == 0x20000 && !(*(pb + 0x1ffc)) && !(*(pb + 0x1fffc)))
     {
-        bCartType = CART_XEGS_OR_ATARIMAX1L; // actually, it could be either of these
+        bCartType = CART_XEGS_OR_ATARIMAX1L;
+        //fRAMCart = TRUE; don't know yet
+        iSwapCart = 15;
+        iBankSize = 0x2000;
+        iNumBanks = 16;
     }
 
     // make sure the last bank is a valid ATARI 8-bit cartridge - assume XEGS
@@ -1176,7 +1207,13 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
             bCartType = CART_XEGS_OR_ATARIMAX8L; // actually, it could be either of these
         else
             bCartType = CART_XEGS;
+        //fRAMCart = TRUE; not for XEGS
+        iNumBanks = (BYTE)(cb / 0x2000);
+        iSwapCart = iNumBanks - 1;
+        iBankSize = 0x2000;
     }
+
+    // I give up, never heard of it
     else
         bCartType = 0;
 
@@ -1200,6 +1237,51 @@ exitCart:
     return bCartType;    // say if cart looks good or not
 }
 
+// helper function to swap either a ROM bank or RAM in (8K or 16K banks)
+// AlterRamtop should always be called, and if it looks like we're swapping in the same bank that's already there,
+// do it anyway because that's what happens when we restore a saved state
+void SwapRAMCart(int iVM, WORD size, BYTE *pb, BYTE iBank)
+{
+    Assert(size <= 0x4000);
+
+    BYTE swap[0x4000];  // big enough for 16K
+
+    // this is the RAM bank
+    if (iBank >= iNumBanks)
+    {
+        // want RAM - currently ROM - swap out that ROM and put the RAM stored there back in
+        if (ramtop == 0xc000 - size)
+        {
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
+            _fmemcpy(pb + iSwapCart * size, swap, size);
+        }
+        AlterRamtop(iVM, 0xc000);
+        iSwapCart = iNumBanks;
+    }
+    else
+    {
+        // want ROM, currently different ROM? First swap the old ROM out and put RAM in so it doesn't get lost
+        if (ramtop == (0xc000 - size) && iBank != iSwapCart)
+        {
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
+            _fmemcpy(pb + iSwapCart * size, swap, size);
+        }
+
+        // do NOT swap if that's the bank already in... you'll swap it out and swap RAM in!
+        if (ramtop == 0xc000 || iBank != iSwapCart)
+        {
+            // now swap in the desired bank
+            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
+            _fmemcpy(&rgbMem[0xc000 - size], pb + iBank * size, size);
+            _fmemcpy(pb + iBank * size, swap, size);
+
+            iSwapCart = iBank;    // what bank is in there now
+            AlterRamtop(iVM, 0xc000 - size);
+        }
+    }
+}
 
 // SWAP in the cartridge
 //
@@ -1231,41 +1313,33 @@ void InitCart(int iVM)
         _fmemcpy(&rgbMem[0xb000], pb, 4096);
         AlterRamtop(iVM, 0xa000);   // even though cart starts at 0xb000
     }
-    if (bCartType == CART_8K)
+    
+    else if (bCartType == CART_8K)
     {
         _fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
         AlterRamtop(iVM, 0xa000);
     }
+    
     else if (bCartType == CART_16K)
     {
         _fmemcpy(&rgbMem[0x8000], pb, 16384);
         AlterRamtop(iVM, 0x8000);
     }
+    
     // main bank is the last one
     else if (bCartType == CART_OSSA || bCartType == CART_OSSAX || bCartType == CART_OSSBX || bCartType == CART_OSSBY)
     {
         _fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
         AlterRamtop(iVM, 0xa000);
     }
+    
     // main bank is the first one
     else if (bCartType == CART_OSSB)
     {
         _fmemcpy(&rgbMem[0xB000], pb, 4096);
         AlterRamtop(iVM, 0xa000);
     }
-    
-    // 8K main bank is the first one
-    else if (bCartType == CART_DIAMOND || bCartType == CART_SPARTA)
-    {
-        if (iSwapCart == 8)
-            AlterRamtop(iVM, 0xc000);    // RAM is in right now
-        else
-        {
-            _fmemcpy(&rgbMem[0xA000], pb, 8192);
-            AlterRamtop(iVM, 0xa000);
-        }
-    }
-    
+
     // 8K main bank is the last one, and init the $8000 and $9000 banks to their bank 0's
     else if (bCartType == CART_BOB)
     {
@@ -1285,6 +1359,43 @@ void InitCart(int iVM)
         read_tab[iVM][0x9f] = PeekBAtariBB;
 #endif
     }
+
+    // 8K main bank is the last one
+    else if (bCartType == CART_XEGS)
+    {
+        _fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
+        // right cartridge present bit must float high if it is not RAM and not part of this bank
+        // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
+        // It's probably not zero, or cold start would crash.
+        if (rgbMem[0x9ffc] == 0)
+            rgbMem[0x9ffc] = 0xff;
+        AlterRamtop(iVM, 0x8000);
+    }
+
+    // one of the many cartridges that also can be swapped out to RAM, or perhaps we're not sure yet
+    // put the correct bank in, but also save the RAM that may have been restored on load.
+    else if (fRAMCart || bCartType == CART_XEGS_OR_ATARIMAX1L || bCartType == CART_XEGS_OR_ATARIMAX8L)
+    {
+        // Swap won't do anything if iSwapCart is already the bank that's in, and shouldn't, since that would swap the thing
+        // we want back out! Set RAMTOP high to force Swap to actually put bank #iSwapCart in
+        ramtop = 0xc000;
+        SwapRAMCart(iVM, iBankSize, pb, iSwapCart);
+        fCartNeedsSwap = FALSE; // we just took care of that
+    }
+
+#if 0
+    // 8K main bank is the first one
+    else if (bCartType == CART_DIAMOND || bCartType == CART_SPARTA)
+    {
+        if (iSwapCart == 8)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xA000], pb, 8192);
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
+    
     // 8K main bank is the first one for ATARIMAX1
     // if we're not sure yet, then iSwapCart won't be the special value
     else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1_OR_ATRAX)
@@ -1293,10 +1404,11 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xc000);    // RAM is in right now
         else
         {
-            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0, 8192); // starts with bank 0
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * iSwapCart, 8192);
             AlterRamtop(iVM, 0xa000);
         }
     }
+
     // old version where the initial bank is the last one
     else if (bCartType == CART_ATARIMAX1L || bCartType == CART_XEGS_OR_ATARIMAX1L)
     {
@@ -1308,6 +1420,20 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0xa000);
         }
     }
+
+    // old version where the initial bank is the last one
+    // or we're not sure, so let $8000-$a000 be RAM for now in case it's ATARIMAX8L
+    else if (bCartType == CART_ATARIMAX8L || bCartType == CART_XEGS_OR_ATARIMAX8L)
+    {
+        if (iSwapCart == 0x80)
+            AlterRamtop(iVM, 0xc000);    // RAM is in right now
+        else
+        {
+            _fmemcpy(&rgbMem[0xa000], pb + 8192 * 0x7f, 8192); // last 8K bank of 1MB is bank 0x7f
+            AlterRamtop(iVM, 0xa000);
+        }
+    }
+
     // initial bank is the first one
     else if (bCartType == CART_ATARIMAX8)
     {
@@ -1353,65 +1479,12 @@ void InitCart(int iVM)
             AlterRamtop(iVM, 0x8000);
         }
     }
-    // 8K main bank is the last one
-    else if (bCartType == CART_XEGS)
-    {
-        _fmemcpy(&rgbMem[0xA000], pb + cb - 8192, 8192);
-        // right cartridge present bit must float high if it is not RAM and not part of this bank
-        // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
-        // It's probably not zero, or cold start would crash.
-        if (rgbMem[0x9ffc] == 0)
-            rgbMem[0x9ffc] = 0xff;
-        AlterRamtop(iVM, 0x8000);
-    }
+#endif
+
+    else
+        Assert(0);  // oops, what did I forget?
 
     return;
-}
-
-// helper function to swap either a ROM bank or RAM in (8K or 16K banks)
-void SwapRAMCart(int iVM, BOOL f16, BYTE *pb, BYTE iBank, BOOL fRAM)
-{
-    WORD size;
-
-    if (!f16)
-        size = 0x2000;
-    else
-        size = 0x4000;
-
-    BYTE swap[0x4000];  // big enough for 16K
-
-    if (fRAM)
-    {
-        // want RAM - currently ROM - exchange with last bank used
-        if (ramtop == 0xc000 - size)
-        {
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
-            _fmemcpy(pb + iSwapCart * size, swap, size);
-        }
-        AlterRamtop(iVM, 0xc000);
-        iSwapCart = iBank;
-    }
-    else
-    {
-        // want ROM, currently different ROM? First exchange with last bank used
-        if (ramtop == (0xc000 - size) && iBank != iSwapCart)
-        {
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
-            _fmemcpy(pb + iSwapCart * size, swap, size);
-        }
-        // now exchange with current bank
-        if (ramtop == 0xc000 || iBank != iSwapCart)
-        {
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iBank * size, size);
-            _fmemcpy(pb + iBank * size, swap, size);
-
-            iSwapCart = iBank;    // what bank is in there now
-            AlterRamtop(iVM, 0xc000 - size);
-        }
-    }
 }
 
 // Swap out cartridge banks
@@ -1440,18 +1513,21 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
 
         // otherwise, we're just asking for bank 0 which we already have, so delay our decision
     }
-    
+
     // we aren't sure between these
     else if (bCartType == CART_XEGS_OR_ATARIMAX8L)
     {
         if (iBank > 0)
+        {
             bCartType = CART_ATARIMAX8L; // XEGS would never use an address != 0xd500 (I hope)
+            fRAMCart = TRUE;             // unlike XEGS, this is a RAM cart
+        }
         else if (iBank == 0 && value > 0)
         {
             bCartType = CART_XEGS;      // XEGS asks for non-zero bank#, better respond to it and hope for the best
-         
+
             AlterRamtop(iVM, 0x8000);   // XEGS uses 16K not 8K
-            
+
             // right cartridge present bit must float high if it is not RAM and not part of this bank
             // but if restoring a state, there may be a bank swapped in there, so don't trash memory.
             // It's probably not zero, or cold start would crash.
@@ -1464,7 +1540,10 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     else if (bCartType == CART_XEGS_OR_ATARIMAX1L)
     {
         if (iBank > 0)
+        {
             bCartType = CART_ATARIMAX1L; // XEGS would never use an address != 0xd500 (I hope)
+            fRAMCart = TRUE;             // unlike XEGS, this is a RAM cart
+        }
         else if (iBank == 0 && value > 0 && value < 0xf)
         {
             bCartType = CART_XEGS;      // XEGS asks for non-zero bank#, better respond to it and hope for the best
@@ -1480,8 +1559,9 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         // actually, we appear to really want bank 0, which means we're neither, but probably ATARIMAX1
         else if (iBank == 0)
         {
-            bCartType = CART_ATARIMAX1L; // XEGS would never use an address != 0xd500 (I hope)
-            _fmemcpy(&rgbMem[0xa000], pb, 8192); // we wanted the first bank initially all along, oops
+            bCartType = CART_ATARIMAX1L;
+            fRAMCart = TRUE;
+            // fall through to code that will swap bank 0 in, luckily it doesn't seem to be too late!
         }
     }
 
@@ -1497,7 +1577,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     }
 
     // banks are 0, 4, 3, main
-    if (bCartType == CART_OSSAX)
+    else if (bCartType == CART_OSSAX)
     {
         i = (iBank == 0 ? 0 : (iBank == 3 ? 2 : (iBank == 4 ? 1 : -1)));
         Assert(i != -1);
@@ -1556,31 +1636,6 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             _fmemcpy(&rgbMem[0xA000], pb + i * 4096, 4096);
     }
 
-    // $d5d7 through $d5d0 is bank 0-7. $d5d8 through $d5df is RAM
-    else if (bCartType == CART_DIAMOND)
-    {
-        if (iBank >= 0xd0 && iBank <= 0xd7)
-        {
-            iBank = 0xd7 - iBank;
-            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
-        }
-        else if (iBank >= 0xd8 && iBank <= 0xdf)
-            SwapRAMCart(iVM, FALSE, pb, 8, TRUE);
-    }
-
-    // $d5e7 through $d5e0 is bank 0-7. $d5e8 through $d5ef is RAM, I hope
-    // !!! 2nd cartridge not supported
-    else if (bCartType == CART_SPARTA)
-    {
-        if (iBank >= 0xe0 && iBank <= 0xe7)
-        {
-            iBank = 0xe7 - iBank;
-            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
-        }
-        else if (iBank >= 0xe8 && iBank <= 0xef)
-            SwapRAMCart(iVM, FALSE, pb, 8, TRUE);
-    }
-
     // Bounty Bob - bank 0 is $8000-$9000, 4 choices starting at beginning of file
     // bank 1 is $9000-$a000, 4 choices starting 16K into file
     // value 0-3 selects a 4K ban
@@ -1597,40 +1652,6 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         }
     }
 
-    // Address is bank #, 8K that goes into $A000. Bank top + 1 is RAM
-    else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8 || bCartType == CART_ATARIMAX1L || bCartType == CART_ATARIMAX8L)
-    {
-        int mask;
-
-        if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1L)
-            mask = 0x0f;
-        else
-            mask = 0x7f;
-
-        if (iBank == (mask + 1))
-            SwapRAMCart(iVM, FALSE, pb, iBank, TRUE);
-        else if (iBank <= mask) // !!! or mask it?
-            SwapRAMCart(iVM, FALSE, pb, iBank, FALSE);
-    }
-
-    // Byte is bank #, 8K that goes into $A000. Any bank >=0x80 means RAM
-    else if (bCartType == CART_ATRAX)
-    {
-        if (value >= 0x80)
-            SwapRAMCart(iVM, FALSE, pb, value, TRUE);
-        else if (value <0xf)    // !!! or mask it?
-            SwapRAMCart(iVM, FALSE, pb, value, FALSE);
-    }
-
-    // Byte is bank #, 16K that goes into $8000. Any bank >=0x80 means RAM
-    else if (bCartType == CART_MEGACART)
-    {
-        if (value >= 0x80)
-            SwapRAMCart(iVM, TRUE, pb, value, TRUE);
-        else if (value < 0x40)  // !!! can still crash since I don't know valid range
-            SwapRAMCart(iVM, TRUE, pb, value, FALSE);
-    }
-
     // 8k banks, given as contents, not the address
     else if (bCartType == CART_XEGS)
     {
@@ -1640,6 +1661,52 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
         if (value < (cb << 13))
             _fmemcpy(&rgbMem[0x8000], pb + value * 8192, 8192);
     }
+
+    // $d5d7 through $d5d0 is bank 0-7. $d5d8 through $d5df is RAM
+    else if (bCartType == CART_DIAMOND)
+    {
+        if (iBank >= 0xd0 && iBank <= 0xd7)
+        {
+            iBank = 0xd7 - iBank;
+            SwapRAMCart(iVM, iBankSize, pb, iBank);
+        }
+        else if (iBank >= 0xd8 && iBank <= 0xdf)
+            SwapRAMCart(iVM, iBankSize, pb, iNumBanks); // RAM
+    }
+
+    // $d5e7 through $d5e0 is bank 0-7. $d5e8 through $d5ef is RAM, I hope
+    // !!! 2nd cartridge not supported
+    else if (bCartType == CART_SPARTA)
+    {
+        if (iBank >= 0xe0 && iBank <= 0xe7)
+        {
+            iBank = 0xe7 - iBank;
+            SwapRAMCart(iVM, iBankSize, pb, iBank);
+        }
+        else if (iBank >= 0xe8 && iBank <= 0xef)
+            SwapRAMCart(iVM, iBankSize, pb, iNumBanks);
+    }
+
+    // Byte is bank #, 8K/16K that goes into $A000/$8000. Any bank >=0x80 means RAM
+    else if (bCartType == CART_ATRAX || bCartType == CART_MEGACART)
+    {
+        if (value >= 0x80)
+            SwapRAMCart(iVM, iBankSize, pb, iNumBanks); // RAM
+        else if (value < iNumBanks)
+            SwapRAMCart(iVM, iBankSize, pb, value);
+        else
+            Assert(0);  // bad bank #
+    }
+
+    // The typical RAM cart behaviour - Address is bank #, 8K that goes into $A000. Bank == top + 1 is RAM
+    else if (fRAMCart)
+    {
+        SwapRAMCart(iVM, iBankSize, pb, iBank);
+    }
+
+    else
+        Assert(0);  // what did I miss?
+
 }
 
 // set the freq of a POKEY timer
@@ -2012,9 +2079,7 @@ BOOL __cdecl InitAtari(int iVM)
 //  vi.cbRAM[1] = 0xC000;
 //  vi.pregs = &rgbMem[0];
 
-    // load the cartridge data
-    fCartNeedsSwap = FALSE; // forget that the old cart wasn't swapped in properly so we don't mess up the new cart
-    return ReadCart(iVM, TRUE);
+    return TRUE;
 }
 
 // Call when you are done with the VM, or need to change cartridges
@@ -2132,6 +2197,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     PSL = 0;
     wSIORTS = 0;    // stop avoiding printing in the monitor
     v.fTimeTravelFixed = FALSE;   // start periodically saving again
+    fCartNeedsSwap = FALSE; // or else we'll fault trying to swap a bogus bank in
 
     // SIO init
     cSEROUT = 0;
@@ -2191,7 +2257,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     // load the proper initial bank back into the cartridge, for cartridges with a RAM bank, make sure it isn't in RAM mode
     // or it will just erase everything and go to memo pad.
-    iSwapCart = 0;
+    ReadCart(iVM, TRUE);
     InitCart(iVM);
 
     // reset the registers
@@ -2321,11 +2387,10 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
     // there are some time travel pointers in the structure, we need to be smart enough not to use them
     if (ppPersist)
     {
+        // !!! Time Travel periodically does this and it is SLOW!
         // before saving, we need to put the RAM that's swapped into cartridge memory back into RAM so it will be persisted
         // keep iSwapCart to tell us which bank should be swapped back in, so don't do this twice in a row!
-        // TimeTravel periodic save state could do this slow memory swap (and swap back) but it's a rare case when
-        // cartridges are first executing, they usually run in RAM mode
-        if (rgvm[iVM].rgcart.fCartIn && (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX8) && ramtop == 0xa000 && !fCartNeedsSwap)
+        if (rgvm[iVM].rgcart.fCartIn && fRAMCart && ramtop == 0xa000 && !fCartNeedsSwap)
         {
             BYTE swap[8192];
             _fmemcpy(swap, &rgbMem[0xa000], 8192);
@@ -2444,6 +2509,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         AlterRamtop(iVM, 0xa000);
         fCartNeedsSwap = FALSE;
     }
+    else
+        fCartNeedsSwap = FALSE; // somebody forgot to reset this!
 
     do {
 
