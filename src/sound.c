@@ -1022,6 +1022,9 @@ void InitJoysticks()
     JOYCAPS jc;
 
     //ReleaseJoysticks();
+    
+    // On some machines I must do this for Windows to notice somebody swapped joysticks
+    joyConfigChanged(0);
 
     if ((nj = joyGetNumDevs()) == 0)
         return;
