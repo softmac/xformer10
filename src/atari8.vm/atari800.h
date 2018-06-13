@@ -96,6 +96,7 @@ BYTE rgPMGMap[65536];
 // [P DMA on?] !!! double check GRACTL doesn't have to be on too
 // [M DMA on?] which is automatically enabled if P DMA is enabled
 // [LMS?] which happens if the right bit is set on valid modes 
+
 #define DMAMAP rgDMAMap[sl.modelo][((DMACTL & 0x20) >> 5) && wScan >= wStartScan && wScan < wStartScan + Y8][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][((DMACTL & 0x8) >> 3) && wScan >= wStartScan && wScan < wStartScan + Y8][(((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)) && wScan >= wStartScan && wScan < wStartScan + Y8][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks

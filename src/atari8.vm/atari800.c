@@ -3188,9 +3188,11 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         // When you turn GRACTL off, you continue to use the most recent data
         if (addr == 0x1d)   // GRACTL
         {
-            if (!(b & 1))   // (blue bar glitches - Decathlon needs to continue to use 0, Pitfall needs to continue with $c0)
+            // should be no need to ProcessScanLine since we are specifically preventing something from changing
+
+            if ((bOld & 1) && !(b & 1))   // (blue bar glitches - Decathlon needs to continue to use 0, Pitfall needs to continue with $c0)
                 GRAFM = pmg.grafm;
-            if (!(b & 2))
+            if ((bOld & 2) && !(b & 2))
                 GRAFPX = pmg.grafpX;
         }
         else if (addr == 30)
