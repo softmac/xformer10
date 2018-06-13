@@ -1410,7 +1410,7 @@ void PSLReadRegs(int iVM, short start, short stop)
     UpdateColourRegisters(iVM);
 
     // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
-    if (!(sl.dmactl & 0x08 && GRACTL & 2))
+    if (!((sl.dmactl & 0x08) && (GRACTL & 2)))
     {
         // note that we're trying to change player data
         if (GRAFP0 != pmg.grafp[0])
@@ -1427,7 +1427,7 @@ void PSLReadRegs(int iVM, short start, short stop)
     }
 
     BOOL newGRAFm = FALSE;
-    if (!((sl.dmactl & 0x04 || sl.dmactl & 0x08) && GRACTL & 1))
+    if (!(((sl.dmactl & 0x04) || (sl.dmactl & 0x08)) && (GRACTL & 1)))
     {
         if (GRAFM != pmg.grafm)
         {
