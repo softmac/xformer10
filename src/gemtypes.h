@@ -115,6 +115,16 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 //
 #define MAX_VM 8192
 
+#define HCLOCKS 114         // in both NTSC & PAL
+
+#define NTSC_CLK 1789790ULL // clock speed
+#define NTSC_FPS 60         // frames per second
+#define NTSC_LPF 262        // lines per frame
+
+#define  PAL_CLK 1773447ULL
+#define  PAL_FPS 50
+#define  PAL_LPF 312
+
 #define wJoySens  3         // set higher for smaller dead zone, no lower than 3
 
 // I assume this is acceptable to all VM types
@@ -350,8 +360,9 @@ typedef struct
     int      fSwapKeys:1;   // use alternate keyboard layout
     int      xQuickBaud:1;  // Acceleration: activate fast baud rates
     
+    int      fEmuPAL:1;        // emulate PAL
+
     // UNUSED
-    int      fWarmReset:1;  // UNUSED if set, this VM needs a warm boot
     int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
     
     int      fValidVM:1;    // if set, this VM is initialized

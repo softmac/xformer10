@@ -60,7 +60,8 @@ INST vi;                // global non-persistable stuff
 VMINST vrgvmi[MAX_VM];    // per instance not persistable stuff
 VM rgvm[MAX_VM];        // per instance persistable stuff
 
-const ULONGLONG JIF = 29830;    // 1789790 / 60
+const ULONGLONG JIFN = NTSC_CLK / NTSC_FPS;
+const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 
 // and our other globals
 
@@ -280,11 +281,13 @@ void DisplayStatus(int iVM)
 
     strcat(rgch0, rgch);
 
-#define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=1sec
+#define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=~1sec (NTSC, anyway)
 
-    // are we running at normal speed or turbo speed
-    sprintf(rgch, "(%s-%lli%%) %s %uHz, %u/%ums renders", fBrakes ? "1.8 MHz" : "Turbo",
-                uExecSpeed ? (JIF * CPUAVG * 100ull / uExecSpeed) : 0, pInst, v.vRefresh, renders, lastRenderCost);
+    // are we running at normal speed or turbo speed !!! PAL runs at 60fps
+    sprintf(rgch, "(%s-%lli%%) %s %s %uHz, %u/%ums renders", fBrakes ? "1.8 MHz" : "Turbo",
+                uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0,
+                iVM >= 0 ? (rgvm[iVM].fEmuPAL ? "PAL" : "NTSC") : "", pInst, v.vRefresh, renders, lastRenderCost);
+
     strcat(rgch0, rgch);
 
     if (v.fZoomColor)
@@ -313,7 +316,9 @@ ULONGLONG GetCycles()
         Assert(0);
     }
 
-    ULONGLONG a = (qpc.QuadPart * 178979ULL);
+    // !!! GEM runs PAL at NTSC speeds!
+    ULONGLONG a = (qpc.QuadPart * NTSC_CLK / 10);
+
     ULONGLONG b = (vi.qpfCold / 10ULL);
     ULONGLONG c = a / b;
     return c;
@@ -321,7 +326,8 @@ ULONGLONG GetCycles()
 
 ULONGLONG GetJiffies()
 {
-    ULONGLONG c = GetCycles() / 29833;
+    // !!! Gem runs PAL at NTSC speeds!
+    ULONGLONG c = GetCycles() / (NTSC_LPF * HCLOCKS);
     return c;
 }
 
@@ -774,11 +780,9 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, v.fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0 && rgvm[inst].fEmuPAL) ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
-
-    // some menu items not appropriate if tiling, but there's no current tile to do anything to
-    // it could do it on
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
@@ -788,6 +792,7 @@ void FixAllMenus(BOOL fVM)
     EnableMenuItem(vi.hMenu, IDM_DELVM, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_CHANGEVM, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_SAVEAS, (inst >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0) ? 0 : MF_GRAYED);
 
     // Initialize the virtual disk menu items to show the associated file path with each drive.
     // Grey the unload option for a disk that isn't loaded
@@ -1851,19 +1856,21 @@ int CALLBACK WinMain(
 
         // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th sec)
         // Don't allow guest time drift to propagate by more than one extra guest second.
-
-        if (fBrakes && (cCur < (JIF*60)))
+        // !!! GEM runs PAL at 60fps too! What else can we do?
+        ULONGLONG ullsec = NTSC_CLK;
+        ULONGLONG ulljif = JIFN;
+        if (fBrakes && (cCur < ullsec))
         {
-            while (cCur < JIF)
+            while (cCur < ulljif)
             {
                 // If the deadline is still over half a jiffy away (1/120th second or 8 ms) use Sleep otherwise poll
-                Sleep((cCur < (JIF/2)) ? 8 : 0);
+                Sleep((cCur < (ulljif/2)) ? 8 : 0);
                 cCur = GetCycles() - cLastJif;
             };
 
             // At this point host time has over shot, but this will be accounted for next iteration by braking less
 
-            cLastJif += JIF;
+            cLastJif += ulljif;
         }
         else
         {
@@ -4369,6 +4376,16 @@ break;
             FixAllMenus(FALSE);
             break;
 
+        // toggle NTSC/PAL
+        case IDM_NTSCPAL:
+            if (v.iVM >= 0)
+            {
+                rgvm[v.iVM].fEmuPAL = !rgvm[v.iVM].fEmuPAL;
+                FixAllMenus(FALSE);
+                DisplayStatus(v.iVM);
+            }
+            break;
+
         // toggle COLOR/B&W
         case IDM_COLORMONO:
 
@@ -4647,7 +4664,9 @@ break;
 
             break;
 
-#ifdef XFORMER // !!! really hacky support for toggle basic
+            // !!! really hacky support for toggle basic. Maybe make 6 different VMs? But you still want to toggle just this
+            // use an rgvm[].member instead of hacking into CANDY, but then you don't know the sense of that variable
+#ifdef XFORMER
         case IDM_TOGGLEBASIC:
             assert(v.iVM != -1);
 

@@ -7,61 +7,61 @@
 #define IDR_ACCEL                       104
 #define IDR_GEMMENU                     105
 
-#define IDM_ADDVM1                      40150 // and leave room for all the different possible VM types
-
-#define IDM_DELVM                       40202
-#define IDM_CHANGEVM                    40225
-#define IDM_NEW                         40203
-#define IDM_COLDSTART                   40204
-#define IDM_WARMSTART                   40221
-#define IDM_TOGGLEBASIC                 40222
-#define IDM_NEXTVM                      40223
-#define IDM_PREVVM                      40224
-
-#define IDM_LOAD                        40206
-#define IDM_SAVEAS                      40207
-#define IDM_IMPORTDOS1                  40208
-#define IDM_IMPORTDOS2                  40209
-#define IDM_DEBUGGER                    40210
-#define IDM_EXIT                        40220
-
 #define IDM_VM1                         65530    // !!! leave lots of room for many more before this one (thousands)
 
-#define IDM_FULLSCREEN                  40231
-#define IDM_STRETCH                     40232
-#define IDM_TILE                        40237
-#define IDM_TURBO                       40033
-#define IDM_COLORMONO                   40032
-#define IDM_TIMETRAVEL                  40034
-#define IDM_AUTOLOAD                    40035
-#define IDM_MYVIDEOCARDSUCKS            40036
-#define IDM_AUTOKILL                    40236
-#define IDM_TIMETRAVELFIXPOINT          40240
-#define IDM_USETIMETRAVELFIXPOINT       40241
+#define IDM_ADDVM1                      40100 // and leave room for all 32 different possible VM types
 
-#define IDM_D1                          40238
-#define IDM_D2                          40239
-#define IDM_D3                          40242
-#define IDM_D4                          40243
-#define IDM_D1U                         40244
-#define IDM_D2U                         40245   // must be consecutive
-#define IDM_D3U                         40246
-#define IDM_D4U                         40247
-#define IDM_CART                        40248
-#define IDM_NOCART                      40249
-#define IDM_WHEELSENS                   40250
-#define IDM_PASTEASCII                  40251
-#define IDM_PASTEATASCII                40252
-#define IDM_D1LABEL                     40253
-#define IDM_D2LABEL                     40254
-#define IDM_WP1                         40255
-#define IDM_WP2                         40256
-#define IDM_D1BLANKSD                   40257
-#define IDM_D2BLANKSD                   40258
-#define IDM_D1BLANKDD                   40259
-#define IDM_D2BLANKDD                   40260
+#define IDM_DELVM                       40150
+#define IDM_NEW                         40151
+#define IDM_LOAD                        40152
+#define IDM_SAVEAS                      40153
+#define IDM_AUTOLOAD                    40154
+#define IDM_EXIT                        40155
 
-#define IDM_ABOUT                       40261
+#define IDM_NEXTVM                      40160
+#define IDM_PREVVM                      40161
+
+#define IDM_FULLSCREEN                  40170
+#define IDM_STRETCH                     40171
+#define IDM_TILE                        40172
+#define IDM_TURBO                       40173
+#define IDM_AUTOKILL                    40174
+#define IDM_WHEELSENS                   40175
+#define IDM_MYVIDEOCARDSUCKS            40176
+
+#define IDM_WARMSTART                   40180
+#define IDM_COLDSTART                   40181
+#define IDM_TOGGLEBASIC                 40182
+#define IDM_CHANGEVM                    40183
+#define IDM_DEBUGGER                    40184
+#define IDM_USETIMETRAVELFIXPOINT       40185
+#define IDM_TIMETRAVELFIXPOINT          40186
+#define IDM_TIMETRAVEL                  40187
+#define IDM_NTSCPAL                     40188
+#define IDM_COLORMONO                   40189
+#define IDM_PASTEASCII                  40190
+#define IDM_PASTEATASCII                40191
+
+#define IDM_D1                          40200
+#define IDM_D2                          40201
+#define IDM_D3                          40202
+#define IDM_D4                          40203
+#define IDM_D1U                         40204
+#define IDM_D2U                         40205   // must be consecutive
+#define IDM_D3U                         40206
+#define IDM_D4U                         40207
+#define IDM_D1BLANKSD                   40208
+#define IDM_D2BLANKSD                   40209
+#define IDM_D1BLANKDD                   40210
+#define IDM_D2BLANKDD                   40211
+#define IDM_IMPORTDOS1                  40212
+#define IDM_IMPORTDOS2                  40213
+#define IDM_WP1                         40214   // write protect
+#define IDM_WP2                         40215
+#define IDM_CART                        40216
+#define IDM_NOCART                      40217
+
+#define IDM_ABOUT                       40220
 
 // legacy
 #define IDSCAN                          10
@@ -204,12 +204,12 @@
 #define IDM_NEWDSK                      40079
 #define IDM_LOG2HFX                     40080
 #define IDM_PHYS2DSK                    40081
-#define IDM_WEB_EMULATORS               40100
-#define IDM_WEB_UPDATE                  40101
-#define IDM_WEB_BETA                    40102
-#define IDM_WEB_FREE                    40103
-#define IDM_WEB_HELP                    40104
-#define IDM_WEB_EMUTOS                  40105
+#define IDM_WEB_EMULATORS               40082
+#define IDM_WEB_UPDATE                  40083
+#define IDM_WEB_BETA                    40084
+#define IDM_WEB_FREE                    40085
+#define IDM_WEB_HELP                    40086
+#define IDM_WEB_EMUTOS                  40087
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -218,7 +218,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        118
-#define _APS_NEXT_COMMAND_VALUE         40200
+#define _APS_NEXT_COMMAND_VALUE         40088
 #define _APS_NEXT_CONTROL_VALUE         1178
 #define _APS_NEXT_SYMED_VALUE           104
 #endif

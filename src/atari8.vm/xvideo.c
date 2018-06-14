@@ -40,10 +40,10 @@ BYTE const * const rgszModes[6] =
     (BYTE const * const)" ATARI 130XE + CARTRIDGE",
     };
 
-#define vcbScan X8
-#define wcScans Y8    // # of valid scan lines
+#define vcbScan X8      // NTSC and PAL widths are the same
+#define wcScans Y8      // # of valid scan lines, NTSC or PAL is the same
 #define NTSCx 512       // TRIVIA: only 456 pixels take time to draw, the other 56 are instantaneous and no CPU time elapses.
-                        // see ATARI800.c rgDMAx[] comment for explanation
+                        // see ATARI800.c rgDMAx[] comment for explanation. Horizontal width is same for PAL
 #define NARROWx 256
 #define NORMALx 320
 #define WIDEx 384
@@ -115,7 +115,7 @@ static const ULONG BitsToByteMask[16] =
 
 void ShowCountDownLine(int iVM)
 {
-    int i = wScan - (wStartScan + wcScans - 12);
+    int i = wScan - (STARTSCAN + wcScans - 12);
 
     // make sure bottom 8 scan lines
 
@@ -156,12 +156,12 @@ void ShowCountDownLine(int iVM)
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - wStartScan) * stride);
+            qch += ((wScan - STARTSCAN) * stride);
             if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else
-            qch += ((wScan - wStartScan) * vcbScan);
+            qch += ((wScan - STARTSCAN) * vcbScan);
 
         colfg = (BYTE)(((wFrame >> 2) << 4) + i + i);
         colfg = (BYTE)((((wFrame >> 2) + i) << 4) + 8);
@@ -974,7 +974,7 @@ void PSLPrepare(int iVM)
         PSL = 0;    // allow PSL to do stuff again
 
         // overscan area - all blank lines and never the first scan line of a mode (so there's no DMA fetch)
-        if (wScan < wStartScan || wScan >= wStartScan + wcScans)
+        if (wScan < STARTSCAN || wScan >= STARTSCAN + wcScans)
         {
             sl.modelo = 0;
             sl.modehi = 0;
@@ -984,7 +984,7 @@ void PSLPrepare(int iVM)
         }
 
         // we are entering visible territory (240 lines are visible - usually 24 blank, 192 created by ANTIC, 24 blank)
-        if (wScan == wStartScan)
+        if (wScan == STARTSCAN)
         {
             //ODS("BEGIN scan 8\n");
             fWait = 0;    // not doing JVB anymore, we reached the top
@@ -1685,12 +1685,12 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - wStartScan) * stride);
+            qch += ((wScan - STARTSCAN) * stride);
             if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else
-            qch += ((wScan - wStartScan) * vcbScan);
+            qch += ((wScan - STARTSCAN) * vcbScan);
     }
 
     // what is the background colour? Normally it's sl.colbk, but in pmg mode we are using an index of 0 to represent it.
@@ -2717,12 +2717,12 @@ if (sl.modelo < 2 || iTop > i)
         {
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - wStartScan) * stride);
+            qch += ((wScan - STARTSCAN) * stride);
             if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else
-            qch += ((wScan - wStartScan) * vcbScan);
+            qch += ((wScan - STARTSCAN) * vcbScan);
 
         // turn the rgpix array from a bitfield of which items are present (player or field colours)
         // into the actual colour that will show up there, based on priorities
@@ -2899,7 +2899,7 @@ if (sl.modelo < 2 || iTop > i)
 
     int i;
 
-    qch += (wScan - wStartScan) * vcbScan + vcbScan - 81;
+    qch += (wScan - STARTSCAN) * vcbScan + vcbScan - 81;
 
     if (wScan == 128)
     {
@@ -2957,10 +2957,10 @@ if (sl.modelo < 2 || iTop > i)
 BOOL ProcessScanLine(int iVM)
 {
     // don't do anything in the invisible top and bottom sections
-    if (wScan < wStartScan)
+    if (wScan < STARTSCAN)
         return TRUE;
 
-    if (wScan >= wStartScan + wcScans)
+    if (wScan >= STARTSCAN + wcScans)
         return TRUE;    // uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
 
     // what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114

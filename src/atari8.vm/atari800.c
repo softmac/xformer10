@@ -1713,10 +1713,15 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
 void ResetPokeyTimer(int iVM, int irq)
 {
     ULONG f[4], c[4];
+    int pCLK, pCLK28, pCLK113;
 
     if (irq == 2 || irq < 0 || irq >= 4)
         return;
 
+    pCLK = fPAL ? PAL_CLK : NTSC_CLK;
+    pCLK28 = pCLK / 28;
+    pCLK113 = pCLK28 / 4;
+    
     // f = how many cycles do we have to count down from? (Might be joined to another channel)
     // c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
     // Then set now how many cycles have to execute before reaching 0
@@ -1726,22 +1731,22 @@ void ResetPokeyTimer(int iVM, int irq)
     if (irq == 0)
     {
         f[0] = AUDF1;
-        c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
-        irqPokey[0] = (LONG)((ULONGLONG)f[0] * 1789790 / c[0]);
+        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        irqPokey[0] = (LONG)((ULONGLONG)f[0] * pCLK / c[0]);
     }
     else if (irq == 1)
     {
         f[1] = (AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2; // when joined, these count down much slower
-        c[0] = (AUDCTL & 0x40) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);
-        c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? 15700 : 63921);
-        irqPokey[1] = (LONG)((ULONGLONG)f[1] * 1789790 / c[1]);
+        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        irqPokey[1] = (LONG)((ULONGLONG)f[1] * pCLK / c[1]);
     }
     else if (irq == 3)
     {
         f[3] = (AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4;
-        c[2] = (AUDCTL & 0x20) ? 1789790 : ((AUDCTL & 0x01) ? 15700 : 63921);    // irq 3 needs to know what this is
-        c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? 15700 : 63921);
-        irqPokey[3] = (LONG)((ULONGLONG)f[3] * 1789790 / c[3]);
+        c[2] = (AUDCTL & 0x20) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);    // irq 3 needs to know what this is
+        c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        irqPokey[3] = (LONG)((ULONGLONG)f[3] * pCLK / c[3]);
     }
 
     // 0 means not being used, so the minimum value for wanting an interrupt is 1
@@ -2043,8 +2048,6 @@ BOOL __cdecl InitAtari(int iVM)
     if (!ramtop)
         AlterRamtop(iVM, (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000);
     
-    wStartScan = STARTSCAN;    // this is when ANTIC starts fetching. Usually 3x "blank 8" means the screen starts at 32.
-
     switch (rgvm[iVM].bfHW)
     {
     default:
@@ -2181,6 +2184,10 @@ BOOL __cdecl WarmbootAtari(int iVM)
 
     cPasteBuffer = 0;   // stop pasting
 
+    // notice NTSC/PAL switch
+    fPAL = rgvm[iVM].fEmuPAL;
+    PAL = fPAL ? 1 : 15;    // set GTIA register
+
     // !!! Warm start is broken on XL/XE - swap banks back?
     // 221B broken
 
@@ -2293,7 +2300,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     // we want to remove BASIC, on an XL the only way is to fake OPTION being held down.
     // but now it will get stuck down! ExecuteAtari will fix that
     CONSOL = ((mdXLXE != md800) && (GetKeyState(VK_F9) < 0 || ramtop == 0xC000)) ? 3 : 7;
-    PAL = 15;   // should be 14, but some apps need to see 15
+    PAL = fPAL ? 1 : 15;   // perhaps should be 0 and 14, but some apps need to see 1 and 15
     TRIG0 = 1;
     TRIG1 = 1;
     TRIG2 = 1;
@@ -2496,6 +2503,12 @@ BOOL __cdecl TraceAtari(int iVM, BOOL fStep, BOOL fCont)
 BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
  {
     fCont; fStep;
+
+    // notice NTSC/PAL switch
+    fPAL = rgvm[iVM].fEmuPAL;
+    PAL = fPAL ? 1 : 15;    // set GTIA register
+
+    WORD MAXY = fPAL ? PAL_LPF : NTSC_LPF; // 312 or 262 lines per frame?
 
     fStop = 0;    // do not break out of big loop
 
@@ -2747,16 +2760,16 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         //ODS("DISK READ REQUEST sector %d\n", rgSIO[2] | ((int)rgSIO[3] << 8));
                         bSERIN = 0x41;    // start with ack
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
-                        if (fSERIN >= NTSCY)
-                            fSERIN -= (NTSCY - 1);    // never be 0, that means stop
+                        if (fSERIN >= MAXY)
+                            fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
                     else if (rgSIO[0] == 0x31 && rgSIO[1] == 0x53)
                     {
                         //ODS("DISK STATUS %02x %02x\n", rgSIO[2], rgSIO[3]);
                         bSERIN = 0x41;    // start with ack
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
-                        if (fSERIN >= NTSCY)
-                            fSERIN -= (NTSCY - 1);    // never be 0, that means stop
+                        if (fSERIN >= MAXY)
+                            fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
                     else if (rgSIO[0] == 0x31)
                     {
@@ -2769,8 +2782,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             if (fSERIN == wScan && (IRQEN & 0x20))
             {
                 fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data (19,200 baud expected)
-                if (fSERIN >= NTSCY)
-                    fSERIN -= (NTSCY - 1);    // never be 0, that means stop
+                if (fSERIN >= MAXY)
+                    fSERIN -= (MAXY - 1);    // never be 0, that means stop
                 //ODS("TRIGGER SERIN\n");
                 IRQST &= ~0x20;
 
@@ -2828,7 +2841,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         }
 
         // we process the audio after the whole frame is done
-        if (wScan >= NTSCY)
+        if (wScan >= MAXY)
         {
             TimeTravelPrepare(iVM, FALSE);        // periodically call this to enable TimeTravel
 
@@ -2923,7 +2936,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         // RANDOM and its shadows
         // we've been asked for a random number. How many times would the poly counter have advanced? (same clock freq as CPU)
         if (addr == 0xD20A) {
-            int cur = (wFrame * NTSCY * HCLOCKS + wScan * HCLOCKS + DMAMAP[wLeft - 1]);
+            int cur = (wFrame * (fPAL ? PAL_LPF : NTSC_LPF) * HCLOCKS + wScan * HCLOCKS + DMAMAP[wLeft - 1]);
             int delta = (int)(cur - random17last);
             random17last = cur;
             random17pos = (random17pos + delta) % 0x1ffff;
@@ -3010,8 +3023,8 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
             // could start arbitrarily further than the end of the last instruction).
             if (wLeft >= 4 && DMAMAP[wLeft - 1 - 3] + 1 <= 111)
                 return (BYTE)(wScan >> 1);
-            // report scan line 262 (131) for only 1 cycle, then start reporting 0 again
-            else if (wScan == 261 && wLeft <= 5)
+            // report scan line NTSC: 262 (131) or PAL: 312 (156) for only 1 cycle, then start reporting 0 again
+            else if (wScan == (fPAL ? PAL_LPF - 1 : NTSC_LPF - 1) && wLeft <= 5)
                 return 0;
             else
                 return (BYTE)((wScan + 1) >> 1);
@@ -3310,7 +3323,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             // AUDFx, AUDCx or AUDCTL have changed - write some sound
             // we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
-            int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 / NTSCY;
+            int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 / (fPAL ? PAL_LPF : NTSC_LPF);
             if (iCurSample < SAMPLES_PER_VOICE)
                 SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
 

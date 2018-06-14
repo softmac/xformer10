@@ -132,6 +132,7 @@ BEGIN
         MENUITEM "Set Time Travel &Fixed Point\tPg Down", IDM_TIMETRAVELFIXPOINT
         MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL
         MENUITEM SEPARATOR
+        MENUITEM "Emulate PAL\tAlt+F12", IDM_NTSCPAL
         MENUITEM "Switch &Monitor\tShift+F12", IDM_COLORMONO
         MENUITEM SEPARATOR
         MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
@@ -139,7 +140,7 @@ BEGIN
     END
     POPUP "&Disk/Cartridge"
     BEGIN
-        POPUP "D&1:" //, IDM_D1LABEL
+        POPUP "D&1:"
         BEGIN
             MENUITEM "&Mount D1", IDM_D1
             MENUITEM "&Unmount D1", IDM_D1U
@@ -154,7 +155,7 @@ BEGIN
             MENUITEM SEPARATOR
             MENUITEM "Write &Protect", IDM_WP1
     END
-        POPUP "D&2:" //, IDM_D2LABEL
+        POPUP "D&2:"
         BEGIN
             MENUITEM "&Mount D2", IDM_D2
             MENUITEM "&Unmount D2", IDM_D2U
@@ -257,7 +258,7 @@ BEGIN
     VK_F10,            IDM_CHANGEVM,            VIRTKEY, ALT, NOINVERT
     VK_F12,            IDM_TURBO,               VIRTKEY, CONTROL, NOINVERT
     VK_F12,            IDM_COLORMONO,           VIRTKEY, SHIFT, NOINVERT
-//    VK_F12,            IDM_WHEELSENS,           VIRTKEY, ALT, NOINVERT
+    VK_F12,            IDM_NTSCPAL,             VIRTKEY, ALT, NOINVERT
     VK_PAUSE,          IDM_DEBUGGER,            VIRTKEY, NOINVERT
 
     // legacy
