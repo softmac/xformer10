@@ -2978,6 +2978,10 @@ void SelectInstance(int iVM)
     if (v.swWindowState == SW_SHOWNORMAL)
         SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
                 v.rectWinPos.bottom - v.rectWinPos.top, 0);
+
+    // show the new VM # immediately in the title bar, don't wait 1sec
+    DisplayStatus(iVM);
+
     return;
 }
 
@@ -4304,6 +4308,8 @@ break;
             fBrakes = !fBrakes;
             uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             FixAllMenus(FALSE);
+            // show the new VM # immediately in the title bar, don't wait 1sec
+            DisplayStatus(v.iVM);
             break;
 
         case IDM_AUTOLOAD:
