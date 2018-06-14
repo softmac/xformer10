@@ -29,10 +29,10 @@
 #define USE_POKE_TABLE (0)
 
 #define STARTSCAN 8    // scan line ANTIC starts drawing at
-#define NTSCY 262    // ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
-                    // the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
-                    // I wonder if that ever created weird burn-in patterns. We do not emulate PAL.
-#define HCLOCKS 114 // number of clock cycles per horizontal scan line
+
+// ANTIC does 262 line non-interlaced NTSC video at true ~60fps, not 262.5 standard NTSC interlaced video.
+// the TV is prevented from going in between scan lines on the next pass, but always overwrites the previous frame.
+// I wonder if that ever created weird burn-in patterns.
 
 extern BYTE rgbRainbow[];    // the ATARI colour palette
 
@@ -97,7 +97,7 @@ BYTE rgPMGMap[65536];
 // [M DMA on?] which is automatically enabled if P DMA is enabled
 // [LMS?] which happens if the right bit is set on valid modes 
 
-#define DMAMAP rgDMAMap[sl.modelo][((DMACTL & 0x20) >> 5) && wScan >= wStartScan && wScan < wStartScan + Y8][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][((DMACTL & 0x8) >> 3) && wScan >= wStartScan && wScan < wStartScan + Y8][(((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)) && wScan >= wStartScan && wScan < wStartScan + Y8][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
+#define DMAMAP rgDMAMap[sl.modelo][((DMACTL & 0x20) >> 5) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8][(DMACTL & 0x03) ? ((DMACTL & 3) - 1) : 0][iscan == sl.vscrol][((DMACTL & 0x8) >> 3) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8][(((DMACTL & 4) >> 2) | ((DMACTL & 8) >> 3)) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8][((sl.modehi & 4) && sl.modelo >= 2) ? 1 : 0]
 
 // !!! I ignore the fact that HSCROL delays the PF DMA by a variable number of clocks
 
@@ -390,7 +390,7 @@ typedef struct
     BYTE m_fHitBP;      // anybody changing the PC outside of Go6502 needs to check and set this
 
     WORD m_fStop;
-    WORD m_wStartScan;
+    BOOL m_fPAL;        // emulating PAL?
     BYTE m_fRedoPoke;
     
     BYTE m_POT;         // current paddle potentiometer reading, counts from 0 to 228
@@ -501,7 +501,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wLeft         CANDY_STATE(wLeft)
 #define ramtop        CANDY_STATE(ramtop)
 #define fStop         CANDY_STATE(fStop)
-#define wStartScan    CANDY_STATE(wStartScan)
+#define fPAL          CANDY_STATE(fPAL)
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)

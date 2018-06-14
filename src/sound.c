@@ -199,6 +199,11 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
         if (rgvm[iVM].fSound) {
 
+            int pCLK = fPAL ? PAL_CLK : NTSC_CLK;
+            int pCLK100 = pCLK * 100;
+            int pCLK28100 = pCLK100 / 28;
+            int pCLK113100 = pCLK28100 / 4;
+            
             // figure out the freq and pulse width of each voice
             int freq[4];
             for (int i = 0; i < 4; i++) {
@@ -213,23 +218,23 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
                     // actual frequency is the current clock divided by (n+1) (x 100 for the precision necessary to count poly clocks)
                     // An additional /2 will happen because this frequency is how often the square wave toggles
 
-                    // Channels 1 and 3 can be clocked with 1.78979 MHz, otherwise the clock is either 15700 or 63921Hz
+                    // Channels 1 and 3 can be clocked with 1.78979 MHz, otherwise the clock is either 15700 or 63921Hz (NTSC)
                     if ((i == 0 && (sAUDCTL & 0x40)) || (i == 2 && (sAUDCTL & 0x20))) {
-                        freq[i] = 1789790 * 100 / (rgvoice[i].frequency + 1);
+                        freq[i] = pCLK * 100 / (rgvoice[i].frequency + 1);
 
                         // Channels 2 and 4 can be combined with channels 1 and 3 for 16 bit precision, clocked by any possible clock
                         // Divide by (n+4) for 64K or (n+7) for 1.79M
                     }
                     else if (i == 1 && (sAUDCTL & 0x10)) {
-                        freq[i] = ((sAUDCTL & 0x40) ? 178979000 : ((sAUDCTL & 0x01) ? 1570000 : 6392100)) /
+                        freq[i] = ((sAUDCTL & 0x40) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
                     else if (i == 3 && (sAUDCTL & 0x08)) {
-                        freq[i] = ((sAUDCTL & 0x20) ? 178979000 : ((sAUDCTL & 0x01) ? 1570000 : 6392100)) /
+                        freq[i] = ((sAUDCTL & 0x20) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
                     else {
-                        freq[i] = ((sAUDCTL & 0x01) ? 1570000 : 6392100) / (rgvoice[i].frequency + 1);
+                        freq[i] = ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100) / (rgvoice[i].frequency + 1);
                     }
 
                     // recalculate the pulse width as the freq may have changed, rounded to the nearest half sample.
@@ -262,7 +267,7 @@ void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
 
                         // How many times would the poly counters have clocked since the last pulse width? We need the accuracy of
                         // using the freq of the note * 10, not the pulse width, which is only rounded to the nearest 1/2 integer
-                        int r = 178979000 / freq[voice];
+                        int r = pCLK100 / freq[voice];
 
                         // poly5's cycle is 31
                         if (!(rgvoice[voice].distortion & 8))    // only if it's being used
