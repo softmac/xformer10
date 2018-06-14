@@ -659,7 +659,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
     if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
         _close(rgDrives[iVM][i].h);
-    rgDrives[iVM][i].h = -1;
+    rgDrives[iVM][i].h = (WORD)-1;
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
@@ -733,6 +733,9 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
        
             rgDrives[iVM][i].ofs = 0;
 
+            char *path = rgDrives[iVM][i].path;
+            int pl = strlen(path);
+
             if (l == 368640)
             {
                 rgDrives[iVM][i].mode = MD_QD;
@@ -748,7 +751,11 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                 rgDrives[iVM][i].mode = MD_ED;
                 rgDrives[iVM][i].wSectorMac = 1040;
             }
-            else if (l == 92160)
+            
+            // somehow, there are XFD files out there not the right size. We better work with them, that's our format!
+            // raw disk images often have a 3 sector loader at first, seeing 0x300 means we're a raw image w/o a header
+            // and therefore a good candidate for an XFD file. Also if our extension is XFD.
+            else if (l == 92160 || (l < 133120 && sc == 0x300) || (pl >=3 && !_stricmp(&path[pl - 3], "xfd")))
             {
                 rgDrives[iVM][i].mode = MD_SD;
                 rgDrives[iVM][i].wSectorMac = 720;
