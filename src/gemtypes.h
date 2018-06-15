@@ -129,8 +129,10 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 
 // I assume this is acceptable to all VM types
 #define SAMPLE_RATE 48000
-#define SNDBUFS     6       // we fill and send two right away to keep from starving, a 1/30s latency
-#define SAMPLES_PER_VOICE SAMPLE_RATE / 60    // 1/60th of a second, one buffer per VBI
+#define SNDBUFS     6       // we fill and send two right away to keep from starving, a 1/30s or 1/25s latency
+// to keep sound smooth, we'll need separate buffers for NTSC and PAL and only switch on a frame boundary
+#define SAMPLES_NTSC SAMPLE_RATE / NTSC_FPS    // 1/60th of a second, one buffer per VBI
+#define SAMPLES_PAL  SAMPLE_RATE /  PAL_FPS    // 1/50th of a second, one buffer per VBI
 
 #define VM_CRASHED 1        // special code sent to FInstallVM to say the type we gave you crashed so try something else
 
@@ -600,8 +602,11 @@ typedef struct
     WAVEOUTCAPS woc;    // wave output capabilities structure
     int  fWaveOutput;   // true if suitable wave output device found
     int  iWaveOutput;   // if fWaveOutput, the identifier of the device
-    WAVEHDR rgwhdr[SNDBUFS]; // sound buffers
-    char rgbSndBuf[SNDBUFS][SAMPLES_PER_VOICE * 2];// MONO sound buffer data
+    WAVEHDR rgwhdrN[SNDBUFS]; // sound buffers for NTSC
+    WAVEHDR rgwhdrP[SNDBUFS]; // sound buffers for PAL
+
+    char rgbSndBufN[SNDBUFS][SAMPLES_NTSC * 2];// MONO NTSC sound buffer data
+    char rgbSndBufP[SNDBUFS][SAMPLES_PAL  * 2];// MONO PAL sound buffer data
 
     HANDLE hROMCard;    // on NT, the handle to the Gemulator device
     unsigned ioPort;    // current port being scanned
@@ -1005,6 +1010,11 @@ void GetPosFromTile(int, RECT *);
 void RenderBitmap();
 void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();
+ULONGLONG GetCyclesN();
+ULONGLONG GetCyclesP();
+ULONGLONG GetJiffies();
+ULONGLONG GetJiffiesN();
+ULONGLONG GetJiffiesP();
 //BOOL OpenThePath(HWND hWnd, char *psz);
 BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int type);
 void FixAllMenus(BOOL);
@@ -1062,7 +1072,7 @@ BOOL FWriteSerialPort(BYTE b);
 
 // sound.c
 //void TestSound(void);
-void SoundDoneCallback(int, LPWAVEHDR, int);
+void SoundDoneCallback(int, int);
 //void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
 //void CaptureJoysticks();
