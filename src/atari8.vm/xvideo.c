@@ -1597,7 +1597,7 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
     // rgpix doesn't have enough room to store everything about a pixel, so we need some extra storage
     BYTE rgFifth[X8];    // is fifth player colour present in this pixel in GTIA modes?
     BYTE rgArtifact[X8]; // is artifacting being done on this pixel?
-    BYTE colpf1Save;     // if so, we'll need to remember this
+    BYTE colpf1Save = 0;     // if so, we'll need to remember this
 
     // Based on the graphics mode, fill in a scanline's worth of data. It might be the actual data, or if PMG exist on this line,
     // a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
@@ -1640,7 +1640,7 @@ void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iT
     // annoying debug pixels near top of screen: qch[regSP & 0xFF] = (BYTE)(cpuPeekB(regSP | 0x100) ^ wFrame);
 #endif
     
-    BYTE *qchStart;
+    BYTE *qchStart = 0;
     if (sl.fpmg)
     {
         // We didn't waste time initializing the array if we weren't going to use it
@@ -1731,6 +1731,7 @@ if (sl.modelo < 2 || iTop > i)
         // GR.0 and descended character GR.0
     case 2:
     case 3:
+    {
         BYTE vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
 
         // mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
@@ -1757,7 +1758,7 @@ if (sl.modelo < 2 || iTop > i)
         const BYTE greenPMG = 0xc0 | (colpf1Save & 0x0F);
         const BYTE yellowPMG = 0xe0 | (colpf1Save & 0x0F);
         yellowPMG; // NYI
-                   
+
         // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
 
         const ULONG FillA = 0x00010001 * (red | (green << 8));
@@ -2011,7 +2012,7 @@ if (sl.modelo < 2 || iTop > i)
                 ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
 
                 *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-           
+
                 // make note of the artificting colour for this pixel
                 if (fPMGA)
                     *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
@@ -2045,7 +2046,7 @@ if (sl.modelo < 2 || iTop > i)
                 ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)];
 
                 *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-                
+
                 if (fPMGA)
                     *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
@@ -2054,7 +2055,8 @@ if (sl.modelo < 2 || iTop > i)
             }
         }
         break;
-        
+    }
+
     case 5:
         vpix = iscan >> 1;    // extra thick, use screen data twice for 2 output lines
     case 4:
@@ -2824,13 +2826,21 @@ if (sl.modelo < 2 || iTop > i)
                 colpfX = colpfXSpec;
                 colpf3 = colpf3Spec;
 
-                // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
-                // if PRIOR = 0, it shows PF2 chroma instead of PMG chroma! Is that right?
-                colpmX = colpmXSpec;
-
                 // we have an artifacting colour we want to use instead of the regular colour for PF1
-                if (rgArtifact[i])
+                // and that colour is not just the normal pf1 colour, it's an artifact colour (red or green)
+                // so let it through and make sure artifacts show through PMGs.
+                if (rgArtifact[i] && rgArtifact[i] != sl.colpf1)
+                {
                     colpfX = colpfX & 0xffff00ff | (rgArtifact[i] << 8);
+                    colpmX = 0x01010101 * rgArtifact[i];    // use artifact colour for PMG colours
+                }
+                else
+                {
+                    // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
+                    // !!! if PRIOR = 0, it shows PF2 chroma instead of PMG chroma, because both P0 and PF1 are prioritized visible,
+                    // and the OR of the two together makes the PF2 chroma come through. This doesn't happen on real hardware.
+                    colpmX = colpmXSpec;
+                }
             }
 
             if (!pmg.fGTIA)
@@ -2839,6 +2849,12 @@ if (sl.modelo < 2 || iTop > i)
                 {
                     // convert bitfield of what is present to bitfield of what wins and is visible
                     b = rgPMGMap[(sl.prior << 8) + b];
+
+                    // !!! accurate, but a perf hit
+                    // for PRIOR=0, both one of (P0,P1) and PF1 might be visible, and OR-d together. But in hi-res mode,
+                    // we need to remove the chroma from PF1 so that the chroma from P0/P1 is used instead
+                    if (pmg.fHiRes && (b & 0x30) && (b & 2))
+                        colpfX &= 0xffff0fff;
 
                     // OR the colours in parallel
                     DWORD bX = (colpmX & BitsToArrayMask[(b / bfPM0) & 0x0f]) | (colpfX & BitsToArrayMask[(b / bfPF0) & 0x0f]);
