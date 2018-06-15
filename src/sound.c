@@ -98,12 +98,17 @@ void CALLBACK MyWaveOutProc(
     DWORD_PTR dwParam2)
 {
     hwo; uMsg; dwInstance; dwParam1; dwParam2;
+
 #ifndef NDEBUG
+    // this might not have been the case when the buffer was written, so we might report bogus data when switching. but who cares
+    BOOL fPal50 = v.iVM >= -1 && rgvm[v.iVM].fEmuPAL && !v.fTiling;
+
     if (uMsg == WOM_DONE) {
         int cx = 0;
         for (int i = 0; i < SNDBUFS; i++)
         {
-            if (vi.rgwhdr[i].dwFlags & WHDR_DONE) cx++;
+            DWORD dwF = fPal50 ? vi.rgwhdrP[i].dwFlags : vi.rgwhdrN[i].dwFlags;
+            if (dwF & WHDR_DONE) cx++;
         }
         if (cx == SNDBUFS)
         {
@@ -118,8 +123,13 @@ void CALLBACK MyWaveOutProc(
 // This is OK not being thread safe, because only one thread is allowed in at a time, and we never switch which
 // thread is allowed in unless all threads are asleep
 //
-void SoundDoneCallback(int iVM, LPWAVEHDR pwhdr, int iCurSample)
+void SoundDoneCallback(int iVM, int iCurSample)
 {
+    // We do 50fps only if PAL and not tiling
+    BOOL fPal50 = fPAL && !v.fTiling;
+    LPWAVEHDR pwhdr = fPal50 ? vi.rgwhdrP : vi.rgwhdrN;
+    int SAMPLES_PER_VOICE = fPal50 ? SAMPLES_PAL : SAMPLES_NTSC;
+
     // Only do sound for the tiled VM in focus, this code is not thread safe
     // We only switch VMs when all threads are asleep
     if (v.fTiling && sVM != (int)iVM)
@@ -871,8 +881,9 @@ void UninitSound()
 
         for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
             {
-            waveOutUnprepareHeader(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));
-            }
+            waveOutUnprepareHeader(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
+            waveOutUnprepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
+        }
         waveOutClose(hWave);
         //fclose(fp);
         }
@@ -948,23 +959,37 @@ void InitSound()
 
         for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
         {
-            vi.rgwhdr[iHdr].lpData = vi.rgbSndBuf[iHdr];
-            vi.rgwhdr[iHdr].dwBufferLength = SAMPLES_PER_VOICE * vi.woc.wChannels * pcmwf.wBitsPerSample / 8;
-            vi.rgwhdr[iHdr].dwBytesRecorded = 0;
-            vi.rgwhdr[iHdr].dwFlags = 0;
-            vi.rgwhdr[iHdr].dwLoops = 0;
+            vi.rgwhdrN[iHdr].lpData = vi.rgbSndBufN[iHdr];
+            vi.rgwhdrN[iHdr].dwBufferLength = SAMPLES_NTSC * vi.woc.wChannels * pcmwf.wBitsPerSample / 8;
+            vi.rgwhdrN[iHdr].dwBytesRecorded = 0;
+            vi.rgwhdrN[iHdr].dwFlags = 0;
+            vi.rgwhdrN[iHdr].dwLoops = 0;
 
-            waveOutPrepareHeader(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));
+            vi.rgwhdrP[iHdr].lpData = vi.rgbSndBufN[iHdr];
+            vi.rgwhdrP[iHdr].dwBufferLength = SAMPLES_PAL * vi.woc.wChannels * pcmwf.wBitsPerSample / 8;
+            vi.rgwhdrP[iHdr].dwBytesRecorded = 0;
+            vi.rgwhdrP[iHdr].dwFlags = 0;
+            vi.rgwhdrP[iHdr].dwLoops = 0;
+            
+            // !!! no error checking, what would I do?
+
+            waveOutPrepareHeader(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
+            waveOutPrepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
+
             if (iHdr < 2)
             {
-                waveOutWrite(hWave, &vi.rgwhdr[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
+                // we only go into 50fps for a solo PAL VM
+                if (!v.fTiling && rgvm[v.iVM].fEmuPAL)
+                    waveOutWrite(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
+                else
+                    waveOutWrite(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
             }
             else
             {
-                vi.rgwhdr[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
+                vi.rgwhdrN[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
+                vi.rgwhdrP[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
             }
         }
-        //fp = fopen("c:\\danny\\8bit\\out.txt", "w");
     } else GetLastError();
 // #endif
 }

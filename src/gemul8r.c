@@ -284,9 +284,11 @@ void DisplayStatus(int iVM)
 #define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=~1sec (NTSC, anyway)
 
     // are we running at normal speed or turbo speed !!! PAL runs at 60fps
-    sprintf(rgch, "(%s-%lli%%) %s %s %uHz, %u/%ums renders", fBrakes ? "1.8 MHz" : "Turbo",
+    sprintf(rgch, "(%s-%lli%%) %s %s %s (%uHz %u/%ums renders)", fBrakes ? "1.8 MHz" : "Turbo",
                 uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0,
-                iVM >= 0 ? (rgvm[iVM].fEmuPAL ? "PAL" : "NTSC") : "", pInst, v.vRefresh, renders, lastRenderCost);
+                iVM >= 0 ? (rgvm[iVM].fEmuPAL ? "PAL" : "NTSC") : "",
+                iVM >= 0 ? ((!v.fTiling && rgvm[iVM].fEmuPAL) ? "50Hz" : "60Hz") : "",
+                pInst, v.vRefresh, renders, lastRenderCost);
 
     strcat(rgch0, rgch);
 
@@ -302,9 +304,17 @@ void DisplayStatus(int iVM)
     //TrayMessage(vi.hWnd, NIM_MODIFY, 0, LoadIcon(vi.hInst, MAKEINTRESOURCE(IDI_APP)), rgch0);
 }
 
-
-// Gets the number of elapsed 6502 cycles, I know that's not machine independent.
+// return NTSC or PAL, depending. Remember we only do 
 ULONGLONG GetCycles()
+{
+    if (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL)
+        return GetCyclesP();
+    else
+        return GetCyclesN();
+}
+
+// Gets the number of elapsed NTSC 6502 cycles, I know that's not machine independent.
+ULONGLONG GetCyclesN()
 {
     LARGE_INTEGER qpc;
     QueryPerformanceCounter(&qpc);
@@ -316,7 +326,6 @@ ULONGLONG GetCycles()
         Assert(0);
     }
 
-    // !!! GEM runs PAL at NTSC speeds!
     ULONGLONG a = (qpc.QuadPart * NTSC_CLK / 10);
 
     ULONGLONG b = (vi.qpfCold / 10ULL);
@@ -324,10 +333,44 @@ ULONGLONG GetCycles()
     return c;
 }
 
+// Gets the number of elapsed NTSC 6502 cycles, I know that's not machine independent.
+ULONGLONG GetCyclesP()
+{
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    qpc.QuadPart -= vi.qpcCold;
+
+    if (qpc.QuadPart == 0)    // wow, you JUST called us!
+    {
+        // QPC is monotonically increasing, would take years to read the same value
+        Assert(0);
+    }
+
+    ULONGLONG a = (qpc.QuadPart * PAL_CLK / 10);
+
+    ULONGLONG b = (vi.qpfCold / 10ULL);
+    ULONGLONG c = a / b;
+    return c;
+}
+
+// return NTSC or PAL, depending. Remember we only do 
 ULONGLONG GetJiffies()
 {
-    // !!! Gem runs PAL at NTSC speeds!
+    if (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL)
+        return GetJiffiesP();
+    else
+        return GetJiffiesN();
+}
+
+ULONGLONG GetJiffiesN()
+{
     ULONGLONG c = GetCycles() / (NTSC_LPF * HCLOCKS);
+    return c;
+}
+
+ULONGLONG GetJiffiesP()
+{
+    ULONGLONG c = GetCycles() / (PAL_LPF * HCLOCKS);
     return c;
 }
 
@@ -1854,18 +1897,18 @@ int CALLBACK WinMain(
             uExecSpeed = (FrameEnd - FrameBegin) * CPUAVG;
         }
 
-        // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th sec)
+        // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th or 1/50th sec)
         // Don't allow guest time drift to propagate by more than one extra guest second.
-        // !!! GEM runs PAL at 60fps too! What else can we do?
-        ULONGLONG ullsec = NTSC_CLK;
-        ULONGLONG ulljif = JIFN;
+        // The Macros will ONLY use PAL timing when we're not tiling, tiled PAL gets 60Hz like NTSC
+        ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? PAL_CLK : NTSC_CLK;
+        ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? JIFP : JIFN;
         if (fBrakes && (cCur < ullsec))
         {
             while (cCur < ulljif)
             {
-                // If the deadline is still over half a jiffy away (1/120th second or 8 ms) use Sleep otherwise poll
+                // If the deadline is still over half a jiffy away, use Sleep, otherwise poll
                 Sleep((cCur < (ulljif/2)) ? 8 : 0);
-                cCur = GetCycles() - cLastJif;
+                cCur = GetCycles() - cLastJif;  // macro uses same conditions as ullsec and ulljif
             };
 
             // At this point host time has over shot, but this will be accounted for next iteration by braking less
@@ -5025,7 +5068,7 @@ break;
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
         static ULONGLONG ullZoomJif;    // last time a zoom was done
-        ULONGLONG ullJif = GetJiffies();
+        ULONGLONG ullJif = GetJiffiesN();   // always do NTSC timing when tiled
         // don't do more than one zoom level at a time, require 10 jiffy delay
         if (fZoom && v.cVM && ullJif - ullZoomJif >10)
         {
@@ -5094,7 +5137,7 @@ break;
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
         
         static ULONGLONG ullGestJif;    // don't allow more than one zoom level at a time
-        ullJif = GetJiffies();
+        ullJif = GetJiffiesN();         // always use the same one so timing doesn't get wonky when we switch NTSC/PAL
 
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
         if (bResult)

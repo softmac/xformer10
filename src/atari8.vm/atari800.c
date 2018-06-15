@@ -500,7 +500,7 @@ BOOL TimeTravelPrepare(unsigned iVM, BOOL fForce)
 
     // assumes we only get called when we are the current VM
 
-    ULONGLONG cCur = GetCycles();
+    ULONGLONG cCur = GetCyclesN();  // !!! So things don't get wonky when we switch NTSC/PAL, let's always use the same one
     ULONGLONG cTest = cCur - ullTimeTravelTime[iVM];
 
     // time to save a snapshot (every 5 seconds, or maybe we're forcing it)
@@ -564,7 +564,7 @@ BOOL TimeTravelReset(unsigned iVM)
     int cbPersist;
 
     // reset our clock to "have not saved any states yet"
-    ullTimeTravelTime[iVM] = GetCycles();
+    ullTimeTravelTime[iVM] = GetCyclesN();
     cTimeTravelPos[iVM] = 0;
 
     // don't remember that we were holding down shift, control or ALT, or going back in time will act like
@@ -588,7 +588,7 @@ BOOL TimeTravelReset(unsigned iVM)
 
         _fmemcpy(Time[iVM][i], pPersist, vrgcandy[iVM]->m_dwSize);
 
-        ullTimeTravelTime[iVM] = GetCycles();    // time stamp it
+        ullTimeTravelTime[iVM] = GetCyclesN();    // time stamp it
     }
 
     return TRUE;
@@ -2504,10 +2504,6 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
  {
     fCont; fStep;
 
-    // notice NTSC/PAL switch
-    fPAL = rgvm[iVM].fEmuPAL;
-    PAL = fPAL ? 1 : 15;    // set GTIA register
-
     WORD MAXY = fPAL ? PAL_LPF : NTSC_LPF; // 312 or 262 lines per frame?
 
     fStop = 0;    // do not break out of big loop
@@ -2845,7 +2841,12 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
         {
             TimeTravelPrepare(iVM, FALSE);        // periodically call this to enable TimeTravel
 
-            SoundDoneCallback(iVM, vi.rgwhdr, SAMPLES_PER_VOICE);    // finish this buffer and send it
+            // we can only do actual 50Hz if we're not tiling
+            SoundDoneCallback(iVM, (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC);    // finish this buffer and send it
+
+            // notice NTSC/PAL switch on a frame boundary only
+            fPAL = rgvm[iVM].fEmuPAL;
+            PAL = fPAL ? 1 : 15;    // set GTIA register
 
             wScan = 0;
             wFrame++;    // count how many frames we've drawn. Does anybody care?
@@ -3323,9 +3324,12 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             // AUDFx, AUDCx or AUDCTL have changed - write some sound
             // we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
-            int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 / (fPAL ? PAL_LPF : NTSC_LPF);
+            // we can only do 50Hz if we're not tiling, otherwise use NTSC timing
+            int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
+            int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+                        ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
             if (iCurSample < SAMPLES_PER_VOICE)
-                SoundDoneCallback(iVM, vi.rgwhdr, iCurSample);
+                SoundDoneCallback(iVM, iCurSample);
 
             // reset a timer that had its frequency changed
             for (int irq = 0; irq < 4; irq++)
