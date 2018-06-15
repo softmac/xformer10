@@ -363,6 +363,10 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 break;
             }
 
+            // !!! Monitor type is not persisted, so we need to re-generate it from the newly loaded rgvm structure
+            vvmhw[i].fMono = FMonoFromBf(rgvm[i].bfMon);
+            vvmhw[i].fGrey = FGreyFromBf(rgvm[i].bfMon);
+
             // what index, 0 based, is this bit?
             int c = -1, t = rgvm[i].bfHW;
             assert(t);
