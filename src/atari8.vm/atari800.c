@@ -2040,8 +2040,13 @@ BOOL __cdecl InitAtari(int iVM)
 
     rgvm[iVM].fCPUAuto = TRUE;
     rgvm[iVM].bfCPU = cpu6502;
-    rgvm[iVM].bfMon = monColrTV;
     rgvm[iVM].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);    // we only have 8, others have 9
+
+    rgvm[iVM].bfMon = monColrTV;
+
+    // need to be kept in sync with bfMon
+    vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
+    vvmhw[iVM].fGrey = FGreyFromBf(rgvm[iVM].bfMon);
 
     // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
     // Install may have a preference and set this already, in which case, don't change it
