@@ -5142,7 +5142,7 @@ break;
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
         if (bResult)
         {
-            if (gi.dwID == GID_PAN)
+            if (gi.dwID == GID_PAN && v.fTiling)
             {
                 if (gi.dwFlags & GF_BEGIN)
                     iPanBegin = gi.ptsLocation.y;    // where were we when we stated gesturing?
