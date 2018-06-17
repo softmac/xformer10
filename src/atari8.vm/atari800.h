@@ -389,10 +389,11 @@ typedef struct
 
     BYTE m_fHitBP;      // anybody changing the PC outside of Go6502 needs to check and set this
 
-    WORD m_fStop;
-    BOOL m_fPAL;        // emulating PAL?
-    BYTE m_fRedoPoke;
-    
+    BOOL m_fPAL;            // emulating PAL?
+    BOOL m_fSwitchingToPAL; // are we in the middle of switching to PAL?
+    BYTE m_fRedoPoke;       // we tried to change a register after a scan line is over. Wait until the next scan line to do it.
+    BOOL m_fInVBI;          // are we inside the VBI?
+
     BYTE m_POT;         // current paddle potentiometer reading, counts from 0 to 228
 
     WORD m_wLiveShift;  // do we look at the shift key live as we process keys, or are we pasting and we want a specific value?
@@ -500,8 +501,9 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wScan         CANDY_STATE(wScan)
 #define wLeft         CANDY_STATE(wLeft)
 #define ramtop        CANDY_STATE(ramtop)
-#define fStop         CANDY_STATE(fStop)
 #define fPAL          CANDY_STATE(fPAL)
+#define fSwitchingToPAL CANDY_STATE(fSwitchingToPAL)
+#define fInVBI        CANDY_STATE(fInVBI)
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)

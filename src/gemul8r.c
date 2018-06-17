@@ -4419,6 +4419,12 @@ break;
             FixAllMenus(FALSE);
             break;
 
+        // a way for a VM to tell us it changed something about itself
+        case IDM_FIXALLMENUS:
+            FixAllMenus(FALSE);
+            DisplayStatus(v.iVM);
+            break;
+
         // toggle NTSC/PAL
         case IDM_NTSCPAL:
             if (v.iVM >= 0)

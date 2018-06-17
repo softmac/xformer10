@@ -984,7 +984,7 @@ void PSLPrepare(int iVM)
 #endif
 
             sl.modehi = cpuPeekB(iVM, DLPC);
-            //ODS("scan %04x FETCH %02x %02x\n", wScan, sl.modehi, sl.modelo);
+            //ODS("%04x scan %04x FETCH %02x %02x\n", DLPC, wScan, sl.modehi, sl.modelo);
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
             //sl.modehi |= (sl.modelo << 4);   // hide original mode up here (technically correct?)
@@ -1043,15 +1043,6 @@ void PSLPrepare(int iVM)
 
                 // how many scan lines a line of this graphics mode takes
                 scans = (BYTE)mpMdScans[sl.modelo] - 1;
-
-#if 0    // I fixed cycle counting, and now VSCROL is correctly set to 13
-                // GR.9++ hack, if this is a single scan line mode, VSCROL is 3 instead of 13 like it's supposed to be
-                if (iscan > scans && scans == 0 && iscan <= 8)
-                {
-                    iscan = 16 - iscan;
-                    sl.vscrol = iscan; // this is the first scan line of a mode line
-                }
-#endif
 
                 // LMS (load memory scan) attached to this line to give start of screen memory
                 if (sl.modehi & 4)

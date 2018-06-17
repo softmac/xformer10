@@ -61,7 +61,8 @@
 #define IDM_CART                        40216
 #define IDM_NOCART                      40217
 
-#define IDM_ABOUT                       40220
+#define IDM_FIXALLMENUS                 40220
+#define IDM_ABOUT                       40221
 
 // legacy
 #define IDSCAN                          10

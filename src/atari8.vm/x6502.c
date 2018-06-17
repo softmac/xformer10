@@ -1242,6 +1242,8 @@ HANDLER(op40)
     regP |= 0x10;    // force srB
     UnpackP(iVM);
     regPC = PopWord(iVM);
+    
+    fInVBI = FALSE; // we might not have been before, but we're not now
 
     // if we were hiding SIO hack loop code, but an interrupt hit so we where showing code again, now hide it again that it's done
     if (wSIORTS)
@@ -1651,6 +1653,8 @@ HANDLER(op6C)
             WORD ws = READ_WORD(iVM, 0x43);
             WORD we = READ_WORD(iVM, 0x45);
       
+            //ODS("Loading segment %04x-%04x\n", ws, we);
+
             // we are loading code over top of our loader, that will kill us. Try the alternate loader
             // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
 
@@ -4152,6 +4156,11 @@ void __cdecl Go6502(const int iVM)
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
+                    
+                    // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
+                    if (fInVBI)
+                        SwitchToPAL(iVM);
+                    fInVBI = TRUE;
 
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -4169,7 +4178,12 @@ void __cdecl Go6502(const int iVM)
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFA);
                     UnpackP(iVM);   // unpack the I bit being set
-                    
+
+                    // We're still in the last VBI? And we're not one of those post-VBI DLI's?
+                    // Must be a PAL app that's spoiled by how long these can be
+                    if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+                        SwitchToPAL(iVM);
+
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;  // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }
