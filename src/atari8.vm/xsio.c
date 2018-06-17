@@ -775,7 +775,9 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                 else
                     rgDrives[iVM][i].mode = MD_FILE;        // who knows?
 
-                rgDrives[iVM][i].wSectorMac = 720;
+                // how many 125 byte sectors fit in a file this big, plus 3 boot sectors plus 9 directory sectors + 1 partial
+                // !!! BASIC also needs to fit autorun.sys and dos.sys, but is less likely to be super-huge?
+                rgDrives[iVM][i].wSectorMac = max(720, l / 125 + 13);
                 rgDrives[iVM][i].fWP = 1;  // force read-only for fake disks that can't be written to
                 rgDrives[iVM][i].cb = l;
 
@@ -1507,9 +1509,10 @@ lNAK:
 
                                 if (wSector >= 360)
                                     wSector += 9;
-                                else if (wSector > 720)
-                                    wSector = 0;
 
+                                // !!! DOS only allows 2 high bits for sector number, and large XEX files fill >1024 sectors
+                                // Squeeze the full sector # in there anyway, and our loader will handle it but it won't be
+                                // a completely valid DOS image, but who cares
                                 rgbMem[wBuff + 125] = (BYTE)(wSector >> 8) | (md == MD_FILEBAS ? 8 : 0);    // FILE # 0 or 2 in bits 7-2
                                 rgbMem[wBuff + 126] = (BYTE)wSector;
                             }

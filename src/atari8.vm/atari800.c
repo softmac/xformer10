@@ -621,6 +621,14 @@ void Interrupt(int iVM, BOOL b)
     regP |= IBIT;    // interrupts always SEI
 }
 
+// we just realized we're running an app that can only work properly on PAL
+void SwitchToPAL(int iVM)
+{
+    fSwitchingToPAL = TRUE;     // don't try again and accidentally switch back
+    rgvm[iVM].fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
+    PostMessage(vi.hWnd, WM_COMMAND, IDM_FIXALLMENUS, 0); // Send will hang.
+}
+
 // What happens when it's scan line 241 and it's time to start the VBI
 // Joysticks, light pen, pasting, etc.
 //
@@ -824,11 +832,6 @@ void DoVBI(int iVM)
 
     if (fTrace)
         ForceRedraw(iVM);    // it might do this anyway
-
-    // Gem window has a message, stop the loop to process it
-    MSG msg;
-    if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-        fStop = TRUE;
 
     // decrement printer timer
 
@@ -2511,7 +2514,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
     WORD MAXY = fPAL ? PAL_LPF : NTSC_LPF; // 312 or 262 lines per frame?
 
-    fStop = 0;    // do not break out of big loop
+    BOOL fStop = 0;    // do not break out of big loop
 
     // to persist, we had to temporarily put the RAM saved in the cartridge space into memory that is persisted. Put it back.
     if (fCartNeedsSwap && ramtop == 0xc000)
@@ -2669,6 +2672,11 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         //ODS("special VBI\n");
                         Interrupt(iVM, FALSE);
                         regPC = cpuPeekW(iVM, 0xFFFA);
+                        
+                        // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
+                        if (fInVBI)
+                            SwitchToPAL(iVM);
+                        fInVBI = TRUE;
 
                         wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                         wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -2687,6 +2695,11 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         //ODS("special DLI\n");
                         Interrupt(iVM, FALSE);
                         regPC = cpuPeekW(iVM, 0xFFFA);
+
+                        // We're still in the last VBI? And we're not one of those post-VBI DLI's?
+                        // Must be a PAL app that's spoiled by how long these can be
+                        if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+                            SwitchToPAL(iVM);
 
                         wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                         wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -2852,6 +2865,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
             // notice NTSC/PAL switch on a frame boundary only
             fPAL = rgvm[iVM].fEmuPAL;
             PAL = fPAL ? 1 : 15;    // set GTIA register
+            if (fPAL)
+                fSwitchingToPAL = FALSE;
 
             wScan = 0;
             wFrame++;    // count how many frames we've drawn. Does anybody care?
@@ -3024,6 +3039,15 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
         if (addr == 0xD40B)
         {
+            // uh oh, somebody is comparing VCOUNT to a really big number, we're supposed to be a PAL machine
+            // CMP VCOUNT (A = big)
+            if (!fPAL && !fSwitchingToPAL && rgbMem[regPC - 3] == 0xcd && regA > 0x83)
+                SwitchToPAL(iVM);
+
+            // uh oh #2... LDA VCOUNT CMP #big
+            if (!fPAL && !fSwitchingToPAL && rgbMem[regPC] == 0xc9 && rgbMem[regPC + 1] > 0x83)
+                SwitchToPAL(iVM);
+
             // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
             // - 1 for 0-based. - 3 for the last cycle. + 1 to see what the next cycle is (which might be blocked, so the next instruction
             // could start arbitrarily further than the end of the last instruction).
@@ -3492,11 +3516,23 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             break;
         }
 
+        // now it's safe to alter the values
+
         rgbMem[writeANTIC+addr] = b;
 
         // the display list pointer is the only ANTIC register that is R/W
         if (addr == 2 || addr == 3)
+        {
             rgbMem[0xd400 + addr] = b;
+
+            // #1 problem in PAL apps... they think they have forever in the VBI (50 extra scan lines, with no DMA stealing)
+            // and they don't get around to letting the OS copy the DLIST shadows until it's too late, past scan 8 of the next line
+            // which resets back to the top of the DLIST and jitters
+            if (!fPAL && !fSwitchingToPAL && fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+                SwitchToPAL(iVM);
+
+            //ODS("DLPC = %04x @ %d\n", DLPC, wScan);
+        }
 
         // Do NOT reload the DL to the top when DMA fetch is turned on, that turned out to be disastrous
 
@@ -3584,6 +3620,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             NMIST = 0x1F;
         }
+
         break;
     }
 
