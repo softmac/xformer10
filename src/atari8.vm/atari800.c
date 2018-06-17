@@ -624,9 +624,12 @@ void Interrupt(int iVM, BOOL b)
 // we just realized we're running an app that can only work properly on PAL
 void SwitchToPAL(int iVM)
 {
-    fSwitchingToPAL = TRUE;     // don't try again and accidentally switch back
-    rgvm[iVM].fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
-    PostMessage(vi.hWnd, WM_COMMAND, IDM_FIXALLMENUS, 0); // Send will hang.
+    if (v.fAutoKill)    // only if the option to auto-detect VM type is on
+    {
+        fSwitchingToPAL = TRUE;     // don't try again and accidentally switch back
+        rgvm[iVM].fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
+        PostMessage(vi.hWnd, WM_COMMAND, IDM_FIXALLMENUS, 0); // Send will hang.
+    }
 }
 
 // What happens when it's scan line 241 and it's time to start the VBI
@@ -2949,6 +2952,16 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         addr &= 0xff1f;    // GTIA has 32 registers
         if (addr < 0xd010)
             ProcessScanLine(iVM);   // reading collision registers needs cycle accuracy
+        else if (addr == 0xd014)
+        {
+            // deliberately hang on NTSC machines? Not only switch to PAL, but lie and say that we already are!
+            // LDA PAL, AND #$e, BEQ $fe
+            if (!fPAL && rgbMem[regPC + 2] == 0xd0 && rgbMem[regPC + 3] == 0xfe)
+            {
+                SwitchToPAL(iVM);
+                return 0x0;
+            }
+        }
         break;
     
     case 0xd2:
@@ -3620,7 +3633,15 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             NMIST = 0x1F;
         }
+        else if (addr == 5)
+        {
+            //ODS("VSCROL=%02x: %d %d\n", b, wScan, wCycle);
 
+            // we're changing VSCROL in a vertical blank, we probably mean for it to happen before the next frame is drawn,
+            // but it is too late since NTSC has far fewer overscan lines
+            if (!fPAL && !fSwitchingToPAL && fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+                SwitchToPAL(iVM);
+        }
         break;
     }
 
