@@ -74,7 +74,9 @@ int fXFCable;
 // the app during the 2nd code portion (Ridiculous Reality)
 //
 // Since there is no source code to this program (I typed it in in hex) I should probably say a few things about it.
-// Some apps (Capt. Sticky) set DOSVEC and return from ($2E0) but aren't supposed to, so I have to jmp ($a) if they do that
+// Some apps (Capt. Sticky) set DOSVEC and return from ($2E0) but aren't supposed to, so I have to jmp ($a) if they do that.
+// Also, to support quad density binary files, I treat the sector number as 12 bits, even though DOS only support 10 bits.
+// I borrow the bottom two bits of the file #.
 //
 
 BYTE Bin1[128] = {
@@ -700,11 +702,12 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             l = l << 4;
             rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
 
-            // !!! do I need to support 512 byte sector .ATR files?
-
             if (sc == 256)
             {
                 char cc[128];
+
+                // Normally, the first three sectors are packed into the first 384 bytes. Then there is 384 blank bytes.
+                // Then starts sector 4 at offset $300
                 rgDrives[iVM][i].mode = MD_DD;
 
                 // Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
@@ -719,11 +722,15 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                                         rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
 
                 // Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
-                // 384-512 will not be blank only in this version
+                // 384-512 will not be blank only in this version. But if sector 4 is blank, we won't realize it's this kind of file,
+                // but we can go by the fact that it's shorter than the other types of files
                 if (_lseek(h, 384 + 16, SEEK_SET) == 384 + 16)
                     if (_read(h, cc, 128) == 128)
-                        if (!IsEmpty(cc))
+                        if (!IsEmpty(cc) || l == 0x2ce80)
+                        {
                             rgDrives[iVM][i].mode = MD_DD_OLD_ATR2;
+                            rgDrives[iVM][i].wSectorMac = 720;  // it looked like 718 before because it's shorter
+                        }
             }
         }
         else

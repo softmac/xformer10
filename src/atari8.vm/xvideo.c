@@ -984,10 +984,10 @@ void PSLPrepare(int iVM)
 #endif
 
             sl.modehi = cpuPeekB(iVM, DLPC);
-            //ODS("%04x scan %04x FETCH %02x %02x\n", DLPC, wScan, sl.modehi, sl.modelo);
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
             //sl.modehi |= (sl.modelo << 4);   // hide original mode up here (technically correct?)
+            //ODS("%04x scan %04x FETCH %02x %02x\n", DLPC, wScan, sl.modehi, sl.modelo);
             IncDLPC(iVM);
 
             fFetch = FALSE;
