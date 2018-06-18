@@ -802,6 +802,7 @@ __inline BYTE *_pbshift(int iVM)
 // Function prototypes
 //
 
+void SwitchToPAL(int);
 void Interrupt(int, BOOL);
 void CheckKey(int, BOOL, WORD);
 void UpdatePorts(int);
