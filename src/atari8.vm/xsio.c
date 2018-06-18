@@ -784,7 +784,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
                 // how many 125 byte sectors fit in a file this big, plus 3 boot sectors plus 9 directory sectors + 1 partial
                 // !!! BASIC also needs to fit autorun.sys and dos.sys, but is less likely to be super-huge?
-                rgDrives[iVM][i].wSectorMac = max(720, l / 125 + 13);
+                rgDrives[iVM][i].wSectorMac = (WORD)max(720, l / 125 + 13);
                 rgDrives[iVM][i].fWP = 1;  // force read-only for fake disks that can't be written to
                 rgDrives[iVM][i].cb = l;
 

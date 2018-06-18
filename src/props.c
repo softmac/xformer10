@@ -314,7 +314,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
     }
 
     // if INI file contained valid data, use what we can of it, otherwise fail
-    if ((vTmp.cb == sizeof(vTmp)) && (vTmp.wMagic == v.wMagic)) // check for version difference
+    if ((vTmp.cb == sizeof(vTmp) ) && (vTmp.wMagic == v.wMagic)) // check for version difference
     {
 
         // looks like something valid can be read, now it's safe to delete the old stuff

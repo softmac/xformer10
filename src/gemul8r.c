@@ -68,6 +68,8 @@ const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 BOOL fDebug;
 int sVM = -1;    // the tile with focus
 
+int sPan; // how far horizontally we're panning a single tile
+
 static ULONG renders;
 static ULONG lastRenderCost;
 
@@ -2910,9 +2912,16 @@ void RenderBitmap()
     else if (v.fZoomColor)
     {
         // Smart Scaling
+        int xp = vvmhw[iVM].xpix;
+        int rate = sPan * xp / rect.right;
+        int dx = max(0, min(sPan, rect.right));
+        int dw = min(rect.right, max(0, rect.right + sPan));
+        int sx = max(0, min(xp, 0 - rate));
+        int sw = vvmhw[iVM].xpix - max(0, rate);
+        
+        ODS("sPan=%d, Dest=(%d,%d) Src=(%d,%d)\n", sPan, dx, dw, sx, sw);
 
-        StretchBlt(vi.hdc, rect.left, rect.top, rect.right, rect.bottom,
-            vrgvmi[v.iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
+        StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[v.iVM].hdcMem, sx, 0, sw, vvmhw[iVM].ypix, SRCCOPY);
     }
     
     // NORMAL MODE
@@ -5139,7 +5148,7 @@ break;
         ZeroMemory(&gi, sizeof(GESTUREINFO));
         gi.cbSize = sizeof(GESTUREINFO);
 
-        static int iPanBegin; // where we first touched the screen
+        static POINTS iPanBegin; // where we first touched the screen
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
         
         static ULONGLONG ullGestJif;    // don't allow more than one zoom level at a time
@@ -5148,15 +5157,21 @@ break;
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
         if (bResult)
         {
-            if (gi.dwID == GID_PAN && v.fTiling)
+            if (gi.dwID == GID_PAN)
             {
                 if (gi.dwFlags & GF_BEGIN)
-                    iPanBegin = gi.ptsLocation.y;    // where were we when we stated gesturing?
-               else
+                    iPanBegin = gi.ptsLocation;    // where were we when we stated gesturing?
+                else if (gi.dwFlags & GF_END)
+                    sPan = 0;
+                else if (v.fTiling)
                 {
-                    sWheelOffset += (gi.ptsLocation.y - iPanBegin);
+                    sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
                     ScrollTiles();
-                    iPanBegin = gi.ptsLocation.y;
+                    iPanBegin.y = gi.ptsLocation.y;
+                }
+                else
+                {
+                    sPan = gi.ptsLocation.x - iPanBegin.x;
                 }
                 return 0;    // makes sure we don't get a mouse click on a tile while panning
             }
