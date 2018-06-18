@@ -5326,13 +5326,13 @@ break;
             {
                 RECT rc;
                 GetClientRect(vi.hWnd, &rc);
-                int max;
+                short max;
 
                 // how much scrolling is an entire frame?
                 if (v.fZoomColor)
-                    max = rc.right;
+                    max = (short)rc.right;
                 else
-                    max = sScale * vvmhw[v.iVM].xpix;
+                    max = (short)(sScale * vvmhw[v.iVM].xpix);
 
                 // note the starting x and y position of the gesture
                 if (gi.dwFlags & GF_BEGIN)
@@ -5377,12 +5377,14 @@ break;
                     if (ns >= max)
                     {
                         SelectInstance(-1);
-                        ns -= rc.right;
+                        ns -= max;
+                        iPanBegin.x += max;
                     }
                     else if (ns <= -max)
                     {
                         SelectInstance(v.iVM + 1);
-                        ns += rc.right;
+                        ns += max;
+                        iPanBegin.x -= max;
                     }
 
                     //ODS("New PAN=%d\n", sPan);
