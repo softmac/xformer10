@@ -2019,8 +2019,8 @@ if (sl.modelo < 2 || iTop > i)
                     *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
                 qch += sizeof(ULONG);
-#elif 1
-                // This is the "my cheap TV really sucks" version
+#elif 0
+                // This is the "my cheap TV really sucks" version - "but does not reflect any read hardware" (-Danny)
 
                 ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
                 ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF];
@@ -2483,33 +2483,36 @@ if (sl.modelo < 2 || iTop > i)
 
 // !!! TODO - make this a monitor type you can select
 // !!! We use different strategies for GR.0 and GR.8
+            if (!fArtifacting)
+            {
+                // This is the "I have sharp display with minimum pixel bleeding" version
+                // It is the ONLY version that works in black and white mode when artifacting is supposedly off
+
+                ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
+                ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
+
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                // make note of the artificting colour for this pixel
+                if (fPMGA)
+                    *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                qch += sizeof(ULONG);
+
+                BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
+
+                BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
+                ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+
+                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                if (fPMGA)
+                    *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                qch += sizeof(ULONG);
+            }
 #if 0
-            // This is the "I have sharp display with minimum pixel bleeding" version
-
-            ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-            ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
-
-            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-            
-            // make note of the artificting colour for this pixel
-            if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-            
-            qch += sizeof(ULONG);
-
-            BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
-     
-            BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
-
-            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-            if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-            qch += sizeof(ULONG);
-#elif 0
-            // This is the "my cheap TV really sucks" version
+            // This is the "my cheap TV really sucks" version - "but does not reflect any real hardware" (- Danny)
 
             ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
             ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF];
@@ -2518,7 +2521,7 @@ if (sl.modelo < 2 || iTop > i)
 
             // make note of the artificting colour for this pixel
             if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
             qch += sizeof(ULONG);
 
@@ -2529,40 +2532,43 @@ if (sl.modelo < 2 || iTop > i)
 
             // make note of the artificting colour for this pixel
             if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-            qch += sizeof(ULONG);
-#elif 1
-            // This is the "make the bricks solid in Lode Runner" mode (Apple II users would disagree!)
-
-            ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-            ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
-            ULONG SolidMask = BitsToByteMask[(u >> 5) & 0xF] & BitsToByteMask[(u >> 3) & 0xF];            
-
-            *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                    ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
-            
-            // make note of the artificting colour for this pixel
-            if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
-                ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
-
-            qch += sizeof(ULONG);
-
-            BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
-            BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-            ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
-            SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
-
-            *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                             ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
-
-            if (fPMGA)
-                *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
-                            ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
             qch += sizeof(ULONG);
 #endif
+            else  // this algorithm does NOT work when fArtifacting is FALSE or for B&W monitors
+            {
+                // This is the "make the bricks solid in Lode Runner" mode ("Apple II users would disagree!" - Darek)
+                // ("Apple II users were on a hi-res monitor, solid bricks are correct for the TV type we say we emulate!" - Danny)
+
+                ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
+                ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
+                ULONG SolidMask = BitsToByteMask[(u >> 5) & 0xF] & BitsToByteMask[(u >> 3) & 0xF];
+
+                *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                    ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+
+                // make note of the artificting colour for this pixel
+                if (fPMGA)
+                    *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
+                    ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+
+                qch += sizeof(ULONG);
+
+                BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
+                BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
+                ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+                SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+
+                *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                    ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+
+                if (fPMGA)
+                    *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
+                    ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+
+                qch += sizeof(ULONG);
+            }
         }
         break;
         }
