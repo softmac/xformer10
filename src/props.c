@@ -156,6 +156,8 @@ void DeleteVM(int iVM, BOOL fFixMenus)
     if (!rgvm[iVM].fValidVM)
         return;
 
+    //ODS("Delete %d\n", iVM);
+
     if (vrgvmi[iVM].hdcMem)
     {
         SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
@@ -175,9 +177,16 @@ void DeleteVM(int iVM, BOOL fFixMenus)
 
     v.cVM--;    // one fewer valid instance now
 
+    // we can't roulette anymore with only 1 thing
+    if (sPan && v.cVM == 1)
+    {
+        sPan = 0;
+        InitThreads();
+    }
+
     sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
     sVM = -1;    // the one in focus may be gone
-
+    
     if (!v.cVM)
     {
         v.iVM = -1;

@@ -68,7 +68,11 @@ const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 BOOL fDebug;
 int sVM = -1;    // the tile with focus
 
-int sPan; // how far horizontally we're panning a single tile
+int sPan;           // how far we've spun the roulette wheel
+int sVMPrev;        // which VMS become visible as you play VM roulette
+int sVMNext;    
+ULONGLONG sPanJif;  // last time we spun the routlette wheel
+int sScale;         // scaling factor for integer multiple stretching
 
 static ULONG renders;
 static ULONG lastRenderCost;
@@ -566,45 +570,55 @@ ThreadTry:
             }
         }
 
-        // NOT TILING - only 1 VM to worry about
+        // NOT TILING - only 1 VM to worry about (well, maybe two when playing roulette)
         else if (v.iVM > -1)
         {
-            ThreadStuff = malloc(sizeof(ThreadStuffS));
-            hDoneEvent = malloc(sizeof(HANDLE));
+            int numt = sPan ? 2 : 1;    // is there a 2nd VM showing because we're scrolling?
+            //ODS("Need %d threads\n", numt);
+            ThreadStuff = malloc(sizeof(ThreadStuffS) * numt);
+            hDoneEvent = malloc(sizeof(HANDLE) * numt);
             if (!ThreadStuff || !hDoneEvent)
                 goto ThreadFail;
 
-            ThreadStuff[0].fKillThread = FALSE;
-            ThreadStuff[0].iThreadVM = v.iVM;
-            
-            ThreadStuff[0].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-            hDoneEvent[0] = CreateEvent(NULL, FALSE, FALSE, NULL);
+            for (int x = 0; x < numt; x++)
+            {
+                ThreadStuff[x].fKillThread = FALSE;
+                if (x == 0)
+                    ThreadStuff[x].iThreadVM = v.iVM;
+                else if (sPan > 0)
+                    ThreadStuff[x].iThreadVM = sVMPrev;
+                else
+                    ThreadStuff[x].iThreadVM = sVMNext;
+
+                ThreadStuff[x].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+                hDoneEvent[x] = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 #pragma warning(push)
 #pragma warning(disable:4152) // function/data pointer conversion
-            // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
-            if (!ThreadStuff[0].hGoEvent || !hDoneEvent[0] ||
+                // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+                if (!ThreadStuff[x].hGoEvent || !hDoneEvent[x] ||
 #ifdef NDEBUG
-                !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
 #else   // debug needs twice the stack
-                !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)x, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
 #endif
 #pragma warning(pop)
-            {
-                // don't leave the events existing if the thread doesn't... we might try to wait on it
-                if (ThreadStuff[0].hGoEvent)
                 {
-                    CloseHandle(ThreadStuff[0].hGoEvent);
-                    ThreadStuff[0].hGoEvent = NULL;
+                    // don't leave the events existing if the thread doesn't... we might try to wait on it
+                    if (ThreadStuff[x].hGoEvent)
+                    {
+                        CloseHandle(ThreadStuff[x].hGoEvent);
+                        ThreadStuff[x].hGoEvent = NULL;
+                    }
+                    if (hDoneEvent[x])
+                    {
+                        CloseHandle(hDoneEvent[x]);
+                        hDoneEvent[x] = NULL;
+                    }
+                    goto ThreadFail;
                 }
-                if (hDoneEvent[0])
-                {
-                    CloseHandle(hDoneEvent[0]);
-                    hDoneEvent[0] = NULL;
-                }
-                goto ThreadFail;
             }
-            cThreads = 1;
+            cThreads = numt;
         }
     }
     
@@ -1790,12 +1804,17 @@ int CALLBACK WinMain(
             // wait for them to complete one frame
             WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
         }
-        // not tiled. Tell the only thread to go.
+        // not tiled. There's only one or two threads
         else if (!v.fTiling && v.iVM >= 0)
         {
             assert(v.cVM);
+            int nt = sPan ? 2 : 1;
+            //ODS("Waiting for %d threads\n", nt);
             SetEvent(ThreadStuff[0].hGoEvent);
-            WaitForSingleObject(hDoneEvent[0], INFINITE);
+            if (nt == 2)
+                SetEvent(ThreadStuff[1].hGoEvent);
+
+            WaitForMultipleObjects(nt, hDoneEvent, TRUE, INFINITE);
         }
 
         // some thread asked us to break into the debugger
@@ -1803,6 +1822,35 @@ int CALLBACK WinMain(
         {
             vi.fWantDebugBreak = FALSE;
             SendMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);
+        }
+
+        // It's been almost a second since we last used the roulette wheel with the mouse wheel, time to settle down
+        if (sPan && GetJiffies() - sPanJif > 50)
+        {
+            RECT rc;
+            int max;
+
+            if (v.fZoomColor)
+            {
+                GetClientRect(vi.hWnd, &rc);
+                max = rc.right;
+            }
+            else
+                max = sScale * vvmhw[v.iVM].xpix;
+
+            if (sPan != 0 && abs(sPan) < max / 2)
+            {
+                //ODS("Settling\n");
+                sPan = 0;
+                InitThreads();
+            }
+            else if (sPan != 0)
+            {
+                //ODS("Settling on different one\n");
+                SelectInstance(sPan > 0 ? -1 : v.iVM + 1);
+                sPan = 0;
+                InitThreads();
+            }
         }
 
         // some thread hung, and we need to try a different VM type to find one that works with this app
@@ -2911,52 +2959,83 @@ void RenderBitmap()
     // ZOOM MODE
     else if (v.fZoomColor)
     {
-        // Smart Scaling
+        // roulette mode position of main tile - sPan is bounded to client rect
         int xp = vvmhw[iVM].xpix;
+        int yp = vvmhw[iVM].ypix;
         int rate = sPan * xp / rect.right;
-        int dx = max(0, min(sPan, rect.right));
-        int dw = min(rect.right, max(0, rect.right + sPan));
-        int sx = max(0, min(xp, 0 - rate));
-        int sw = vvmhw[iVM].xpix - max(0, rate);
+        int dx = max(0, sPan); // max(0, min(sPan, rect.right));
+        int dw = rect.right - abs(sPan);
+        int sx = max(0, 0 - rate);  // max(0, min(xp, 0 - rate));
+        int sw = xp - abs(rate);
         
-        ODS("sPan=%d, Dest=(%d,%d) Src=(%d,%d)\n", sPan, dx, dw, sx, sw);
+        //ODS("sPan=%d, Dest=(%d,%d) Src=(%d,%d)\n", sPan, dx, dw, sx, sw);
 
-        StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[v.iVM].hdcMem, sx, 0, sw, vvmhw[iVM].ypix, SRCCOPY);
+        StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[iVM].hdcMem, sx, 0, sw, yp, SRCCOPY);
+
+        // show the VM to the left (sPan will be zero if there's only 1 VM)
+        if (sPan > 0)
+        {
+            dw = dx;
+            dx = 0;
+            sx = sw;
+            sw = xp - sw;
+            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[sVMPrev].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        }
+        
+        // show the VM to the right
+        else if (sPan < 0)
+        {
+            dx = dw;
+            dw = 0 - sPan;
+            sw = xp - sw;
+            sx = 0;
+            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[sVMNext].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        }
     }
     
-    // NORMAL MODE
+    // NORMAL MODE - integer scaling
     else
     {
-        // Integer scaling
+        int x, y;
 
-        int x, y, scale;
-
-        // !!! vi is a global! Don't use it?
-
-        for (scale = 16; scale > 1; scale--)
-        {
-            x = rect.right - (vvmhw[iVM].xpix * vi.fXscale * scale);
-            y = rect.bottom - (vvmhw[iVM].ypix * vi.fYscale * scale);
-
-            if ((x >= 0) && (y >= 0))
-                break;
-        }
-
-        // Repeat for the case of scale==1 when rectangle doesn't fit
-
-        x = rect.right - (vvmhw[iVM].xpix * vi.fXscale * scale);
-        y = rect.bottom - (vvmhw[iVM].ypix * vi.fYscale * scale);
+        x = rect.right - (vvmhw[iVM].xpix * sScale);
+        y = rect.bottom - (vvmhw[iVM].ypix * sScale);
+        int xp = vvmhw[iVM].xpix;
+        int yp = vvmhw[iVM].ypix;
 
         // Why did we not used to have to do this? Only necessary when coming out of zoom?
-        StretchBlt(vi.hdc, 0, 0, x / 2, rect.bottom, vrgvmi[v.iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2, 0, x / 2 + (vvmhw[iVM].xpix * vi.fXscale * scale), y / 2, vrgvmi[v.iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2, y / 2 + (vvmhw[iVM].ypix * vi.fYscale * scale), x / 2 + (vvmhw[iVM].xpix * vi.fXscale * scale), rect.bottom,
-            vrgvmi[v.iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2 + (vvmhw[iVM].xpix * vi.fXscale * scale), 0, rect.right, rect.bottom, vrgvmi[v.iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, 0, 0, x / 2, rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2, 0, x / 2 + (xp * sScale), y / 2, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2, y / 2 + (yp * sScale), x / 2 + (xp * sScale), rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2 + (xp * sScale), 0, rect.right, rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
 
-        StretchBlt(vi.hdc, x / 2, y / 2,
-            (vvmhw[iVM].xpix * vi.fXscale * scale), (vvmhw[iVM].ypix * vi.fYscale * scale),
-            vrgvmi[v.iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
+        // main routlette tile position - sPan is bounded by xp * sScale
+        int dx = max(0, sPan);
+        int dw = xp * sScale - abs(sPan);
+        int sx = max(0, 0 - sPan / sScale);
+        int sw = xp - abs(sPan) / sScale;
+
+        StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[iVM].hdcMem, sx, 0, sw, yp, SRCCOPY);
+
+        // show the VM to the left (sPan will be zero if there's only 1 VM)
+        if (sPan > 0)
+        {
+            dw = dx;
+            dx = 0;
+            sx = sw;
+            sw = xp - sw;
+            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[sVMPrev].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        }
+
+        // show the VM to the right
+        else if (sPan < 0)
+        {
+            dx = dw;
+            dw = 0 - sPan;
+            sw = xp - sw;
+            sx = 0;
+            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[sVMNext].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        }
     }
 
 #if 0 // future cloud stuff, too slow for now
@@ -3028,7 +3107,24 @@ void SelectInstance(int iVM)
     v.iVM = iVM;                    // current VM #
 
     FixAllMenus(TRUE);
-    
+
+    // before making threads, figure out the next and previous instance (one of these might be active too, in roulette mode)
+    sVMPrev = v.iVM - 1;
+    while (sVMPrev < 0 || !rgvm[sVMPrev].fValidVM)
+    {
+        sVMPrev--;
+        if (sVMPrev < 0)
+            sVMPrev = MAX_VM - 1;
+    }
+
+    sVMNext = v.iVM + 1;
+    while (sVMNext >= MAX_VM || !rgvm[sVMNext].fValidVM)
+    {
+        sVMNext++;
+        if (sVMNext >= MAX_VM)
+            sVMNext = 0;
+    }
+
     // The active thread needs to change
     if (!v.fTiling)
         InitThreads();
@@ -3821,6 +3917,22 @@ LRESULT CALLBACK WndProc(
             fNeedTiledBitmap = TRUE;
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
             InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
+        }
+
+        // figure out the scaling factor for when we do integer scaled stretching
+        if (!v.fTiling && v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
+        {
+            RECT rect;
+            GetWindowRect(vi.hWnd, &rect);
+
+            for (sScale = 16; sScale > 1; sScale--)
+            {
+                int x = rect.right - (vvmhw[v.iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
+                int y = rect.bottom - (vvmhw[v.iVM].ypix * sScale);
+
+                if ((x >= 0) && (y >= 0))
+                    break;
+            }
         }
 
         break;
@@ -5082,6 +5194,46 @@ break;
         short int offset = GET_WHEEL_DELTA_WPARAM(uParam) * (v.fWheelSensitive ? 8 : 1); // must be short to catch the sign
         BOOL fZoom = GET_KEYSTATE_WPARAM(uParam) & MK_CONTROL;
 
+        // ATARI roulette - spin the wheel and watch all the VMs go by and land on a random one
+        if (!v.fTiling && v.cVM > 1)
+        {
+            RECT rc;
+            int max;
+
+            // new wheel location
+            int ns = sPan + offset / 8;
+            
+            sPanJif = GetJiffies(); // note when it was last spun
+            
+            // how much scrolling is an entire frame?
+            if (v.fZoomColor)
+            {
+                GetClientRect(vi.hWnd, &rc);
+                max = rc.right;
+            }
+            else
+                max = sScale * vvmhw[v.iVM].xpix;
+            
+            if (ns >= max)
+            {
+                SelectInstance(-1);
+                ns -= max;
+            }
+            else if (ns <= -max)
+            {
+                SelectInstance(v.iVM + 1);
+                ns += max;
+            }
+            
+            //ODS("New PAN=%d\n", sPan);
+            if ((!ns && sPan) || (ns > 0 && sPan <= 0) || (ns < 0 && sPan >= 0))
+            {
+                sPan = ns;
+                InitThreads();
+            }
+            sPan = ns;
+        }
+
         static ULONGLONG ullZoomJif;    // last time a zoom was done
         ULONGLONG ullJif = GetJiffiesN();   // always do NTSC timing when tiled
         // don't do more than one zoom level at a time, require 10 jiffy delay
@@ -5159,19 +5311,69 @@ break;
         {
             if (gi.dwID == GID_PAN)
             {
+                RECT rc;
+                GetClientRect(vi.hWnd, &rc);
+                int max;
+
+                // how much scrolling is an entire frame?
+                if (v.fZoomColor)
+                    max = rc.right;
+                else
+                    max = sScale * vvmhw[v.iVM].xpix;
+
+                // note the starting x and y position of the gesture
                 if (gi.dwFlags & GF_BEGIN)
+                {
                     iPanBegin = gi.ptsLocation;    // where were we when we stated gesturing?
+                }
+
+                // when we stop horizontal routlette wheel, choose the one showing the most
                 else if (gi.dwFlags & GF_END)
-                    sPan = 0;
+                {                    
+                    if (sPan != 0 && abs(sPan) < max / 2)
+                    {
+                        sPan = 0;
+                        InitThreads();
+                    }
+                    else if (sPan != 0)
+                    {
+                        SelectInstance(sPan > 0 ? -1 : v.iVM + 1);
+                        sPan = 0;
+                        InitThreads();
+                    }
+                }
+                
+                // Tiled mode - vertical swipe through the tiles
                 else if (v.fTiling)
                 {
                     sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
                     ScrollTiles();
                     iPanBegin.y = gi.ptsLocation.y;
                 }
-                else
+                
+                // Non-Tiled - ATARI roulette - horizontal spin the wheel and watch all the VMs go by and land on a random one
+                else if (v.cVM > 1)
                 {
-                    sPan = gi.ptsLocation.x - iPanBegin.x;
+                    int ns = gi.ptsLocation.x - iPanBegin.x;
+                
+                    if (ns >= max)
+                    {
+                        SelectInstance(-1);
+                        ns -= rc.right;
+                    }
+                    else if (ns <= -max)
+                    {
+                        SelectInstance(v.iVM + 1);
+                        ns += rc.right;
+                    }
+
+                    if ((!ns && sPan) || (ns > 0 && sPan <= 0) || (ns < 0 && sPan >= 0))
+                    {
+                        sPan = ns;
+                        InitThreads();
+                    }
+                    sPan = ns;
+                    //ODS("New PAN=%d\n", sPan);
                 }
                 return 0;    // makes sure we don't get a mouse click on a tile while panning
             }
