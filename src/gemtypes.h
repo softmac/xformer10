@@ -152,6 +152,8 @@ BOOL fRenderThisTime;       //
 extern BOOL fDebug;            // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
 
+extern int sPan;            // amount the roulette wheel is spun
+
 // paste into keyboard buffer, can only do this through the menu to one VM at a time, NOT PERSISTABLE
 BYTE rgPasteBuffer[65536 * 16];  // a simple BASIC program listing might take half this because of all the delays after RETURN
 int cPasteBuffer, iPasteBuffer;

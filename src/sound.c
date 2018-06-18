@@ -130,9 +130,9 @@ void SoundDoneCallback(int iVM, int iCurSample)
     LPWAVEHDR pwhdr = fPal50 ? vi.rgwhdrP : vi.rgwhdrN;
     int SAMPLES_PER_VOICE = fPal50 ? SAMPLES_PAL : SAMPLES_NTSC;
 
-    // Only do sound for the tiled VM in focus, this code is not thread safe
+    // Only do sound for the VM in focus, this code is not thread safe
     // We only switch VMs when all threads are asleep
-    if (v.fTiling && sVM != (int)iVM)
+    if ((v.fTiling && sVM != iVM) || (!v.fTiling && v.iVM != iVM))
         return;
 
     // if we have reset since last we were called, init this variable again
