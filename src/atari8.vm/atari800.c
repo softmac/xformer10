@@ -624,7 +624,7 @@ void Interrupt(int iVM, BOOL b)
 // we just realized we're running an app that can only work properly on PAL
 void SwitchToPAL(int iVM)
 {
-    if (v.fAutoKill)    // only if the option to auto-detect VM type is on
+    if (v.fAutoKill && !fPAL && !fSwitchingToPAL)    // only if the option to auto-detect VM type is on
     {
         fSwitchingToPAL = TRUE;     // don't try again and accidentally switch back
         rgvm[iVM].fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
@@ -2956,7 +2956,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         {
             // deliberately hang on NTSC machines? Not only switch to PAL, but lie and say that we already are!
             // LDA PAL, AND #$e, BEQ $fe
-            if (!fPAL && rgbMem[regPC + 2] == 0xd0 && rgbMem[regPC + 3] == 0xfe)
+            if (rgbMem[regPC + 2] == 0xd0 && rgbMem[regPC + 3] == 0xfe)
             {
                 SwitchToPAL(iVM);
                 return 0x0;
@@ -3054,11 +3054,11 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         {
             // uh oh, somebody is comparing VCOUNT to a really big number, we're supposed to be a PAL machine
             // CMP VCOUNT (A = big)
-            if (!fPAL && !fSwitchingToPAL && rgbMem[regPC - 3] == 0xcd && regA > 0x83)
+            if (rgbMem[regPC - 3] == 0xcd && regA > 0x83)
                 SwitchToPAL(iVM);
 
             // uh oh #2... LDA VCOUNT CMP #big
-            if (!fPAL && !fSwitchingToPAL && rgbMem[regPC] == 0xc9 && rgbMem[regPC + 1] > 0x83)
+            if (rgbMem[regPC] == 0xc9 && rgbMem[regPC + 1] > 0x83)
                 SwitchToPAL(iVM);
 
             // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
@@ -3541,7 +3541,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             // #1 problem in PAL apps... they think they have forever in the VBI (50 extra scan lines, with no DMA stealing)
             // and they don't get around to letting the OS copy the DLIST shadows until it's too late, past scan 8 of the next line
             // which resets back to the top of the DLIST and jitters
-            if (!fPAL && !fSwitchingToPAL && fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+            if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                 SwitchToPAL(iVM);
 
             //ODS("DLPC = %04x @ %d\n", DLPC, wScan);
@@ -3639,7 +3639,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             // we're changing VSCROL in a vertical blank, we probably mean for it to happen before the next frame is drawn,
             // but it is too late since NTSC has far fewer overscan lines
-            if (!fPAL && !fSwitchingToPAL && fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+            if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                 SwitchToPAL(iVM);
         }
         break;
