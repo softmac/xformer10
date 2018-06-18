@@ -417,7 +417,6 @@ DWORD WINAPI VMThread(LPVOID l)
             SetEvent(hDoneEvent[iV]);
             return 0;
         }
-
         vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger = !FExecVM(ThreadStuff[iV].iThreadVM, FALSE, TRUE);
 
         if (vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger)
@@ -575,7 +574,7 @@ ThreadTry:
         else if (v.iVM > -1)
         {
             int numt = sPan ? 2 : 1;    // is there a 2nd VM showing because we're scrolling?
-            ODS("Need %d threads\n", numt);
+            //ODS("Need %d threads\n", numt);
             ThreadStuff = malloc(sizeof(ThreadStuffS) * numt);
             hDoneEvent = malloc(sizeof(HANDLE) * numt);
             if (!ThreadStuff || !hDoneEvent)
@@ -599,7 +598,7 @@ ThreadTry:
                 // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                 if (!ThreadStuff[x].hGoEvent || !hDoneEvent[x] ||
 #ifdef NDEBUG
-                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)0, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
 #else   // debug needs twice the stack
                     !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)x, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
 #endif
@@ -1810,7 +1809,7 @@ int CALLBACK WinMain(
         {
             assert(v.cVM);
             int nt = sPan ? 2 : 1;
-            ODS("Waiting for %d threads\n", nt);
+            //ODS("Waiting for %d threads\n", nt);
             SetEvent(ThreadStuff[0].hGoEvent);
             if (nt == 2)
                 SetEvent(ThreadStuff[1].hGoEvent);
@@ -5348,7 +5347,7 @@ break;
                 {                    
                     sGesturing = FALSE;
 
-                    ODS("GESTURE END\n");
+                    //ODS("GESTURE END\n");
                     if (sPan != 0 && abs(sPan) < max / 2)
                     {
                         sPan = 0;
@@ -5386,7 +5385,7 @@ break;
                         ns += rc.right;
                     }
 
-                    ODS("New PAN=%d\n", sPan);
+                    //ODS("New PAN=%d\n", sPan);
                     if ((!ns && sPan) || (ns > 0 && sPan <= 0) || (ns < 0 && sPan >= 0))
                     {
                         sPan = ns;
