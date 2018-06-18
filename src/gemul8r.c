@@ -73,6 +73,7 @@ int sVMPrev;        // which VMS become visible as you play VM roulette
 int sVMNext;    
 ULONGLONG sPanJif;  // last time we spun the routlette wheel
 int sScale;         // scaling factor for integer multiple stretching
+BOOL sGesturing;    // using touch screen to roulette, not mouse wheel
 
 static ULONG renders;
 static ULONG lastRenderCost;
@@ -574,7 +575,7 @@ ThreadTry:
         else if (v.iVM > -1)
         {
             int numt = sPan ? 2 : 1;    // is there a 2nd VM showing because we're scrolling?
-            //ODS("Need %d threads\n", numt);
+            ODS("Need %d threads\n", numt);
             ThreadStuff = malloc(sizeof(ThreadStuffS) * numt);
             hDoneEvent = malloc(sizeof(HANDLE) * numt);
             if (!ThreadStuff || !hDoneEvent)
@@ -1809,7 +1810,7 @@ int CALLBACK WinMain(
         {
             assert(v.cVM);
             int nt = sPan ? 2 : 1;
-            //ODS("Waiting for %d threads\n", nt);
+            ODS("Waiting for %d threads\n", nt);
             SetEvent(ThreadStuff[0].hGoEvent);
             if (nt == 2)
                 SetEvent(ThreadStuff[1].hGoEvent);
@@ -1825,7 +1826,7 @@ int CALLBACK WinMain(
         }
 
         // It's been almost a second since we last used the roulette wheel with the mouse wheel, time to settle down
-        if (sPan && GetJiffies() - sPanJif > 50)
+        if (sPan && !sGesturing && GetJiffies() - sPanJif > 50)
         {
             RECT rc;
             int max;
@@ -2998,6 +2999,19 @@ void RenderBitmap()
     {
         int x, y;
 
+        // if we haven't been sized since the first VM was created, we might not know our scale and don't want to divide by 0
+        if (!sScale)
+        {
+            for (sScale = 16; sScale > 1; sScale--)
+            {
+                x = rect.right - (vvmhw[v.iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
+                y = rect.bottom - (vvmhw[v.iVM].ypix * sScale);
+
+                if ((x >= 0) && (y >= 0))
+                    break;
+            }
+        }
+
         x = rect.right - (vvmhw[iVM].xpix * sScale);
         y = rect.bottom - (vvmhw[iVM].ypix * sScale);
         int xp = vvmhw[iVM].xpix;
@@ -3920,7 +3934,7 @@ LRESULT CALLBACK WndProc(
         }
 
         // figure out the scaling factor for when we do integer scaled stretching
-        if (!v.fTiling && v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
+        if (v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
         {
             RECT rect;
             GetWindowRect(vi.hWnd, &rect);
@@ -5324,12 +5338,17 @@ break;
                 // note the starting x and y position of the gesture
                 if (gi.dwFlags & GF_BEGIN)
                 {
+                    //ODS("GESTURE BEGIN\n");
                     iPanBegin = gi.ptsLocation;    // where were we when we stated gesturing?
+                    sGesturing = TRUE;
                 }
 
                 // when we stop horizontal routlette wheel, choose the one showing the most
                 else if (gi.dwFlags & GF_END)
                 {                    
+                    sGesturing = FALSE;
+
+                    ODS("GESTURE END\n");
                     if (sPan != 0 && abs(sPan) < max / 2)
                     {
                         sPan = 0;
@@ -5367,13 +5386,13 @@ break;
                         ns += rc.right;
                     }
 
+                    ODS("New PAN=%d\n", sPan);
                     if ((!ns && sPan) || (ns > 0 && sPan <= 0) || (ns < 0 && sPan >= 0))
                     {
                         sPan = ns;
                         InitThreads();
                     }
                     sPan = ns;
-                    //ODS("New PAN=%d\n", sPan);
                 }
                 return 0;    // makes sure we don't get a mouse click on a tile while panning
             }
