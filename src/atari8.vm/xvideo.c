@@ -2483,7 +2483,7 @@ if (sl.modelo < 2 || iTop > i)
 
 // !!! TODO - make this a monitor type you can select
 // !!! We use different strategies for GR.0 and GR.8
-            if (!fArtifacting)
+            if (!fArtifacting && !fPMGA)
             {
                 // This is the "I have sharp display with minimum pixel bleeding" version
                 // It is the ONLY version that works in black and white mode when artifacting is supposedly off
