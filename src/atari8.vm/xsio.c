@@ -1167,6 +1167,7 @@ void SIOV(int iVM)
     bAux1 = cpuPeekB(iVM, 0x30A);
     bAux2 = cpuPeekB(iVM, 0x30B);
 
+    //ODS("Read SECTOR %d\n", wSector);
     if (wDev == 0x31)       /* disk drives */
     {
 #if 0
