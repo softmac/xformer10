@@ -2956,7 +2956,8 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         {
             // deliberately hang on NTSC machines? Not only switch to PAL, but lie and say that we already are!
             // LDA PAL, AND #$e, BEQ $fe
-            if (rgbMem[regPC + 2] == 0xd0 && rgbMem[regPC + 3] == 0xfe)
+            // LDA PAL, EOR #$ff (Bounty Bob)
+            if ((rgbMem[regPC + 2] == 0xd0 && rgbMem[regPC + 3] == 0xfe) || (rgbMem[regPC] == 0x49 && rgbMem[regPC + 1] == 0xff))
             {
                 SwitchToPAL(iVM);
                 return 0x0;
@@ -3334,7 +3335,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            if (PBCTL == 0x34)
+            // all known apps call this with 0x34, Astromeda uses 0x30
+            if (PBCTL == 0x34 || PBCTL == 0x30)   //    !!! I basically need to avoid startup clearing this with 0's but is this right?
             {
                 Assert(cSEROUT < 5);
                 //ODS("SEROUT #%d = 0x%02x %04x %03x %02x\n", cSEROUT, b, wFrame, wScan, wLeft);
