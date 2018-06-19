@@ -1171,6 +1171,24 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
     return lpCmdLine;
 }
 
+void CalcIntegerScale(int iVM)
+{
+    RECT rect;
+    GetClientRect(vi.hWnd, &rect);
+    
+    // use our last restored size if we are minimized, don't let sScale be 0 because we divide by it
+    if (rect.right == 0 || rect.bottom == 0)
+        rect = v.rectWinPos;
+
+    for (sScale = 16; sScale > 1; sScale--)
+    {
+        int x = rect.right - (vvmhw[iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
+        int y = rect.bottom - (vvmhw[iVM].ypix * sScale);
+
+        if ((x >= 0) && (y >= 0))
+            break;
+    }
+}
 
 /****************************************************************************
 
@@ -1836,7 +1854,9 @@ int CALLBACK WinMain(
                 max = rc.right;
             }
             else
+            {
                 max = sScale * vvmhw[v.iVM].xpix;
+            }
 
             if (sPan != 0 && abs(sPan) < max / 2)
             {
@@ -2344,6 +2364,9 @@ BOOL CreateNewBitmap(int iVM)
 
     vvmhw[iVM].xpix = rgvm[iVM].pvmi->uScreenX;
     vvmhw[iVM].ypix = rgvm[iVM].pvmi->uScreenY;
+
+    // Now that we have a size, figure out the proper integer scale to display it.
+    CalcIntegerScale(iVM);
 
     //PrintScreenStats();
     //printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n", vvmhw[iVM].xpix, vvmhw[iVM].ypix, v.fFullScreen, v.fZoomColor);
@@ -2997,19 +3020,6 @@ void RenderBitmap()
     else
     {
         int x, y;
-
-        // if we haven't been sized since the first VM was created, we might not know our scale and don't want to divide by 0
-        if (!sScale)
-        {
-            for (sScale = 16; sScale > 1; sScale--)
-            {
-                x = rect.right - (vvmhw[v.iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
-                y = rect.bottom - (vvmhw[v.iVM].ypix * sScale);
-
-                if ((x >= 0) && (y >= 0))
-                    break;
-            }
-        }
 
         x = rect.right - (vvmhw[iVM].xpix * sScale);
         y = rect.bottom - (vvmhw[iVM].ypix * sScale);
@@ -3932,21 +3942,9 @@ LRESULT CALLBACK WndProc(
             InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
         }
 
-        // figure out the scaling factor for when we do integer scaled stretching
-        if (v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
-        {
-            RECT rect;
-            GetClientRect(vi.hWnd, &rect);
-
-            for (sScale = 16; sScale > 1; sScale--)
-            {
-                int x = rect.right - (vvmhw[v.iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
-                int y = rect.bottom - (vvmhw[v.iVM].ypix * sScale);
-
-                if ((x >= 0) && (y >= 0))
-                    break;
-            }
-        }
+        // figure out the new scaling factor for when we do integer scaled stretching.
+        if (v.iVM >= 0)
+            CalcIntegerScale(v.iVM);
 
         break;
 
@@ -5225,8 +5223,10 @@ break;
                 max = rc.right;
             }
             else
+            {
                 max = sScale * vvmhw[v.iVM].xpix;
-            
+            }
+
             if (ns >= max)
             {
                 SelectInstance(-1);
@@ -5626,26 +5626,14 @@ break;
                 // the screen aspect ratio is preserved and it is a certain scale multiple
                 else
                 {
-                    int x, y, scale;
-                    // !!! vi is a global! Don't use it?
-
-                    for (scale = 16; scale > 1; scale--)
-                    {
-                        x = rect.right - (vvmhw[v.iVM].xpix * vi.fXscale * scale);
-                        y = rect.bottom - (vvmhw[v.iVM].ypix * vi.fYscale * scale);
-
-                        if ((x >= 0) && (y >= 0))
-                            break;
-                    }
-
-                    int bb = (rect.right - scale * vvmhw[v.iVM].xpix) / 2;    // black bar size on left
+                    int bb = (rect.right - sScale * vvmhw[v.iVM].xpix) / 2;    // black bar size on left
                     if (xPos > bb)
-                        LightPenX = (WORD)((xPos - bb) / scale);
+                        LightPenX = (WORD)((xPos - bb) / sScale);
                     if (LightPenX >= vvmhw[v.iVM].xpix)
                         LightPenX = (WORD)(vvmhw[v.iVM].xpix - 1);
-                    bb = (rect.bottom - scale * vvmhw[v.iVM].ypix) / 2;    // black bar size on top
+                    bb = (rect.bottom - sScale * vvmhw[v.iVM].ypix) / 2;    // black bar size on top
                     if (yPos > bb)
-                        LightPenY = (WORD)((yPos - bb) / scale);
+                        LightPenY = (WORD)((yPos - bb) / sScale);
                     if (LightPenY >= vvmhw[v.iVM].ypix)
                         LightPenY = (WORD)(vvmhw[v.iVM].ypix - 1);
                 }
