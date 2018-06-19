@@ -707,7 +707,8 @@ HANDLER(op00)
     // !!! Is BRK maskable like I am assuming?
 
     // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
-    if (regPC >= 0xc000 && regPC < 0xd000 && mdXLXE == md800)
+    // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there
+    if (regPC >= 0xc000 /* && regPC < 0xd000 */ && mdXLXE == md800)
         KIL(iVM);
 
     PackP(iVM);    // we'll be pushing it
@@ -1065,6 +1066,17 @@ HANDLER(op2A)
     HANDLER_END();
 }
 
+// ANC #
+
+HANDLER(op2B)
+{
+    EA_imm(iVM);
+    AND_com(iVM);
+    srC = regA & 0x80;
+    wLeft -= 2;
+    HANDLER_END();
+}
+
 // BIT abs
 
 HANDLER(op2C)
@@ -1243,7 +1255,16 @@ HANDLER(op40)
     UnpackP(iVM);
     regPC = PopWord(iVM);
     
-    fInVBI = FALSE; // we might not have been before, but we're not now
+    // I'm not sure which one this is, but assume DLI for now
+    if (fInVBI && fInDLI)
+        fInDLI--;
+    else if (fInVBI)
+    {
+        fInVBI--;
+        wScanVBIEnd = wScan;    // remember when the VBI ended
+    }
+    else if (fInDLI)
+        fInDLI--;
 
     // if we were hiding SIO hack loop code, but an interrupt hit so we where showing code again, now hide it again that it's done
     if (wSIORTS)
@@ -2192,6 +2213,17 @@ HANDLER(opA6)
     HANDLER_END();
 }
 
+// LAX zp
+
+HANDLER(opA7)
+{
+    EA_zpR(iVM);
+    LDA_com(iVM);
+    LDX_com(iVM);
+    wLeft -= 3;
+    HANDLER_END();
+}
+
 // TAY
 
 HANDLER(opA8)
@@ -2980,7 +3012,7 @@ PFNOP jump_tab[256] =
     op28,
     op29,
     op2A,
-    unused,
+    op2B,
     op2C,
     op2D,
     op2E,
@@ -3104,7 +3136,7 @@ PFNOP jump_tab[256] =
     opA4,
     opA5,
     opA6,
-    unused,
+    opA7,
     opA8,
     opA9,
     opAA,
@@ -3274,7 +3306,6 @@ void __cdecl Go6502(const int iVM)
                 case 0x1F:
                 case 0x23:
                 case 0x27:
-                case 0x2B:
                 case 0x37:
                 case 0x3B:
                 case 0x43:
@@ -3293,7 +3324,6 @@ void __cdecl Go6502(const int iVM)
                 case 0x9C:
                 case 0x9E:
                 case 0xA3:
-                case 0xA7:
                 case 0xB3:
                 case 0xB7:
                 case 0xBB:
@@ -3445,6 +3475,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x2A:   // ROL A
                     op2A(iVM);
+                    break;
+
+                case 0x2B:   // ANC #
+                    op2B(iVM);
                     break;
 
                 case 0x2C:   // BIT abs
@@ -3843,6 +3877,10 @@ void __cdecl Go6502(const int iVM)
                     opA6(iVM);
                     break;
 
+                case 0xA7:   // LAX zp
+                    opA7(iVM);
+                    break;
+
                 case 0xA8:   // TAY
                     opA8(iVM);
                     break;
@@ -4160,7 +4198,7 @@ void __cdecl Go6502(const int iVM)
                     // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
                     if (fInVBI)
                         SwitchToPAL(iVM);
-                    fInVBI = TRUE;
+                    fInVBI++;;
 
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -4181,8 +4219,10 @@ void __cdecl Go6502(const int iVM)
 
                     // We're still in the last VBI? And we're not one of those post-VBI DLI's?
                     // Must be a PAL app that's spoiled by how long these can be
-                    if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+                    // We're starting to nest deeply in DLIs? Maybe it's a long DLI kernel that needs PAL.
+                    if ((fInVBI || fInDLI > 1) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                         SwitchToPAL(iVM);
+                    fInDLI++;
 
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;  // wLeft could be 0 if the NMI was delayed due to WSYNC
