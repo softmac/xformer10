@@ -626,7 +626,8 @@ __inline void SIOCheck(const int iVM)
     // OS must be paged in on XL for this to really be SIO. But some people replace the OS with an exact copy, and we can't
     // actually execute that SIO code and work properly, so detect if the swapped in code still says jmp $c933 and do our
     // hack anyway (TITAN)
-    if ((regPC == 0xe459 || regPC == 0xe959) && (mdXLXE == md800 || (wPBDATA & 1) || (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9)))
+    if ((regPC == 0xe459 || regPC == 0xe959) &&
+            (mdXLXE == md800 || (wPBDATA & 1) || (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9)))
     {
         // this is our SIO hook!
         PackP(iVM);
