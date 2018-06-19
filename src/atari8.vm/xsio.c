@@ -1355,6 +1355,21 @@ lNAK:
             else
                 lcbSector = 256L;
 
+            // !!! Arena is mean and uses a custom SEROUT needed interrupt with SIOV to change the sector # to load
+            // after SIOV is called from a certain point on
+            if (wLastSIOSector == 9 && wSector == 9 && rgbMem[0xbb8a] == 0x3c)
+            {
+                wSector = 10;           // start the hack
+                wLastSIOSector = -1;
+            }
+            else if (wLastSIOSector == -1)
+            {
+                if (wSector > 9)
+                    wSector++;
+                else
+                    wLastSIOSector = 0; // stop the hack
+            }
+
             _lseek(pdrive->h,(ULONG)((wSector-1) * lcbSector) + cbSIO2PCFudge,SEEK_SET);
 
             if ((wCom == 'R'))    // wStat is only checked for cassette I/O not disk I/O, breaks apps // && (wStat == 0x40))
@@ -1585,7 +1600,8 @@ lNAK:
                     }
 
                     wRetStat = SIO_OK;
-                    wLastSIOSector = wSector;
+                    if (wLastSIOSector >= 0)
+                        wLastSIOSector = wSector;
                 }
             }
             else if ((wCom == 'W') || (wCom == 'P'))

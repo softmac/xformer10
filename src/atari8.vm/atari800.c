@@ -3285,6 +3285,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         break;
 
     case 0xD1:  // XL CIO R: hack, Darek ???
+#if 0   // this breaks apps like Arena who need to see the C: handler, not the R: swapped in
 
         if (mdXLXE != md800 && addr == 0xD1FF)
         {
@@ -3309,6 +3310,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 memcpy(&rgbMem[0xD800], (unsigned char const *)rgbXLXED800, sizeof(rgbSIOR));
             }
         }
+#endif
         break;
 
     case 0xD2:      // POKEY
