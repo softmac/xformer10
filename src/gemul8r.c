@@ -3936,7 +3936,7 @@ LRESULT CALLBACK WndProc(
         if (v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
         {
             RECT rect;
-            GetWindowRect(vi.hWnd, &rect);
+            GetClientRect(vi.hWnd, &rect);
 
             for (sScale = 16; sScale > 1; sScale--)
             {
