@@ -2198,6 +2198,8 @@ BOOL __cdecl WarmbootAtari(int iVM)
     // notice NTSC/PAL switch
     fPAL = rgvm[iVM].fEmuPAL;
     PAL = fPAL ? 1 : 15;    // set GTIA register
+    fInVBI = 0;
+    fInDLI = 0;
 
     // !!! Warm start is broken on XL/XE - swap banks back?
     // 221B broken
@@ -2679,7 +2681,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
                         if (fInVBI)
                             SwitchToPAL(iVM);
-                        fInVBI = TRUE;
+                        fInVBI++;
 
                         wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                         wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -2703,6 +2705,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         // Must be a PAL app that's spoiled by how long these can be
                         if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                             SwitchToPAL(iVM);
+                        fInDLI++;
 
                         wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                         wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
@@ -3542,8 +3545,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             // #1 problem in PAL apps... they think they have forever in the VBI (50 extra scan lines, with no DMA stealing)
             // and they don't get around to letting the OS copy the DLIST shadows until it's too late, past scan 8 of the next line
-            // which resets back to the top of the DLIST and jitters
-            if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+            // which resets back to the top of the DLIST and jitters.
+            // Sometimes, the first thing they do after a VBI is set this, so we might not be in the VBI, but we just left it.
+            if ((fInVBI || wScan == wScanVBIEnd) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                 SwitchToPAL(iVM);
 
             //ODS("DLPC = %04x @ %d\n", DLPC, wScan);
@@ -3641,7 +3645,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
             // we're changing VSCROL in a vertical blank, we probably mean for it to happen before the next frame is drawn,
             // but it is too late since NTSC has far fewer overscan lines
-            if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+            // Sometimes, the first thing they do after a VBI is set this, so we might not be in the VBI, but we just left it.
+            if ((fInVBI || wScan == wScanVBIEnd) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                 SwitchToPAL(iVM);
         }
         break;
