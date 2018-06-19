@@ -212,7 +212,7 @@ void SoundDoneCallback(int iVM, int iCurSample)
             int pCLK = fPAL ? PAL_CLK : NTSC_CLK;
             int pCLK100 = pCLK * 100;
             int pCLK28100 = pCLK100 / 28;
-            int pCLK113100 = pCLK28100 / 4;
+            int pCLK114100 = pCLK100 / 114;
             
             // figure out the freq and pulse width of each voice
             int freq[4];
@@ -236,15 +236,15 @@ void SoundDoneCallback(int iVM, int iCurSample)
                         // Divide by (n+4) for 64K or (n+7) for 1.79M
                     }
                     else if (i == 1 && (sAUDCTL & 0x10)) {
-                        freq[i] = ((sAUDCTL & 0x40) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100)) /
+                        freq[i] = ((sAUDCTL & 0x40) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
                     else if (i == 3 && (sAUDCTL & 0x08)) {
-                        freq[i] = ((sAUDCTL & 0x20) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100)) /
+                        freq[i] = ((sAUDCTL & 0x20) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
                     else {
-                        freq[i] = ((sAUDCTL & 0x01) ? pCLK113100 : pCLK28100) / (rgvoice[i].frequency + 1);
+                        freq[i] = ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100) / (rgvoice[i].frequency + 1);
                     }
 
                     // recalculate the pulse width as the freq may have changed, rounded to the nearest half sample.
