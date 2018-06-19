@@ -1719,14 +1719,14 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
 void ResetPokeyTimer(int iVM, int irq)
 {
     ULONG f[4], c[4];
-    int pCLK, pCLK28, pCLK113;
+    int pCLK, pCLK28, pCLK114;
 
     if (irq == 2 || irq < 0 || irq >= 4)
         return;
 
     pCLK = fPAL ? PAL_CLK : NTSC_CLK;
     pCLK28 = pCLK / 28;
-    pCLK113 = pCLK28 / 4;
+    pCLK114 = pCLK / 114;
     
     // f = how many cycles do we have to count down from? (Might be joined to another channel)
     // c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
@@ -1734,24 +1734,26 @@ void ResetPokeyTimer(int iVM, int irq)
 
     // STIMER will call us for all 4 voices in order, so the math will work out.
 
+    // 64K and 15K clocks have an extra count (N+1) before firing, just like the audio frequency will actually be divided by N+1
+
     if (irq == 0)
     {
-        f[0] = AUDF1;
-        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        f[0] = AUDF1 + ((AUDCTL & 0x20) ? 0 : 1);
+        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         irqPokey[0] = (LONG)((ULONGLONG)f[0] * pCLK / c[0]);
     }
     else if (irq == 1)
     {
-        f[1] = (AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2; // when joined, these count down much slower
-        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
-        c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        f[1] = ((AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2) + ((AUDCTL & 0x20) ? 0 : 1);
+        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
+        c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         irqPokey[1] = (LONG)((ULONGLONG)f[1] * pCLK / c[1]);
     }
     else if (irq == 3)
     {
-        f[3] = (AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4;
-        c[2] = (AUDCTL & 0x20) ? pCLK : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);    // irq 3 needs to know what this is
-        c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? pCLK113 : pCLK28);
+        f[3] = ((AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4) + ((AUDCTL & 0x20) ? 0 : 1);
+        c[2] = (AUDCTL & 0x20) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);    // irq 3 needs to know what this is
+        c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         irqPokey[3] = (LONG)((ULONGLONG)f[3] * pCLK / c[3]);
     }
 
@@ -2838,7 +2840,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 {
                     if (IRQEN & (irq + 1))
                     {
-                        //ODS("TIMER %d FIRING\n", irq + 1);
+                        //ODS("TIMER %d FIRING: %03x %02x\n", irq + 1, wScan, wCycle);
                         IRQST &= ~(irq + 1);                // fire away
                     }
 
