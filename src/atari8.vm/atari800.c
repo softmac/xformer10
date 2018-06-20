@@ -3064,8 +3064,13 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
                 SwitchToPAL(iVM);
 
             // uh oh #2... LDA VCOUNT CMP #big
-            if (rgbMem[regPC] == 0xc9 && rgbMem[regPC + 1] > 0x83)
+            else if (rgbMem[regPC] == 0xc9 && rgbMem[regPC + 1] > 0x83)
                 SwitchToPAL(iVM);
+
+            // some XL apps (Operation Blood) wait for VCOUNT == $7f because that's when the XL VBI exits,
+            // but the 800 VBI is longer and exits at $80 and hangs. Help it out.
+            else if (mdXLXE == md800 && rgbMem[regPC + 1] == 0x7f)
+                rgbMem[regPC + 1] = 0x80;
 
             // if the last cycle of this 4-cycle instruction ends AT the point where VCOUNT is incremented (111), it still sees the old value
             // - 1 for 0-based. - 3 for the last cycle. + 1 to see what the next cycle is (which might be blocked, so the next instruction
