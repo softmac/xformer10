@@ -2414,11 +2414,11 @@ HANDLER(opBE)
     HANDLER_END();
 }
 
-// LAX abs,X
+// LAX abs,Y
 
 HANDLER(opBF)
 {
-    EA_absXR(iVM);
+    EA_absYR(iVM);
     LDA_com(iVM);
     LDX_com(iVM);
     wLeft -= 4;
@@ -3979,7 +3979,7 @@ void __cdecl Go6502(const int iVM)
                     opBE(iVM);
                     break;
 
-                case 0xBF:   // LAX abs,X
+                case 0xBF:   // LAX abs,Y
                     opBF(iVM);
                     break;
 
