@@ -1195,6 +1195,9 @@ void CalcIntegerScale(int iVM)
         Assert(iVM < MAX_VM);
     }
 
+    if (iVM < 0)
+        return;
+
     for (sScale = 16; sScale > 1; sScale--)
     {
         int x = rect.right - (vvmhw[iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
