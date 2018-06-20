@@ -149,6 +149,10 @@ BOOL fNeedTiledBitmap;      // size change or something means we need a new size
 POINT ptBlack;              // the top left of the black area of the tiled window
 BOOL fRenderThisTime;       //
 
+RECT sRectTile[MAX_VM];     // the piece of the large bitmap the VM is responsible for, in Tiled mode
+RECT sRectC;                // the size of the whole window that it is drawing a piece of
+int  sStride;               // the stride of the big client rect
+
 extern BOOL fDebug;            // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
 
