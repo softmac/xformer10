@@ -3470,7 +3470,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
                             SwapMem(iVM, bOld ^ bNew, bNew);
                         }
-                        else
+                        else if (b && !(b & 1)) // hopefully poking with 0 is init code and not meant to swap out the OS
                         {
                             if (v.fAutoKill)
                             {

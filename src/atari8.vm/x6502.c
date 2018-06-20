@@ -2414,6 +2414,17 @@ HANDLER(opBE)
     HANDLER_END();
 }
 
+// LAX abs,X
+
+HANDLER(opBF)
+{
+    EA_absXR(iVM);
+    LDA_com(iVM);
+    LDX_com(iVM);
+    wLeft -= 4;
+    HANDLER_END();
+}
+
 // CPY #
 
 HANDLER(opC0)
@@ -2958,6 +2969,18 @@ HANDLER(opFE)
     HANDLER_END();
 }
 
+// ISB abs,X
+
+HANDLER(opFF)
+{
+    EA_absXW(iVM);
+    INC_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    SBC_com(iVM);
+    wLeft -= 7;
+    HANDLER_END();
+}
+
 // !!! Implement the rest of these, already!
 HANDLER(unused)
 {
@@ -3161,7 +3184,7 @@ PFNOP jump_tab[256] =
     opBC,
     opBD,
     opBE,
-    unused,
+    opBF,
     opC0,
     opC1,
     opC2,
@@ -3225,7 +3248,7 @@ PFNOP jump_tab[256] =
     opFC,
     opFD,
     opFE,
-    unused,
+    opFF,
 };
 
 
@@ -3328,7 +3351,6 @@ void __cdecl Go6502(const int iVM)
                 case 0xB3:
                 case 0xB7:
                 case 0xBB:
-                case 0xBF:
                 case 0xC7:
                 case 0xCB:
                 case 0xCF:
@@ -3338,7 +3360,6 @@ void __cdecl Go6502(const int iVM)
                 case 0xE3:
                 case 0xF7:
                 case 0xFB:
-                case 0xFF:
                     unused(iVM);
                     break;
 
@@ -3954,8 +3975,12 @@ void __cdecl Go6502(const int iVM)
                     opBD(iVM);
                     break;
 
-                case 0xBE:   // LDX abs,X
+                case 0xBE:   // LDX abs,Y
                     opBE(iVM);
+                    break;
+
+                case 0xBF:   // LAX abs,X
+                    opBF(iVM);
                     break;
 
                 case 0xC0:   // CPY #
@@ -4164,6 +4189,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xFE:   // INC abs,X
                     opFE(iVM);
+                    break;
+
+                case 0xFF:   // ISB abs,X
+                    opFF(iVM);
                     break;
                 }
 #ifdef NDEBUG
