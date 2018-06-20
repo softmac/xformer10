@@ -2831,8 +2831,6 @@ if (sl.modelo < 2 || iTop > i)
                 else
                 {
                     // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
-                    // !!! if PRIOR = 0, it shows PF2 chroma instead of PMG chroma, because both P0 and PF1 are prioritized visible,
-                    // and the OR of the two together makes the PF2 chroma come through. This doesn't happen on real hardware.
                     colpmX = colpmXSpec;
                 }
             }
@@ -2844,10 +2842,9 @@ if (sl.modelo < 2 || iTop > i)
                     // convert bitfield of what is present to bitfield of what wins and is visible
                     b = rgPMGMap[(sl.prior << 8) + b];
 
-                    // !!! accurate, but a perf hit
                     // for PRIOR=0, both one of (P0,P1) and PF1 might be visible, and OR-d together. But in hi-res mode,
                     // we need to remove the chroma from PF1 so that the chroma from P0/P1 is used instead
-                    if (pmg.fHiRes && (b & 0x30) && (b & 2))
+                    if (pmg.fHiRes && (b & (bfPM1 | bfPM0)) && (b & bfPF1))
                         colpfX &= 0xffff0fff;
 
                     // OR the colours in parallel

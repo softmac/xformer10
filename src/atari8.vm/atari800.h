@@ -93,7 +93,7 @@ BYTE rgPMGMap[65536];
 // [PF DMA on?], plus must be in a valid range of scan lines or ANTIC won't do it anyway
 // [0=narrow 1=normal 2=wide]
 // [first scan line of this mode?], which we indicate by setting iScan == sl.vscrol
-// [P DMA on?] !!! double check GRACTL doesn't have to be on too
+// [P DMA on?]
 // [M DMA on?] which is automatically enabled if P DMA is enabled
 // [LMS?] which happens if the right bit is set on valid modes 
 
@@ -327,7 +327,7 @@ typedef struct
 
 typedef struct
 {
-    // !!! THIS MUST STAY AT THE TIPPY TOP
+    // !!! THIS MUST STAY AT THE TIPPY TOP until I support GEM knowing about BASIC in a non-hacky way
     WORD m_ramtop;
 
     // most ofen accessed variables go first!
