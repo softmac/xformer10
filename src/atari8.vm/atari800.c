@@ -500,7 +500,7 @@ BOOL TimeTravelPrepare(unsigned iVM, BOOL fForce)
 
     // assumes we only get called when we are the current VM
 
-    ULONGLONG cCur = GetCyclesN();  // !!! So things don't get wonky when we switch NTSC/PAL, let's always use the same one
+    ULONGLONG cCur = GetCyclesN();  // always use the same NTSC clock, it doesn't matter
     ULONGLONG cTest = cCur - ullTimeTravelTime[iVM];
 
     // time to save a snapshot (every 5 seconds, or maybe we're forcing it)
@@ -979,8 +979,8 @@ BOOL ReadCart(int iVM, BOOL fDefaultBank)
     //
     //{name: 'Standard 8k cartridge', id : 1 },
     //{name: 'Standard 16k cartridge', id : 2 },
-    //{ name: 'Diamond 64 KB cartridge', id : 10 },
-    //{ name: 'SpartaDOS X 64 KB cartridge', id : 11 },
+    //{ name: 'Diamond 64 KB cartridge', id : 10 },     // !!! buggy
+    //{ name: 'SpartaDOS X 64 KB cartridge', id : 11 }, // !!! buggy
     //{name: 'XEGS 32 KB cartridge', id : 12 },
     //{name: 'XEGS 64 KB cartridge', id : 13 },
     //{name: 'XEGS 128 KB cartridge', id : 14 },
@@ -1513,7 +1513,7 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
             bCartType = CART_ATARIMAX1; // ATRAX bank# is in value, and would never be 16-127
         else if (iBank > 0)
             bCartType = CART_ATARIMAX1; // ATRAX would never use an address != 0xd500 (I hope)
-        // !!! 0xfe is hack for Loderunner 2010 TURBOSOFT which is identical behaviour to ATARIMAX1
+        // 0xfe is hack for Loderunner 2010 TURBOSOFT which is identical behaviour to ATARIMAX1
         else if (iBank == 0 && value > 0 && (value <= 0x0f || value >= 0x80) && value != 0xfe)
             bCartType = CART_ATRAX;     // ATRAX asks for non-zero bank#, better respond to it and hope for the best
 
@@ -3052,7 +3052,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
         break;
 
     case 0xd4:
-        addr &= 0xff0f;    // ANTIC has 16 registers (!!! some say shadowed to $D5 too in a way?)
+        addr &= 0xff0f;    // ANTIC has 16 registers (some say shadowed to $D5 too in a way?)
 
         // VCOUNT - by clock 111 VCOUNT increments
         // DMAMAP[115] + 1 is the WSYNC point (cycle 105). VCOUNT increments 6 cycles later. LDA VCOUNT is a 4 cycle instruction.
@@ -3342,7 +3342,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            // all known apps call this with 0x34, Astromeda uses 0x30
+            // most known apps call this with 0x34, Astromeda uses 0x30
             if (PBCTL == 0x34 || PBCTL == 0x30)   //    !!! I basically need to avoid startup clearing this with 0's but is this right?
             {
                 Assert(cSEROUT < 5);
@@ -3596,7 +3596,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 cW = 5;     // and the write happens on cycle 5
             }
 
-            // !!! hack for Tarzan. Sometimes WSYNC resumes at cycle 105 instead of 104, if the cycle after STA WSYNC is blocked,
+            // Sometimes WSYNC resumes at cycle 105 instead of 104, if the cycle after STA WSYNC is blocked,
             // or if playfield DMA or RAM refresh DMA uses cycle 104. It's difficult to know for sure, but
             // if we're drawing in the middle (narrow) section of a character mode right now, chances are ANTIC is busy and
             // a STA WSYNC won't resume until cycle 105. At least it works for Tarzan.
