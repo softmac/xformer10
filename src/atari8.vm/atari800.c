@@ -3446,9 +3446,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             {
                 // it is a data register. Update only bits that are marked as write.
 
-                BYTE bMask = cpuPeekB(iVM, wPADDIRea + addr);
-                bOld  = cpuPeekB(iVM, wPADATAea + addr);
-                BYTE bNew  = (b & bMask) | (bOld & ~bMask);
+                BYTE bMask = cpuPeekB(iVM, wPADDIRea + addr);   // which bits are in write mode
+                bOld  = cpuPeekB(iVM, wPADATAea + addr);        // what was last written there
+                BYTE bNew  = (b & bMask) | (bOld & ~bMask);     // use new data for those in write mode, keep old data for those that aren't
 
                 if (bOld != bNew)
                 {
@@ -3512,6 +3512,21 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 // it is a data direction register.
 
                 cpuPokeB(iVM, wPADDIRea + addr, b);
+
+                // Apparently, putting PORTB bits into read mode swaps those banks back to default, so that clearing PIA with 0s
+                // won't swap out the OS accidentally. First POKE PORTB,0 does swap out the OS. Then POKE PBCTL,0 puts the
+                // ports into direction control mode. Then the POKE to the next PORTB shadow sets PORTB to read mode, and
+                // that needs to swap the OS back in (Great American Road Race, some versions)
+                
+                // The bits marked for reading get the default bank (1) and the bits marked for writing keep whatever was last written
+                if (addr == 1 && mdXLXE != md800)
+                {
+                                                              // b is which bits are in write mode
+                    bOld = cpuPeekB(iVM, wPADATAea + addr);   // what was last written there
+                    BYTE bNew = (0xff & ~b) | (bOld & b);     // use default (1) for those in read mode, keep old data for those in write mode.
+                    if (bNew != bOld)
+                        SwapMem(iVM, bOld ^ bNew, bNew);
+                }
             }
         }
 
