@@ -1176,9 +1176,24 @@ void CalcIntegerScale(int iVM)
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
     
-    // use our last restored size if we are minimized, don't let sScale be 0 because we divide by it
-    if (rect.right == 0 || rect.bottom == 0)
-        rect = v.rectWinPos;
+    // use our last restored size if we are minimized or whatever
+    if (rect.right == 0 || rect.bottom == 0 || rect.right == rect.left)
+    {
+        rect = v.rectWinPos;    // this isn't client co-ords, so adjust
+        rect.bottom -= rect.top;
+        rect.right -= rect.left;
+        rect.left = 0;
+        rect.top = 0;
+    }
+
+    // if we weren't given a valid one but there is one, find it to get the proper size of a frame for this VM
+    if (iVM < 0 && v.cVM)
+    {
+        iVM++;
+        while (!rgvm[iVM].fValidVM && iVM < MAX_VM)
+            iVM++;
+        Assert(iVM < MAX_VM);
+    }
 
     for (sScale = 16; sScale > 1; sScale--)
     {
@@ -3966,9 +3981,8 @@ LRESULT CALLBACK WndProc(
             InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
         }
 
-        // figure out the new scaling factor for when we do integer scaled stretching.
-        if (v.iVM >= 0)
-            CalcIntegerScale(v.iVM);
+        // figure out the new scaling factor for when we do integer scaled stretching
+        CalcIntegerScale(v.iVM);
 
         break;
 
