@@ -2734,16 +2734,13 @@ if (sl.modelo < 2 || iTop > i)
     // even with Fetch DMA off, PMG DMA might be on
     if (sl.fpmg)
     {
-        // !!! precompute?
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
             qch = vi.pTiledBits;
-            RECT rect;
-            GetPosFromTile(iVM, &rect);
-            GetClientRect(vi.hWnd, &rectC);
+            // We are being told what piece of the big bitmap we are writing into (sRectTile) and the size of the entire bitmap (sRectC)
+            // as well as its stride (sStride).
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += rect.top * stride + rect.left;
+            qch += sRectTile[iVM].top * sStride + sRectTile[iVM].left;
         }
         else
             qch = vrgvmi[iVM].pvBits;
@@ -3028,11 +3025,8 @@ if (sl.modelo < 2 || iTop > i)
 BOOL ProcessScanLine(int iVM)
 {
     // don't do anything in the invisible top and bottom sections
-    if (wScan < STARTSCAN)
+    if (wScan < STARTSCAN || wScan >= STARTSCAN + wcScans)
         return TRUE;
-
-    if (wScan >= STARTSCAN + wcScans)
-        return TRUE;    // uh oh, ANTIC is over - extending itself, but we have no buffer to draw into
 
     // what pixel is the electron beam drawing at this point (wLeft)? While executing, wLeft will be between 1 and 114
     // so the index into the DMA array, which is 0-based, is (wLeft - 1). That tells us the horizontal clock cycle we're on,
@@ -3058,35 +3052,17 @@ BOOL ProcessScanLine(int iVM)
 
     wSLEnd = X8;    // assume we're doing the whole scan line
 
-    RECT rectTile = { 0 };
-    RECT rectc = { 0 };
     if (v.fTiling)
     {
-        // !!! precompute this
-        // this is the rectangle of the big window to fill with our bits
-        GetPosFromTile(iVM, &rectTile);
-        
-        // Note the last tile's position so we can put black in empty tiles later
-        if (rectTile.top >= ptBlack.y)
-        {
-            if (rectTile.top > ptBlack.y)
-                ptBlack.x = rectTile.right;
-            else if (rectTile.right > ptBlack.x)
-                ptBlack.x = rectTile.right;
-            ptBlack.y = rectTile.top;
-        }
-
-        // uh oh, we're clipped off the right edge, only draw what you can see or you'll write over another tile's bits
-        GetClientRect(vi.hWnd, &rectc);
-        
+        // these variables tell us what piece of the big bitmap we're drawing (sRectTile) and how big the entire bitmap is (sRectC)
         // this is how many pixels are visible, and our stop point for this scan line instead of X8 (352)
-        if (rectTile.right > rectc.right)
-            wSLEnd = (WORD)(rectc.right - rectTile.left);
+        if (sRectTile[iVM].right > sRectC.right)
+            wSLEnd = (WORD)(sRectC.right - sRectTile[iVM].left);
 
-        if (rectTile.right > rectc.right)
+        if (sRectTile[iVM].right > sRectC.right)
         {
-            if ((short)(rectc.right - rectTile.left) < cclock)
-                cclock = (short)(rectc.right - rectTile.left);
+            if ((short)(sRectC.right - sRectTile[iVM].left) < cclock)
+                cclock = (short)(sRectC.right - sRectTile[iVM].left);
         }
     }
 
@@ -3190,18 +3166,19 @@ BOOL ProcessScanLine(int iVM)
         //ODS("          %d-%d (%d-%d)\n", pmg.hposPixLatest, cclock, iLate, iTop);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &rectTile);
+        PSLInternal(iVM, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &sRectTile[iVM]);
   
         sl.fpmg = TRUE;
-        PSLInternal(iVM, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest), max(i, iEarly), min(iTop, iLate), bbars, &rectTile);
+        PSLInternal(iVM, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest),
+                                max(i, iEarly), min(iTop, iLate), bbars, &sRectTile[iVM]);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &rectTile);
+        PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &sRectTile[iVM]);
     }
     else
     {
         //ODS("%d %d-%d (%d-%d)\n", wScan, cclockPrev, cclock, i, iTop);
-        PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars, &rectTile);
+        PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars, &sRectTile[iVM]);
     }
 
     PSLPostpare(iVM);    // see if we're done this scan line and be ready to do the next one

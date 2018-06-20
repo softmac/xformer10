@@ -1797,8 +1797,6 @@ int CALLBACK WinMain(
             }
         }
         
-        ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
-
         static ULONGLONG lastRenderMs;
         // Catch 22 - First execute a frame of code, then render it. But we need to know if we're going to render before
         // the code executes so we can save time (eg. only do collision detection, no actual rendering)
@@ -1816,8 +1814,34 @@ int CALLBACK WinMain(
         // Tell the thread(s) to go.
         if (v.cVM && v.fTiling && cThreads)
         {
+
+            ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
+
             for (int ii = 0; ii < cThreads; ii++)
+            {
+                // precompute some things for each tile so it can run quicker
+                
+                int iVM = ThreadStuff[ii].iThreadVM;
+
+                // this is the rectangle of the big window it should fill with its bits
+                GetPosFromTile(iVM, &sRectTile[iVM]);
+
+                // Figure out the last tile's position so we can put black in empty tiles later
+                if (sRectTile[iVM].top >= ptBlack.y)
+                {
+                    if (sRectTile[iVM].top > ptBlack.y)
+                        ptBlack.x = sRectTile[iVM].right;
+                    else if (sRectTile[iVM].right > ptBlack.x)
+                        ptBlack.x = sRectTile[iVM].right;
+                    ptBlack.y = sRectTile[iVM].top;
+                }
+
+                // also let each VM see the size of the entire big window they are drawing a piece of
+                GetClientRect(vi.hWnd, &sRectC);
+                sStride = ((((sRectC.right + 32 - 1) >> 2) + 1) << 2);
+
                 SetEvent(ThreadStuff[ii].hGoEvent);
+            }
 
             // wait for them to complete one frame
             WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
