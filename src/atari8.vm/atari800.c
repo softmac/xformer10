@@ -855,12 +855,14 @@ void UpdatePorts(int iVM)
 {
     if (PACTL & 4)
     {
-        BYTE b = wPADATA ^ rPADATA;
+        // return the read or write status of each bit, depending on if it's a read or write bit
 
-        PORTA = (b & wPADDIR) ^ rPADATA;
+        BYTE b = wPADATA ^ rPADATA;         // bits that don't agree
+
+        PORTA = (b & wPADDIR) ^ rPADATA;    // return read value, except for bits that are write bits and different from the read value
     }
     else
-        PORTA = wPADDIR;
+        PORTA = wPADDIR;                    // return the direction of each bit
 
     if (PBCTL & 4)
     {
@@ -2189,6 +2191,35 @@ BOOL __cdecl UninitAtariDisks(int iVM)
     return TRUE;
 }
 
+// PIA reset - this is a lot of stuff for only having 4 registers
+//
+void ResetPIA(int iVM)
+{
+    // XL/XE - swap banks back to default, this might be a warm start so don't lose data
+    if (mdXLXE != md800)
+    {
+        // this will trigger the swap code to safely swap back to the default banks, keeping the data in the other banks
+        PBCTL = 0;  // PORTB registers are DIRECTIONS 
+        PokeBAtari(iVM, PORTAea + 1, 0);    // all bits INPUT
+    }
+
+    // but it also might be a coldstart, and ramtop might have changed, so 
+    rPADATA = 255;    // the data PORTA will provide if it is in READ mode - defaults to no joysticks moved
+    rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !rgvm[iVM].rgcart.fCartIn) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
+    
+    wPADATA = 0;    // the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
+    wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !rgvm[iVM].rgcart.fCartIn) ? 253 : 255) : 0; // XL defaults to OS IN and HELP OUT
+
+    wPADDIR = 0;    // direction - default to read
+    wPBDDIR = 0;
+
+    PORTA = rPADATA; // since they default to read mode
+    PORTB = rPBDATA;
+
+    PACTL = 0x0; // was 0x3c;    // I/O mode, not SET DIR mode
+    PBCTL = 0x0; // was 0x3c;    // I/O mode, not SET DIR mode    
+}
+
 // soft reset
 //
 BOOL __cdecl WarmbootAtari(int iVM)
@@ -2203,9 +2234,11 @@ BOOL __cdecl WarmbootAtari(int iVM)
     fInVBI = 0;
     fInDLI = 0;
 
-    // !!! Warm start is broken on XL/XE - swap banks back?
-    // 221B broken
+    // on XL/XE, PIA is reset on warm start too (eg, to swap the OS back in)
+    if (mdXLXE != md800)
+        ResetPIA(iVM);
 
+    // run the warm start interrupt
     NMIST = 0x20 | 0x1F;
     regPC = cpuPeekW(iVM, (mdXLXE != md800) ? 0xFFFC : 0xFFFA);
     cntTick = 255;    // delay for banner messages
@@ -2239,12 +2272,15 @@ BOOL __cdecl WarmbootAtari(int iVM)
 //
 BOOL __cdecl ColdbootAtari(int iVM)
 {
-    unsigned addr;
     //ODS("\n\nCOLD START\n\n");
 
     // first do the warm start stuff
     if (!WarmbootAtari(iVM))
         return FALSE;
+
+    // 800 resets PIA on cold start only
+    if (mdXLXE == md800)
+        ResetPIA(iVM);
 
 	// A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
 	// or we'll think it's a paddle
@@ -2272,9 +2308,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
 
     //DisplayStatus(); this might not be the active instance
 
-    // Swap in BASIC and OS ROMs.
-
-    // load the OS
+    // load the OS, erase all extra RAM
     InitBanks(iVM);
 
     // load the proper initial bank back into the cartridge, for cartridges with a RAM bank, make sure it isn't in RAM mode
@@ -2285,7 +2319,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     // reset the registers
     cpuReset(iVM);
 
-    // XL's need hardware to cold start, and can only warm start through emulation.
+    // XL's use hardware assist to cold start, pure emulation can only warm start.
     // We have to invalidate this checksum to force a cold start
     if (mdXLXE != md800)
         rgbMem[0x033d] = 0;
@@ -2297,9 +2331,8 @@ BOOL __cdecl ColdbootAtari(int iVM)
     {
         cpuPokeB(addr, 0xAA);
     }
-#endif
 
-    // !!! why?
+    // !!! why? This is a bad idea, it will screw up PIA XL banking, for one
     // initialize hardware
     // NOTE: at $D5FE is ramtop and then the jump table
 
@@ -2307,6 +2340,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     {
         cpuPokeB(iVM, addr,0xFF);
     }
+#endif
 
     NMIST = 0x20 | 0x1F;    // the one in WARMSTART might get undone from the above clearing?
 
@@ -2367,22 +2401,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
     DLISTL = 0;
     CHACTL = 0;
     DMACTL = 0;
-
-    // PIA reset - this is a lot of stuff for only having 4 registers
-
-    rPADATA = 255;    // the data PORTA will provide if it is in READ mode
-    rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
-    PORTA = rPADATA; // since they default to read mode
-    PORTB = rPBDATA;
-
-    wPADATA = 0;    // the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
-    wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000) ? 253 : 255) : 0; // XL needs to default to OS IN and HELP OUT
-
-    wPADDIR = 0;    // direction - default to read
-    wPBDDIR = 0;
-
-    PACTL  = 0x3c;    // I/O mode, not SET DIR mode
-    PBCTL  = 0x3c;    // I/O mode, not SET DIR mode
 
     // seed the random number generator again. The real ATARI is probably seeded by the orientation
     // of sector 1 on the floppy. I wonder how cartridges are unpredictable?
@@ -3511,22 +3529,30 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             {
                 // it is a data direction register.
 
-                cpuPokeB(iVM, wPADDIRea + addr, b);
-
                 // Apparently, putting PORTB bits into read mode swaps those banks back to default, so that clearing PIA with 0s
                 // won't swap out the OS accidentally. First POKE PORTB,0 does swap out the OS. Then POKE PBCTL,0 puts the
                 // ports into direction control mode. Then the POKE to the next PORTB shadow sets PORTB to read mode, and
                 // that needs to swap the OS back in (Great American Road Race, some versions)
                 
-                // The bits marked for reading get the default bank (1) and the bits marked for writing keep whatever was last written
+                // The default banks are found in rPBDATA, set at power up and never changed - HELP out, OS IN, BASIC ???)
+                // The bits marked for writing get whatever bank they were last told to use (wPBDATA)
+                // Therefore, putting all PORTB bits into read mode swaps in the default banks, and putting them back into write mode
+                // restores whatever was there before by seeing if wPBDATA is different than rPBDATA for that bit
+                // 
                 if (addr == 1 && mdXLXE != md800)
                 {
-                                                              // b is which bits are in write mode
-                    bOld = cpuPeekB(iVM, wPADATAea + addr);   // what was last written there
-                    BYTE bNew = (0xff & ~b) | (bOld & b);     // use default (1) for those in read mode, keep old data for those in write mode.
+                    // b contains which bits are in write mode
+                    // what is the banking state right now? read bits have the default bank, and write bits have the last data written
+                    bOld = (rPBDATA & ~wPBDDIR) | (wPBDATA & wPBDDIR);
+
+                    BYTE bNew = (rPBDATA & ~b) | (bOld & b);  // use default for those in read mode, keep old data for those in write mode.
                     if (bNew != bOld)
-                        SwapMem(iVM, bOld ^ bNew, bNew);
+                        SwapMem(iVM, bOld ^ bNew, bNew);      // this crashes if we tell it to swap in something already there
                 }
+
+                // now it's safe to poke in the new value
+                cpuPokeB(iVM, wPADDIRea + addr, b);
+
             }
         }
 
