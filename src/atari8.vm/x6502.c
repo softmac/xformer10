@@ -622,12 +622,22 @@ WORD HELPER(PopWord)
 __inline void SIOCheck(const int iVM)
 {
     // !!! You can't set a bp on $e459, $e959 or anything inside SIO
+    
     // Some people jump directly to $e959, where $e459 points to on the 800 (so that had to be made valid in XL too)
     // OS must be paged in on XL for this to really be SIO. But some people replace the OS with an exact copy, and we can't
     // actually execute that SIO code and work properly, so detect if the swapped in code still says jmp $c933 and do our
     // hack anyway (TITAN)
+    // Also, the TRANSLATOR copies the 800 OS back in, so make sure to do our hack if the 800 OS in in XL RAM.
+    
+    // !!! I'm torn about whether to assume that a jmp to $e459 is always wanting SIO. What are the odds that a custom 
+    // program also has an entry point at $e459? Versus the odds that every call to $e459 is some form of SIO that
+    // will only work if we trap it?
+
     if ((regPC == 0xe459 || regPC == 0xe959) &&
-            (mdXLXE == md800 || (wPBDATA & 1) || (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9)))
+            (mdXLXE == md800 || (wPBDATA & 1) ||
+                (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9) || 
+                (rgbMem[regPC + 1] == 0x59 && rgbMem[regPC + 2] == 0xe9) ||
+                (rgbMem[regPC + 1] == 0x00 && rgbMem[regPC + 2] == 0xce) )) // hack for PAL TRANSLATOR
     {
         // this is our SIO hook!
         PackP(iVM);
