@@ -3238,7 +3238,7 @@ PFNOP jump_tab[256] =
     opE8,
     opE9,
     opEA,
-    unused,
+    opEB,
     opEC,
     opED,
     opEE,
@@ -3260,7 +3260,6 @@ PFNOP jump_tab[256] =
     opFE,
     opFF,
 };
-
 
 // Run for "wLeft" cycles and then return after completing the last instruction (cycles may go negative)
 // In debug, tracing and breakpoints can return early.
@@ -3349,10 +3348,8 @@ void __cdecl Go6502(const int iVM)
                 case 0x5B:
                 case 0x6B:
                 case 0x73:
-                case 0x7A:
                 case 0x7B:
                 case 0x7F:
-                case 0x82:
                 case 0x93:
                 case 0x9B:
                 case 0x9C:
@@ -3363,10 +3360,7 @@ void __cdecl Go6502(const int iVM)
                 case 0xBB:
                 case 0xC7:
                 case 0xCB:
-                case 0xCF:
                 case 0xD7:
-                case 0xDA:
-                case 0xDB:
                 case 0xE3:
                 case 0xF7:
                 case 0xFB:
@@ -3769,6 +3763,10 @@ void __cdecl Go6502(const int iVM)
                     op79(iVM);
                     break;
 
+                case 0x7A:   // NOP
+                    op7A(iVM);
+                    break;
+
                 case 0x7C:   // UNDOCUMENTED
                     op7C(iVM);
                     break;
@@ -3787,6 +3785,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x81:   // STA (zp),Y
                     op81(iVM);
+                    break;
+
+                case 0x82:   // NOP #
+                    op82(iVM);
                     break;
 
                 case 0x83:   // UNDOCUMENTED
@@ -4045,6 +4047,10 @@ void __cdecl Go6502(const int iVM)
                     opCE(iVM);
                     break;
 
+                case 0xCF:   // DCP abs
+                    opCF(iVM);
+                    break;
+
                 case 0xD0:   // BNE rel8
                     opD0(iVM);
                     break;
@@ -4075,6 +4081,14 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xD9:   // CMP abs,Y
                     opD9(iVM);
+                    break;
+
+                case 0xDA:   // NOP
+                    opDA(iVM);
+                    break;
+
+                case 0xDB:   // DCP abs,Y
+                    opDB(iVM);
                     break;
 
                 case 0xDC:   // UNDOCUMENTED
