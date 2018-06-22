@@ -2274,6 +2274,16 @@ BOOL __cdecl ColdbootAtari(int iVM)
 {
     //ODS("\n\nCOLD START\n\n");
 
+    // !!! why is this needed for some apps? (PAL: Joe Blade #1, Kick off, One Man Droid, Uridium, etc.)
+    // initialize hardware
+    // !!! old NOTE: at $D5FE is ramtop and then the jump table, not still true?
+    // do it first before PIA registers are set to non-$ff in Warmboot
+    WORD addr;
+    for (addr = 0xD000; addr < 0xD5FE; addr++)
+    {
+        cpuPokeB(iVM, addr, 0xFF);
+    }
+
     // first do the warm start stuff
     if (!WarmbootAtari(iVM))
         return FALSE;
@@ -2330,15 +2340,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
     for (addr = 0; addr < ramtop; addr++)
     {
         cpuPokeB(addr, 0xAA);
-    }
-
-    // !!! why? This is a bad idea, it will screw up PIA XL banking, for one
-    // initialize hardware
-    // NOTE: at $D5FE is ramtop and then the jump table
-
-    for (addr = 0xD000; addr < 0xD5FE; addr++)
-    {
-        cpuPokeB(iVM, addr,0xFF);
     }
 #endif
 
