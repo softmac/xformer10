@@ -1657,6 +1657,10 @@ HANDLER(op6C)
     // load address of the last segment in $47/48. We can try that.
     if (regEA == 0x2e0)
     {
+        // !!! I'm too lazy to fix my hand assembly to make sure critic==0 (Deflektor XE)
+        if ((regPC == 0x86c || regPC == 0x5ec) && rgbMem[0x42] != 0)
+            rgbMem[0x42] = 0;
+
         if (!rgbMem[0x2e0] && !rgbMem[0x2e1])
         {
             rgbMem[0x2e0] = rgbMem[0x47];
@@ -1667,6 +1671,10 @@ HANDLER(op6C)
 
     else if (regEA == 0x2e2)
     {
+        // !!! I'm too lazy to fix my hand assembly to make sure critic==0
+        if ((regPC == 0x87c || regPC == 0x5fc || regPC == 0x7fc || regPC == 0x57c) && rgbMem[0x42] != 0)
+            rgbMem[0x42] = 0;
+
         regPC = READ_WORD(iVM, regEA);
 
         // this detects the famous autorun.sys (2 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
