@@ -635,7 +635,7 @@ __inline void SIOCheck(const int iVM)
 
     if ((regPC == 0xe459 || regPC == 0xe959) &&
             (mdXLXE == md800 || (wPBDATA & 1) ||
-                (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9) || 
+                (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9) ||
                 (rgbMem[regPC + 1] == 0x59 && rgbMem[regPC + 2] == 0xe9) ||
                 (rgbMem[regPC + 1] == 0x00 && rgbMem[regPC + 2] == 0xce) )) // hack for PAL TRANSLATOR
     {

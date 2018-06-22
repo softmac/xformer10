@@ -1381,8 +1381,15 @@ lNAK:
                 // now that SIO is not instantaneous, mute the audio. This seems to do the trick without calling PokeBAtari
                 AUDF1 = AUDF2 = AUDF3 = AUDF4 = 0;
                 
-                /* temporary kludge to prevent reading over ROM */
-                if (wBuff >= ramtop)
+                // do not read into ROM and overwrite something we shouldn't. If the OS is swapped out, himem could be RAM.
+                // Maybe I should make a flag to save me this trouble.
+                BYTE temp = rgbMem[wBuff];
+                BYTE temp2 = rgbMem[wBuff + wBytes - 1];
+                PokeBAtari(iVM, wBuff, temp + 1);   // this will disallow an attempted write to ROM
+                PokeBAtari(iVM, wBuff + wBytes - 1, temp2 + 1);
+
+                // !!! this breaks if the buffer straddles ROM, we err on the side of not hurting ROM
+                if (rgbMem[wBuff] == temp || rgbMem[wBuff + wBytes - 1] == temp2)
                     wRetStat = SIO_OK;
                 else if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS))
                 {
