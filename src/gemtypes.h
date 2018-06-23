@@ -403,6 +403,8 @@ extern VM    rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
 
 //
 // Per-VM instance data (not persistable)
+// This structure is useful for the VM and GEM to communicate with each other, since GEM does not have access to the VM data structures
+// 
 //
 typedef struct VMINST
 {
@@ -414,10 +416,13 @@ typedef struct VMINST
     HDC  hdcMem;            // hdc of memory context
 
     BOOL fWantDebugger;     // EXEC failed, use it to figure out which VM wants the debugger
+
+    // VM sets a code here saying what it needs. 2=coldboot only, anything else=re-install, let me see what code I set here
     BOOL fKillMePlease;     // I hung, probably because I need a different VM type to run
+    
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
-    BYTE rgbKeybuf[1024];   // circular keyboard buffer
+    BYTE rgbKeybuf[1024];   // circular keyboard buffer !!! smaller?
 } VMINST, *PVMINST;
 
 extern VMINST vrgvmi[MAX_VM];

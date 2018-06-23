@@ -1931,10 +1931,8 @@ int CALLBACK WinMain(
             for (int i = 0; i < MAX_VM; i++)
             {
                 // change VM type for exactly == TRUE
-                if (vrgvmi[i].fKillMePlease == TRUE)
+                if (vrgvmi[i].fKillMePlease == TRUE || vrgvmi[i].fKillMePlease == 3)
                 {
-                    vrgvmi[i].fKillMePlease = FALSE;
-
                     // what type are we now?
                     int type = rgvm[i].bfHW;
                     int otype = 0;
@@ -1951,6 +1949,9 @@ int CALLBACK WinMain(
                     if (!fOK)
                         DeleteVM(v.iVM, TRUE);
                     FixAllMenus(!v.fTiling); // don't do unnecessary slow stuff when tiled
+
+                    // don't reset this until after the VM can see the reason code in FInstallVM
+                    vrgvmi[i].fKillMePlease = FALSE;
                 }
                 
                 // coldboot only - to switch binary loaders and try a different one

@@ -394,6 +394,7 @@ typedef struct
     BYTE m_fRedoPoke;       // we tried to change a register after a scan line is over. Wait until the next scan line to do it.
     BOOL m_fInVBI;          // are we inside the VBI?
     BOOL m_fInDLI;          // are we inside the DLI?
+    WORD m_fDLIinVBI;       // what scan line did we last see a DLI start inside a VBI?
     WORD m_wScanVBIEnd;     // what scan line did the VBI end on?
 
     BYTE m_POT;         // current paddle potentiometer reading, counts from 0 to 228
@@ -507,6 +508,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define fSwitchingToPAL CANDY_STATE(fSwitchingToPAL)
 #define fInDLI        CANDY_STATE(fInDLI)
 #define fInVBI        CANDY_STATE(fInVBI)
+#define fDLIinVBI     CANDY_STATE(fDLIinVBI)
 #define wScanVBIEnd   CANDY_STATE(wScanVBIEnd)
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
@@ -806,6 +808,8 @@ __inline BYTE *_pbshift(int iVM)
 // Function prototypes
 //
 
+void KillMePlease(int);
+void KillMeSoftlyPlease(int);
 void SwitchToPAL(int);
 void Interrupt(int, BOOL);
 void CheckKey(int, BOOL, WORD);

@@ -694,17 +694,9 @@ __inline void SIOCheck(const int iVM)
 // we hit a KIL instruction and should hang. Try a different VM type
 HANDLER(KIL)
 {
-    if (v.fAutoKill)
-    {
-        ODS("KIL OPCODE!\n");
-        vi.fExecuting = FALSE;  // alert the main thread something is up
+    ODS("KIL OPCODE!\n");
 
-        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
-
-        // quit the thread as early as possible
-        wLeft = 0;  // exit the Go6502 loop
-        bp = regPC; // don't do additional scan lines
-    }
+    KillMePlease(iVM);
 
     wLeft -= 2; // Must be non-zero! Or we stack fault in long BRK chains that call this
     HANDLER_END();
@@ -1702,12 +1694,8 @@ HANDLER(op6C)
             {
                 fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere
 
-                // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
-                vi.fExecuting = FALSE;  // alert the main thread something is up
-                // quit the thread as early as possible
-                wLeft = 0;  // exit the Go6502 loop
-                bp = regPC; // don't do additional scan lines
-                vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+                KillMeSoftlyPlease(iVM);
+
                 regPC = 0x87c;          // where our handler would like to continue
             }
 
@@ -1715,12 +1703,8 @@ HANDLER(op6C)
             {
                 fAltBinLoader = FALSE;  // try the other loaded relocated elsewhere
 
-                // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
-                vi.fExecuting = FALSE;  // alert the main thread something is up
-                // quit the thread as early as possible
-                wLeft = 0;  // exit the Go6502 loop
-                bp = regPC; // don't do additional scan lines
-                vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+                KillMeSoftlyPlease(iVM);
+
                 regPC = 0x5fc;          // where our handler would like to continue
             }
             else
@@ -4283,7 +4267,13 @@ void __cdecl Go6502(const int iVM)
                     // Must be a PAL app that's spoiled by how long these can be
                     // We're starting to nest deeply in DLIs? Maybe it's a long DLI kernel that needs PAL.
                     if ((fInVBI || fInDLI > 1) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
-                        SwitchToPAL(iVM);
+                    {
+                        // this happened last frame too, we're PAL. NTSC programs occasionally do this, like MULE every
+                        // 4 frames, but never consecutively like a PAL program would.
+                        if (fDLIinVBI == wFrame - 1)
+                            SwitchToPAL(iVM);
+                        fDLIinVBI = wFrame;
+                    }
                     fInDLI++;
 
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
