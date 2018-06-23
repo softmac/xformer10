@@ -1939,9 +1939,14 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XL w/o BASIC. If XL breaks, try XE w/ BASIC.
         //
         // Some apps (BountyBob v3) don't run on XE, only XL, and usually an XE only app prompts you that you need 128K
-        // and doesn't crash.
+        // and doesn't crash. Plus an XE is twice the memory footprint, you can fit twice almsot as many XL VMs
 
-        if (type == md800)
+        if (vrgvmi[iVM].fKillMePlease == 3) // our special kill code for "need XE w/o BASIC"
+        {
+            type = mdXE;
+            initramtop = 0xc000;
+        }
+        else if (type == md800)
         {
             type = mdXL;
             initramtop = 0xc000;
@@ -2725,7 +2730,13 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                         // We're still in the last VBI? And we're not one of those post-VBI DLI's?
                         // Must be a PAL app that's spoiled by how long these can be
                         if (fInVBI && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
-                            SwitchToPAL(iVM);
+                        {
+                            // this happened last frame too, we're PAL. NTSC programs occasionally do this, like MULE every
+                            // 4 frames, but never consecutively like a PAL program would.
+                            if (fDLIinVBI == wFrame - 1)
+                                SwitchToPAL(iVM);
+                            fDLIinVBI = wFrame;
+                        }
                         fInDLI++;
 
                         wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
@@ -2931,10 +2942,53 @@ BOOL __cdecl DisasmAtari(int iVM, char *pch, ADDR *pPC)
     return TRUE;
 }
 
+// we are running in the wrong type of VM, schedule a reboot of a different type
+void KillMePlease(int iVM)
+{
+    if (v.fAutoKill)
+    {
+        vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
+
+        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+
+                                            // quit the thread as early as possible
+        wLeft = 0;  // exit the Go6502 loop
+        bp = regPC; // don't do additional scan lines                    }
+    }
+}
+
+// we need to switch binary loaders, so a reboot is required.
+void KillMeSoftlyPlease(int iVM)
+{
+    // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
+    vi.fExecuting = FALSE;  // alert the main thread something is up
+ 
+    // quit the thread as early as possible
+    wLeft = 0;  // exit the Go6502 loop
+    bp = regPC; // don't do additional scan lines
+
+    vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+}
+
+// we specifically notice we need to be an XE, probably without BASIC (not normally in our cycle (800 w/o --> XL w/o --> XE w/BASIC)
+void KillMePleaseXE(int iVM)
+{
+    if (v.fAutoKill)
+    {
+        vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
+
+        vrgvmi[iVM].fKillMePlease = 3;   // say which thread died, special code for XE w/o BASIC
+
+                                            // quit the thread as early as possible
+        wLeft = 0;  // exit the Go6502 loop
+        bp = regPC; // don't do additional scan lines                    }
+    }
+}
+
+
 //
 // here are our various PEEK routines, based on address
 //
-
 
 // This is how Bounty Bob bank selects
 BYTE __forceinline __fastcall PeekBAtariBB(int iVM, ADDR addr)
@@ -3482,6 +3536,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
                             if (mdXLXE != mdXE)
                             {
+                                // This is an XE bank switch to a non-main bank, we're in the wrong VM!
+                                // !!! Not ideal, we'll switch to 130XE w/BASIC, hopefully the app is smart enough to swap that out
+                                // (Fortress Underground is smart enough)
+                                // 8f/8e swaps out bit 6, which is undefined, so doesn't sound like a real XE bank request
+                                // Some Bounty Bob hang in XE so we can't go into XE mode by mistake if they don't mean it
+                                if ((bNew & 0x30) != 0x30 && bNew != 0x8f && bNew != 0x8e)
+                                    KillMePleaseXE(iVM);
+
                                 // in 800XL mode, mask bank select bits
                                 bNew |= 0x7C;
                                 wPBDATA |= 0x7C;
@@ -3491,39 +3553,26 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                         }
                         else if (b && !(b & 1)) // hopefully poking with 0 is init code and not meant to swap out the OS
                         {
-                            if (v.fAutoKill)
-                            {
-                                vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
-
-                                vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
-
-                                // quit the thread as early as possible
-                                wLeft = 0;  // exit the Go6502 loop
-                                bp = regPC; // don't do additional scan lines                    }
-                            }
+                            KillMePlease(iVM);
                         }
                     }
                 }
 
-                // PORT B bit 0 being used to attempt to swap out the OS on an 800?
+                // PORT B bit 0 being used to attempt to swap out the OS on an 800? Or swap in an extended XE bank?
                 // Unfortunately, the XL OS boot sequence leaves PORTB in write mode, and the 800 OS obviously doesn't,
                 // so I can't actually tell if somebody is trying to swap out the OS, I have to assume.
                 // (They won't always put PORTB in write mode explicitly)
                 // I at least protect against clearing memory with zeros thinking that's an attempt to swap out the OS
                 // by insisting b be non-zero
                 // 
-                else if (addr == 1 && mdXLXE == md800 && b && !(b & 1))
+                else if (addr == 1 && mdXLXE == md800 && b && (!(b & 1) || ((b & 0x30) != 0x30)))
                 {
-                    if (v.fAutoKill)
-                    {
-                        vi.fExecuting = FALSE;  // alert the main thread something is up
-
-                        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
-
-                        // quit the thread as early as possible
-                        wLeft = 0;  // exit the Go6502 loop
-                        bp = regPC; // don't do additional scan lines
-                    }
+                    // 8f/8e swaps out bit 6, which is undefined, so doesn't sound like a real XE bank request
+                    // Some Bounty Bob hang in XE so we can't go into XE mode by mistake if they don't mean it
+                    if ((b & 0x30) != 0x30 && b != 0x8f && b != 0x8e)    
+                        KillMePleaseXE(iVM);    // need XE w/o BASIC
+                    else
+                        KillMePlease(iVM);      // need XL w/o BASIC
                 }
             }
             else
