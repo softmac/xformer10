@@ -291,11 +291,19 @@ void DisplayStatus(int iVM)
 #define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=~1sec (NTSC, anyway)
 
     // are we running at normal speed or turbo speed !!! PAL runs at 60fps
-    sprintf(rgch, "(%s-%lli%%) %s %s %s (%uHz %u/%ums renders)", fBrakes ? "1.8 MHz" : "Turbo",
+#ifndef NDEBUG
+    sprintf(rgch, "(%s-%lli%%) %s %s %s (%uHz %u/%ums renders)",    // monitor info is for debug only
+#else
+    sprintf(rgch, "(%s-%lli%%) %s %s %s",
+#endif  
+                fBrakes ? "1.8 MHz" : "Turbo",
                 uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0,
                 iVM >= 0 ? (rgvm[iVM].fEmuPAL ? "PAL" : "NTSC") : "",
-                iVM >= 0 ? ((!v.fTiling && rgvm[iVM].fEmuPAL) ? "50Hz" : "60Hz") : "",
-                pInst, v.vRefresh, renders, lastRenderCost);
+                iVM >= 0 ? ((!v.fTiling && rgvm[iVM].fEmuPAL) ? "50Hz" : "60Hz") : "", pInst
+#ifndef NDEBUG
+                , v.vRefresh, renders, lastRenderCost
+#endif
+                );
 
     strcat(rgch0, rgch);
 
@@ -5195,6 +5203,7 @@ break;
         {
             // this magically only executes if a SYS key like ALT is pressed with ENTER
             return SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
+            // !!! Windows still chimes coming OUT of fullscreen even with return not break
         }
 
         // fall through
