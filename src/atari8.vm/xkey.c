@@ -652,7 +652,7 @@ BOOL FKeyMsg800(int iVM, HWND hwnd, UINT message, WPARAM uParam, LPARAM lParam)
     case 0x40: // F6 - HELP key for XL/XE
         if (fDown && mdXLXE != md800)
         {
-            if (*pbshift & wAnyShift)    // HELP + CTRL + SHIFT unspecified, I choose shift.
+            if (*pbshift & wAnyShift)    // !!! HELP + CTRL + SHIFT supposedly doesn't do anything, I register it as SHIFT-HELP
                 rgbMem[0x02dc] = 81;
             else if (*pbshift & wCtrl)
                 rgbMem[0x02dc] = 145;
