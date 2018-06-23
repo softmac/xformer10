@@ -734,7 +734,7 @@ void CreateVMMenu()
 
                 // this is the previous inst to the current one
                 if (fNeedPrevKey) {
-                    strcat(mNew, "\tShift+Ctrl+F11");
+                    strcat(mNew, "\tShift+F5");
                     fNeedPrevKey = FALSE;
                 }
 
@@ -753,7 +753,7 @@ void CreateVMMenu()
                     mii.dwTypeData = mNew;
                     mii.cch = sizeof(mNew);
                     GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-                    strcat(mNew, "\tCtrl+F11");
+                    strcat(mNew, "\tAlt+F5");
                     SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 
                     fNeedPrevKey = TRUE;
@@ -767,7 +767,7 @@ void CreateVMMenu()
                     mii.dwTypeData = mNew;
                     mii.cch = sizeof(mNew);
                     GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-                    strcat(mNew, "\tCtrl+F11");
+                    strcat(mNew, "\tAlt+F5");
                     SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 
                     // don't put PREV KEY hotkey over top of NEXT KEY hotkey, NEXT should get priority
@@ -786,7 +786,7 @@ void CreateVMMenu()
         mii.dwTypeData = mNew;
         mii.cch = sizeof(mNew);
         GetMenuItemInfo(vi.hMenu, fNeedNextKey ? (IDM_VM1 - iFound + 1) : IDM_VM1, 0, &mii);
-        strcat(mNew, fNeedNextKey ? "\tCtrl+F11" : "\tShift+Ctrl+F11");
+        strcat(mNew, fNeedNextKey ? "\tAlt+F5" : "\tShift+F5");
         SetMenuItemInfo(vi.hMenu, fNeedNextKey ? (IDM_VM1 - iFound + 1) : IDM_VM1, FALSE, &mii);
     }
 

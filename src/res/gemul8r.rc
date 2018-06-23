@@ -108,10 +108,10 @@ BEGIN
     POPUP "&Window"
     BEGIN
         MENUITEM "&Full Screen\tAlt+Enter", IDM_FULLSCREEN
-        MENUITEM "&Stretch Mode\tF5", IDM_STRETCH
-        MENUITEM "&Tile All VMs\tF11", IDM_TILE
+        MENUITEM "&Stretch Mode\tF12", IDM_STRETCH
+        MENUITEM "&Tile All VMs\tF5", IDM_TILE
         MENUITEM SEPARATOR
-        MENUITEM "Tur&bo Mode\tCtrl+F12", IDM_TURBO
+        MENUITEM "Tur&bo Mode\tAlt+F1", IDM_TURBO
         MENUITEM SEPARATOR
         MENUITEM "&Auto-detect VM Type", IDM_AUTOKILL
         MENUITEM SEPARATOR
@@ -247,16 +247,16 @@ END
 
 IDR_ACCEL ACCELERATORS PRELOAD MOVEABLE PURE 
 BEGIN
-    VK_F5,             IDM_STRETCH,             VIRTKEY, NOINVERT
+    VK_F12,            IDM_STRETCH,             VIRTKEY, NOINVERT
     VK_RETURN,         IDM_FULLSCREEN,          VIRTKEY, CONTROL, NOINVERT
-    VK_F11,            IDM_TILE,                VIRTKEY, NOINVERT
-    VK_F11,            IDM_NEXTVM,              VIRTKEY, CONTROL, NOINVERT
-    VK_F11,            IDM_PREVVM,              VIRTKEY, SHIFT, CONTROL, NOINVERT
+    VK_F5,             IDM_TILE,                VIRTKEY, NOINVERT
+    VK_F5,             IDM_NEXTVM,              VIRTKEY, ALT, NOINVERT
+    VK_F5,             IDM_PREVVM,              VIRTKEY, SHIFT, NOINVERT
     VK_F10,            IDM_WARMSTART,           VIRTKEY, NOINVERT
     VK_F10,            IDM_TOGGLEBASIC,         VIRTKEY, SHIFT, NOINVERT
     VK_F10,            IDM_COLDSTART,           VIRTKEY, CONTROL, NOINVERT
     VK_F10,            IDM_CHANGEVM,            VIRTKEY, ALT, NOINVERT
-    VK_F12,            IDM_TURBO,               VIRTKEY, CONTROL, NOINVERT
+    VK_F1,             IDM_TURBO,               VIRTKEY, ALT, NOINVERT
     VK_F12,            IDM_COLORMONO,           VIRTKEY, SHIFT, NOINVERT
     VK_F12,            IDM_NTSCPAL,             VIRTKEY, ALT, NOINVERT
     VK_PAUSE,          IDM_DEBUGGER,            VIRTKEY, NOINVERT
