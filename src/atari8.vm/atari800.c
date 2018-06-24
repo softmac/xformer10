@@ -3028,8 +3028,20 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
 
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
+        
         if (addr < 0xd010)
             ProcessScanLine(iVM);   // reading collision registers needs cycle accuracy
+        
+        // (XL) TRIG3 == 1 for cartridge present, which makes a lot of paranoid disk games deliberately hang
+        // on 800, TRIG3 is always 1 unless P4 presses the trigger, and these apps always hang (TurboBasic, Barroom Brawl)
+        // User code reading this within 1sec or so of boot is suspiciously not actually looking for a joystick reading (OS reads it during boot)
+        else if (addr == 0xd013)
+        {
+            if (mdXLXE == md800 && wFrame < 100 && regPC < ramtop)
+                KillMePlease(iVM);
+        }
+        
+        // NTSC/PAL GTIA flag
         else if (addr == 0xd014)
         {
             // deliberately hang on NTSC machines? Not only switch to PAL, but lie and say that we already are!
@@ -3334,6 +3346,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 GRAFM = pmg.grafm;
             if ((bOld & 2) && !(b & 2))
                 GRAFPX = pmg.grafpX;
+            if (b & 4)
+                ODS("ATTEMPT TO LATCH TRIGGERS!\n");    // !!! NYI
         }
         else if (addr == 30)
         {
