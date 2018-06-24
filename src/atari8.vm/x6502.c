@@ -378,6 +378,7 @@ void HELPER(INC_mem)
     update_NZ(iVM, b);
 } }
 
+// zp versions of the macros do the quicker direct lookup without a compare to test for special register read
 void HELPER(INC_zp)
 {
     BYTE b = cpuPeekB(iVM, regEA) + 1;
@@ -741,10 +742,10 @@ HANDLER(op01)
 
 HANDLER(op03)
 {
-    EA_zpXindR(iVM);
-    ASL_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_zpXindW(iVM);                // the W version of these macros doesn't indirect the second time yet
+    ASL_mem(iVM);                   // because this needs to alter the EA (which isn't zero page any longer, so don't use the _zp macro)
+    regEA = READ_BYTE(iVM, regEA);  // then this part does the indirection that the R version of the macro would have done
+    ORA_com(iVM);                   // so this can act on the new contents
     wLeft -= 6;
     HANDLER_END();
 }
@@ -823,6 +824,17 @@ HANDLER(op0A)
     HANDLER_END();
 }
 
+// ANC #
+
+HANDLER(op0B)
+{
+    EA_imm(iVM);
+    AND_com(iVM);
+    srC = regA & 0x80;
+    wLeft -= 2;
+    HANDLER_END();
+}
+
 // NOP abs
 
 HANDLER(op0C)
@@ -856,7 +868,7 @@ HANDLER(op0E)
 
 HANDLER(op0F)
 {
-    EA_absR(iVM);
+    EA_absW(iVM);
     ASL_mem(iVM);
     regEA = READ_BYTE(iVM, regEA);
     ORA_com(iVM);
@@ -886,8 +898,8 @@ HANDLER(op11)
 
 HANDLER(op13)
 {
-    EA_zpYindR(iVM);
-    ASL_zp(iVM);
+    EA_zpYindW(iVM);
+    ASL_mem(iVM);
     regEA = READ_BYTE(iVM, regEA);
     ORA_com(iVM);
     wLeft -= 5;     // best guess
@@ -962,6 +974,18 @@ HANDLER(op1A)
     HANDLER_END();
 }
 
+// SLO abs,Y
+
+HANDLER(op1B)
+{
+    EA_absYW(iVM);
+    ASL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ORA_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // NOP abs,X
 
 HANDLER(op1C)
@@ -991,6 +1015,18 @@ HANDLER(op1E)
     HANDLER_END();
 }
 
+// SLO abs,X
+
+HANDLER(op1F)
+{
+    EA_absXW(iVM);
+    ASL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ORA_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // JSR abs
 
 HANDLER(op20)
@@ -1014,6 +1050,18 @@ HANDLER(op21)
     EA_zpXindR(iVM);
     AND_com(iVM);
     wLeft -= 6;
+    HANDLER_END();
+}
+
+// RLA (zp,X)
+
+HANDLER(op23)
+{
+    EA_zpXindW(iVM);
+    ROL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
+    wLeft -= 6; // best guess
     HANDLER_END();
 }
 
@@ -1043,6 +1091,18 @@ HANDLER(op26)
 {
     EA_zpW(iVM);
     ROL_zp(iVM);
+    wLeft -= 5;
+    HANDLER_END();
+}
+
+// RLA zp
+
+HANDLER(op27)
+{
+    EA_zpW(iVM);
+    ROL_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1193,6 +1253,18 @@ HANDLER(op36)
     HANDLER_END();
 }
 
+// RLA zp,X
+
+HANDLER(op37)
+{
+    EA_zpXW(iVM);
+    ROL_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // SEC
 
 HANDLER(op38)
@@ -1217,6 +1289,18 @@ HANDLER(op39)
 HANDLER(op3A)
 {
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// RLA abs,Y
+
+HANDLER(op3B)
+{
+    EA_absYW(iVM);
+    ROL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    AND_com(iVM);
+    wLeft -= 7;
     HANDLER_END();
 }
 
@@ -1299,6 +1383,18 @@ HANDLER(op41)
     HANDLER_END();
 }
 
+// SRE (zp,X)
+
+HANDLER(op43)
+{
+    EA_zpXindW(iVM);
+    LSR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // NOP zp
 
 HANDLER(op44)
@@ -1324,6 +1420,18 @@ HANDLER(op46)
 {
     EA_zpW(iVM);
     LSR_zp(iVM);
+    wLeft -= 5;
+    HANDLER_END();
+}
+
+// SRE zp
+
+HANDLER(op47)
+{
+    EA_zpW(iVM);
+    LSR_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1424,6 +1532,18 @@ HANDLER(op51)
     HANDLER_END();
 }
 
+// SRE (zp),Y
+
+HANDLER(op53)
+{
+    EA_zpYindW(iVM);
+    LSR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
+    wLeft -= 5; // best guess
+    HANDLER_END();
+}
+
 // NOP zp,X
 
 HANDLER(op54)
@@ -1489,6 +1609,18 @@ HANDLER(op59)
 HANDLER(op5A)
 {
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// SRE abs,Y
+
+HANDLER(op5B)
+{
+    EA_absYW(iVM);
+    LSR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    EOR_com(iVM);
+    wLeft -= 7;
     HANDLER_END();
 }
 
@@ -1791,6 +1923,18 @@ HANDLER(op71)
     HANDLER_END();
 }
 
+// RRA (zp),Y
+
+HANDLER(op73)
+{
+    EA_zpYindW(iVM);
+    ROR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ADC_com(iVM);
+    wLeft -= 5; // best guess
+    HANDLER_END();
+}
+
 // NOP zp,X
 
 HANDLER(op74)
@@ -1859,6 +2003,18 @@ HANDLER(op7A)
     HANDLER_END();
 }
 
+// RRA abs,Y
+
+HANDLER(op7B)
+{
+    EA_absYW(iVM);
+    ROR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ADC_com(iVM);
+    wLeft -= 7;
+    HANDLER_END();
+}
+
 // NOP abs,X
 
 HANDLER(op7C)
@@ -1884,6 +2040,18 @@ HANDLER(op7E)
 {
     EA_absXW(iVM);
     ROR_mem(iVM);
+    wLeft -= 7;
+    HANDLER_END();
+}
+
+// RRA abs,X
+
+HANDLER(op7F)
+{
+    EA_absXW(iVM);
+    ROR_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ADC_com(iVM);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -2198,6 +2366,17 @@ HANDLER(opA2)
     HANDLER_END();
 }
 
+// LAX (zp,X)
+
+HANDLER(opA3)
+{
+    EA_zpXindR(iVM);
+    LDA_com(iVM);
+    LDX_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // LDY zp
 
 HANDLER(opA4)
@@ -2339,6 +2518,17 @@ HANDLER(opB1)
     HANDLER_END();
 }
 
+// LAX (zp),Y
+
+HANDLER(opB3)
+{
+    EA_zpYindR(iVM);
+    LDA_com(iVM);
+    LDX_com(iVM);
+    wLeft -= 5;
+    HANDLER_END();
+}
+
 // LDY zp,X
 
 HANDLER(opB4)
@@ -2364,6 +2554,17 @@ HANDLER(opB5)
 HANDLER(opB6)
 {
     EA_zpYR(iVM);
+    LDX_com(iVM);
+    wLeft -= 4;
+    HANDLER_END()
+}
+
+// LAX zp,Y
+
+HANDLER(opB7)
+{
+    EA_zpYR(iVM);
+    LDA_com(iVM);
     LDX_com(iVM);
     wLeft -= 4;
     HANDLER_END()
@@ -2473,7 +2674,7 @@ HANDLER(opC2)
 HANDLER(opC3)
 {
     EA_zpXindW(iVM);
-    DEC_zp(iVM);
+    DEC_mem(iVM);
     regEA = READ_BYTE(iVM, regEA);
     CMP_com(iVM, regA);
     wLeft -= 6;     // best guess
@@ -2508,6 +2709,18 @@ HANDLER(opC6)
     DEC_zp(iVM);
     wLeft -= 5;
     HANDLER_END();
+}
+
+// DCP zp
+
+HANDLER(opC7)
+{
+    EA_zpW(iVM);
+    DEC_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    CMP_com(iVM, regA);
+    wLeft -= 5;
+    HANDLER_END()
 }
 
 // INY
@@ -2603,7 +2816,7 @@ HANDLER(opD1)
 HANDLER(opD3)
 {
     EA_zpYindW(iVM);
-    DEC_zp(iVM);
+    DEC_mem(iVM);
     regEA = READ_BYTE(iVM, regEA);
     CMP_com(iVM, regA);
     wLeft -= 5;     // best guess
@@ -2636,6 +2849,18 @@ HANDLER(opD6)
     EA_zpXW(iVM);
     DEC_zp(iVM);
     wLeft -= 6;
+    HANDLER_END();
+}
+
+// DCP zp,X
+
+HANDLER(opD7)
+{
+    EA_zpXW(iVM);
+    DEC_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    CMP_com(iVM, regA);
+    wLeft -= 6;     // best guess
     HANDLER_END();
 }
 
@@ -2744,6 +2969,18 @@ HANDLER(opE2)
 {
     regPC++;
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// ISB (zp,X)
+
+HANDLER(opE3)
+{
+    EA_zpXindW(iVM);
+    INC_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    SBC_com(iVM);
+    wLeft -= 6; // best guess
     HANDLER_END();
 }
 
@@ -2891,7 +3128,7 @@ HANDLER(opF1)
 HANDLER(opF3)
 {
     EA_zpYindW(iVM);
-    INC_zp(iVM);
+    INC_mem(iVM);
     regEA = READ_BYTE(iVM, regEA);
     SBC_com(iVM);
     wLeft -= 5;     // best guess
@@ -2927,6 +3164,18 @@ HANDLER(opF6)
     HANDLER_END();
 }
 
+// ISB zp,Y
+
+HANDLER(opF7)
+{
+    EA_zpYW(iVM);
+    INC_zp(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    SBC_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // SED
 
 HANDLER(opF8)
@@ -2951,6 +3200,18 @@ HANDLER(opF9)
 HANDLER(opFA)
 {
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// ISB abs,Y
+
+HANDLER(opFB)
+{
+    EA_absYW(iVM);
+    INC_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    SBC_com(iVM);
+    wLeft -= 7;
     HANDLER_END();
 }
 
@@ -3018,7 +3279,7 @@ PFNOP jump_tab[256] =
     op08,
     op09,
     op0A,
-    unused,
+    op0B,
     op0C,
     op0D,
     op0E,
@@ -3034,19 +3295,19 @@ PFNOP jump_tab[256] =
     op18,
     op19,
     op1A,
-    unused,
+    op1B,
     op1C,
     op1D,
     op1E,
-    unused,
+    op1F,
     op20,
     op21,
     KIL,
-    unused,
+    op23,
     op24,
     op25,
     op26,
-    unused,
+    op27,
     op28,
     op29,
     op2A,
@@ -3062,11 +3323,11 @@ PFNOP jump_tab[256] =
     op34,
     op35,
     op36,
-    unused,
+    op37,
     op38,
     op39,
     op3A,
-    unused,
+    op3B,
     op3C,
     op3D,
     op3E,
@@ -3074,11 +3335,11 @@ PFNOP jump_tab[256] =
     op40,
     op41,
     KIL,
-    unused,
+    op43,
     op44,
     op45,
     op46,
-    unused,
+    op47,
     op48,
     op49,
     op4A,
@@ -3090,7 +3351,7 @@ PFNOP jump_tab[256] =
     op50,
     op51,
     KIL,
-    unused,
+    op53,
     op54,
     op55,
     op56,
@@ -3098,7 +3359,7 @@ PFNOP jump_tab[256] =
     op58,
     op59,
     op5A,
-    unused,
+    op5B,
     op5C,
     op5D,
     op5E,
@@ -3122,7 +3383,7 @@ PFNOP jump_tab[256] =
     op70,
     op71,
     KIL,
-    unused,
+    op73,
     op74,
     op75,
     op76,
@@ -3130,11 +3391,11 @@ PFNOP jump_tab[256] =
     op78,
     op79,
     op7A,
-    unused,
+    op7B,
     op7C,
     op7D,
     op7E,
-    unused,
+    op7F,
     op80,
     op81,
     op82,
@@ -3170,7 +3431,7 @@ PFNOP jump_tab[256] =
     opA0,
     opA1,
     opA2,
-    unused,
+    opA3,
     opA4,
     opA5,
     opA6,
@@ -3186,11 +3447,11 @@ PFNOP jump_tab[256] =
     opB0,
     opB1,
     KIL,
-    unused,
+    opB3,
     opB4,
     opB5,
     opB6,
-    unused,
+    opB7,
     opB8,
     opB9,
     opBA,
@@ -3206,7 +3467,7 @@ PFNOP jump_tab[256] =
     opC4,
     opC5,
     opC6,
-    unused,
+    opC7,
     opC8,
     opC9,
     opCA,
@@ -3222,7 +3483,7 @@ PFNOP jump_tab[256] =
     opD4,
     opD5,
     opD6,
-    unused,
+    opD7,
     opD8,
     opD9,
     opDA,
@@ -3234,7 +3495,7 @@ PFNOP jump_tab[256] =
     opE0,
     opE1,
     opE2,
-    unused,
+    opE3,
     opE4,
     opE5,
     opE6,
@@ -3254,11 +3515,11 @@ PFNOP jump_tab[256] =
     opF4,
     opF5,
     opF6,
-    unused,
+    opF7,
     opF8,
     opF9,
     opFA,
-    unused,
+    opFB,
     opFC,
     opFD,
     opFE,
@@ -3337,36 +3598,14 @@ void __cdecl Go6502(const int iVM)
                     KIL(iVM);
                     break;
 
-                case 0x0B:
-                case 0x1B:
-                case 0x1F:
-                case 0x23:
-                case 0x27:
-                case 0x37:
-                case 0x3B:
-                case 0x43:
-                case 0x47:
                 case 0x4B:
-                case 0x53:
-                case 0x5B:
                 case 0x6B:
-                case 0x73:
-                case 0x7B:
-                case 0x7F:
                 case 0x93:
                 case 0x9B:
                 case 0x9C:
                 case 0x9E:
-                case 0xA3:
-                case 0xB3:
-                case 0xB7:
                 case 0xBB:
-                case 0xC7:
                 case 0xCB:
-                case 0xD7:
-                case 0xE3:
-                case 0xF7:
-                case 0xFB:
                     unused(iVM);
                     break;
 
@@ -3408,6 +3647,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x0A:   // ASL A
                     op0A(iVM);
+                    break;
+
+                case 0x0B:   // ANC #
+                    op0B(iVM);
                     break;
 
                 case 0x0C:   // UNDOCUMENTED
@@ -3466,6 +3709,10 @@ void __cdecl Go6502(const int iVM)
                     op1A(iVM);
                     break;
 
+                case 0x1B:   // SLO abs,Y
+                    op1B(iVM);
+                    break;
+
                 case 0x1C:   // UNDOCUMENTED
                     op1C(iVM);
                     break;
@@ -3478,12 +3725,20 @@ void __cdecl Go6502(const int iVM)
                     op1E(iVM);
                     break;
 
+                case 0x1F:   // SLO abs,X
+                    op1F(iVM);
+                    break;
+
                 case 0x20:   // JSR abs
                     op20(iVM);
                     break;
 
                 case 0x21:   // AND (zp,X)
                     op21(iVM);
+                    break;
+
+                case 0x23:   // RLA (zp,X)
+                    op23(iVM);
                     break;
 
                 case 0x24:   // BIT zp
@@ -3496,6 +3751,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x26:   // ROL zp
                     op26(iVM);
+                    break;
+
+                case 0x27:   // RLA zp
+                    op27(iVM);
                     break;
 
                 case 0x28:   // PLP
@@ -3554,6 +3813,10 @@ void __cdecl Go6502(const int iVM)
                     op36(iVM);
                     break;
 
+                case 0x37:   // RLA zp,X
+                    op37(iVM);
+                    break;
+
                 case 0x38:   // SEC
                     op38(iVM);
                     break;
@@ -3564,6 +3827,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x3A:   // UNDOCUMENTED
                     op3A(iVM);
+                    break;
+
+                case 0x3B:   // RLA abs,Y
+                    op3B(iVM);
                     break;
 
                 case 0x3C:   // UNDOCUMENTED
@@ -3590,6 +3857,10 @@ void __cdecl Go6502(const int iVM)
                     op41(iVM);
                     break;
 
+                case 0x43:   // SRE (zp,X)
+                    op43(iVM);
+                    break;
+                
                 case 0x44:   // UNDOCUMENTED
                     op44(iVM);
                     break;
@@ -3602,6 +3873,10 @@ void __cdecl Go6502(const int iVM)
                     op46(iVM);
                     break;
 
+                case 0x47:   // SRE zp
+                    op47(iVM);
+                    break;
+                
                 case 0x48:   // PHA
                     op48(iVM);
                     break;
@@ -3638,6 +3913,10 @@ void __cdecl Go6502(const int iVM)
                     op51(iVM);
                     break;
 
+                case 0x53:   // SRE (zp),Y
+                    op53(iVM);
+                    break;
+                
                 case 0x54:   // UNDOCUMENTED
                     op54(iVM);
                     break;
@@ -3664,6 +3943,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x5A:   // UNDOCUMENTED
                     op5A(iVM);
+                    break;
+
+                case 0x5B:   // SRE abs,Y
+                    op5B(iVM);
                     break;
 
                 case 0x5C:   // UNDOCUMENTED
@@ -3746,6 +4029,10 @@ void __cdecl Go6502(const int iVM)
                     op71(iVM);
                     break;
 
+                case 0x73:   // RRA (zp),Y
+                    op73(iVM);
+                    break;
+
                 case 0x74:   // UNDOCUMENTED
                     op74(iVM);
                     break;
@@ -3774,6 +4061,10 @@ void __cdecl Go6502(const int iVM)
                     op7A(iVM);
                     break;
 
+                case 0x7B:   // RRA abs,Y
+                    op7B(iVM);
+                    break;
+
                 case 0x7C:   // UNDOCUMENTED
                     op7C(iVM);
                     break;
@@ -3784,6 +4075,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x7E:   // ROR abs,X
                     op7E(iVM);
+                    break;
+
+                case 0x7F:   // RRA abs,X
+                    op7F(iVM);
                     break;
 
                 case 0x80:   // UNDOCUMENTED
@@ -3906,6 +4201,10 @@ void __cdecl Go6502(const int iVM)
                     opA2(iVM);
                     break;
 
+                case 0xA3:   // LAX (zp,X)
+                    opA3(iVM);
+                    break;
+
                 case 0xA4:   // LDY zp
                     opA4(iVM);
                     break;
@@ -3954,12 +4253,16 @@ void __cdecl Go6502(const int iVM)
                     opAF(iVM);
                     break;
 
+                case 0xB0:   // BCS rel8
+                    opB0(iVM);
+                    break;
+
                 case 0xB1:   // LDA (zp),Y
                     opB1(iVM);
                     break;
 
-                case 0xB0:   // BCS rel8
-                    opB0(iVM);
+                case 0xB3:   // LAX (zp),Y
+                    opB3(iVM);
                     break;
 
                 case 0xB4:   // LDY zp,X
@@ -3972,6 +4275,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xB6:   // LDX zp,Y
                     opB6(iVM);
+                    break;
+
+                case 0xB7:   // LAX zp,Y
+                    opB7(iVM);
                     break;
 
                 case 0xB8:   // CLV
@@ -4030,6 +4337,10 @@ void __cdecl Go6502(const int iVM)
                     opC6(iVM);
                     break;
 
+                case 0xC7:   // DCP zp
+                    opC7(iVM);
+                    break;
+
                 case 0xC8:   // INY
                     opC8(iVM);
                     break;
@@ -4082,6 +4393,10 @@ void __cdecl Go6502(const int iVM)
                     opD6(iVM);
                     break;
 
+                case 0xD7:   // DCP zp,X
+                    opD7(iVM);
+                    break;
+
                 case 0xD8:   // CLD
                     opD8(iVM);
                     break;
@@ -4124,6 +4439,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xE2:   // UNDOCUMENTED
                     opE2(iVM);
+                    break;
+
+                case 0xE3:   // ISB (zp,X)
+                    opE3(iVM);
                     break;
 
                 case 0xE4:   // CPX zp
@@ -4198,6 +4517,10 @@ void __cdecl Go6502(const int iVM)
                     opF6(iVM);
                     break;
 
+                case 0xF7:   // ISB zp,Y
+                    opF7(iVM);
+                    break;
+
                 case 0xF8:   // SED
                     opF8(iVM);
                     break;
@@ -4208,6 +4531,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xFA:   // UNDOCUMENTED
                     opFA(iVM);
+                    break;
+
+                case 0xFB:   // ISB abs,Y
+                    opFB(iVM);
                     break;
 
                 case 0xFC:   // NOP abs,X
