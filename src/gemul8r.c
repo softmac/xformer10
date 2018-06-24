@@ -877,7 +877,7 @@ void FixAllMenus(BOOL fVM)
         SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D1, 0);    // might be grey from before
         EnableMenuItem(vi.hMenu, IDM_D1BLANKSD, 0);
-        EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, 0);
+        //EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, 0);
         EnableMenuItem(vi.hMenu, IDM_D1U, (rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_WP1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
@@ -888,7 +888,8 @@ void FixAllMenus(BOOL fVM)
         SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D2, 0);
         EnableMenuItem(vi.hMenu, IDM_D2BLANKSD, 0);
-        EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, 0);
+        //EnableMenuItem(vi.hMenu, IDM_D2COPYD1, (rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED); // if there's a D1 to copy
+        //EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, 0);
         EnableMenuItem(vi.hMenu, IDM_D2U, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_WP2, rgvm[inst].rgvd[1].sz[0] ? 0 : MF_GRAYED);
@@ -907,7 +908,7 @@ void FixAllMenus(BOOL fVM)
         EnableMenuItem(vi.hMenu, IDM_D1, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D1U, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D1BLANKSD, MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, MF_GRAYED);
+        //EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_WP1, MF_GRAYED);
         CheckMenuItem(vi.hMenu, IDM_WP1, MF_UNCHECKED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, MF_GRAYED);
@@ -917,7 +918,8 @@ void FixAllMenus(BOOL fVM)
         EnableMenuItem(vi.hMenu, IDM_D2, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D2U, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_D2BLANKSD, MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, MF_GRAYED);
+        //EnableMenuItem(vi.hMenu, IDM_D2COPYD1, MF_GRAYED);
+        //EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, MF_GRAYED);
         EnableMenuItem(vi.hMenu, IDM_WP2, MF_GRAYED);
         CheckMenuItem(vi.hMenu, IDM_WP2, MF_UNCHECKED);
         EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, MF_GRAYED);
@@ -4390,6 +4392,7 @@ break;
         case IDM_D1BLANKSD:
         case IDM_D2BLANKSD:
             int disk = wmId - IDM_D1BLANKSD;
+            
             if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[disk].sz, TRUE, 0))
             {
                 int h = _open(rgvm[v.iVM].rgvd[disk].sz, _O_BINARY | _O_RDONLY);
