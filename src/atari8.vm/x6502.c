@@ -1783,7 +1783,7 @@ HANDLER(op6A)
     HANDLER_END();
 }
 
-// JMP (abs)
+// JMP (abs) - remember, jmp (0xNNFF) uses NN00 as the high byte, not (NN+1)00
 
 HANDLER(op6C)
 {
@@ -1863,7 +1863,12 @@ HANDLER(op6C)
     }
     else
     {
-        regPC = READ_WORD(iVM, regEA);
+        if ((regEA & 0xff) == 0xff)   // 6502 bug
+        {
+            regPC = READ_BYTE(iVM, regEA) | (READ_BYTE(iVM, regEA & 0xff00) << 8);
+        }
+        else
+            regPC = READ_WORD(iVM, regEA);
     }
 
     wLeft -= 5;

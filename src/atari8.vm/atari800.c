@@ -3412,12 +3412,18 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
 
         rgbMem[writePOKEY+addr] = b;
 
+        // only non-zero values start the timers, OS init code does not
         if (addr == 9)
         {
             // STIMER - grab the new frequency of all the POKEY timers, even if they're disabled. They might be enabled by time 0
             // maybe not necessary, but I believe, technically, poking here should reset any timer that is partly counted down.
             for (int irq = 0; irq < 4; irq++)
-                ResetPokeyTimer(iVM, irq);
+            {
+                if (b)
+                    ResetPokeyTimer(iVM, irq);
+                else
+                    irqPokey[irq] = 0;  // !!! should warm start or this reset these? Or both?
+            }
         }
         if (addr == 10)
         {
@@ -3452,8 +3458,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         else if (addr == 14)
         {
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
-
+            
             IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
+            
             //ODS("IRQEN: 0x%02x %04x %03x\n", b, wFrame, wScan);
 
             // !!! All of the bits they poke ON have to show up instantly OFF in IRQST, but that's not how I do it right now.
