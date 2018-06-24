@@ -1468,6 +1468,22 @@ HANDLER(op4A)
     HANDLER_END();
 }
 
+// ASR # - AND # followed by LSR A
+
+HANDLER(op4B)
+{
+    EA_imm(iVM);
+    AND_com(iVM);
+    
+    BYTE newC = regA << 7;
+    regA >>= 1;
+    update_NZ(iVM, regA);
+    srC = newC;
+    
+    wLeft -= 2; // best guess
+    HANDLER_END();
+}
+
 // JMP abs
 
 HANDLER(op4C)
@@ -1780,6 +1796,24 @@ HANDLER(op6A)
     update_NZ(iVM, regA);
     srC = newC;
     wLeft -= 2;
+    HANDLER_END();
+}
+
+// ARR # - ADC # + AND # + ROR A
+
+HANDLER(op6B)
+{
+    EA_imm(iVM);
+    ADC_com(iVM);
+
+    AND_com(iVM);
+
+    BYTE newC = regA << 7;
+    regA = (regA >> 1) | (srC & 0x80);
+    update_NZ(iVM, regA);
+    srC = newC;
+
+    wLeft -= 2; // best guess
     HANDLER_END();
 }
 
@@ -2187,11 +2221,13 @@ HANDLER(op8A)
     HANDLER_END();
 }
 
-// ANE imm
+// ANE imm - A AND X AND # - ALTIRRA SAYS UNSTABLE
 
 HANDLER(op8B)
 {
-    regPC++;    // undefined behaviour, but it is a 2 byte opcode
+    EA_imm(iVM);
+    regA = regX;    // Altirra says regA &= regX;
+    AND_com(iVM);
     wLeft -= 2; // best guess
     HANDLER_END()
 }
@@ -2251,6 +2287,19 @@ HANDLER(op91)
     EA_zpYindW(iVM);
     ST_com(iVM, regA);
     wLeft -= 6;
+    HANDLER_END();
+}
+
+// SHA (zp),Y
+
+HANDLER(op93)
+{
+    regEA = cpuPeekB(iVM, regPC++);
+    regEA = cpuPeekW(iVM, regEA);
+    BYTE b = ((regEA & 0xff00) >> 8) + 1;   // some sources say + 1, some don't, but all say to do it pre-indexing
+    regEA += regY;
+    ST_com(iVM, regA & regX & b);           // Altirra says unstable implementation
+    wLeft -= 6;     // best guess
     HANDLER_END();
 }
 
@@ -2323,6 +2372,33 @@ HANDLER(op9A)
     HANDLER_END();
 }
 
+// SHS abs,Y - stack = A & X, memory gets A & X & ((hi byte of operand pre indexing) + 1)
+
+HANDLER(op9B)
+{
+    regEA = cpuPeekW(iVM, regPC);
+    regPC += 2;
+    BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
+    regEA += regY;
+    ST_com(iVM, regA & regX & b);
+    regSP = (regA & regX) | 0x100;
+    wLeft -= 5;     // best guess
+    HANDLER_END();
+}
+
+// SHY abs,X - memory gets Y & ((high byte of operand pre-indexing) + 1)
+
+HANDLER(op9C)
+{
+    regEA = cpuPeekW(iVM, regPC);
+    regPC += 2;
+    BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
+    regEA += regX;
+    ST_com(iVM, regY & b);
+    wLeft -= 5;     // best guess
+    HANDLER_END();
+}
+
 // STA abs,X
 
 HANDLER(op9D)
@@ -2333,12 +2409,26 @@ HANDLER(op9D)
     HANDLER_END();
 }
 
-// SHA abs,Y
+// SHX abs,Y - memory gets X & ((high byte of operand pre-indexing) + 1)
+
+HANDLER(op9E)
+{
+    regEA = cpuPeekW(iVM, regPC);
+    regPC += 2;
+    BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
+    regEA += regY;
+    ST_com(iVM, regX & b);
+    wLeft -= 5;     // best guess
+    HANDLER_END();
+}
+
+// SAX abs,Y (Altirra is in error saying it's ,X)
 
 HANDLER(op9F)
 {
-    regPC += 2;     // undefined implementation, the important thing is to know it's a 3 byte opcode
-    wLeft -= 5;     // best guess, probably +1 for crossing a page boundary
+    EA_absYW(iVM);
+    ST_com(iVM, regA & regX);
+    wLeft -= 5; // best guess
     HANDLER_END();
 }
 
@@ -2454,11 +2544,12 @@ HANDLER(opAA)
     HANDLER_END();
 }
 
-// LXA imm
+// LXA imm - Altirra says UNSTABLE but supposedly ORA #$ee AND # into A and X
 
 HANDLER(opAB)
 {
     EA_imm(iVM);
+    regEA = regA | 0xee & (BYTE)regEA;
     LDX_com(iVM);
     LDA_com(iVM);
     wLeft -= 2;
@@ -2605,6 +2696,19 @@ HANDLER(opBA)
     HANDLER_END();
 }
 
+// LAS abs  - S & memory is stored in A, X and S.
+
+HANDLER(opBB)
+{
+    EA_absR(iVM);
+    regA = (BYTE)regEA & (BYTE)regSP;
+    regX = regA;
+    regSP = regA | 0x100;
+    update_NZ(iVM, regA);
+    wLeft -= 4;
+    HANDLER_END();
+}
+
 // LDY abs,X
 
 HANDLER(opBC)
@@ -2635,7 +2739,7 @@ HANDLER(opBE)
     HANDLER_END();
 }
 
-// LAX abs,Y
+// LAX abs,Y - Altirra is in error saying it's abs,X
 
 HANDLER(opBF)
 {
@@ -2753,6 +2857,42 @@ HANDLER(opC9)
 HANDLER(opCA)
 {
     update_NZ(iVM, --regX);
+    wLeft -= 2;
+    HANDLER_END();
+}
+
+// SBX # - X = (A & X) - #
+
+HANDLER(opCB)
+{
+    EA_imm(iVM);
+    
+    BYTE op2 = (BYTE)regEA;
+    BYTE tCF = 0;   // carry not used in this subtraction
+    BYTE diff = (regA & regX) - op2 - tCF;
+
+    update_CC(iVM, diff, regA & regX, op2);    // V flag not to be affected by this instruction
+
+    if (srD)
+    {
+        if (((regA & regX) & 0x0F) < ((op2 & 0x0F) + tCF))
+        {
+            diff -= 6;
+        }
+
+        if ((regA & regX) < (op2 + tCF))
+        {
+            diff -= 0x60;
+            srC = 0;
+        }
+
+        // if (diff > 0x99)   printf("SBC error: regA = %02X op2 = %02X C = %d  diff = %02X\n", regA, op2, tCF, diff);
+        // if ((diff&15) > 9) printf("SBC error: regA = %02X op2 = %02X C = %d  diff = %02X\n", regA, op2, tCF, diff);
+    }
+
+    regX = diff;
+    update_NZ(iVM, diff);
+    
     wLeft -= 2;
     HANDLER_END();
 }
@@ -3349,7 +3489,7 @@ PFNOP jump_tab[256] =
     op48,
     op49,
     op4A,
-    unused,
+    op4B,
     op4C,
     op4D,
     op4E,
@@ -3381,7 +3521,7 @@ PFNOP jump_tab[256] =
     op68,
     op69,
     op6A,
-    unused,
+    op6B,
     op6C,
     op6D,
     op6E,
@@ -3421,7 +3561,7 @@ PFNOP jump_tab[256] =
     op90,
     op91,
     KIL,
-    unused,
+    op93,
     op94,
     op95,
     op96,
@@ -3429,10 +3569,10 @@ PFNOP jump_tab[256] =
     op98,
     op99,
     op9A,
-    unused,
-    unused,
+    op9B,
+    op9C,
     op9D,
-    unused,
+    op9E,
     op9F,
     opA0,
     opA1,
@@ -3461,7 +3601,7 @@ PFNOP jump_tab[256] =
     opB8,
     opB9,
     opBA,
-    unused,
+    opBB,
     opBC,
     opBD,
     opBE,
@@ -3477,7 +3617,7 @@ PFNOP jump_tab[256] =
     opC8,
     opC9,
     opCA,
-    unused,
+    opCB,
     opCC,
     opCD,
     opCE,
@@ -3604,16 +3744,7 @@ void __cdecl Go6502(const int iVM)
                     KIL(iVM);
                     break;
 
-                case 0x4B:
-                case 0x6B:
-                case 0x93:
-                case 0x9B:
-                case 0x9C:
-                case 0x9E:
-                case 0xBB:
-                case 0xCB:
-                    unused(iVM);
-                    break;
+                // !!! Other web documentation besides Altirra may have different or better implementations of the secret opcodes
 
                 case 0x00:   // BRK
                     op00(iVM);
@@ -3895,6 +4026,10 @@ void __cdecl Go6502(const int iVM)
                     op4A(iVM);
                     break;
 
+                case 0x4B:   // ASR #
+                    op4B(iVM);
+                    break;
+
                 case 0x4C:   // JMP abs
                     op4C(iVM);
                     break;
@@ -4009,6 +4144,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x6A:   // ROR A
                     op6A(iVM);
+                    break;
+
+                case 0x6B:   // ARR #
+                    op6B(iVM);
                     break;
 
                 case 0x6C:   // JMP (abs)
@@ -4159,6 +4298,10 @@ void __cdecl Go6502(const int iVM)
                     op91(iVM);
                     break;
 
+                case 0x93:   // SHA (zp),Y
+                    op93(iVM);
+                    break;
+
                 case 0x94:   // STY zp,X
                     op94(iVM);
                     break;
@@ -4187,11 +4330,23 @@ void __cdecl Go6502(const int iVM)
                     op9A(iVM);
                     break;
 
+                case 0x9B:   // SHS abs,Y
+                    op9B(iVM);
+                    break;
+
+                case 0x9C:   // SHY abs,X
+                    op9B(iVM);
+                    break;
+
                 case 0x9D:   // STA abs,X
                     op9D(iVM);
                     break;
 
-                case 0x9F:   // UNDOCUMENTED
+                case 0x9E:   // STA abs,X
+                    op9E(iVM);
+                    break;
+
+                case 0x9F:   // SAX abs,Y (NOT ,X)
                     op9F(iVM);
                     break;
 
@@ -4299,6 +4454,10 @@ void __cdecl Go6502(const int iVM)
                     opBA(iVM);
                     break;
 
+                case 0xBB:   // LAS abs
+                    opBB(iVM);
+                    break;
+
                 case 0xBC:   // LDY abs,X
                     opBC(iVM);
                     break;
@@ -4311,7 +4470,7 @@ void __cdecl Go6502(const int iVM)
                     opBE(iVM);
                     break;
 
-                case 0xBF:   // LAX abs,Y
+                case 0xBF:   // LAX abs,Y (NOT ,X)
                     opBF(iVM);
                     break;
 
@@ -4357,6 +4516,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0xCA:   // DEX
                     opCA(iVM);
+                    break;
+
+                case 0xCB:   // SBX #
+                    opCB(iVM);
                     break;
 
                 case 0xCC:   // CPY abs
