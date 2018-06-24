@@ -852,6 +852,18 @@ HANDLER(op0E)
     HANDLER_END();
 }
 
+// SLO abs
+
+HANDLER(op0F)
+{
+    EA_absR(iVM);
+    ASL_mem(iVM);
+    regEA = READ_BYTE(iVM, regEA);
+    ORA_com(iVM);
+    wLeft -= 6;
+    HANDLER_END();
+}
+
 // BPL rel8
 
 HANDLER(op10)
@@ -3010,7 +3022,7 @@ PFNOP jump_tab[256] =
     op0C,
     op0D,
     op0E,
-    unused,
+    op0F,
     op10,
     op11,
     KIL,
@@ -3326,7 +3338,6 @@ void __cdecl Go6502(const int iVM)
                     break;
 
                 case 0x0B:
-                case 0x0F:
                 case 0x1B:
                 case 0x1F:
                 case 0x23:
@@ -3409,6 +3420,10 @@ void __cdecl Go6502(const int iVM)
 
                 case 0x0E:   // ASL abs
                     op0E(iVM);
+                    break;
+
+                case 0x0F:   // SLO abs
+                    op0F(iVM);
                     break;
 
                 case 0x10:   // BPL rel8
