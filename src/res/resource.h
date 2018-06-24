@@ -52,8 +52,9 @@
 #define IDM_D4U                         40207
 #define IDM_D1BLANKSD                   40208
 #define IDM_D2BLANKSD                   40209
-#define IDM_D1BLANKDD                   40210
-#define IDM_D2BLANKDD                   40211
+//#define IDM_D2COPYD1
+//#define IDM_D1BLANKDD                   
+//#define IDM_D2BLANKDD                   
 #define IDM_IMPORTDOS1                  40212
 #define IDM_IMPORTDOS2                  40213
 #define IDM_WP1                         40214   // write protect

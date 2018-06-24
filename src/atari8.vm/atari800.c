@@ -3647,7 +3647,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             // and they don't get around to letting the OS copy the DLIST shadows until it's too late, past scan 8 of the next line
             // which resets back to the top of the DLIST and jitters.
             // Sometimes, the first thing they do after a VBI is set this, so we might not be in the VBI, but we just left it.
-            if ((fInVBI || wScan == wScanVBIEnd) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
+            if ((fInVBI || wScan == wScanVBIEnd || wScan == wScanVBIEnd + 1) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
                 SwitchToPAL(iVM);
 
             //ODS("DLPC = %04x @ %d\n", DLPC, wScan);
