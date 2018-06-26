@@ -1799,12 +1799,20 @@ HANDLER(op6A)
     HANDLER_END();
 }
 
-// ARR # - ADC # + AND # + ROR A
+// ARR # - (pseudo ADC #) + AND # + ROR A - !!! FAILS ACID TEST BECAUSE NOBODY CAN EXPLAIN HOW TO SET C, V
 
 HANDLER(op6B)
 {
     EA_imm(iVM);
+
+#if 0
     ADC_com(iVM);
+    BYTE xC = srC;
+    BYTE xV = srV;
+    SBC_com(iVM);   // the purpose is to set the carry but not change A !!! probably not right
+    srC = xC;
+    srV = xV;
+#endif
 
     AND_com(iVM);
 
@@ -2333,11 +2341,11 @@ HANDLER(op96)
     HANDLER_END();
 }
 
-// SAX zp,X
+// SAX zp,Y - Altirra mistakenly calls it zp,X
 
 HANDLER(op97)
 {
-    EA_zpXW(iVM);
+    EA_zpYW(iVM);
     ST_com(iVM, regA & regX);
     wLeft -= 4;
     HANDLER_END();
@@ -2393,8 +2401,18 @@ HANDLER(op9C)
     regEA = cpuPeekW(iVM, regPC);
     regPC += 2;
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
-    regEA += regX;
+
+    // if a page boundary is crossed the high byte is replaced by the result of the AND
+    if ((regEA & 0xff00) != ((regEA + regX) & 0xff00))
+    {
+        regEA += regX;
+        regEA = ((b & regY) << 8) | (regEA & 0xff);
+    }
+    else
+        regEA += regX;
+
     ST_com(iVM, regY & b);
+
     wLeft -= 5;     // best guess
     HANDLER_END();
 }
@@ -2416,8 +2434,18 @@ HANDLER(op9E)
     regEA = cpuPeekW(iVM, regPC);
     regPC += 2;
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
-    regEA += regY;
+
+    // if a page boundary is crossed the high byte is replaced by the result of the AND
+    if ((regEA & 0xff00) != ((regEA + regY) & 0xff00))
+    {
+        regEA += regY;
+        regEA = ((b & regX) << 8) | (regEA & 0xff);
+    }
+    else
+        regEA += regY;
+
     ST_com(iVM, regX & b);
+
     wLeft -= 5;     // best guess
     HANDLER_END();
 }
@@ -3010,7 +3038,8 @@ HANDLER(opD7)
     HANDLER_END();
 }
 
-// CLD
+// CLD - !!! We do not emulate the 6502 behaviour that the Z flag and others are not always valid in decimal mode
+//      eg. SED LDA #$99 CLC ADC #1 CLD should leave the Z flag clear, but we set it
 
 HANDLER(opD8)
 {
@@ -3310,11 +3339,11 @@ HANDLER(opF6)
     HANDLER_END();
 }
 
-// ISB zp,Y
+// ISB zp,X - NOT ,Y as Altirra says
 
 HANDLER(opF7)
 {
-    EA_zpYW(iVM);
+    EA_zpXW(iVM);
     INC_zp(iVM);
     regEA = READ_BYTE(iVM, regEA);
     SBC_com(iVM);
@@ -4314,7 +4343,7 @@ void __cdecl Go6502(const int iVM)
                     op96(iVM);
                     break;
 
-                case 0x97:   // UNDOCUMENTED
+                case 0x97:   // SAX zp,Y (NOT zp,X)
                     op97(iVM);
                     break;
 
@@ -4686,7 +4715,7 @@ void __cdecl Go6502(const int iVM)
                     opF6(iVM);
                     break;
 
-                case 0xF7:   // ISB zp,Y
+                case 0xF7:   // ISB zp,X (NOT ,Y)
                     opF7(iVM);
                     break;
 
