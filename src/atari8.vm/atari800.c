@@ -1897,7 +1897,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
         else if (i == 0xd5)
             write_tab[iVM][i] = PokeBAtariBS;   // cartridge line for bank select
         else if (i >= 0xd6 && i < 0xd8)
-            write_tab[iVM][i] = PokeBAtariNULL; // empty
+            write_tab[iVM][i] = PokeBAtariHW; // PokeBAtariNULL; // !!! $d600 binary loader hack
         else if (i >= 0xd8)
             write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
         else if (i < 0x80)
@@ -3899,6 +3899,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 SwitchToPAL(iVM);
         }
         break;
+
+        case 0xd6:
+        case 0xd7:
+            // !!! self modifying binary loader hack at $d600
+            // self modifying instruction, 800 OS loader, XL OS loader
+            if (fAltBinLoader && ((addr == 0xd6fd && regPC == 0xd746) || regPC == 0xf334 || regPC == 0xc5ef))
+                rgbMem[addr] = b;
+            break;
     }
 
     return TRUE;
@@ -3953,7 +3961,7 @@ BOOL __forceinline __fastcall PokeBAtari(int iVM, ADDR addr, BYTE b)
 
     case 0xd6:
     case 0xd7:
-        return TRUE;
+        return PokeBAtariHW(iVM, addr, b);  // was TRUE; $d600 binary loader hack
 
     case 0xd8:
     case 0xd9:
