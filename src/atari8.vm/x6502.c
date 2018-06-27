@@ -694,6 +694,8 @@ __inline void SIOCheck(const int iVM)
 
             regPC = 0xd180;
         }
+
+#if 0   // !!! BUS hook interferes with binary loader patch at $d600
         else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
             // this is our XE BUS hook!
@@ -702,7 +704,8 @@ __inline void SIOCheck(const int iVM)
             UnpackP(iVM);
         }
         else if (regPC >= 0xD700 && regPC <= 0xD7FF)
-            Assert(FALSE);  // Wrong VM?
+            Assert(FALSE);  // Wrong VM? !!! $d600 binary loader hack will hit this
+#endif
     }
 }
 
@@ -1849,8 +1852,9 @@ HANDLER(op6C)
     // load address of the last segment in $47/48. We can try that.
     if (regEA == 0x2e0)
     {
-        // !!! I'm too lazy to fix my hand assembly to make sure critic==0 (Deflektor XE)
-        if ((regPC == 0x86c || regPC == 0x5ec) && rgbMem[0x42] != 0)
+        // !!! I'm too lazy to fix my hand assembly to make sure critic==0 (Deflektor XE). Luckily, even if you
+        // make an ATR image out of a binary, this code should still trigger, but only my emulator will work with it.
+        if ((regPC == 0x86c || regPC == 0xd76c) && rgbMem[0x42] != 0)
             rgbMem[0x42] = 0;
 
         if (!rgbMem[0x2e0] && !rgbMem[0x2e1])
@@ -1863,10 +1867,6 @@ HANDLER(op6C)
 
     else if (regEA == 0x2e2)
     {
-        // !!! I'm too lazy to fix my hand assembly to make sure critic==0
-        if ((regPC == 0x87c || regPC == 0x5fc || regPC == 0x7fc || regPC == 0x57c) && rgbMem[0x42] != 0)
-            rgbMem[0x42] = 0;
-
         regPC = READ_WORD(iVM, regEA);
 
         // this detects the famous autorun.sys (4 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
@@ -1880,7 +1880,7 @@ HANDLER(op6C)
 
         // super hack to let us know every section of code that is loaded by our XEX loader.
         // Bin1-Bin3 puts the start addr in (43,44) and the end addr in (45,46), and jumps through ($ffff)
-        // We are then responsible for clearing (0x2e2,0x2e3) and jumping to $87c to continue the loader code
+        // We are then responsible for clearing (0x2e2,0x2e3) and jumping to $87c/$d77c to continue the loader code
         if (regPC == 0xffff)
         {
             WORD ws = READ_WORD(iVM, 0x43);
@@ -1891,7 +1891,7 @@ HANDLER(op6C)
             // we are loading code over top of our loader, that will kill us. Try the alternate loader
             // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
 
-            if (!fAltBinLoader && ((ws >= 0x700 && ws < 0x0a80) || (we >= 0x700 && we < 0x0a80)))
+            if (!fAltBinLoader && ws < 0xa80 && we >= 0x700)
             {
                 fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere
 
@@ -1900,7 +1900,8 @@ HANDLER(op6C)
                 regPC = 0x87c;          // where our handler would like to continue
             }
 
-            else if (fAltBinLoader && ((ws >= 0x400 && ws < 0x600) || (we >= 0x400 && we < 0x0600)))
+#if 0
+            else if (fAltBinLoader && ws < 0x600 && we >= 0x480)
             {
                 fAltBinLoader = FALSE;  // try the other loaded relocated elsewhere
 
@@ -1908,14 +1909,26 @@ HANDLER(op6C)
 
                 regPC = 0x5fc;          // where our handler would like to continue
             }
+#endif
+
             else
-                regPC = fAltBinLoader ? 0x5fc : 0x87c;              // where our handler would like to continue
+                regPC = fAltBinLoader ? 0xd77c : 0x87c;              // where our handler would like to continue
 
             // also, remember the start address of the most recent segment loaded for the $2e0 hack above
             rgbMem[0x47] = rgbMem[0x43];
             rgbMem[0x48] = rgbMem[0x44];
 
             cpuPokeW(iVM, 0x2e2, 0);    // put this back
+        }
+
+        // don't DEC CRITIC if this is was a fake $ffff hack jump, that won't really run code and critic will stay off
+        // for the next VBI which could crash
+        else
+        {
+            // !!! I'm too lazy to fix my hand assembly to make sure critic==0 (Deflektor XE). Luckily, even if you
+            // make an ATR image out of a binary, this code should still trigger, but only my emulator will work with it.
+            if ((regPC == 0x87c || regPC == 0xd77c || regPC == 0x7fc || regPC == 0xd6fc) && rgbMem[0x42] != 0)
+                rgbMem[0x42] = 0;
         }
     }
     else
@@ -2125,19 +2138,20 @@ HANDLER(op80)
     // BINARY LOADER HACK #2
     // we just ran some INIT code, and our loader assumed $300-$30b weren't touched, but they were (Click)
     // put them back
-    if (regPC == 0x724 || regPC == 0x4a4)   // our two versions of the loader
+    // !!! Such a disk image won't run on real hardware if we make an ATR image out of it
+    if (regPC == 0x724 || regPC == 0xd624)   // our two versions of the loader
     {
         rgbMem[0x300] = 0x31;
         rgbMem[0x301] = 0x1;
         rgbMem[0x302] = 0x52;
         rgbMem[0x303] = 0x01;
         rgbMem[0x304] = 0x00;
-        rgbMem[0x305] = regPC == 0x724 ? 0x0a : 0x04;    // correct buffer for this version
+        rgbMem[0x305] = (regPC == 0x724) ? 0x0a : 0x04; // the buffer this loader uses
         rgbMem[0x306] = 0x06;
         rgbMem[0x308] = 0x80;
         rgbMem[0x309] = 0x00;
-        rgbMem[0x30a] = regPC == 0x724 ? rgbMem[0xa7e] : rgbMem[0x47e]; // correct buffer for this version
-        rgbMem[0x30b] = regPC == 0x724 ? rgbMem[0xa7d] : rgbMem[0x47d];
+        rgbMem[0x30a] = (regPC == 0x724) ? rgbMem[0xa7e] : rgbMem[0x47e];   // the buffer this loader uses
+        rgbMem[0x30b] = (regPC == 0x724) ? rgbMem[0xa7d] : rgbMem[0x47d];
     }
     regPC++;
     wLeft -= 2;
