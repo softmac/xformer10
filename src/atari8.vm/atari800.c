@@ -2383,7 +2383,7 @@ BOOL __cdecl ColdbootAtari(int iVM)
     //POT7 = 228;
     
     SKSTAT = 0xFF;
-    IRQST = 0xFF;
+    IRQST = 0xFF;   // !!! shouldn't warm start do some of this?
     AUDC1 = 0x00;
     AUDC2 = 0x00;
     AUDC3 = 0x00;
@@ -2473,7 +2473,7 @@ BOOL __cdecl LoadStateAtari(int iVM, char *pPersist, int cbPersist)
 
     BOOL f = InitAtariDisks(iVM);
     // if we were in the middle of reading a sector through SIO, restore that data
-    SIOReadSector(iVM);
+    SIOReadSector(iVM, rgSIO[0] - 0x31);
 
     if (!f)
         return f;
@@ -2597,14 +2597,21 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
 
             // IRQ's, like key presses, SIO or POKEY timers. VBI and DLIST interrupts are NMI's.
             // !!! Only scan line granularity.
-            // !!! Serialize when multiple are triggered at once?
-            if (!(regP & IBIT))
+            // We clear bits in IRQST when we want the interrupt to happen and the interrupt is enabled. If I is set,
+            // they won't happen, but some apps poll IRQST with an IRQ enabled in IRQEN but with SEI disabled to see
+            // when the events happen. When I is cleared, if they haven't reset the IRQ by POKE IRQEN, the interrupt will happen, delayed.
+            // !!! I need to reset IRQST $8 for apps to see (DEATHCHASE XE hangs) even if the IRQ is not enabled, so that
+            // one needs to have a check for being enabled
+            if (!(regP & IBIT)) // registers are packed right now since we are not inside a call to Go6502
             {
-                if (IRQST != 255)
+                // a low bit in IRQST means an interrupt wants to trigger and we already checked that it was enabled in IRQEN,
+                // except for $8.
+                if (((IRQST & (BYTE)~0x08) != (BYTE)~0x08) || (!(IRQST & (BYTE)0x08) && (IRQEN & (BYTE)0x08)))
                 {
                     Interrupt(iVM, FALSE);
                     regPC = cpuPeekW(iVM, 0xFFFE);
-                    //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+                    
+                    //ODS("IRQ %02x TIME! @%03x\n", (BYTE)~(IRQST), wScan);
 
                     // check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
                     if (regPC == bp)
@@ -2786,58 +2793,172 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 }
             }
 
-            // we want the $10 IRQ. Make sure it's enabled, and we waited long enough (dont' decrement past 0)
-            if ((IRQEN & 0x10) && fWant10 && (--fWant10 == 0))
+            // A data byte was written, so we want to assert SEROUT has been freed up after the approximate amount of time
+            // has passed. It's now OK to write to SEROUT again. Don't decrement past 0.
+            // If the IRQ is not enabled at the moment it happens, it is missed
+            if (fWant10 && (--fWant10 == 0) && (IRQEN & 0x10))
             {
-                //ODS("TRIGGER - SEROUT NEEDED\n");
-                IRQST &= ~0x10;    // it might not be enabled yet
+                //ODS("TRIGGER - SEROUT NEEDED @%03x\n", wScan);
+                IRQST &= ~0x10;
             }
 
-            // the $8 IRQ is needed.
-            // !!! apps don't seem to actually be ready for it unless they specificaly enable only this and no other low nibble ones
-            // (hardb, Eidolon V2, 221B)
-            if ((IRQEN & 0x08) && !(IRQEN & 0x07) && fWant8 && (--fWant8 == 0))
+            // If another byte is not written within another few scan lines, we are starving.
+            // They either completed a frame and stopped sending, or are just slow.
+            // This means not only is SEROUT finished being read into the output shift register, but the shift register is empty too.
+            // If we're starving because they finished sending a frame, let's process that frame. We'll trigger the interrupt next.
+            if (fWant8 && (--fWant8 == 0) && cSEROUT == 5)  // 5 bytes sent, and suitable time has passed
             {
-                //ODS("TRIGGER - SEROUT COMPLETE\n");
-                IRQST &= ~0x08;    // it might not be enabled yet
-                fSERIN = 0;    // abandon any pending transfer from before
+                // we have a complete frame, that's why we're starving, let's give them some data back!
+                cSEROUT = 0;
 
-                // after $8 (SEROUT FINISHED) for an entire frame comes SERIN, unless we're already transmitting
-                if (cSEROUT == 5)
+                // !!! Lots of bare bones SIO stuff is NYI
+                // Anything except read D1 sector # and D1 status (D2-D4, format, write, etc.) - see SIOV hack
+                // Technically, SKSTAT bit 1 should go low 90% of the time to signal the input shift register is busy.
+                // SKSTAT bit 7 framing error never happens in emulation, except possibily protected disks?
+                // SKSTAT bit 4 raw data read NYI (for detecting cassette motor speed)
+                // SKSTAT bits 4-6 external clock NYI
+                // SKCTL bit 4 asynch receive NYI
+                // SKCTL bit 3 two tone mode NYI
+
+                isectorPos = 0;
+
+                // !!! 2-drive support only, the drive in question must be mounted, or we ignore the request and let it time out
+                if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x32 && rgvm[iVM].rgvd[rgSIO[0] - 0x31].sz[0])
                 {
-                    cSEROUT = 0;
-                    isectorPos = 0;
-                    if (rgSIO[0] == 0x31 && rgSIO[1] == 0x52)
+                    if (rgSIO[1] == 0x52)
                     {
-                        //ODS("DISK READ REQUEST sector %d\n", rgSIO[2] | ((int)rgSIO[3] << 8));
-                        bSERIN = 0x41;    // start with ack
+                        //ODS("DISK READ REQUEST sector %d @%03x\n", rgSIO[2] | ((int)rgSIO[3] << 8), wScan);
+                        SERIN = 0xff;    // flag to say we haven't reported any data back yet
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                         if (fSERIN >= MAXY)
                             fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
-                    else if (rgSIO[0] == 0x31 && rgSIO[1] == 0x53)
+
+                    else if (rgSIO[1] == 0x53)
                     {
-                        //ODS("DISK STATUS %02x %02x\n", rgSIO[2], rgSIO[3]);
-                        bSERIN = 0x41;    // start with ack
+                        //ODS("DISK STATUS %02x %02x @%03x\n", rgSIO[2], rgSIO[3], wScan);
+                        SERIN = 0xff;    // flag to say we haven't reported any data back yet
                         fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
                         if (fSERIN >= MAXY)
                             fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
-                    else if (rgSIO[0] == 0x31)
+
+                    // since there is a drive to respond, it should respond with NAK
+                    else
                     {
-                        ODS("UNSUPPORTED SIO command %02x\n", rgSIO[1]);
+                        ODS("UNSUPPORTED SIO command %02x %02x\n", rgSIO[0], rgSIO[1]);
+                        SERIN = 0xff;    // flag to say we haven't reported any data back yet
+                        fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
+                        if (fSERIN >= MAXY)
+                            fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
                 }
+                
+                else
+                    ODS("UNSUPPORTED SIO command %02x %02x\n", rgSIO[0], rgSIO[1]);
+                
             }
         
-            // SIO - periodically send the next data byte, too fast breaks them
-            if (fSERIN == wScan && (IRQEN & 0x20))
+            // Unlike other interrupts, this interrupt triggers whenever the output shift register is idle and the interrupt is enabled,
+            // you don't miss it if you didn't have the interrupt enabled at the exact right moment.
+            // !!! Apps need to see the IRQST bit reset even if the IRQ is not enabled, so my trigger an IRQ code, above, is hacked.
+            if (!fWant8) // DEATHCHASE XE hangs && (IRQEN & 0x08))  // the output shift register is not busy
             {
-                fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data (19,200 baud expected)
+                //ODS("MAYBE TRIGGER - SEROUT COMPLETE @%03x\n", wScan);
+                IRQST &= ~0x08;
+            }
+
+            // SIO - periodically send the next data byte, too fast breaks them
+            if (wScan == fSERIN)    
+            {
+                Assert(wScan);  // wScan should not be able to be 0 at this point
+
+                fSERIN = (wScan + SIO_DELAY);    // you have this long to read it before the next bit goes in its place
                 if (fSERIN >= MAXY)
                     fSERIN -= (MAXY - 1);    // never be 0, that means stop
-                //ODS("TRIGGER SERIN\n");
-                IRQST &= ~0x20;
+                
+                // They want the interrupt for this, let's give it to them
+                if (IRQEN & 0x20)
+                {
+                    //ODS("TRIGGER SERIN @%03x\n", wScan);
+                    IRQST &= ~0x20;
+                }
+
+                // !!! Technically, SKSTAT bit 5 (overrun) should be set if the $20 interrupt is enabled and was already low
+                // in IRQST before we set it low above 
+
+                // Now set SERIN to the next input byte. They can read it as many times as they want, but it has to be inside
+                // the correct time window or they'll miss it and another byte will replace it
+
+                // remember, the data in the sector can be the same as the ack, complete or checksum
+
+                // status responses are 4 bytes long, sector reads are 128
+                BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
+
+                if (isectorPos > 0 && isectorPos < iLastSector)
+                {
+                    SERIN = sectorSIO[iVM][isectorPos];
+                    //ODS("SERIN: DATA 0x%02x = 0x%02x\n", isectorPos, SERIN);
+                    isectorPos++;
+                }
+
+                else if (isectorPos == iLastSector)
+                {
+                    SERIN = checksum;
+                    //ODS("SERIN: CHECKSUM = 0x%02x\n", SERIN);
+                    fSERIN = FALSE;
+                    isectorPos = 0;
+                }
+
+                else if (SERIN == 0xff && (rgSIO[1] == 0x52 || rgSIO[1] == 0x53))    // nothing sent yet
+                {
+                    SERIN = 0x41;    // ack
+                    //ODS("SERIN: ACK\n");
+                }
+
+                // we don't support this yet, so send NAK
+                else if (SERIN == 0xff)
+                {
+                    SERIN = 0x4e;    // NAK
+                    fSERIN = FALSE;  // all done
+                }
+
+                else if (SERIN == 0x41)    // ack
+                {
+                    SERIN = 0x43;    // complete
+                    //ODS("SERIN: COMPLETE\n");
+                }
+
+                else if (SERIN == 0x43)
+                {
+                    if (rgSIO[1] == 0x52)
+                    {
+                        checksum = SIOReadSector(iVM, rgSIO[0] - 0x31);
+                    }
+                    
+                    // this is how I think you properly respond to a status request, I hope
+                    else if (rgSIO[1] == 0x53)
+                    {
+                        WORD dv = rgSIO[0] - 0x31;
+                        BOOL sd, ed, dd, wp;
+                        SIOGetInfo(iVM, dv, &sd, &ed, &dd, &wp);
+                        
+                        /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
+                        sectorSIO[iVM][0] = ((ed ? 128 : 0) + (dd ? 32 : 0) + (wp ? 8 : 0));;
+
+                        sectorSIO[iVM][1] = 0xff;
+                        sectorSIO[iVM][2] = 0xe0;
+                        sectorSIO[iVM][3] = 0x00;
+
+                        checksum = 0xe0 + sectorSIO[iVM][0];
+                        if (sectorSIO[iVM][0] > 0x1f)
+                            checksum++; // add the carry
+                    }
+
+                    SERIN = sectorSIO[iVM][0];
+                    isectorPos = 1;    // next byte will be this one
+                    //ODS("SERIN: DATA 0x%02x = 0x%02x\n", 0, SERIN);
+                }
 
 #if 0   // this doesn't help any known app, and kind of breaks hardb
                 // now pretend 7 jiffies elapsed for apps that time disk sector reads
@@ -3068,67 +3189,11 @@ BYTE __forceinline __fastcall PeekBAtariHW(int iVM, ADDR addr)
             rgbMem[addr] = poly17[random17pos];
         }
 
-        else if (addr == 0xd20d)
-        {
-            if (!fSERIN)
-            {
-                ODS("UNEXPECTED SERIN\n");
-                return 0;
-            }
+        //else if (addr == 0xd20d)
+            //ODS("SERIN READ @%03x\n", wScan);
 
-            IRQST |= 0x20;    // don't do another IRQ yet, we have to emulate a slow BAUD rate (VBI will turn back on)
-
-            BYTE rv = bSERIN;
-
-            // remember, the data in the sector can be the same as the ack, complete or checksum
-
-            // status responses are 4 bytes long, sector reads are 128
-            BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
-
-            if (isectorPos > 0 && isectorPos < iLastSector)
-            {
-                //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
-                bSERIN = sectorSIO[iVM][isectorPos];
-                isectorPos++;
-            }
-            else if (isectorPos == iLastSector)
-            {
-                //ODS("DATA 0x%02x = 0x%02x\n", isectorPos - 1, bSERIN);
-                bSERIN = checksum;
-                isectorPos++;
-            }
-            else if (isectorPos > iLastSector)
-            {
-                //ODS("CHECKSUM = 0x%02x\n", bSERIN);
-                fSERIN = FALSE;    // all done
-                isectorPos = 0;
-            }
-            else if (bSERIN == 0x41)    // ack
-            {
-                bSERIN = 0x43;    // complete
-                                  //ODS("ACK\n");
-            }
-            else if (bSERIN == 0x43)
-            {
-                //ODS("COMPLETE\n");
-                if (rgSIO[1] == 0x52)
-                {
-                    checksum = SIOReadSector(iVM);
-                }
-                // this is how I think you properly respond to a status request, I hope
-                else if (rgSIO[1] == 0x53)
-                {
-                    checksum = 0xe0;
-                    sectorSIO[iVM][0] = 0x0;
-                    sectorSIO[iVM][1] = 0xff;
-                    sectorSIO[iVM][2] = 0xe0;
-                    sectorSIO[iVM][3] = 0x00;
-                }
-                bSERIN = sectorSIO[iVM][0];
-                isectorPos = 1;    // next byte will be this one
-            }
-            return rv;
-        }
+        //else if (addr == 0xd20e && regPC < 0xa000)
+        //    ODS("IRQST READ @%03x\n", wScan);
 
         break;
 
@@ -3422,7 +3487,11 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
                 if (b)
                     ResetPokeyTimer(iVM, irq);
                 else
-                    irqPokey[irq] = 0;  // !!! should warm start or this reset these? Or both?
+                    // Should warm start or this reset these? Or both? Or neither?
+                    // !!! This is not right. I have to avoid OS boot code writing zero here from starting the timers
+                    // or a program hung, but I don't know the real rules. ACID test fails because it writes 0 to STIMER and expects
+                    // them to start. I am risking not starting timers and hanging apps doing this
+                    irqPokey[irq] = 0;
             }
         }
         if (addr == 10)
@@ -3440,28 +3509,37 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         }
         else if (addr == 13)
         {
-            // most known apps call this with 0x34, Astromeda uses 0x30
-            if (PBCTL == 0x34 || PBCTL == 0x30)   //    !!! I basically need to avoid startup clearing this with 0's but is this right?
+            // most known apps call this with PBCTL == 0x34, Astromeda uses 0x30
+            // ACID test calls us with PBCTL == $3c. I need to avoid OS boot code that writes 0 or FF being interpreted as valid.
+            // But I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't 
+            // fire that show we sent that command. Other apps try to talk to the printer, etc.
+            // !!! The right thing to do is probably a timeout of some sort? This can hang apps who write here with PBCTL == $3c
+            if (PBCTL == 0x34 || PBCTL == 0x30)
             {
                 Assert(cSEROUT < 5);
-                //ODS("SEROUT #%d = 0x%02x %04x %03x %02x\n", cSEROUT, b, wFrame, wScan, wLeft);
+                //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
                 rgSIO[cSEROUT] = b;
                 cSEROUT++;
 
-                // they'll need a scan line at least to prepare for the interrupt
-                fWant10 = 2;
+                // we pretend that sending one byte takes more than 1 full scan line. Any faster is a faster baud rate than
+                // some apps can handle and they hang not expected it to finish so quickly
+                fWant10 = 2;    // !!! I wait 2, and my beep rate sounds about right
 
-                // and one extra scan line to prepare for this interrupt
-                fWant8 = 3;
+                // Add three extra scan lines until we are starving. This is the shift register clear interrupt
+                // so if they don't send another byte in time after the $10 interrupt is ready for data, we are "starving"
+                fWant8 = 5;     // !!! I wait 3 additional
+                IRQST |= 0x08;  // we're not starving anymore
             }
         }
+
         else if (addr == 14)
         {
             // IRQEN - IRQST is the complement of the enabled IRQ's, and says which interrupts are active
+
+            // all the bits they poked OFF (to disable an INT) have to show up here as ON, except for $8
+            IRQST |= (~b & (BYTE)~0x08);
             
-            IRQST |= ~b; // all the bits they poked OFF (to disable an INT) have to show up here as ON
-            
-            //ODS("IRQEN: 0x%02x %04x %03x\n", b, wFrame, wScan);
+            //ODS("IRQEN: 0x%02x @%03x\n", b, wScan);
 
             // !!! All of the bits they poke ON have to show up instantly OFF in IRQST, but that's not how I do it right now.
             // I don't reset the bit until the interrupt is ready to fire, I treat it as meaning it's triggered not just enabled.

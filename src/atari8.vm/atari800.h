@@ -149,7 +149,8 @@ PFNWRITE write_tab[MAX_VM][256];
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
-#define SIO_DELAY 6                // wait fewer scan lines than this and you're faster than 19,200 BAUD and apps hang not expecting it so soon
+#define SIO_DELAY 13            // !!! wait fewer than 13 scan lines and Spy vs Spy Arctic hangs, my beep timing seems about right
+
 // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
 BYTE sectorSIO[MAX_VM][128];    // disk sector, not persisted but reloaded
 
@@ -381,7 +382,6 @@ typedef struct
     BYTE m_rgSIO[5];    // holds the SIO command frame
     BYTE m_cSEROUT;     // how many bytes we've gotten so far of the 5
     WORD m_fSERIN;      // we're executing a disk read command
-    BYTE m_bSERIN;      // byte to return in SERIN
     BYTE m_isectorPos;  // where in the buffer are we?
     BYTE m_checksum;    // buffer checksum
     BYTE m_fWant8;      // we'd like the SEROUT DONE IRQ8
@@ -482,7 +482,6 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define rgSIO         CANDY_STATE(rgSIO)
 #define cSEROUT       CANDY_STATE(cSEROUT)
 #define fSERIN        CANDY_STATE(fSERIN)
-#define bSERIN        CANDY_STATE(bSERIN)
 #define isectorPos    CANDY_STATE(isectorPos)
 #define checksum      CANDY_STATE(checksum)
 #define fWant8        CANDY_STATE(fWant8)
@@ -643,7 +642,7 @@ __inline BYTE *_pbshift(int iVM)
 #define ALLPOT  rgbMem[0xD208]
 #define KBCODE  rgbMem[0xD209]
 #define RANDOM  rgbMem[0xD20A]
-
+#define SERIN   rgbMem[0xD20D]
 #define IRQST   rgbMem[0xD20E]
 #define SKSTAT  rgbMem[0xD20F]
 
@@ -815,7 +814,8 @@ void Interrupt(int, BOOL);
 void CheckKey(int, BOOL, WORD);
 void UpdatePorts(int);
 void SIOV(int);
-BYTE SIOReadSector(int);
+BYTE SIOReadSector(int, int);
+void SIOGetInfo(int, int, BOOL *, BOOL *, BOOL *, BOOL *);
 BOOL GetWriteProtectDrive(int, int);
 BOOL SetWriteProtectDrive(int, int, BOOL);
 void DeleteDrive(int, int);
