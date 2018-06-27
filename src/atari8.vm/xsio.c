@@ -1057,19 +1057,35 @@ void BUS1(int iVM)
 }
 
 
+// SIO Bare bones, get some information that's private to this file
+//
+void SIOGetInfo(int iVM, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *pfwp)
+{
+    WORD md = rgDrives[iVM][drive].mode;
+
+    if (psd)
+        *psd = (rgDrives[iVM][drive].mode == MD_SD);
+    if (ped)
+        *ped = (rgDrives[iVM][drive].mode == MD_ED);
+    if (pdd)
+        *pdd = (md == MD_QD) || (md == MD_DD) || (md == MD_DD_OLD_ATR1) || (md == MD_DD_OLD_ATR2) || (md == MD_HD) || (md == MD_RD);
+    if (pfwp)
+        *pfwp = rgDrives[iVM][drive].fWP;
+}
+
+
 // SIO Bare bones read a sector, return checksum for those rolling their own and not using SIOV
 //
-BYTE SIOReadSector(int iVM)
+BYTE SIOReadSector(int iVM, int wDrive)
 {
-    WORD wDev, wDrive, wCom, wStat, wSector;
+    WORD wDev, wCom, wStat, wSector;
     WORD  wBytes;
     WORD wTimeout;
     WORD md;
     DRIVE *pdrive;
     ULONG lcbSector;
 
-    wDev = 0x31;
-    wDrive = 0;
+    wDev = (WORD)(wDrive + 0x31);
     wCom = 0x52;
     wStat = 0x40;
     wTimeout = 0x1f;
@@ -1081,9 +1097,10 @@ BYTE SIOReadSector(int iVM)
     md = pdrive->mode;
 
     // At least for Eidolon V1, just treating DD disks as SD seems to work!
+    // !!! How does non-SD work?
     if (md != MD_SD)
     {
-//        ODS("Bare bones SIO not supported on DD Drive\n");
+//        ODS("Bare bones SIO not supported on DD Drive?\n");
 //        return 0;
     }
 
@@ -1104,6 +1121,8 @@ BYTE SIOReadSector(int iVM)
 
     if (_read(pdrive->h, sectorSIO[iVM], wBytes) < wBytes)
         return 0;
+
+    /* the disk # is valid, the sector # is valid, # bytes is valid */
 
     // now do the checksum
     WORD ck = 0;
@@ -1167,8 +1186,13 @@ void SIOV(int iVM)
     bAux1 = cpuPeekB(iVM, 0x30A);
     bAux2 = cpuPeekB(iVM, 0x30B);
 
-    //ODS("Read SECTOR %d into %04x\n", wSector, wBuff);
-    
+#if 0
+    if (wCom == 0x52)
+        ODS("SIOV: Read SECTOR %d into %04x\n", wSector, wBuff);
+    else
+        ODS("SIOV: Command %02x\n", wCom);
+#endif
+
     if (wDev == 0x31)       /* disk drives */
     {
 #if 0

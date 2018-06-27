@@ -623,73 +623,87 @@ WORD HELPER(PopWord)
 __inline void SIOCheck(const int iVM)
 {
     // !!! You can't set a bp on $e459, $e959 or anything inside SIO
-    
+
     // Some people jump directly to $e959, where $e459 points to on the 800 (so that had to be made valid in XL too)
     // OS must be paged in on XL for this to really be SIO. But some people replace the OS with an exact copy, and we can't
     // actually execute that SIO code and work properly, so detect if the swapped in code still says jmp $c933 and do our
     // hack anyway (TITAN)
     // Also, the TRANSLATOR copies the 800 OS back in, so make sure to do our hack if the 800 OS in in XL RAM.
-    
+
     // !!! I'm torn about whether to assume that a jmp to $e459 is always wanting SIO. What are the odds that a custom 
     // program also has an entry point at $e459? Versus the odds that every call to $e459 is some form of SIO that
     // will only work if we trap it?
 
-    if ((regPC == 0xe459 || regPC == 0xe959) &&
+    // When to do our SIO hack? Right now, we're trying to let the actual code run for status and single density reads
+    // Not only is supporting DD still a mystery to me, if we are faking a disk image out of a binary, we certainly need this
+    // hack
+
+    // !!! My SIO bare bones code is actually good enough now to work just as well as this SIO hack for STATUS
+    // and drive reads of single density for every program I've tested! Wow!
+    // But it's much slower doing the beeps in real time so let's leave the hack in for now
+    
+    //BOOL sd;
+    //SIOGetInfo(iVM, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL);
+    //if (rgbMem[0x302] != 0x53 && !(rgbMem[0x302] == 0x52 && sd))
+    
+    {
+        if ((regPC == 0xe459 || regPC == 0xe959) &&
             (mdXLXE == md800 || (wPBDATA & 1) ||
-                (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9) ||
+            (rgbMem[regPC + 1] == 0x33 && rgbMem[regPC + 2] == 0xc9) ||
                 (rgbMem[regPC + 1] == 0x59 && rgbMem[regPC + 2] == 0xe9) ||
-                (rgbMem[regPC + 1] == 0x00 && rgbMem[regPC + 2] == 0xce) )) // hack for PAL TRANSLATOR
-    {
-        // this is our SIO hook!
-        PackP(iVM);
-        SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
-        UnpackP(iVM);
-
-        // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
-        // a little bit of time (but not nearly as much as it would really take)
-
-        rgbMem[0xd180] = 0x08;  // php
-        rgbMem[0xd181] = 0x48;  // pha
-        rgbMem[0xd182] = 0x8a;  // txa
-        rgbMem[0xd183] = 0x48;  // pha
-        rgbMem[0xd184] = 0x98;  // tya
-        rgbMem[0xd185] = 0x48;  // pha
-        rgbMem[0xd186] = 0xa0;
-        rgbMem[0xd187] = 0x08;  // change this to vary the delay
-        rgbMem[0xd188] = 0xa2;
-        rgbMem[0xd189] = 0x00;
-        rgbMem[0xd18a] = 0xca;
-        rgbMem[0xd18b] = 0xd0;
-        rgbMem[0xd18c] = 0xfd;
-        rgbMem[0xd18d] = 0x88;
-        rgbMem[0xd18e] = 0xd0;
-        rgbMem[0xd18f] = 0xfa;
-        rgbMem[0xd190] = 0x68;  // pla
-        rgbMem[0xd191] = 0xa8;  // tay
-        rgbMem[0xd192] = 0x68;  // pla
-        rgbMem[0xd193] = 0xaa;  // tax
-        rgbMem[0xd194] = 0x68;  // pla
-        rgbMem[0xd195] = 0x28;  // plp
-        rgbMem[0xd196] = 0x60;
-        PushWord(iVM, regPC - 1);
-
-        if (vi.fInDebugger && !vi.fExecuting && fTrace)
+                (rgbMem[regPC + 1] == 0x00 && rgbMem[regPC + 2] == 0xce))) // hack for PAL TRANSLATOR
         {
-            fTrace = FALSE; // stop tracing until RTS so we don't get bogged down by this hacky delay code
-            wSIORTS = regPC;
-        }
+            // this is our SIO hook!
+            PackP(iVM);
+            SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
+            UnpackP(iVM);
 
-        regPC = 0xd180;
+            // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
+            // a little bit of time (but not nearly as much as it would really take)
+
+            rgbMem[0xd180] = 0x08;  // php
+            rgbMem[0xd181] = 0x48;  // pha
+            rgbMem[0xd182] = 0x8a;  // txa
+            rgbMem[0xd183] = 0x48;  // pha
+            rgbMem[0xd184] = 0x98;  // tya
+            rgbMem[0xd185] = 0x48;  // pha
+            rgbMem[0xd186] = 0xa0;
+            rgbMem[0xd187] = 0x08;  // change this to vary the delay
+            rgbMem[0xd188] = 0xa2;
+            rgbMem[0xd189] = 0x00;
+            rgbMem[0xd18a] = 0xca;
+            rgbMem[0xd18b] = 0xd0;
+            rgbMem[0xd18c] = 0xfd;
+            rgbMem[0xd18d] = 0x88;
+            rgbMem[0xd18e] = 0xd0;
+            rgbMem[0xd18f] = 0xfa;
+            rgbMem[0xd190] = 0x68;  // pla
+            rgbMem[0xd191] = 0xa8;  // tay
+            rgbMem[0xd192] = 0x68;  // pla
+            rgbMem[0xd193] = 0xaa;  // tax
+            rgbMem[0xd194] = 0x68;  // pla
+            rgbMem[0xd195] = 0x28;  // plp
+            rgbMem[0xd196] = 0x60;
+            PushWord(iVM, regPC - 1);
+
+            if (vi.fInDebugger && !vi.fExecuting && fTrace)
+            {
+                fTrace = FALSE; // stop tracing until RTS so we don't get bogged down by this hacky delay code
+                wSIORTS = regPC;
+            }
+
+            regPC = 0xd180;
+        }
+        else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
+        {
+            // this is our XE BUS hook!
+            PackP(iVM);
+            SIOV(iVM);
+            UnpackP(iVM);
+        }
+        else if (regPC >= 0xD700 && regPC <= 0xD7FF)
+            Assert(FALSE);  // Wrong VM?
     }
-    else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
-    {
-        // this is our XE BUS hook!
-        PackP(iVM);
-        SIOV(iVM);
-        UnpackP(iVM);
-    }
-    else if (regPC >= 0xD700 && regPC <= 0xD7FF)
-        Assert(FALSE);  // Wrong VM?
 }
 
 // we hit a KIL instruction and should hang. Try a different VM type
@@ -3431,7 +3445,8 @@ HANDLER(opFF)
     HANDLER_END();
 }
 
-// !!! Implement the rest of these, already!
+#if 0
+// Implement the rest of these, already!
 HANDLER(unused)
 {
     regPC--;
@@ -3440,6 +3455,7 @@ HANDLER(unused)
     wLeft -= 2; // must be non-zero or we could stack fault
     HANDLER_END();
 }
+#endif
 
 PFNOP jump_tab[256] =
 {
