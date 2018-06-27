@@ -307,7 +307,7 @@ void DisplayStatus(int iVM)
 
     strcat(rgch0, rgch);
 
-    if (v.fZoomColor)
+    if (v.fZoomColor && !v.fTiling)
     {
         // Is the display stretched to fill the window?
         strcat(rgch0, " - Stretched");
@@ -4540,6 +4540,7 @@ break;
                 SelectInstance(v.iVM >= 0 ? v.iVM : 0);    // bring the one with focus up if it exists, else the top one
             }
             FixAllMenus(TRUE);
+            DisplayStatus(v.iVM);   // Stretched status may change, for instance
             InitThreads();
             break;
 
