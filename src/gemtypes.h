@@ -640,11 +640,14 @@ typedef struct
 #define JT_PADDLE   2
 #define JT_DRIVING  4   // multiple bits set means we don't know yet, it's one of those choices
 
+#define JT_XBOXPADDLE 8 // If it's a joystick, and we detect a non-zero U axis, treat the right joystick as a paddle
+
     JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
     JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
     int rgjn[NUM_JOYDEVS];        // which handle we use to talk to that joystick
     int rgjt[NUM_JOYDEVS];        // type of controller - joystick or paddle
-    int njc;            // # of joysticks
+    int njc;                      // # of joysticks
+    BOOL fJoyNeedsInit;           // something happened to our joysticks, let's re-query them so they are hot-pluggable
 
     PDI  rgpdi[10];     // pointers to DISKINFO structures for disks
 
