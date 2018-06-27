@@ -1876,7 +1876,23 @@ HANDLER(op6C)
                  (rgbMem[regPC + 3] == 0x21 && rgbMem[regPC + 4] == 0x03) ||    // carrier force
                  (rgbMem[regPC + 0xa] == 0x21 && rgbMem[regPC + 0xb] == 0x03) ||
                  (rgbMem[regPC + 0x2e] == 0x4a && rgbMem[regPC + 0x2f] == 0x03)))
-            KIL(iVM);
+        {
+            if (mdXLXE == mdXE)
+                PostMessage(vi.hWnd, WM_COMMAND, IDM_TOGGLEBASIC, 0);   // see comment below
+            else
+                KIL(iVM);
+        }
+
+        // Bird Eggs autorun - custom booter banks XE before we see this, so we're already in XE w/o BASIC mode. KIL would simply
+        // loop forever by switching to 800 w/o BASIC.
+        if (regPC == 0x066a && ramtop == 0xc000 &&
+            ((rgbMem[regPC + 0x4f] == 0x21 && rgbMem[regPC + 0x50] == 0x03)))
+        {
+            if (mdXLXE == mdXE)
+                PostMessage(vi.hWnd, WM_COMMAND, IDM_TOGGLEBASIC, 0);
+            else
+                KIL(iVM);
+        }
 
         // super hack to let us know every section of code that is loaded by our XEX loader.
         // Bin1-Bin3 puts the start addr in (43,44) and the end addr in (45,46), and jumps through ($ffff)

@@ -87,7 +87,9 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             return FS_MFS;
             }
 
-        if (rgch[0] == 0x00 && rgch[1] == 0x03)
+        // !!! ATR images exist with non-zero first byte (Bird Eggs). Hopefully just checking for 3 won't give false positives
+        // Boot disks can have anything besides 3, but I believe a DOS disk will always have 3.
+        if (rgch[0] != 0x4D && rgch[1] == 0x03)
             {
 #if TRACEDISK
             printf("Atari DOS file system\n");
