@@ -3211,7 +3211,7 @@ void SelectInstance(int iVM)
         InitThreads();
 
     // Enforce minimum window size for this type of VM
-    if (v.swWindowState == SW_SHOWNORMAL)
+    if (v.swWindowState == SW_SHOWNORMAL && !v.fFullScreen)
         SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
                 v.rectWinPos.bottom - v.rectWinPos.top, 0);
 
@@ -4514,7 +4514,7 @@ break;
             
 			v.fTiling = !v.fTiling;
             
-			if (!CreateTiledBitmap())   // what can we do on error besides try again later?
+			if (v.fTiling && !CreateTiledBitmap())   // what can we do on error besides try again later?
                 fNeedTiledBitmap = TRUE;
             
 			uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
