@@ -2054,6 +2054,11 @@ int CALLBACK WinMain(
 
             int ids = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);
             DisplayStatus(ids);
+
+            // every 5 seconds check to see if a joystick was plugged in (if one isn't working right now), for hot pluggable joysticks!
+            // !!! This takes 10ms, so that's a 0.2% perf hit
+            if (vi.fJoyNeedsInit && !(--vi.fJoyNeedsInit))
+                InitJoysticks();
         }
 
 #ifndef NDEBUG

@@ -639,23 +639,39 @@ void DoVBI(int iVM)
 {
     // process joysticks before the vertical blank, just because.
     // When tiling, only the tile in focus gets input
-    if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick && vi.njc > 0)
+    if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick)
     {
         // we can handle 4 joysticks on 800, 2 on XL/XE
-        for (int joy = 0; joy < min(vi.njc, (mdXLXE == md800) ? 4 : 2); joy++)
+        for (int joy = 0; joy < ((mdXLXE == md800) ? 4 : 2); joy++)
         {
-            JOYINFO ji;
+            if (joy >= vi.njc)
+            {
+                // make paddles read neutral for any that aren't plugged in
+                rgbMem[PADDLE0 + (joy << 1)] = 228;
+                rgbMem[PADDLE0 + (joy << 1) + 1] = 228;
+                continue;
+            }
+            
+            JOYINFOEX ji;
+            ji.dwSize = sizeof(JOYINFOEX);
+            ji.dwFlags = JOY_RETURNALL;
             JOYCAPS jc = vi.rgjc[joy];
 
-            MMRESULT mm = joyGetPos(vi.rgjn[joy], &ji);
-            
-            //ODS("x=%04x y=%04x\n", ji.wXpos, ji.wYpos);
-            
+            MMRESULT mm = joyGetPosEx(vi.rgjn[joy], &ji);
+            //ODS("x=%04x y=%04x u=%04x b=%04x\n", ji.dwXpos, ji.dwYpos, ji.dwUpos, ji.dwButtonNumber);
+
             if (mm == 0) {
+
+                // if this axis ever goes non-zero, it's an XBOX joystick and we can use the right joystick safely as a paddle!
+                if (ji.dwUpos)
+                {
+                    Assert(vi.rgjt[joy] & JT_JOYSTICK);
+                    vi.rgjt[joy] |= JT_XBOXPADDLE;
+                }
 
                 if (vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING))
                 {
-                    int dir = (ji.wXpos - (jc.wXmax - jc.wXmin) / 2);
+                    int dir = (ji.dwXpos - (jc.wXmax - jc.wXmin) / 2);
                     dir /= (int)((jc.wXmax - jc.wXmin) / wJoySens);
 
                     BYTE *pB;
@@ -666,7 +682,7 @@ void DoVBI(int iVM)
 
                     // joy 1 & 3 are low nibble, 2 & 4 are high nibble
 
-                    (*pB) |= (12 << ((joy & 1) << 4));                  // assume joystick X centered
+                    (*pB) |= (12 << ((joy & 1) << 2));                  // assume joystick X centered
 
                     if (dir < 0)
                         (*pB) &= ~(4 << ((joy & 1) << 2));              // left
@@ -674,27 +690,27 @@ void DoVBI(int iVM)
                         (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
                     // driving controller special value reports $bfef or so
-                    ULONG uz = abs((jc.wYmax - jc.wYmin) * 3 / 4 - (ji.wYpos - jc.wYmin));
+                    ULONG uz = abs((jc.wYmax - jc.wYmin) * 3 / 4 - (ji.dwYpos - jc.wYmin));
 
                     // we don't know which it is yet, figure it out
                     if ((vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING)) == (JT_JOYSTICK | JT_DRIVING))
                     {
-                        ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - (ji.wXpos - jc.wXmin));
-                        ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - (ji.wYpos - jc.wYmin));
+                        ULONG ux = abs((jc.wXmax - jc.wXmin) / 2 - (ji.dwXpos - jc.wXmin));
+                        ULONG uy = abs((jc.wYmax - jc.wYmin) / 2 - (ji.dwYpos - jc.wYmin));
 
                         // This is a value a driving controller can't return, so we must be an XBox joystick or similar
-                        if (!(ux < 0x20 && (uz < 0x20 || (ji.wYpos - jc.wYmin) < 0x20 || uy < 0x20 || (jc.wYmax - ji.wYpos) < 0x20)))
+                        if (!(ux < 0x20 && (uz < 0x20 || (ji.dwYpos - jc.wYmin) < 0x20 || uy < 0x20 || (jc.wYmax - ji.dwYpos) < 0x20)))
                             vi.rgjt[joy] &= ~JT_DRIVING;
 
                         // If we reached the special driving controller value without any invalid values first, we must be driving!
                         if (uz < 0x20)
                             vi.rgjt[joy] &= ~JT_JOYSTICK;
                     }
-                    
-                    dir = (ji.wYpos - (jc.wYmax - jc.wYmin) / 2);
+
+                    dir = (ji.dwYpos - (jc.wYmax - jc.wYmin) / 2);
                     dir /= (int)((jc.wYmax - jc.wYmin) / wJoySens);
 
-                    (*pB) |= (3 << ((joy & 1) << 4));                   // assume joystick centered
+                    (*pB) |= (3 << ((joy & 1) << 2));                   // assume joystick centered
 
                     if (vi.rgjt[joy] == JT_DRIVING && uz < 0x20)
                     {
@@ -713,29 +729,43 @@ void DoVBI(int iVM)
 
                     pB = &TRIG0;
 
-                    if (ji.wButtons == 1)
+                    if (ji.dwButtons == 1)
                         (*(pB + joy)) &= ~1;                // JOY fire button down
                     else
                         (*(pB + joy)) |= 1;                 // JOY fire button up
 
-					// extra buttons become START SELECT OPTION for tablet mode
-                    if (!fJoyCONSOL && ji.wButtons >= 2 && ji.wButtons <= 8)
-					{
-						CONSOL &= ~(ji.wButtons >> 1);	// button goes down
-						fJoyCONSOL = TRUE;				// we were the cause
-					}
-					else if (fJoyCONSOL && ji.wButtons == 0)
-					{
-						CONSOL |= 7;						// don't lift up buttons we didn't press
-						fJoyCONSOL = FALSE;
-					}
+                    // extra buttons become START SELECT OPTION for tablet mode
+                    if (!fJoyCONSOL && ji.dwButtons >= 2 && ji.dwButtons <= 8)
+                    {
+                        CONSOL &= ~(ji.dwButtonNumber >> 1);	// button goes down
+                        fJoyCONSOL = TRUE;				// we were the cause
+                    }
+                    else if (fJoyCONSOL && ji.dwButtonNumber == 0)
+                    {
+                        CONSOL |= 7;						// don't lift up buttons we didn't press
+                        fJoyCONSOL = FALSE;
+                    }
                 }
-                
-                else if (vi.rgjt[joy] == JT_PADDLE)
+
+                // an XBOX right joystick will serve as a paddle! That is the U axis. Only if we've ever seen the U axis go non-zero
+                // should we do this. Moving the left joystick left will be the paddle trigger.
+
+                if (vi.rgjt[joy] == JT_PADDLE || (vi.rgjt[joy] & JT_XBOXPADDLE))
                 {
-                    // x value is left paddle, y value is right paddle, scaled to 0-228
-                    int x = (ji.wXpos - jc.wXmin) * 229 / (jc.wXmax - jc.wXmin);
-                    int y = (ji.wYpos - jc.wYmin) * 229 / (jc.wYmax - jc.wYmin);
+                    int x, y;
+
+                    // x or u value is left paddle, y value is right paddle, scaled to 0-228
+                    if (vi.rgjt[joy] == JT_PADDLE)
+                    {
+                        x = (ji.dwXpos - jc.wXmin) * 229 / (jc.wXmax - jc.wXmin);
+                        y = (ji.dwYpos - jc.wYmin) * 229 / (jc.wYmax - jc.wYmin);
+                    }
+                    else
+                    {
+                        x = (ji.dwUpos - jc.wXmin) * 229 / (jc.wUmax - jc.wXmin);   // assume the same max and min
+                        y = 228;                                                    // there is no second paddle
+                    }
+
                     if (x == 229) x = 228;  // give 228 a reasonable chance of being chosen
                     if (y == 229) y = 228;
 
@@ -751,17 +781,37 @@ void DoVBI(int iVM)
                     else
                         pB = &rPBDATA;    // paddles 4-7
 
-                    // paddles 0-1 & 4-5 are low nibble, 2-3 & 6-7 are high nibble
+                    // only process paddle buttons for a real paddle - otherwise we move the joystick they are using on them!
+                    if (vi.rgjt[joy] == JT_PADDLE)
+                    {
+                        // paddles 0-1 & 4-5 are low nibble, 2-3 & 6-7 are high nibble
 
-                    (*pB) |= (12 << ((joy & 1) << 4));                  // assume buttons not pressed
+                        (*pB) |= (12 << ((joy & 1) << 2));                  // assume buttons not pressed
 
-                    if (ji.wButtons == 1)
-                        (*pB) &= ~(4 << ((joy & 1) << 2));              // left
-                    else if (ji.wButtons == 2)
-                        (*pB) &= ~(8 << ((joy & 1) << 2));              // right
+                        if (ji.dwButtonNumber == 1)
+                            (*pB) &= ~(4 << ((joy & 1) << 2));              // left
+                        else if (ji.dwButtonNumber == 2)
+                            (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
-                    UpdatePorts(iVM);
+                        UpdatePorts(iVM);
+                    }
                 }
+
+                // if this device is not a paddle, use the values that mean a paddle is not plugged in
+                else
+                {
+                    rgbMem[PADDLE0 + (joy << 1)] = 228;
+                    rgbMem[PADDLE0 + (joy << 1) + 1] = 228;
+                }
+            }
+
+            // a joystick isn't working that was before. Time to re-query the joystick situation
+            // DO NOT POLL for new joysticks being added while some joysticks are working! That breaks the working
+            // joysticks and re-centres them!
+            else
+            {
+                vi.fJoyNeedsInit = 5;   // check every this many seconds
+                vi.njc = 0;             // don't keep trying the broken joysticks and resetting to 5 all the time
             }
         }
     }
@@ -2270,6 +2320,14 @@ BOOL __cdecl WarmbootAtari(int iVM)
     for (BYTE i = 0; i < 4; i++)
         pmg.hpospPixNewStart[i] = 512;  // !!! should be NTSCx, we can't access that constant
 
+    // A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
+    // or we'll think it's a paddle. 
+    if (iVM == v.iVM)
+    {
+        InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm boot!
+        //CaptureJoysticks();
+    }
+
     return TRUE;
 }
 
@@ -2296,14 +2354,6 @@ BOOL __cdecl ColdbootAtari(int iVM)
     // 800 resets PIA on cold start only
     if (mdXLXE == md800)
         ResetPIA(iVM);
-
-	// A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
-	// or we'll think it's a paddle
-	if (iVM == v.iVM)
-	{
-		InitJoysticks();    // let somebody hot plug a joystick in and it will work the next cold boot
-		//CaptureJoysticks();
-	}
 
 	BOOL f = InitAtariDisks(iVM);
 

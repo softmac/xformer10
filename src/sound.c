@@ -1059,7 +1059,7 @@ void InitJoysticks()
     if ((nj = joyGetNumDevs()) == 0)
         return;
 
-    // 16 seems to be common, and the 2nd and subsequent joysticks might be a sparse matrix so check thenm all
+    // 16 seems to be common, and the 2nd and subsequent joysticks might be a sparse matrix so check them all
     nj = min(nj, NUM_JOYDEVS);
 
     memset (&vi.rgji, 0, sizeof(vi.rgji));
@@ -1105,6 +1105,9 @@ void InitJoysticks()
         }
     }
     vi.njc = j;    // this is how many actual joysticks are plugged in, and we compacted the array of them
+
+    // no joysticks right now, try again later! They'll be hot pluggable!
+    vi.fJoyNeedsInit = (j == 0) ? 5 : 0;    // try every 5 seconds
 // #endif
 }
 
