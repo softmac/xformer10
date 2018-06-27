@@ -1942,13 +1942,14 @@ int CALLBACK WinMain(
                         otype++; // convert bitfield to index
 
                     // give the VM a non-hacky way of choosing an alternate type, since this one didn't work
+                    BOOL fXOK = FALSE;
                     FUnInitVM(i);
                     FUnInstallVM(i);
                     if (FInstallVM(i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
                         if (FInitVM(i))
                             if (ColdStart(i))
-                                fOK = TRUE;
-                    if (!fOK)
+                                fXOK = TRUE;
+                    if (!fXOK)
                         DeleteVM(v.iVM, TRUE);
                     FixAllMenus(!v.fTiling); // don't do unnecessary slow stuff when tiled
 
