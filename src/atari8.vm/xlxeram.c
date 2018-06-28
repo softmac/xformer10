@@ -125,52 +125,57 @@ BOOL __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
     }
 
     if (mask & OS_MASK)
-        {
+    {
         if ((flags & OS_MASK) == OS_IN)
-            {
+        {
             // enable OS ROMs
             _fmemcpy(rgbSwapC000, &rgbMem[0xC000], C000_SIZE);
             _fmemcpy(rgbSwapD800, &rgbMem[0xD800], D800_SIZE);
             _fmemcpy(&rgbMem[0xC000], rgbXLXEC000, C000_SIZE);
             _fmemcpy(&rgbMem[0xD800], rgbXLXED800, D800_SIZE);
-            }
+        }
         else
-            {
+        {
             // disable OS ROMs
             _fmemcpy(&rgbMem[0xC000], rgbSwapC000, C000_SIZE);
             _fmemcpy(&rgbMem[0xD800], rgbSwapD800, D800_SIZE);
-            }
         }
+    }
 
-    // don't do any BASIC swapping if a cartridge is present. The Sofware will try, but the hardware doesn't allow it
-    if ((mask & BASIC_MASK) && !rgvm[iVM].rgcart.fCartIn)
-        {
+    // Don't do any BASIC swapping if a cartridge is present. The Sofware will try, but the hardware doesn't allow it
+    // But remember, some fancy cartridges can swap themselves out to RAM and then BASIC *can* be swapped in.
+    // OK to swap in BASIC if ramtop is high. OK to swap out BASIC if there's no other cartridge, or that cartridge's
+    // current bank is maxed out, meaning RAM.
+    // !!! What happens if a somebody tries to bank a cartridge in when BASIC is already in? I won't allow that.
+    if ((mask & BASIC_MASK) && (ramtop == 0xc000 || !rgvm[iVM].rgcart.fCartIn || iSwapCart == iNumBanks))
+    {
         int cb = 8192;
 
         // make space for BASIC. If a real cartridge goes in, UnInit will free and alloc a larger space for a real cartridge
-        if (!rgbSwapCart[iVM])
-            rgbSwapCart[iVM] = malloc(cb);
-        if (!rgbSwapCart)
+        if (!rgbSwapBASIC[iVM])
+            rgbSwapBASIC[iVM] = malloc(cb);
+        if (!rgbSwapBASIC)
             return FALSE;
+        memset(rgbSwapBASIC, cb, 0);
 
         if ((flags & BASIC_MASK) == BASIC_IN)
-            {
+        {
             // enable BASIC ROMs
             ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(rgbSwapCart[iVM], &rgbMem[ramtop], cb);
+            _fmemcpy(rgbSwapBASIC[iVM], &rgbMem[ramtop], cb);
             _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
-            }
+        }
         else
-            {
+        {
             // disable BASIC ROMs
 
-            // make sure rgbSwapCart is initialized with the cartridge image!
+            // make sure rgbSwapBASIC was initialized with the cartridge image!
             ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(&rgbMem[ramtop], rgbSwapCart[iVM], cb);
+            _fmemcpy(&rgbMem[ramtop], rgbSwapBASIC[iVM], cb);
             ramtop = 0xC000;
-            }
         }
-
+    }
+    
     if (mask & SELF_MASK)
     {
         if ((flags & SELF_MASK) == SELF_IN)

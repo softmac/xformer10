@@ -141,7 +141,8 @@ BYTE rgPMGMap[65536];
 #define CART_SPARTA     21
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
-BYTE *rgbSwapCart[MAX_VM];    // Contents of the cartridges, not persisted but reloaded
+BYTE *rgbSwapCart[MAX_VM];      // Contents of the cartridges, not persisted but reloaded
+BYTE *rgbSwapBASIC[MAX_VM];     // a place to save RAM when BASIC is in
 
 #if USE_PEEK_TABLE
 // quickly peek and poke to the right page w/o branching using jump tables

@@ -1304,6 +1304,10 @@ void SwapRAMCart(int iVM, WORD size, BYTE *pb, BYTE iBank)
 
     BYTE swap[0x4000];  // big enough for 16K
 
+    // !!! Sorry, if you swapped BASIC in when your cartridge was out, you're stuck that way until you swap BASIC out
+    if (iSwapCart == iNumBanks && ramtop < 0xc000)
+        return;
+
     // this is the RAM bank
     if (iBank >= iNumBanks)
     {
@@ -1758,10 +1762,8 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     {
         if (value >= 0x80)
             SwapRAMCart(iVM, iBankSize, pb, iNumBanks); // RAM
-        else if (value < iNumBanks)
-            SwapRAMCart(iVM, iBankSize, pb, value);
         else
-            Assert(0);  // bad bank #
+            SwapRAMCart(iVM, iBankSize, pb, value % iNumBanks); // ATRAX uses bank $10 to mean 0, strip off the high bits
     }
 
     // The typical RAM cart behaviour - Address is bank #, 8K that goes into $A000. Bank == top + 1 is RAM
@@ -2178,10 +2180,14 @@ BOOL __cdecl UninitAtari(int iVM)
         rgbMem[0xbffd] = 0;    // no special R cartridge
     }
 
-    // free the cartridge
+    // free the cartridges
     if (rgbSwapCart[iVM])
         free(rgbSwapCart[iVM]);
     rgbSwapCart[iVM] = NULL;
+
+    if (rgbSwapBASIC[iVM])
+        free(rgbSwapBASIC[iVM]);
+    rgbSwapBASIC[iVM] = NULL;
 
     UninitAtariDisks(iVM);
 
@@ -2495,7 +2501,8 @@ BOOL __cdecl SaveStateAtari(int iVM, char **ppPersist, int *pcbPersist)
         // !!! Time Travel periodically does this and it is SLOW!
         // before saving, we need to put the RAM that's swapped into cartridge memory back into RAM so it will be persisted
         // keep iSwapCart to tell us which bank should be swapped back in, so don't do this twice in a row!
-        if (rgvm[iVM].rgcart.fCartIn && fRAMCart && ramtop == 0xa000 && !fCartNeedsSwap)
+        // if BASIC is swapped in to a RAM cart, then ramtop is low, but that still means that no swapping is needed
+        if (rgvm[iVM].rgcart.fCartIn && fRAMCart && iSwapCart < iNumBanks && !fCartNeedsSwap)
         {
             BYTE swap[8192];
             _fmemcpy(swap, &rgbMem[0xa000], 8192);
@@ -3186,7 +3193,9 @@ BYTE __forceinline __fastcall PeekBAtariBS(int iVM, ADDR addr)
 {
     Assert((addr & 0xff00) == 0xd500);
 
-    BankCart(iVM, addr & 0xff, 0);    // cartridge banking
+    // some don't bank when reading, only writing !!! Which ones?
+    if (bCartType != CART_ATRAX)
+        BankCart(iVM, addr & 0xff, 0);    // cartridge banking
     
     return TRUE;
 }
@@ -3334,17 +3343,14 @@ BYTE PeekBAtariMON(int iVM, ADDR addr)
 WORD __cdecl PeekWAtari(int iVM, ADDR addr)
 {
     iVM; addr;
-    Assert(addr >= ramtop);
-    Assert(FALSE); // I'm curious when this happens
-
     return 0;
 }
 
+// not used
 ULONG __cdecl PeekLAtari(int iVM, ADDR addr)
 {
-    // not used
-
-    return cpuPeekW(iVM, addr);
+    iVM; addr;
+    return 0;
 }
 
 // not used
@@ -3358,10 +3364,7 @@ BOOL __cdecl PokeLAtari(int iVM, ADDR addr, ULONG w)
 //
 BOOL __cdecl PokeWAtari(int iVM, ADDR addr, WORD w)
 {
-    w;
-    Assert(addr >= ramtop);
-    Assert(FALSE);    // I'm curious if this ever happens
-
+    iVM; addr; w;
     return TRUE;
 }
 
