@@ -1823,6 +1823,7 @@ void ResetPokeyTimer(int iVM, int irq)
             irqPokey[irq] = 1;
 
     //if (irqPokey[irq]) ODS("TIMER %d f=%d c=%d WAIT=%d instr\n", irq + 1, f[irq], c[irq], irqPokey[irq]);
+
 }
 
 #ifndef NDEBUG
@@ -2873,10 +2874,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 // Anything except read D1 sector # and D1 status (D2-D4, format, write, etc.) - see SIOV hack
                 // Technically, SKSTAT bit 1 should go low 90% of the time to signal the input shift register is busy.
                 // SKSTAT bit 7 framing error never happens in emulation, except possibily protected disks?
+                // SKSTAT bits 5-6 serial and keyboard overrun errors NYI
                 // SKSTAT bit 4 raw data read NYI (for detecting cassette motor speed)
-                // SKSTAT bits 4-6 external clock NYI
-                // SKCTL bit 4 asynch receive NYI
-                // SKCTL bit 3 two tone mode NYI
 
                 isectorPos = 0;
 
@@ -3538,18 +3537,13 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
         // only non-zero values start the timers, OS init code does not
         if (addr == 9)
         {
-            // STIMER - grab the new frequency of all the POKEY timers, even if they're disabled. They might be enabled by time 0
-            // maybe not necessary, but I believe, technically, poking here should reset any timer that is partly counted down.
+            // STIMER - grab the new frequency of all the POKEY timers, even if they're disabled. They might be enabled by time 0.
+            // I believe, technically, poking here should reset any timer that is partly counted down.
             for (int irq = 0; irq < 4; irq++)
             {
-                if (b)
-                    ResetPokeyTimer(iVM, irq);
-                else
-                    // Should warm start or this reset these? Or both? Or neither?
-                    // !!! This is not right. I have to avoid OS boot code writing zero here from starting the timers
-                    // or a program hung, but I don't know the real rules. ACID test fails because it writes 0 to STIMER and expects
-                    // them to start. I am risking not starting timers and hanging apps doing this
-                    irqPokey[irq] = 0;
+                // Halftime Battlin' Bands hangs unless the initial OS pokes of 0 do trigger timer interrupts when they're enabled
+                // so clearly the docs that say this should only start the timers for non-zero values are wrong.
+                ResetPokeyTimer(iVM, irq);
             }
         }
         if (addr == 10)
@@ -3603,6 +3597,28 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             // I don't reset the bit until the interrupt is ready to fire, I treat it as meaning it's triggered not just enabled.
 
         }
+
+        // SKCTL !!!
+        // SKCTL bit 7 force serial to output 0 NYI
+        // SKCTL bits 5 & 6 serial clock NYI
+        // SKCTL bit 4 asynch receive NYI fully
+        // SKCTL bit 3 two tone mode NYI
+        // SKCTL bit 2 fast pot scan NYI
+        // SKCTL bits 0 & 1 always assumed on to enable keyboard
+        // SKCTL resetting the poly counters to a known value also NYI
+
+        else if (addr == 15)
+        {
+            // asynch receive mode. Timers 3 and 4 are suspended until a start bit is received
+            // !!! I don't resume them when SIO receives data or when this bit is cleared, should I?
+            if (b & 0x10)
+            {
+                // Cosmic Balance hangs if entering async receive mode doesn't kill timer 4
+                irqPokey[2] = 0;
+                irqPokey[3] = 0;
+            }
+        }
+
         else if (addr <= 8)
         {
             if (addr == 8 && (b & 6))
@@ -3617,10 +3633,10 @@ BOOL __forceinline __fastcall PokeBAtariHW(int iVM, ADDR addr, BYTE b)
             if (iCurSample < SAMPLES_PER_VOICE)
                 SoundDoneCallback(iVM, iCurSample);
 
-            // reset a timer that had its frequency changed
+            // reset an active timer (irqPokey will be non-zero) that had its frequency changed
             for (int irq = 0; irq < 4; irq++)
             {
-                if (addr == 8 || addr == (ADDR)(irq << 1))
+                if (irqPokey[irq] && addr == 8 || addr == (ADDR)(irq << 1))
                     ResetPokeyTimer(iVM, irq);
             }
         }
