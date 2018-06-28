@@ -2073,7 +2073,7 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
 
     int candysize = sizeof(CANDYHW);
     if (rgvm[iVM].bfHW != vmAtari48)
-        candysize += (2048 + 4096 + 10240);    // extended XL/XE RAM
+        candysize += (SELF_SIZE + C000_SIZE + BASIC_SIZE + D800_SIZE);    // extended XL/XE RAM
     if (rgvm[iVM].bfHW == vmAtariXE)
         candysize += (16384 * 4);            // extended XE RAM
 
@@ -2180,14 +2180,10 @@ BOOL __cdecl UninitAtari(int iVM)
         rgbMem[0xbffd] = 0;    // no special R cartridge
     }
 
-    // free the cartridges
+    // free the cartridge
     if (rgbSwapCart[iVM])
         free(rgbSwapCart[iVM]);
     rgbSwapCart[iVM] = NULL;
-
-    if (rgbSwapBASIC[iVM])
-        free(rgbSwapBASIC[iVM]);
-    rgbSwapBASIC[iVM] = NULL;
 
     UninitAtariDisks(iVM);
 

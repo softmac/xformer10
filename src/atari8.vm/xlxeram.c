@@ -65,6 +65,7 @@ void InitBanks(int iVM)
         _fmemset(rgbSwapSelf, 0, SELF_SIZE);
         _fmemset(rgbSwapC000, 0, C000_SIZE);
         _fmemset(rgbSwapD800, 0, D800_SIZE);
+        _fmemset(rgbSwapBASIC, 0, BASIC_SIZE);
     }
 
 #if XE
@@ -149,29 +150,21 @@ BOOL __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
     // !!! What happens if a somebody tries to bank a cartridge in when BASIC is already in? I won't allow that.
     if ((mask & BASIC_MASK) && (ramtop == 0xc000 || !rgvm[iVM].rgcart.fCartIn || iSwapCart == iNumBanks))
     {
-        int cb = 8192;
-
-        // make space for BASIC. If a real cartridge goes in, UnInit will free and alloc a larger space for a real cartridge
-        if (!rgbSwapBASIC[iVM])
-            rgbSwapBASIC[iVM] = malloc(cb);
-        if (!rgbSwapBASIC)
-            return FALSE;
-        memset(rgbSwapBASIC, cb, 0);
+        int cb = BASIC_SIZE;
 
         if ((flags & BASIC_MASK) == BASIC_IN)
         {
             // enable BASIC ROMs
             ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(rgbSwapBASIC[iVM], &rgbMem[ramtop], cb);
+            _fmemcpy(rgbSwapBASIC, &rgbMem[ramtop], cb);
             _fmemcpy(&rgbMem[ramtop], rgbXLXEBAS, cb);
         }
         else
         {
             // disable BASIC ROMs
 
-            // make sure rgbSwapBASIC was initialized with the cartridge image!
             ramtop = 0xC000 - (WORD)cb;
-            _fmemcpy(&rgbMem[ramtop], rgbSwapBASIC[iVM], cb);
+            _fmemcpy(&rgbMem[ramtop], rgbSwapBASIC, cb);
             ramtop = 0xC000;
         }
     }
