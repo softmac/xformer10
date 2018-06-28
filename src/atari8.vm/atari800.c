@@ -1316,6 +1316,10 @@ void SwapRAMCart(int iVM, WORD size, BYTE *pb, BYTE iBank)
         }
         AlterRamtop(iVM, 0xc000);
         iSwapCart = iNumBanks;
+
+        // XL/XE uses TRIG3 to tell programs if a cartridge is in
+        if (mdXLXE != md800)
+            TRIG3 = 0;
     }
     else
     {
@@ -1338,6 +1342,10 @@ void SwapRAMCart(int iVM, WORD size, BYTE *pb, BYTE iBank)
             iSwapCart = iBank;    // what bank is in there now
             AlterRamtop(iVM, 0xc000 - size);
         }
+
+        // XL/XE uses TRIG3 to tell programs if a cartridge is in
+        if (mdXLXE != md800)
+            TRIG3 = 1;
     }
 }
 
