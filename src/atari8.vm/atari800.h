@@ -65,6 +65,10 @@ extern BYTE rgbRainbow[];    // the ATARI colour palette
 extern const BYTE rgDMAC[HCLOCKS];
 extern const BYTE rgDMANC[HCLOCKS];
 
+extern const BYTE Bin1[128];
+extern const BYTE Bin2[128];
+extern const BYTE Bin3[128];
+
 // all the possible variables affecting which cycles ANTIC will have the CPU blocked
 //
 // 19 modes

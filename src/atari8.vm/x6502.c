@@ -1850,12 +1850,6 @@ HANDLER(op6C)
 
     if (regEA == 0x2e0)
     {
-        if ((regPC == 0x86c || regPC == 0xd76c) && rgbMem[0x42] != 0)
-        {
-            rgbMem[0x42] = 0;
-            //Assert(0);  // !!! hack for Deflektor XE trashes $725 using page 7 as data, this breaks critic.
-        }
-
         // !!! if a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
         // load address of the last segment in $47/48 in the $2e2 hack below. We can try that.
         // I can't find the program that did this, it must be rare.
@@ -1864,6 +1858,7 @@ HANDLER(op6C)
             rgbMem[0x2e0] = rgbMem[0x47];
             rgbMem[0x2e1] = rgbMem[0x48];
         }
+
         regPC = READ_WORD(iVM, regEA);
     }
 
@@ -2122,8 +2117,7 @@ HANDLER(op80)
         // but you'd be hard pressed to find a good loader that could make them work on real hw anyway
         if (!fAltBinLoader && ws < 0xa80 && we >= 0x700)
         {
-            fAltBinLoader = TRUE;   // try the other loaded relocated elsewhere
-
+            fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
             KillMeSoftlyPlease(iVM);
         }
 
@@ -2133,11 +2127,39 @@ HANDLER(op80)
     }
 
     // BINARY LOADER HACK #2
-    // we just ran some INIT code, and our loader assumed $300-$30b weren't touched, but they were (Click)
-    // put them back
-    // !!! Such a disk image won't run on real hardware if we make an ATR image out of it
+    // we just ran some INIT code, and our loader assumes $300-$30b weren't touched, but they were (Click).
+    // It also assumes that they don't use $700-$880 for data and corrupt that memory space (Deflektor 128)
+    // !!! Such a disk image won't run on real hardware if we make an ATR image out of it - loader lives in ROM, but what can you do?
+    // !!! Hopefully they didn't trash 0x723, that's all we need left alive to notice. I could put this in the RTS but that slows things
+    // down a bit and might falsely trigger, whereas NOP # will never falsely trigger @0x723
     else if (regPC == 0x724 || regPC == 0xd624)   // our two versions of the loader
     {
+        if (regPC == 0x724) // first version of loader susceptible to corruption
+        {
+            // Did init code of the binary trash $700 thinking it owned the place, corrupting our binary? (Deflektor 128)
+            BYTE chk = 0, chkA = 0;
+            for (int i = 0; i < 0x180; i++)
+            {
+                // byte fd is self modifying and unpredictable
+                if (i != 0xfd)
+                {
+                    chk += rgbMem[i + 0x700];
+                    if (i < 0x80)
+                        chkA += Bin1[i];
+                    else if (i < 0x100)
+                        chkA += Bin2[i - 0x80];
+                    else
+                        chkA += Bin3[i - 0x100];
+                }
+            }
+
+            if (chk != chkA)
+            {
+                fAltBinLoader = TRUE;   // try the other loader relocated in ROM
+                KillMeSoftlyPlease(iVM);
+            }
+        }
+
         rgbMem[0x300] = 0x31;
         rgbMem[0x301] = 0x1;
         rgbMem[0x302] = 0x52;
