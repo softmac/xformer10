@@ -142,7 +142,6 @@ BYTE rgPMGMap[65536];
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
 BYTE *rgbSwapCart[MAX_VM];      // Contents of the cartridges, not persisted but reloaded
-BYTE *rgbSwapBASIC[MAX_VM];     // a place to save RAM when BASIC is in
 
 #if USE_PEEK_TABLE
 // quickly peek and poke to the right page w/o branching using jump tables
@@ -444,11 +443,12 @@ typedef struct
 
     // which, if present, will look like this:
     //
-    //char m_rgbSwapSelf[2048];    // extended XL memory
-    //char m_rgbSwapC000[4096];
-    //char m_rgbSwapD800[10240];
+    //BYTE m_rgbSwapSelf[2048];    // extended XL memory
+    //BYTE m_rgbSwapC000[4096];
+    //BYTE m_rgbSwapD800[10240];
+    //BYTE m_rgbSwapBASIC[8192];
     //
-    //char m_rgbXEMem[4][16384];
+    //BYTE m_rgbXEMem[4][16384];
     //
 
 } CANDYHW;
@@ -543,6 +543,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 
 #define SELF_SIZE 2048
 #define C000_SIZE 4096
+#define BASIC_SIZE 8192
 #define D800_SIZE 10240
 #define XE_SIZE 16384
 
@@ -550,8 +551,8 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define rgbSwapSelf   &CANDY_STATE(rgbXLExtMem)
 #define rgbSwapC000   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE)
 #define rgbSwapD800   (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE)
-
-#define rgbXEMem      (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
+#define rgbSwapBASIC  (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
+#define rgbXEMem      (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE + BASIC_SIZE)
 
 #include "6502.h"
 
