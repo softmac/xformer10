@@ -1800,13 +1800,13 @@ void ResetPokeyTimer(int iVM, int irq)
 
     if (irq == 0)
     {
-        f[0] = AUDF1 + ((AUDCTL & 0x20) ? 0 : 1);
+        f[0] = AUDF1 + ((AUDCTL & 0x40) ? 0 : 1);
         c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         irqPokey[0] = (LONG)((ULONGLONG)f[0] * pCLK / c[0]);
     }
     else if (irq == 1)
     {
-        f[1] = ((AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2) + ((AUDCTL & 0x20) ? 0 : 1);
+        f[1] = ((AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2) + ((AUDCTL & 0x40) ? 0 : 1);
         c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
         irqPokey[1] = (LONG)((ULONGLONG)f[1] * pCLK / c[1]);
