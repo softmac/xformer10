@@ -1875,7 +1875,7 @@ HANDLER(op6C)
                  (rgbMem[regPC + 0x2e] == 0x4a && rgbMem[regPC + 0x2f] == 0x03)))
         {
             if (mdXLXE == mdXE)
-                PostMessage(vi.hWnd, WM_COMMAND, IDM_TOGGLEBASIC, 0);   // see comment below
+                KillMePleaseBASIC(iVM); // do NOT post ToggleBasic msg, that only works on current active VM!
             else
                 KIL(iVM);
         }
@@ -1886,7 +1886,7 @@ HANDLER(op6C)
             ((rgbMem[regPC + 0x4f] == 0x21 && rgbMem[regPC + 0x50] == 0x03)))
         {
             if (mdXLXE == mdXE)
-                PostMessage(vi.hWnd, WM_COMMAND, IDM_TOGGLEBASIC, 0);
+                KillMePleaseBASIC(iVM);
             else
                 KIL(iVM);
         }

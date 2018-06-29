@@ -1933,7 +1933,7 @@ int CALLBACK WinMain(
             for (int i = 0; i < MAX_VM; i++)
             {
                 // change VM type for exactly == TRUE
-                if (vrgvmi[i].fKillMePlease == TRUE || vrgvmi[i].fKillMePlease == 3)
+                if (vrgvmi[i].fKillMePlease && vrgvmi[i].fKillMePlease != 2)
                 {
                     // what type are we now?
                     int type = rgvm[i].bfHW;
