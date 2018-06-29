@@ -814,6 +814,8 @@ __inline BYTE *_pbshift(int iVM)
 //
 
 void KillMePlease(int);
+void KillMePleaseXE(int);
+void KillMePleaseBASIC(int);
 void KillMeSoftlyPlease(int);
 void SwitchToPAL(int);
 void Interrupt(int, BOOL);

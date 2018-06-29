@@ -2007,6 +2007,11 @@ BOOL __cdecl InstallAtari(int iVM, PVMINFO pvmi, int type)
             type = mdXE;
             initramtop = 0xc000;
         }
+        else if (vrgvmi[iVM].fKillMePlease == 4) // our special kill code for "need BASIC"
+        {
+            // keep the same type
+            initramtop = 0xa000;
+        }
         else if (type == md800)
         {
             type = mdXL;
@@ -3132,7 +3137,7 @@ void KillMePlease(int iVM)
 
         vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
 
-                                            // quit the thread as early as possible
+        // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
         bp = regPC; // don't do additional scan lines                    }
     }
@@ -3160,12 +3165,26 @@ void KillMePleaseXE(int iVM)
 
         vrgvmi[iVM].fKillMePlease = 3;   // say which thread died, special code for XE w/o BASIC
 
-                                            // quit the thread as early as possible
+        // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
         bp = regPC; // don't do additional scan lines                    }
     }
 }
 
+// we specifically want BASIC swapped into the same VM type we are now
+void KillMePleaseBASIC(int iVM)
+{
+    if (v.fAutoKill)
+    {
+        vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
+
+        vrgvmi[iVM].fKillMePlease = 4;   // say which thread died, special code for BASIC
+
+        // quit the thread as early as possible
+        wLeft = 0;  // exit the Go6502 loop
+        bp = regPC; // don't do additional scan lines                    }
+    }
+}
 
 //
 // here are our various PEEK routines, based on address
