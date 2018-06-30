@@ -17,6 +17,7 @@
 #define IDM_SAVEAS                      40153
 #define IDM_AUTOLOAD                    40154
 #define IDM_EXIT                        40155
+#define IDM_OPENFOLDER                  40156
 
 #define IDM_NEXTVM                      40160
 #define IDM_PREVVM                      40161

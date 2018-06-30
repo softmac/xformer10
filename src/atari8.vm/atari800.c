@@ -2341,10 +2341,7 @@ BOOL __cdecl WarmbootAtari(int iVM)
     // A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
     // or we'll think it's a paddle. 
     if (iVM == v.iVM)
-    {
         InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm boot!
-        //CaptureJoysticks();
-    }
 
     return TRUE;
 }

@@ -461,6 +461,8 @@ typedef struct
     // referenced, but not used
     BOOL     fNoMono : 1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
 
+    char lpCurrentDir[MAX_PATH]; // the current directory the user has browsed to in the dialog boxes
+
     //////////////////////////////////////////////////
     // BELOW THIS LINE ARE THINGS NOT USED BY ATARI800
     //////////////////////////////////////////////////
