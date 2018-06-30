@@ -32,7 +32,7 @@
 typedef struct
 {
     WORD mode;
-    WORD  h;
+    int  h;
     WORD fWP;
     WORD wSectorMac;
     WORD ofs;
@@ -714,11 +714,11 @@ void AtariFNFromPath(int iVM, int i, BYTE *spec)
 
 void DeleteDrive(int iVM, int i)
 {
-    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
+    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != -1))
         _close(rgDrives[iVM][i].h);
 
     rgDrives[iVM][i].mode = MD_OFF;
-    rgDrives[iVM][i].h    = (WORD)-1;
+    rgDrives[iVM][i].h    = -1;
 }
 
 BOOL AddDrive(int iVM, int i, BYTE *pchPath)
@@ -734,9 +734,9 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             }
         }
 
-    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != 65535))
+    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != -1))
         _close(rgDrives[iVM][i].h);
-    rgDrives[iVM][i].h = (WORD)-1;
+    rgDrives[iVM][i].h = -1;
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
@@ -752,7 +752,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
         rgDrives[iVM][i].fWP = 1;  // file is read-only or in use
     }
 
-    rgDrives[iVM][i].h = (WORD)h;
+    rgDrives[iVM][i].h = h;
     rgDrives[iVM][i].wSectorMac = 720;
     rgDrives[iVM][i].mode = MD_SD;
     strcpy(rgDrives[iVM][i].path, (const char *)pchPath);
