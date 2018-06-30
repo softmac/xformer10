@@ -929,6 +929,7 @@ void AlterRamtop(int iVM, WORD addr)
 {
     ramtop = addr;
 
+#if USE_POKE_TABLE || USE_PEEK_TABLE
     int i;
     for (i = 0x80; i < (ramtop >> 8); i++)
     {
@@ -948,6 +949,7 @@ void AlterRamtop(int iVM, WORD addr)
         read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
 #endif
     }
+#endif
 }
 
 // Read in the cartridge. Are we initializing and using the default bank, or restoring a saved state to the last bank used?
@@ -1573,8 +1575,8 @@ void BankCart(int iVM, BYTE iBank, BYTE value)
     // we aren't sure yet, figure it out based on type of banking attempted
     if (bCartType == CART_ATARIMAX1_OR_ATRAX)
     {
-        if (value > 0x0f && value < 0x80)
-            bCartType = CART_ATARIMAX1; // ATRAX bank# is in value, and would never be 16-127
+        if (value > 0x10 && value < 0x80)
+            bCartType = CART_ATARIMAX1; // ATRAX bank# is in value, and would never be 17-127
         else if (iBank > 0)
             bCartType = CART_ATARIMAX1; // ATRAX would never use an address != 0xd500 (I hope)
         // 0xfe is hack for Loderunner 2010 TURBOSOFT which is identical behaviour to ATARIMAX1

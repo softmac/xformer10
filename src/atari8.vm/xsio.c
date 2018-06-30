@@ -220,9 +220,9 @@ BYTE BinA3[128] = {
 
 // BASIC loader
 
-const BYTE Bas1[128] = {
- 0x00, 0x02, 0x00, 0x07, 0x0A, 0x07, 0x18, 0x60, 0xBE, 0x01, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA,
- 0xEA, 0xEA, 0x20, 0x2B, 0x07, 0xA2, 0x0D, 0x18, 0xBD, 0xF2, 0x07, 0x69, 0x07, 0x95, 0x80, 0xCA,
+const BYTE Bas1[128] = {    // ca fe @$10 is our signature so we know to use BASIC
+ 0x00, 0x02, 0x00, 0x07, 0x12, 0x07, 0x18, 0x60, 0xBE, 0x01, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA,
+ 0xca, 0xfe, 0x20, 0x2B, 0x07, 0xA2, 0x0D, 0x18, 0xBD, 0xF2, 0x07, 0x69, 0x07, 0x95, 0x80, 0xCA,
  0xBD, 0xF2, 0x07, 0x95, 0x80, 0xCA, 0x10, 0xEF, 0x4C, 0x98, 0x07, 0xA9, 0x31, 0x8D, 0x00, 0x03,
  0xA9, 0x01, 0x8D, 0x01, 0x03, 0xA9, 0x52, 0x8D, 0x02, 0x03, 0xA9, 0x80, 0x8D, 0x08, 0x03, 0xA9,
  0x00, 0x8D, 0x09, 0x03, 0x8D, 0x0B, 0x03, 0xA9, 0xF2, 0x8D, 0x04, 0x03, 0xA9, 0x07, 0x8D, 0x05,
@@ -1481,21 +1481,9 @@ lNAK:
                 //AUDF1 = AUDF2 = AUDF3 = AUDF4 = 0;    // doesn't work by itself!
                 AUDC1 = AUDC2 = AUDC3 = AUDC4 = 0;
                 
-                // do not read into ROM and overwrite something we shouldn't. If the OS is swapped out, himem could be RAM.
-                // Maybe I should make a flag to save me this trouble.
-                BYTE temp = rgbMem[wBuff];
-                BYTE temp2 = rgbMem[wBuff + wBytes - 1];
-                PokeBAtari(iVM, wBuff, temp + 1);   // this will disallow an attempted write to ROM
-                PokeBAtari(iVM, wBuff + wBytes - 1, temp2 + 1);
-
-                // !!! this test fails to write any bytes if the buffer straddles ROM, we err on the side of not hurting ROM.
-                // Our binary loader hacks (MD_FILEBIN) actually might load into ROM ($d600 hack)
-                if (rgbMem[wBuff] == temp || rgbMem[wBuff + wBytes - 1] == temp2)
-                    wRetStat = SIO_OK;
-                else if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS))
+                // create a virtual whole disk image out of a single ATARI file
+                if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS))
                 {
-                    // read a normal file as an 8-bit file in a virtual disk
-
                     memset(rgb, 0, sizeof(rgb));
                     _fmemset(&rgbMem[wBuff], 0, 128);
 
@@ -1617,31 +1605,40 @@ lNAK:
                     }
                 }
 
-                // only partial sector existed on the disk - error
-                else if (_read(pdrive->h, &rgbMem[wBuff], wBytes) < wBytes)
-                    wRetStat = SIO_DEVDONE;
-
-                // it worked!
+                // read from a PC disk file
                 else
                 {
-                    // now pretend 7 jiffies elapsed for apps that time disk sector reads (Repton)
-                    BYTE jif = 7;
-                    // reading the same sector as last time takes twice as long
-                    if (wSector == wLastSIOSector)
-                        jif = 14;
-                    BYTE oldjif = rgbMem[20];
-                    rgbMem[20] = oldjif + jif;
-                    if (oldjif >= (256 - jif))
-                    {
-                        oldjif = rgbMem[19];
-                        rgbMem[19]++;
-                        if (oldjif == 255)
-                            rgbMem[18]++;
-                    }
+                    // don't read directly into memory, it might be partially in himem which should be ignored,
+                    // so use PokeBAtari (SAG mag #114)
+                    BYTE c128[256]; // largest sector size
+                    int wBX = _read(pdrive->h, c128, wBytes);
+                    for (int iw = 0; iw < wBX; iw++)
+                        PokeBAtari(iVM, wBuff + iw, c128[iw]);
 
-                    wRetStat = SIO_OK;
-                    if (wLastSIOSector >= 0)
-                        wLastSIOSector = wSector;
+                    if (wBX < wBytes)
+                        wRetStat = SIO_DEVDONE;
+
+                    else
+                    {
+                        // now pretend 7 jiffies elapsed for apps that time disk sector reads (Repton)
+                        BYTE jif = 7;
+                        // reading the same sector as last time takes twice as long
+                        if (wSector == wLastSIOSector)
+                            jif = 14;
+                        BYTE oldjif = rgbMem[20];
+                        rgbMem[20] = oldjif + jif;
+                        if (oldjif >= (256 - jif))
+                        {
+                            oldjif = rgbMem[19];
+                            rgbMem[19]++;
+                            if (oldjif == 255)
+                                rgbMem[18]++;
+                        }
+
+                        wRetStat = SIO_OK;
+                        if (wLastSIOSector >= 0)
+                            wLastSIOSector = wSector;
+                    }
                 }
             }
             else if ((wCom == 'W') || (wCom == 'P'))
