@@ -46,6 +46,7 @@ IDR_GEMMENU MENU PRELOAD DISCARDABLE
 BEGIN
     POPUP "&File"
     BEGIN
+        MENUITEM "&Open Folder...", IDM_OPENFOLDER
         POPUP "New &VM"
         BEGIN
             MENUITEM "ATARI 800", IDM_ADDVM1    // 32 possible VM types

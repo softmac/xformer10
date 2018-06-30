@@ -1181,6 +1181,126 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
     return lpCmdLine;
 }
 
+// Open all the files inside this folder or long string of dragged filenames.
+// Provides the instance # of the first VM opened, or -1 if nothing opened successfully
+// Returns a filename if the only file in the list was a .GEM file.
+//
+LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
+{
+    if (piFirstVM)
+        *piFirstVM = -1;
+
+    LPSTR lpLoad = NULL;
+
+    // make a copy of the cmd line parameters (and remember its starting point) so we can grow it to add dir contents
+    int szCmdLineUsed = strlen(lpCmdLine);  // used portion of buffer, not including NULL
+    int szCmdLine;          // size of buffer
+    LPSTR lpCmdLineStart = NULL;   // beginning of buffer
+    if (szCmdLineUsed)
+    {
+        szCmdLine = max(65536, szCmdLineUsed + 1);  // size of buffer
+        lpCmdLineStart = malloc(szCmdLine);    // beginning of buffer
+        strcpy(lpCmdLineStart, lpCmdLine);
+        lpCmdLine = lpCmdLineStart;  // current position in buffer as we read filenames
+    }
+
+    // !!! what if more than one VM type supports the same file extension?
+
+    if (lpCmdLine && lpCmdLine[0])
+    {
+        char sFile[MAX_PATH];
+        int iVM, VMtype, MEDIAtype;
+        size_t len;
+        BOOL f;
+
+        while (lpCmdLine && strlen(lpCmdLine) > 4 && v.cVM < MAX_VM)
+        {
+            // parse the next filename out of the list and tell us what VM can handle this kind of file, and what kind of media it is
+            // directory names will be replaced with all of the files in them, recursively.
+            // 
+            lpCmdLine = GetNextFilename(sFile, lpCmdLine, &szCmdLineUsed, &lpCmdLineStart, &szCmdLine, &VMtype, &MEDIAtype);
+
+            len = strlen(sFile);
+
+            // a disk
+            if (VMtype != -1 && MEDIAtype == 1)
+            {
+                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
+                {
+                    strcpy(rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
+                    rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+                    f = FALSE;
+                    if (FInitVM(iVM))
+                    {
+                        f = ColdStart(iVM);
+                        if (f && vi.hdc)
+                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                    }
+                    if (f)
+                    {
+                        if (piFirstVM && *piFirstVM == -1)
+                            *piFirstVM = iVM;
+                    }
+                    else
+                        DeleteVM(iVM, FALSE);
+
+                }    // using drag/drop, just move on with our lives if there's an error
+            }
+
+            // a cartridge
+            else if (VMtype != -1 && MEDIAtype == 2)
+            {
+                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
+                {
+                    strcpy(rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
+                    rgvm[iVM].rgcart.fCartIn = TRUE;
+                    f = FALSE;
+                    if (FInitVM(iVM))
+                    {
+                        f = ColdStart(iVM);
+                        if (f && vi.hdc)
+                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                    }
+                    if (f)
+                    {
+                        if (piFirstVM && *piFirstVM == -1)
+                            *piFirstVM = iVM;
+                    }
+                    else
+                        DeleteVM(iVM, FALSE);    // bad cartridge? Don't show an empty VM, just kill it
+
+                }    // using drag/drop, just move on with our lives if there's an error
+            }
+
+            // found a .gem file. Only notice it if it's the first/only thing being dragged.
+            // One .gem file in a thousand other files keeping them all from loading would really aggravate a person.
+
+            else if (_stricmp(sFile + len - 3, "gem") == 0 && *piFirstVM == -1)
+            {
+#if 0
+                fSkipLoad = FALSE;    // changed our mind, loading this .gem file
+
+                                      // delete all of our VMs we accidently made before we found the .gem file
+                for (int z = 0; z < MAX_VM; z++)
+                {
+                    if (rgvm[z].fValidVM)
+                        DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
+                }
+#endif
+
+                lpLoad = sFile;    // load this .gem file
+                break;    // stop loading more files
+            }
+        }
+    }
+
+    if (szCmdLineUsed)
+        free(lpCmdLineStart);
+
+    return lpLoad;
+}
+
+
 void CalcIntegerScale(int iVM)
 {
     RECT rect;
@@ -1391,129 +1511,25 @@ int CALLBACK WinMain(
 	// INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
 	// to allow hot-plugging
 	InitJoysticks();
-	//CaptureJoysticks();
-
-    // In case we start up with a parameter on the cmd line
-    BOOL fSkipLoad = FALSE;
 
     //MessageBox(vi.hWnd, "HI", NULL, MB_OK);
 
     //char test[130] = "\"c:\\danny\\8bit\\atari\\_TEST\\HOH1.xex\"";
     //lpCmdLine = test;
 
-    // assume we're loading the default .ini file
-    char *lpLoad = NULL;
-
     // load all of the files dragged onto us, including those in all subdirectories of directories!
+    // if lpLoad is not NULL, that means the first/only thing was was a .GEM file that it wants us to load
+    // iVM is the first VM opened so we can select it
 
-    // make a copy of the cmd line parameters (and remember its starting point) so we can grow it to add dir contents
-    int szCmdLineUsed = strlen(lpCmdLine);  // used portion of buffer, not including NULL
-    int szCmdLine;          // size of buffer
-    LPSTR lpCmdLineStart = NULL;   // beginning of buffer
-    if (szCmdLineUsed)
-    {
-        szCmdLine = max(65536, szCmdLineUsed + 1);  // size of buffer
-        lpCmdLineStart = malloc(szCmdLine);    // beginning of buffer
-        strcpy(lpCmdLineStart, lpCmdLine);
-        lpCmdLine = lpCmdLineStart;  // current position in buffer as we read filenames
-    }
-
-    // !!! what if more than one VM type supports the same file extension?
+    int iVMx;
+    char *lpLoad = OpenFolders(lpCmdLine, &iVMx);
+    BOOL fSkipLoad = (iVMx >= 0); // we loaded at list one new thing, no need to load our last state
     
-    if (lpCmdLine && lpCmdLine[0])
-    {
-        char sFile[MAX_PATH];
-        int iVM, VMtype, MEDIAtype;
-        size_t len;
-        BOOL f;
-
-        while (lpCmdLine && strlen(lpCmdLine) > 4 && v.cVM < MAX_VM)
-        {
-            // parse the next filename out of the list and tell us what VM can handle this kind of file, and what kind of media it is
-            // directory names will be replaced with all of the files in them, recursively.
-            // 
-            lpCmdLine = GetNextFilename(sFile, lpCmdLine, &szCmdLineUsed, &lpCmdLineStart, &szCmdLine, &VMtype, &MEDIAtype);
-
-            len = strlen(sFile);
-
-            // a disk
-            if (VMtype != -1 && MEDIAtype == 1)
-            {
-                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
-                {
-                    strcpy(rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
-                    rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
-                    f = FALSE;
-                    if (FInitVM(iVM))
-                    {
-                        f = ColdStart(iVM);
-                        if (f && vi.hdc)
-                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
-                    }
-                    if (f)
-                    {
-                        if (!fSkipLoad)
-                            SelectInstance(iVM);
-                        fSkipLoad = TRUE;
-                    }
-                    else
-                        DeleteVM(iVM, FALSE);
-
-                }    // using drag/drop, just move on with our lives if there's an error
-            }
-
-            // a cartridge
-            else if (VMtype != -1 && MEDIAtype == 2)
-            {
-                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
-                {
-                    strcpy(rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
-                    rgvm[iVM].rgcart.fCartIn = TRUE;
-                    f = FALSE;
-                    if (FInitVM(iVM))
-                    {
-                        f = ColdStart(iVM);
-                        if (f && vi.hdc)
-                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
-                    }
-                    if (f)
-                    {
-                        if (!fSkipLoad)
-                            SelectInstance(iVM);
-                        fSkipLoad = TRUE;
-                    }
-                    else
-                        DeleteVM(iVM, FALSE);    // bad cartridge? Don't show an empty VM, just kill it
-
-                }    // using drag/drop, just move on with our lives if there's an error
-            }
-
-            // found a .gem file. Only notice it if it's the first thing being dragged.
-            // One .gem file in a thousand other files keeping them all from loading would really aggravate a person.
-
-            else if (_stricmp(sFile + len - 3, "gem") == 0 && fSkipLoad == FALSE)
-            {
-#if 0
-                fSkipLoad = FALSE;    // changed our mind, loading this .gem file
-
-                // delete all of our VMs we accidently made before we found the .gem file
-                for (int z = 0; z < MAX_VM; z++)
-                {
-                    if (rgvm[z].fValidVM)
-                        DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
-                }
-#endif
-
-                lpLoad = sFile;    // load this .gem file
-                break;    // stop loading more files
-            }
-        }
-    }
-
-    if (szCmdLineUsed)
-        free(lpCmdLineStart);
-
-    // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
+    // make the first new thing loaded the current one
+    if (iVMx >= 0)
+        SelectInstance(iVMx);
+    
+        // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
     // Otherwise, keep the last global settings
     if (v.cVM > 1)
     {
@@ -3862,6 +3878,22 @@ void PasteAsciiAtascii(LPSTR lpClip, BOOL fAtascii)
     }
 }
 
+// The only way to set an initial directory for the folder browser
+
+INT CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lp, LPARAM pData)
+{
+    lp;
+
+    switch (uMsg)
+    {
+    case BFFM_INITIALIZED:
+        SendMessage(hwnd, BFFM_SETSELECTION, TRUE, (LPARAM)pData);
+        break;
+    }
+
+    return 0;
+}
+
 /****************************************************************************
 
     FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -4661,12 +4693,42 @@ break;
             FixAllMenus(FALSE);
             break;
 
-        // Delete this instance, and choose another
-        case IDM_DELVM:
+        // Open every VM found inside this folder
+        case IDM_OPENFOLDER:
+            BROWSEINFOA bi;
+            CHAR fold[MAX_PATH];
+            memset(&bi, 0, sizeof(BROWSEINFOA));
+            
+            bi.hwndOwner = vi.hWnd;
+            bi.pidlRoot = NULL;
+            bi.pszDisplayName = fold;
+            bi.lpszTitle = "Pick a Folder";
+            bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_DONTGOBELOWDOMAIN | BIF_EDITBOX | BIF_USENEWUI | BIF_NONEWFOLDERBUTTON;
+            bi.lpfn = BrowseCallbackProc;
+            // !!! This will always use the location of the last file specified in the OpenFile Dlg, it won't remember
+            // the choice they make here, or will OpenFile.
+            bi.lParam = (LPARAM)v.lpCurrentDir;  // the only way to set an initial directory to show, stupid function
 
-            assert(v.iVM != -1);
-            if (v.iVM != -1)
-                DeleteVM(v.iVM, TRUE);
+            CoInitialize(NULL); // this stupid function needs this
+            PIDLIST_ABSOLUTE pid = SHBrowseForFolder(&bi);
+            SHGetPathFromIDList(pid, fold);
+            CoTaskMemFree(pid);
+            
+            // Open everything in that folder and add to the currently open VMs. Select the first new thing opened.
+            // Do nothing if the only thing in the folder is a .GEM file; that is opened through a separate menu item.
+            // Go into TILED mode if opened something new and we now have >1 VM
+            int iVMx;
+            OpenFolders(fold, &iVMx);
+            if (iVMx >= 0)
+            {
+                if (v.cVM > 1 && !v.fTiling)
+                    SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+                else if (!v.fTiling)
+                    SelectInstance(iVMx);
+                FixAllMenus(TRUE);
+                InitThreads();  // mutiple opens like this doesn't do this each time, to save time
+            }
+
             break;
 
         case IDM_NEW:
@@ -4682,6 +4744,14 @@ break;
 
             // now try to make the default ones
             CreateAllVMs();
+            break;
+
+        // Delete this instance, and choose another
+        case IDM_DELVM:
+
+            assert(v.iVM != -1);
+            if (v.iVM != -1)
+                DeleteVM(v.iVM, TRUE);
             break;
 
         // There are 32 types of VMs (it's a LONG bitfield)
@@ -4743,9 +4813,6 @@ break;
                 // even if we're tiling, what the heck
                 SelectInstance(vmNew);
 
-            // !!! what about error?
-            assert(v.cVM);
-            FixAllMenus(TRUE);
             break;
 
         // choose a cartridge to use
@@ -5778,6 +5845,7 @@ break;
 #endif
 
         PostQuitMessage(0);
+        CoUninitialize();
         return 0;
         break;
 
@@ -5868,12 +5936,14 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
     OpenFileName.hInstance         = NULL;
 
     // we want to save/load our whole session
-    if (nType == 0)
+    if (nType == 0 && iVM >= 0)
         OpenFileName.lpstrFilter = rgvm[iVM].pvmi->szFilter;
-    else if (nType == 1)
+    else if (nType == 1 && iVM >= 0)
         OpenFileName.lpstrFilter = rgvm[iVM].pvmi->szCartFilter;
-    else
+    else if (nType == 2)
         OpenFileName.lpstrFilter = "Xformer Session\0*.gem\0All Files\0*.*\0\0";
+    else
+        OpenFileName.lpstrFilter = "";
 
     // !!! TODO - Darek, set the proper VMINFO fields for other VMs like this:
     // MAC: VMINFO.szFilter = "Macintosh Disk Images\0*.dsk;*.ima*;*.img;*.hf*;*.hqx;*.cd\0All Files\0*.*\0\0";
@@ -5892,7 +5962,7 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
     OpenFileName.nFileExtension    = 0;
     OpenFileName.lpstrDefExt       = (fCreate && nType == 2) ? "gem" : ((fCreate && nType == 0) ? "atr" : NULL);
     OpenFileName.lCustData         = 0;
-    OpenFileName.lpfnHook            = NULL;
+    OpenFileName.lpfnHook          = NULL;
     OpenFileName.lpTemplateName    = NULL;
     OpenFileName.Flags             = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST |
             (fCreate ? 0 : OFN_FILEMUSTEXIST);
@@ -5907,6 +5977,13 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
     if (fR)
     {
         strcpy(psz, OpenFileName.lpstrFile);
+
+        // remember the folder the chosen file is in, so Browsing for a folder dialog can default to the same place
+        int c = strlen(psz) - 1;
+        while (c >= 0 && psz[c] != '\\')
+            c--;
+        if (c >= 2)
+            strncpy(v.lpCurrentDir, psz, c + 1);
         return TRUE;
     }
 
