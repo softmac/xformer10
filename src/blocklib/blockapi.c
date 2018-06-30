@@ -87,8 +87,12 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             return FS_MFS;
             }
 
-        // !!! ATR images exist with non-zero first byte (Bird Eggs). Hopefully just checking for 3 won't give false positives
+        // !!! ATR images exist with non-zero first byte (Bird Eggs). Hopefully just checking for 3 won't give false positives.
         // Boot disks can have anything besides 3, but I believe a DOS disk will always have 3.
+        // !!! Unfortunately many, many magazine disks with custom boot records don't have 3, so these files can't be extracted.
+        // If we ignore the three, we'll extract garbage from every non-DOS disk, but that's their own fault for trying to
+        // extract files from it?
+        // Also, it's not safe to assume every disk is an ATARI disk once other VM types are allowed.
         if (rgch[0] != 0x4D && rgch[1] == 0x03)
             {
 #if TRACEDISK

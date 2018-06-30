@@ -1848,7 +1848,20 @@ HANDLER(op6C)
 {
     EA_absW(iVM);
 
-    if (regEA == 0x2e0)
+    if (regEA == 0xc)
+    {
+        regPC = READ_WORD(iVM, regEA);
+        
+        // detect our BASIC loader, that means we need BASIC
+        if (ramtop == 0xc000 && regPC == 0x712 && rgbMem[0x710] == 0xca && rgbMem[0x711] == 0xfe)
+            KillMePleaseBASIC(iVM);
+
+        // detect another common BASIC loader in the boot sectors (not the AUTORUN.SYS kind) - Crickets
+        if (ramtop == 0xc000 && regPC == 0x70a && rgbMem[0x720] == 0x95 && rgbMem[0x721] == 0x80)
+            KillMePleaseBASIC(iVM);
+    }
+    
+    else if (regEA == 0x2e0)
     {
         // !!! if a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
         // load address of the last segment in $47/48 in the $2e2 hack below. We can try that.
@@ -1866,35 +1879,31 @@ HANDLER(op6C)
     {
         regPC = READ_WORD(iVM, regEA);
 
-        // this detects the famous autorun.sys (4 versions) that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
+        // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
         // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
-        if (regPC == 0x0600 && ramtop == 0xc000 &&
-                ((rgbMem[regPC + 3] == 0x1a && rgbMem[regPC + 4] == 0x03) ||
-                 (rgbMem[regPC + 3] == 0x21 && rgbMem[regPC + 4] == 0x03) ||    // carrier force
-                 (rgbMem[regPC + 0xa] == 0x21 && rgbMem[regPC + 0xb] == 0x03) ||
-                 (rgbMem[regPC + 0x2e] == 0x4a && rgbMem[regPC + 0x2f] == 0x03)))
+        // There are many versions out there (I stopped counting at 6 and made a generalized solution),
+        // and access a page 3 address and then the next page 3 address 5 bytes later LDA #nn STA $3xx LDA #mm STA $3(xx+1).
+        // where nn is between $1a and $3f.
+        // Some variations are different, though. Aargh.
+        // Also, some custom boot loaders have this code nearby in case they need it, but it won't execute. Finding it
+        // will ruin the non-BASIC games on their menu. Careful not to false positive (check for immediate RTS)
+        // (SAG mag #114 Earth). If launched in XL mode, it's stupid enough to swap BASIC in on a warm start, but that's its fault.
+        if (ramtop == 0xc000)
         {
-            if (mdXLXE == mdXE)
-                KillMePleaseBASIC(iVM); // do NOT post ToggleBasic msg, that only works on current active VM!
-            else
-                KIL(iVM);
-        }
-
-        // Bird Eggs autorun - custom booter banks XE before we see this, so we're already in XE w/o BASIC mode. KIL would simply
-        // loop forever by switching to 800 w/o BASIC.
-        if (regPC == 0x066a && ramtop == 0xc000 &&
-            ((rgbMem[regPC + 0x4f] == 0x21 && rgbMem[regPC + 0x50] == 0x03)))
-        {
-            if (mdXLXE == mdXE)
-                KillMePleaseBASIC(iVM);
-            else
-                KIL(iVM);
-        }
-
-        if ((regPC == 0x87c || regPC == 0xd77c || regPC == 0x7fc || regPC == 0xd6fc) && rgbMem[0x42] != 0)
-        {
-            rgbMem[0x42] = 0;
-            Assert(0);  // this should be fixed now, CRITIC should always be OK
+            for (int i = regPC; i < regPC + 0xfa; i++) // always less than 2 pages long to fit in 2 sector autorun.sys
+            {
+                BYTE b = rgbMem[i];
+                if (rgbMem[regPC] != 0x60 && b >= 0x1a && b <= 0x3e && rgbMem[i + 1] == 3 && (b == 0x1a || (rgbMem[i + 6] == 3 && rgbMem[i + 5] == b + 1)))
+                {
+                    KillMePleaseBASIC(iVM); // do NOT post ToggleBasic msg, that only works on current active VM!
+                }
+                // demo_1b.atr writes to the screen and presses return continuously by poking $34a,$d @ i=$62e
+                // I wonder if anybody else does something similar... !!! will this false positive without the test for i == $62e?
+                if (b == 0x4a && rgbMem[i + 1] == 3 && rgbMem[i - 2] == 0xd)
+                {
+                    KillMePleaseBASIC(iVM);
+                }
+            }
         }
     }
     
