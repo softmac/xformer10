@@ -1762,6 +1762,10 @@ lExit:
     
     // Cosmic balance hangs without this as the timer 4 interrupt swallows it whole
     PokeBAtari(iVM, 0xd20f, 0x13); // SKCTL - SIO also leaves POKEY in async receive mode stopping timers 3 and 4
+
+    // The real SIO also copies the IRQEN shadow to IRQEN, that's not the VBI that does it, so we need to do this
+    // or the keyboard IRQ is left turned off and the keyboard stops working (Floyd of the Jungle)
+    PokeBAtari(iVM, 0xd20e, rgbMem[0x10]);
    
     //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
     //regSP = (regSP + 2) & 255 | 256;
