@@ -140,8 +140,11 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 // globals used by the app and not persisted, extern ones are visible from other files
 //
 
-static int sWheelOffset;    // for scrolling tiles using the pad or touchscreen
+int sWheelOffset;           // for scrolling tiles using the pad or touchscreen
+int sTilesPerRow;           // how many tiles we are currently fitting per ro
 extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
+POINT sTileSize;            // the size of the tiles, we have to pick one when mixing VM types
+
 WORD fBrakes;               // run at full speed or emulated speed?
 WORD fBrakesSave;           // remember last state when pasting
 ULONGLONG uExecSpeed;       // how long Execute() takes (for one, or all VMs if tiled)
@@ -153,7 +156,7 @@ RECT sRectTile[MAX_VM];     // the piece of the large bitmap the VM is responsib
 RECT sRectC;                // the size of the whole window that it is drawing a piece of
 int  sStride;               // the stride of the big client rect
 
-extern BOOL fDebug;            // enables DEBUG output
+extern BOOL fDebug;         // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
 
 extern int sPan;            // amount the roulette wheel is spun
@@ -690,7 +693,9 @@ extern INST vi;
 //
 typedef struct _vmhw
 {
-    // current graphics mode settings (this is not in vi. since it must be restorable)
+    // current graphics mode settings - mostly copied from the VMINFO the VM provides to us, but we
+    // may want to alter the monitor type or size for some reason, so this represents the "current settings"
+    // vs the "default settings" provided by the VMINFO. Plus it holds the BITMAPINFOHEADER we create for this VM.
 
     int   xpix;         // horizontal resolution (ST pixels)
     int   ypix;         // vertical resolution (ST pixels)
