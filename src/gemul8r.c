@@ -1574,12 +1574,6 @@ int CALLBACK WinMain(
     char *lpLoad = OpenFolders(lpCmdLine, &iVMx);
     BOOL fSkipLoad = (iVMx >= 0); // we loaded at list one new thing, no need to load our last state
     
-    if (iVMx >= 0)
-    {
-        SelectInstance(iVMx);  // make the first new thing loaded the current one
-        v.sWheelOffset = 0;    // new dragged tiles, not loading an old state - start at the top of the tiles
-    }
-
     // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
     // Otherwise, keep the last global settings
     if (v.cVM > 1)
@@ -1588,12 +1582,20 @@ int CALLBACK WinMain(
         v.fFullScreen = FALSE;
         v.swWindowState = SW_SHOWMAXIMIZED;
     }
+
     // drag and drop a single file shouldn't be tiled, but re-loading your preference that way should
     else if (fSkipLoad)
     {
         v.fTiling = FALSE;
         // !!! If the saved size is a small window, allowed because of tiling, we'll start up this 
         // drag/drop VM single sized, not double sized!
+    }
+
+    // Select the first instance loaded as the current. We must have set tiled/not tiled already to init threads properly
+    if (iVMx >= 0)
+    {
+        SelectInstance(iVMx);  // make the first new thing loaded the current one
+        v.sWheelOffset = 0;    // new dragged tiles, not loading an old state - start at the top of the tiles
     }
 
     // If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
