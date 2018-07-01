@@ -153,7 +153,10 @@ PFNWRITE write_tab[MAX_VM][256];
 
 // bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
 
-#define SIO_DELAY 13            // !!! wait fewer than 13 scan lines and Spy vs Spy Arctic hangs, my beep timing seems about right
+// !!! This delay between byte reads seems to make beeps at the proper rate. The initial delay
+// for the first byte is going to be twice as long (for spin-up). Spy vs Spy Arctic hangs if the doubled
+// delay is < 13, and Flight Simulator II hangs if it's < 20
+#define SIO_DELAY 13
 
 // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
 BYTE sectorSIO[MAX_VM][128];    // disk sector, not persisted but reloaded
