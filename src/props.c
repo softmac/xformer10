@@ -184,7 +184,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         InitThreads();
     }
 
-    sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
+    v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
     sVM = -1;    // the one in focus may be gone
     
     if (!v.cVM)
