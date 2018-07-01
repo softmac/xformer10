@@ -507,15 +507,19 @@ ThreadTry:
             int x, y, iDone = iVM;
             BOOL fFirst = TRUE;
 
-            // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-            int nx = (rect.right * 10 / rgvm[iVM].pvmi->uScreenX + 5) / 10; // how many fit across (if 1/2 showing counts)?
+            // !!! the tile size will match the first VM in the list
+            sTileSize.x = rgvm[iVM].pvmi->uScreenX;
+            sTileSize.y = rgvm[iVM].pvmi->uScreenY;
 
-            for (y = sWheelOffset; y < rect.bottom; y += rgvm[iVM].pvmi->uScreenY /* * vi.fYscale*/)
+            int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
+            sTilesPerRow = nx;  // remember this
+
+            for (y = sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
-                for (x = 0; x < nx * (int)rgvm[iVM].pvmi->uScreenX; x += rgvm[iVM].pvmi->uScreenX /* * vi.fXscale*/)
+                for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
                     // Don't consider tiles completely off screen
-                    if (y + (int)rgvm[iVM].pvmi->uScreenY > 0 && y < rect.bottom)
+                    if (y + sTileSize.y > 0 && y < rect.bottom)
                     {
                         if (fFirst)
                         {
@@ -1890,6 +1894,7 @@ int CALLBACK WinMain(
             // wait for them to complete one frame
             WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
         }
+
         // not tiled. There's only one or two threads
         else if (!v.fTiling && v.iVM >= 0)
         {
@@ -2482,7 +2487,7 @@ BOOL CreateNewBitmap(int iVM)
     vi.sy = vvmhw[iVM].ypix;
     vi.dx = 0;
     vi.dy = 0;
-    vi.fXscale = 1;
+    vi.fXscale = 1; // global size multiplier currently ignored
     vi.fYscale = 1;
 
 #ifdef ALLOW_DIRECTX
@@ -2677,8 +2682,8 @@ Ltryagain:
 
         vi.fYscale *= (char)scan_double; // won't overflow?
 
-        vi.sx = vvmhw[iVM].xpix * vi.fXscale;
-        vi.sy = vvmhw[iVM].ypix * vi.fYscale;
+        vi.sx = vvmhw[iVM].xpix /* * vi.fXscale */;
+        vi.sy = vvmhw[iVM].ypix /* * vi.fYscale */;
     }
 
     // true monochrome? (2-color)
@@ -2791,8 +2796,8 @@ Ltryagain:
     vi.sx = rect.right;
     vi.sy = rect.bottom;
 
-    vi.dx = (vi.sx - (vvmhw[iVM].xpix * vi.fXscale)) / 2;
-    vi.dy = (vi.sy - (vvmhw[iVM].ypix * vi.fYscale)) / 2;
+    vi.dx = (vi.sx - (vvmhw[iVM].xpix /* * vi.fXscale */)) / 2;
+    vi.dy = (vi.sy - (vvmhw[iVM].ypix /* * vi.fYscale */)) / 2;
 
     // we may have moved the window, so we need to move the mouse capture rectangle too
 
@@ -2919,24 +2924,24 @@ void RenderBitmap()
             BOOL fBlack = FALSE;
 
             // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
-            int nx1 = rect.right / vvmhw[iVM].xpix; // how many fit across entirely?
-            int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (if 1/2 showing counts)?
+            int nx1 = rect.right / sTileSize.x; // how many fit across entirely?
+            int nx = sTilesPerRow;   // how many fit across (if 1/2 showing counts)?
 
             // black out the area we'll never draw to
             if (nx == nx1)
-                BitBlt(vi.hdc, nx * vvmhw[iVM].xpix, 0, rect.right - (vvmhw[iVM].xpix * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
+                BitBlt(vi.hdc, nx * sTileSize.x, 0, rect.right - (sTileSize.x * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
 
-            for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale*/)
+            for (y = rect.top + sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
-                for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+                for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
                     // Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
-                    if (y + vvmhw[iVM].ypix > 0 && !fBlack)
+                    if (y + sTileSize.y > 0 && !fBlack)
                     {
                         if (sVM == (int)iVM)
                         {
                             // border around the one we're hovering over
-                            int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
+                            int xw = sTileSize.x, yw = sTileSize.y;
                             BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
                             BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
                             BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
@@ -2975,7 +2980,7 @@ void RenderBitmap()
                 RECT rectB;
                 int ycur = 0;
                 GetPosFromTile(sVM, &rectB);
-                int xw = vvmhw[iVM].xpix, yw = vvmhw[iVM].ypix;
+                int xw = sTileSize.x, yw = sTileSize.y;
                 int xmax = xw;
                 int ymax = yw;
                 if (rectB.left + xw > rect.right)
@@ -3396,24 +3401,24 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
 
     int fDone = 0;
 
-    int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+    int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
     
     // first tile position, may be a huge negative number
     y = rect.top + sWheelOffset;
 
-    int row = abs(y) / vvmhw[iVM].ypix;   // how many rows down until the bottom of the rect will be > 0?
-    y += row * vvmhw[iVM].ypix;           // top of nFirstTileVisible
+    int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
+    y += row * sTileSize.y;           // top of nFirstTileVisible
 
-    for (; y < rect.bottom; y += vvmhw[iVM].ypix /* * vi.fYscale */)
+    for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
-        for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+        for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
         {
             if (iVM == iVMTarget)
             {
                 prect->left = x;
                 prect->top = y;
-                prect->right = x + vvmhw[iVM].xpix;
-                prect->bottom = y + vvmhw[iVM].ypix;
+                prect->right = x + sTileSize.x;
+                prect->bottom = y + sTileSize.y;
                 return;
             }
 
@@ -3454,16 +3459,14 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
         iVM = ((iVM + 1) % MAX_VM);
     int fDone = iVM;
 
-    int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+    int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
 
-    for (y = rect.top + sWheelOffset; y < rect.bottom; y += vvmhw[iVM].ypix * vi.fYscale)
+    for (y = rect.top + sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
-        for (x = 0; x < nx * vvmhw[iVM].xpix; x += vvmhw[iVM].xpix /* * vi.fXscale*/)
+        for (x = 0; x < nx * vvmhw[iVM].xpix; x += sTileSize.x /* * vi.fXscale*/)
         {
-            // !!! vi is a global! Don't use it?
-
-            if ((xPos >= x) && (xPos < x + vvmhw[iVM].xpix * vi.fXscale) &&
-                (yPos >= y) && (yPos < y + vvmhw[iVM].ypix * vi.fYscale))
+            if ((xPos >= x) && (xPos < x + sTileSize.x /* * vi.fXscale */) &&
+                (yPos >= y) && (yPos < y + sTileSize.y /* * vi.fYscale */))
             {
                 if (ppt)
                 {
@@ -3501,9 +3504,9 @@ void ScrollTiles()
     while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
         iVM++;
 
-    int nx = (rect.right * 10 / vvmhw[iVM].xpix + 5) / 10; // how many fit across (1/2 showing counts)
+    int nx = sTilesPerRow; // how many fit across (1/2 showing counts)
     int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
-    bottom = bottom * vvmhw[iVM].ypix - rect.bottom;    // how many pixels past the bottom of the screen is that?
+    bottom = bottom * sTileSize.y - rect.bottom;    // how many pixels past the bottom of the screen is that?
 
     if (bottom < 0)
         bottom = 0;
@@ -3981,8 +3984,8 @@ LRESULT CALLBACK WndProc(
         RECT rect;
         GetWindowRect(hWnd, &rect);
         if (!v.fFullScreen)
-          if ((vvmhw[v.iVM].xpix * vi.fXscale) < GetSystemMetrics(SM_CXSCREEN)) // !!! vi is a global!
-          if ((vvmhw[v.iVM].ypix * vi.fYscale) < GetSystemMetrics(SM_CYSCREEN))
+          if ((vvmhw[v.iVM].xpix /* * vi.fXscale */) < GetSystemMetrics(SM_CXSCREEN))
+          if ((vvmhw[v.iVM].ypix /* * vi.fYscale */) < GetSystemMetrics(SM_CYSCREEN))
           if (rect.left > 0 && rect.top > 0)
                 GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
@@ -4008,20 +4011,27 @@ LRESULT CALLBACK WndProc(
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
           }
 
-        // remember if we're maximized, minimized or normal
         WINDOWPLACEMENT wp;
         wp.length = sizeof(WINDOWPLACEMENT);
         GetWindowPlacement(vi.hWnd, &wp);
+
+        // The tiles will re-arrange themselves on a resize, so we need to reset our scrolling offset to show the 
+        // same tiles in this new configuration.
+        // If we're going into or coming out of minimize, nothing's really changing
+        if (v.fTiling && sWheelOffset && v.swWindowState != SW_SHOWMINIMIZED && wp.showCmd != SW_SHOWMINIMIZED)
+        {
+            int nFT = -sWheelOffset / sTileSize.y * sTilesPerRow;       // top left tile
+            int noff = -sWheelOffset - nFT / sTilesPerRow * sTileSize.y;// amount of partial scrolling            
+            int nx = (LOWORD(lParam) * 10 / sTileSize.x + 5) / 10;      // how many fit across using the new size
+            sWheelOffset = -(nFT / nx * sTileSize.y + noff);         // keep the old top left tile in the first row, offset the same amount
+        }
+
+        // remember if we're maximized, minimized or normal
         v.swWindowState = wp.showCmd;
 
-        // take note of our window size (if not full screen nor minimized)
+        // take note of our restored window size (if not full screen nor minimized)
         if (!v.fFullScreen && v.swWindowState == SW_SHOWNORMAL)
             GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
-
-        // If we're bigger, so many tiles might now fit offscreen that all the visible ones vanish
-        // If we're not tiling, doing this would make it so coming back to tiled mode loses your place
-        if (v.fTiling)
-            sWheelOffset = 0;
 
         // Don't make a tiled bitmap of the new size yet, that blanks out our window as we resize.
         // don't try and re-make a zero size window either
@@ -4032,6 +4042,8 @@ LRESULT CALLBACK WndProc(
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
             InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
         }
+        else if (v.fTiling)
+            InitThreads();  // save time by halting everything while minimized
 
         // figure out the new scaling factor for when we do integer scaled stretching
         CalcIntegerScale(v.iVM);
@@ -4706,7 +4718,7 @@ break;
             bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_DONTGOBELOWDOMAIN | BIF_EDITBOX | BIF_USENEWUI | BIF_NONEWFOLDERBUTTON;
             bi.lpfn = BrowseCallbackProc;
             // !!! This will always use the location of the last file specified in the OpenFile Dlg, it won't remember
-            // the choice they make here, or will OpenFile.
+            // the choice they make here, or will OpenFile.wm
             bi.lParam = (LPARAM)v.lpCurrentDir;  // the only way to set an initial directory to show, stupid function
 
             CoInitialize(NULL); // this stupid function needs this
