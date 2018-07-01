@@ -140,8 +140,7 @@ typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
 // globals used by the app and not persisted, extern ones are visible from other files
 //
 
-int sWheelOffset;           // for scrolling tiles using the pad or touchscreen
-int sTilesPerRow;           // how many tiles we are currently fitting per ro
+int sTilesPerRow;           // how many tiles we are currently fitting per row
 extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
 POINT sTileSize;            // the size of the tiles, we have to pick one when mixing VM types
 
@@ -460,11 +459,11 @@ typedef struct
     int      swWindowState;    // were we restored? maximized? minimized?
     RECT     rectWinPos;    // saved window pos (want top left corner only)
     BOOL     fTimeTravelFixed; // we chose a point to go back to, so stop saving periodically
+    int      sWheelOffset;           // for scrolling tiles using the pad or touchscreen
+    char     lpCurrentDir[MAX_PATH]; // the current directory the user has browsed to in the dialog boxes
 
     // referenced, but not used
     BOOL     fNoMono : 1;     // 0 = use mono bitmaps, 1 = use 256 color for mono
-
-    char lpCurrentDir[MAX_PATH]; // the current directory the user has browsed to in the dialog boxes
 
     //////////////////////////////////////////////////
     // BELOW THIS LINE ARE THINGS NOT USED BY ATARI800

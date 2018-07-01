@@ -514,7 +514,7 @@ ThreadTry:
             int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
             sTilesPerRow = nx;  // remember this
 
-            for (y = sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
+            for (y = v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
                 for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
@@ -2931,7 +2931,7 @@ void RenderBitmap()
             if (nx == nx1)
                 BitBlt(vi.hdc, nx * sTileSize.x, 0, rect.right - (sTileSize.x * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
 
-            for (y = rect.top + sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
+            for (y = rect.top + v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
                 for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
@@ -3404,7 +3404,7 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
     int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
     
     // first tile position, may be a huge negative number
-    y = rect.top + sWheelOffset;
+    y = rect.top + v.sWheelOffset;
 
     int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
     y += row * sTileSize.y;           // top of nFirstTileVisible
@@ -3461,7 +3461,7 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 
     int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
 
-    for (y = rect.top + sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
+    for (y = rect.top + v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
         for (x = 0; x < nx * vvmhw[iVM].xpix; x += sTileSize.x /* * vi.fXscale*/)
         {
@@ -3510,10 +3510,10 @@ void ScrollTiles()
 
     if (bottom < 0)
         bottom = 0;
-    if (sWheelOffset > 0)
-        sWheelOffset = 0;
-    if (sWheelOffset < bottom * -1)
-        sWheelOffset = bottom * -1;
+    if (v.sWheelOffset > 0)
+        v.sWheelOffset = 0;
+    if (v.sWheelOffset < bottom * -1)
+        v.sWheelOffset = bottom * -1;
 
     InitThreads();  // now that sWheelOffset is stable
 
@@ -4014,16 +4014,18 @@ LRESULT CALLBACK WndProc(
         WINDOWPLACEMENT wp;
         wp.length = sizeof(WINDOWPLACEMENT);
         GetWindowPlacement(vi.hWnd, &wp);
-
+        
         // The tiles will re-arrange themselves on a resize, so we need to reset our scrolling offset to show the 
         // same tiles in this new configuration.
         // If we're going into or coming out of minimize, nothing's really changing
-        if (v.fTiling && sWheelOffset && v.swWindowState != SW_SHOWMINIMIZED && wp.showCmd != SW_SHOWMINIMIZED)
+        // If we would divide by zero, we're just starting up and we can trust sWheelOffset to be correct already
+        if (v.fTiling && v.sWheelOffset && sTileSize.y && sTilesPerRow &&
+                    v.swWindowState != SW_SHOWMINIMIZED && wp.showCmd != SW_SHOWMINIMIZED)
         {
-            int nFT = -sWheelOffset / sTileSize.y * sTilesPerRow;       // top left tile
-            int noff = -sWheelOffset - nFT / sTilesPerRow * sTileSize.y;// amount of partial scrolling            
-            int nx = (LOWORD(lParam) * 10 / sTileSize.x + 5) / 10;      // how many fit across using the new size
-            sWheelOffset = -(nFT / nx * sTileSize.y + noff);         // keep the old top left tile in the first row, offset the same amount
+            int nFT = -v.sWheelOffset / sTileSize.y * sTilesPerRow;        // top left tile
+            int noff = -v.sWheelOffset - nFT / sTilesPerRow * sTileSize.y; // amount of partial scrolling            
+            int nx = (LOWORD(lParam) * 10 / sTileSize.x + 5) / 10;         // how many fit across using the new size
+            v.sWheelOffset = -(nFT / nx * sTileSize.y + noff);             // keep the old top left tile in the first row, offset the same amount
         }
 
         // remember if we're maximized, minimized or normal
@@ -4559,15 +4561,56 @@ break;
             
 			v.fTiling = !v.fTiling;
             
-			if (v.fTiling && !CreateTiledBitmap())   // what can we do on error besides try again later?
-                fNeedTiledBitmap = TRUE;
+            // things we need set up for tiled mode
+            if (v.fTiling)
+            {
+                if (!CreateTiledBitmap())   // what can we do on error besides try again later?
+                    fNeedTiledBitmap = TRUE;
+
+                // Set a logical current scroll position, but not if we're not initialized and would / 0
+                if (v.sWheelOffset && sTileSize.y)
+                {
+                    RECT rc;
+                    GetClientRect(vi.hWnd, &rc);
+                    
+                    // Make sure the current VM is visible as one of the tiles that come up. Perhaps we changed VMs.
+                    // Perhaps we changed window size. Either way, the current tile might not be one of the visible ones.
+                    // If it's at all visible, don't touch a thing, that will make going in/out of tiled mode disconcerting.
+
+                    int nx = (rc.right * 10 / sTileSize.x + 5) / 10;         // how many fit across
+                    int nFT = -(v.sWheelOffset / sTileSize.y * nx);          // top left tile
+                    int nLT = nFT + sTilesPerRow * ((rc.bottom - 1) / sTileSize.y + 1); // last tile even partially visible
+
+                    // which tile number is this VM? It's a sparse array.
+                    Assert(v.iVM >= 0);
+                    int nT = -1, nV = 0;
+                    while (nV < MAX_VM)
+                    {
+                        if (rgvm[nV].fValidVM)
+                            nT++;
+                        if (nV == v.iVM)
+                            break;
+                        nV++;
+                    }
+
+                    // Our tile is too high up to be visible - put it in the top row
+                    if (nT < nFT)
+                        v.sWheelOffset = -(nT / nx * sTileSize.y);
+
+                    // Our tile is too far down to be visible - put it in the bottom row
+                    else if (nT >= nLT)
+                        v.sWheelOffset = min(0, -(nT / nx * sTileSize.y - rc.bottom + sTileSize.y));
+                }
+            
+                InitThreads();  // now that we know our offset, make the proper threads
+            }
             
 			uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             
 			if (v.cVM && v.fTiling)
             {
                 //nFirstTile = v.iVM;    // show the current VM as the top left one - that's annoying
-                //sWheelOffset = 0;    // start at the top - also annoying
+                //v.sWheelOffset = 0;    // start at the top - also annoying
 
                 // now where is the mouse? That tile gets focus
                 POINT pt;
@@ -4586,7 +4629,6 @@ break;
             }
             FixAllMenus(TRUE);
             DisplayStatus(v.iVM);   // Stretched status may change, for instance
-            InitThreads();
             break;
 
         // toggle TURBO mode
@@ -5073,7 +5115,7 @@ break;
                 //    f = CreateAllVMs();
             }
 
-            sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
+            v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
             sVM = -1;    // the one in focus may be gone
             FixAllMenus(TRUE);
             InitThreads();
@@ -5428,7 +5470,7 @@ break;
         }
         else if (!fZoom && v.fTiling && v.cVM)
         {
-            sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
+            v.sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
             ScrollTiles();
         }
         
@@ -5504,7 +5546,7 @@ break;
                 // Tiled mode - vertical swipe through the tiles
                 else if (v.fTiling)
                 {
-                    sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
+                    v.sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
                     ScrollTiles();
                     iPanBegin.y = gi.ptsLocation.y;
                 }
