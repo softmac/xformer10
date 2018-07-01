@@ -150,6 +150,7 @@ ULONGLONG uExecSpeed;       // how long Execute() takes (for one, or all VMs if 
 BOOL fNeedTiledBitmap;      // size change or something means we need a new size bitmap
 POINT ptBlack;              // the top left of the black area of the tiled window
 BOOL fRenderThisTime;       //
+BYTE *pThreadReserve;       // allocate storage for threads before it gets fragmented
 
 RECT sRectTile[MAX_VM];     // the piece of the large bitmap the VM is responsible for, in Tiled mode
 RECT sRectC;                // the size of the whole window that it is drawing a piece of

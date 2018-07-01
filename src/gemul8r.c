@@ -453,6 +453,13 @@ void SacrificeVM()
 //
 BOOL InitThreads()
 {
+    // if we saved space to make sure making these wouldn't run out of memory, free that now
+    if (pThreadReserve)
+    {
+        free(pThreadReserve);
+        pThreadReserve = NULL;
+    }
+
     //ODS("InitThreads\n");
     BOOL fNeedFix = FALSE;
 
@@ -1237,8 +1244,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     if (FInitVM(iVM))
                     {
                         f = ColdStart(iVM);
-                        if (f && vi.hdc)
-                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                        if (f)
+                            f = CreateNewBitmap(iVM);
                     }
                     if (f)
                     {
@@ -1262,8 +1269,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     if (FInitVM(iVM))
                     {
                         f = ColdStart(iVM);
-                        if (f && vi.hdc)
-                            f = CreateNewBitmap(iVM);    // we might not have a window yet, we'll do it when we do
+                        if (f)
+                            f = CreateNewBitmap(iVM);
                     }
                     if (f)
                     {
@@ -1509,12 +1516,50 @@ int CALLBACK WinMain(
             );
 #endif // ATARIST
 
+    // before memory fragments itself loading all the VMs, reserve space for a number of threads and a big bitmap for tiles
+    // = a rough estimate number of tiles that fit on a screen. Thread stack space is 64K retail, 128K debug.
+    // Otherwise creating the threads will fail and we'll have to kill a bunch of VMs to make space for them, way more than
+    // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
+    int nT = (GetSystemMetrics(SM_CXSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYSCREEN) / 240 + 1);
+#ifdef NDEBUG
+    pThreadReserve = malloc(nT * 65536 * 6);        // 6x 64K stack space seems to be needed
+#else
+    pThreadReserve = malloc(nT * 65536 * 2 * 4);    // 4x 128K stack space seems to be needed
+#endif
+
+    if (!pThreadReserve)
+        return FALSE;
+
     // this is slow, so only do it once ever. And do it now before we fill memory with VMs and they end up having to be silent
     InitSound();
 
 	// INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
 	// to allow hot-plugging
 	InitJoysticks();
+
+    // Create a main window for this application instance - default size for now
+    // We need to do this before processing drag/drop or restoring our state, as we need an hdc!
+
+    vi.hWnd = CreateWindowEx(0L,
+        vi.szAppName,       // See RegisterClass() call.
+        vi.szTitle,         // Text for window title bar.
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX,
+        100,    // X posisition
+        100,    // Y position
+        640, // Window width
+        480, // Window height
+        NULL,            // Overlapped windows have no parent.
+        NULL,            // Use the window class menu.
+        hInstance,       // This instance owns this window.
+        NULL             // We don't use any data in our WM_CREATE
+    );
+
+    // If window could not be created, return "failure"
+    if (!vi.hWnd)
+        return (FALSE);
+
+    // Attach the menu, make the window visible; update its client area; and return "success"
+    SetMenu(vi.hWnd, vi.hMenu);
 
     //MessageBox(vi.hWnd, "HI", NULL, MB_OK);
 
@@ -1642,29 +1687,17 @@ int CALLBACK WinMain(
 
     //printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 
-    // Create a main window for this application instance.
-    vi.hWnd = CreateWindowEx(0L,
-        vi.szAppName,       // See RegisterClass() call.
-        vi.szTitle,         // Text for window title bar.
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX,
-        v.rectWinPos.left,    // X posisition
-        v.rectWinPos.top,    // Y position
-        v.rectWinPos.right - v.rectWinPos.left, // Window width
-        v.rectWinPos.bottom - v.rectWinPos.top, // Window height
-        NULL,            // Overlapped windows have no parent.
-        NULL,            // Use the window class menu.
-        hInstance,       // This instance owns this window.
-        NULL             // We don't use any data in our WM_CREATE
-    );
+    int ws = v.swWindowState;   // remember if we wanted to come up maximized (from our restored state)
 
-    // If window could not be created, return "failure"
-    if (!vi.hWnd)
-        return (FALSE);
+    // Now make the window the proper restored size (we had to create it before we restored its previous size)
+    // This will change v.swWindowState to restored
+    SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
+        v.rectWinPos.bottom - v.rectWinPos.top, 0);
 
-    // Attach the menu, make the window visible; update its client area; and return "success"
-    SetMenu(vi.hWnd, vi.hMenu);
+    // remember if we wanted to come up maximized
+    v.swWindowState = ws;
 
-    // don't ever come up minimized, that's dumb
+    // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb
     ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED: nCmdShow);
 
     UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
@@ -3947,21 +3980,6 @@ LRESULT CALLBACK WndProc(
         SetTextColor(vi.hdc, RGB(0,255,0));  // set green text
         SetBkMode(vi.hdc, TRANSPARENT);
 
-        // now that we have a DC make all the buffers for the screens of all the instances
-        for (int ii = 0; ii < MAX_VM; ii++)
-        {
-            if (rgvm[ii].fValidVM)
-            {
-                BOOL fC = CreateNewBitmap(ii);
-                if (!fC)
-                    DeleteVM(ii, FALSE);   // don't do the slow parts
-            }
-        }
-
-        FixAllMenus(TRUE);
-        SelectInstance(v.iVM);  // current instance might have gone away
-        //InitThreads(); !!! our window size is not valid yet, do not call yet! So we can't call DeleteVM(-1, TRUE)
-
         // if we were saved in fullscreen mode, then actually go into fullscreen
         if (v.fFullScreen) {
             v.fFullScreen = FALSE;    // so we think we aren't in it yet
@@ -4859,8 +4877,8 @@ break;
             if (vmNew != -1 && FInitVM(vmNew))
             {
                 fA = ColdStart(vmNew);
-                if (fA && vi.hdc)
-                    fA = CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
+                if (fA)
+                    fA = CreateNewBitmap(vmNew);
             }
             if (!fA)
                 DeleteVM(vmNew, TRUE);
