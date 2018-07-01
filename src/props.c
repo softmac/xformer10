@@ -149,54 +149,88 @@ int AddVM(int type, BOOL fAll)
 
 // This will Uninit and delete the VM, freeing it's bitmap, etc.
 // The BOOL tells us whether to do slow things that should only be done after calling this a bunch of times in a row,
-// but needn't happen every time
+// but needn't happen every time. If you call us with fFIxMenus = FALSE a bunch of times, you have to finish off
+// by calling us with (-1, TRUE)
 //
 void DeleteVM(int iVM, BOOL fFixMenus)
 {
-    if (!rgvm[iVM].fValidVM)
-        return;
-
-    //ODS("Delete %d\n", iVM);
-
-    if (vrgvmi[iVM].hdcMem)
+    if (iVM >= 0)
     {
-        SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
-        DeleteDC(vrgvmi[iVM].hdcMem);
-        vrgvmi[iVM].hdcMem = NULL;
-    }
+        if (!rgvm[iVM].fValidVM)
+            return;
 
-    if (vrgvmi[iVM].hbm)
-    {
-        DeleteObject(vrgvmi[iVM].hbm);
-        vrgvmi[iVM].hbm = NULL;
-    }
+        //ODS("Delete %d\n", iVM);
 
-    FUnInitVM(iVM);
-    FUnInstallVM(iVM);
-    rgvm[iVM].fValidVM = FALSE;    // the next line will do this anyway, but let's be clear
+        if (vrgvmi[iVM].hdcMem)
+        {
+            SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
+            DeleteDC(vrgvmi[iVM].hdcMem);
+            vrgvmi[iVM].hdcMem = NULL;
+        }
 
-    v.cVM--;    // one fewer valid instance now
+        if (vrgvmi[iVM].hbm)
+        {
+            DeleteObject(vrgvmi[iVM].hbm);
+            vrgvmi[iVM].hbm = NULL;
+        }
 
-    // we can't roulette anymore with only 1 thing
-    if (sPan && v.cVM == 1)
-    {
-        sPan = 0;
-        InitThreads();
-    }
+        FUnInitVM(iVM);
+        FUnInstallVM(iVM);
+        rgvm[iVM].fValidVM = FALSE;
 
-    v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
-    sVM = -1;    // the one in focus may be gone
-    
-    if (!v.cVM)
-    {
-        v.iVM = -1;
-        RenderBitmap(); // draw black to make the last image go away
+        v.cVM--;    // one fewer valid instance now
+
+        // we can't roulette anymore with only 1 thing
+        if (sPan && v.cVM == 1)
+        {
+            sPan = 0;
+            InitThreads();
+        }
+
+        v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
+        sVM = -1;              // the one in focus may be gone
+
+        if (!v.cVM)
+        {
+            v.iVM = -1;
+            RenderBitmap(); // draw black to make the last image go away
+        }
     }
 
     // OK, we're not doing a bunch of deletes in a row, take the possibly slow steps
     if (fFixMenus)
     {
-        SelectInstance(v.iVM);
+
+        // !!! this will never work until we compact hundreds of individual variables that are [MAX_VM]
+        // including the private VM data we know nothing about
+#if 0   
+        
+        // now compact our array - overlapping regions
+
+        // just one thing to compact
+        if (iVM >= 0 && iVM < v.cVM)
+        {
+            memmove(&rgvm[iVM], &rgvm[iVM + 1], sizeof(VM) * (v.cVM - iVM));
+            rgvm[v.cVM].fValidVM = FALSE;
+        }
+
+        // who knows how much compaction we have to do
+        else if (iVM == -1)
+        {
+            int sparse = 0;
+            for (int i = 0; i < v.cVM; i++)
+            {
+                while (!rgvm[sparse].fValidVM)
+                    sparse++;
+                if (i != sparse)
+                    memmove(&rgvm[i], &rgvm[sparse], sizeof(VM));
+                sparse++;
+            }
+            Assert(sparse <= MAX_VM);
+        }
+#endif
+
+        SelectInstance(v.iVM);   // best guess at the next VM to get focus
         DisplayStatus(v.iVM);    // or name of last VM erased would stay on title bar
         FixAllMenus(TRUE);
         InitThreads();
@@ -331,10 +365,9 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         for (int z = 0; z < MAX_VM; z++)
         {
             if (rgvm[z].fValidVM)
-                DeleteVM(z, FALSE);
+                DeleteVM(z, FALSE); // the quick version when we call it successively
         }
-        FixAllMenus(TRUE);
-        InitThreads();  // do these 2 things after calling DeleteVM(,FALSE) a bunch of times
+        DeleteVM(-1, TRUE); // now do the things we skipped 
 
         assert(v.cVM == 0);
 
@@ -490,8 +523,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
         }
-        FixAllMenus(TRUE);
-        InitThreads();
+        DeleteVM(-1, TRUE); // now do the stuff we skipped
         return FALSE;
     }
 

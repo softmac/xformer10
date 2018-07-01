@@ -642,7 +642,7 @@ ThreadTry:
 
     // something went wrong. Rather than exiting the app, try again with fewer VMs until it works
 ThreadFail:
-    SacrificeVM();
+    SacrificeVM();  // !!! This calls DeleteVM( , FALSE) is that OK?
     fNeedFix = TRUE;
     goto ThreadTry;
 }
@@ -1246,7 +1246,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                             *piFirstVM = iVM;
                     }
                     else
-                        DeleteVM(iVM, FALSE);
+                        DeleteVM(iVM, FALSE);   // !!! we do the quick version! Caller must do the rest
 
                 }    // using drag/drop, just move on with our lives if there's an error
             }
@@ -1529,11 +1529,13 @@ int CALLBACK WinMain(
     char *lpLoad = OpenFolders(lpCmdLine, &iVMx);
     BOOL fSkipLoad = (iVMx >= 0); // we loaded at list one new thing, no need to load our last state
     
-    // make the first new thing loaded the current one
     if (iVMx >= 0)
-        SelectInstance(iVMx);
-    
-        // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
+    {
+        SelectInstance(iVMx);  // make the first new thing loaded the current one
+        v.sWheelOffset = 0;    // new dragged tiles, not loading an old state - start at the top of the tiles
+    }
+
+    // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
     // Otherwise, keep the last global settings
     if (v.cVM > 1)
     {
@@ -1835,9 +1837,9 @@ int CALLBACK WinMain(
                     {
                         SacrificeVM();
                     } while ((fx = CreateTiledBitmap()) == FALSE && v.cVM);
-                    FixAllMenus(TRUE);
-                    InitThreads();
-                    SelectInstance(v.iVM);  // current one might have gone away
+                    
+                    DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
+
                     if (fx)
                         fNeedTiledBitmap = FALSE;
                 }
@@ -3955,9 +3957,10 @@ LRESULT CALLBACK WndProc(
                     DeleteVM(ii, FALSE);   // don't do the slow parts
             }
         }
+
         FixAllMenus(TRUE);
         SelectInstance(v.iVM);  // current instance might have gone away
-        //InitThreads(); our window size is not valid yet, do not call yet!
+        //InitThreads(); !!! our window size is not valid yet, do not call yet! So we can't call DeleteVM(-1, TRUE)
 
         // if we were saved in fullscreen mode, then actually go into fullscreen
         if (v.fFullScreen) {
@@ -4071,15 +4074,12 @@ LRESULT CALLBACK WndProc(
         {
             if (rgvm[ii].fValidVM)
                 if (!CreateNewBitmap(ii))    // fix every instance's bitmap
-                    DeleteVM(ii, FALSE);
+                    DeleteVM(ii, FALSE);     // do the quick version
         }
-        FixAllMenus(TRUE);
-        SelectInstance(v.iVM); // current instance might have gone away
-
+        DeleteVM(-1, TRUE); // now do the stuff we missed
+        
         if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
             fNeedTiledBitmap = TRUE;
-
-        InitThreads();  // we keep a # of threads == # of visible tiles !!! error?
 
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
@@ -4609,9 +4609,6 @@ break;
             
 			if (v.cVM && v.fTiling)
             {
-                //nFirstTile = v.iVM;    // show the current VM as the top left one - that's annoying
-                //v.sWheelOffset = 0;    // start at the top - also annoying
-
                 // now where is the mouse? That tile gets focus
                 POINT pt;
                 if (GetCursorPos(&pt))
@@ -4779,8 +4776,12 @@ break;
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
                 else if (!v.fTiling)
                     SelectInstance(iVMx);
+                
+                // OpenFolders does the quick DeleteVM, so do the stuff that might not have been done
+                // but not exactly what DeleteVM(-1, TRUE) does
                 FixAllMenus(TRUE);
                 InitThreads();  // mutiple opens like this doesn't do this each time, to save time
+                // don't reset scroll position, we're adding VMs not replacing the session
             }
 
             break;
@@ -4791,13 +4792,13 @@ break;
             for (int z = 0; z < MAX_VM; z++)
             {
                 if (rgvm[z].fValidVM)
-                    DeleteVM(z, FALSE);
+                    DeleteVM(z, FALSE); // the quick version
             }
-            FixAllMenus(TRUE);
-            InitThreads();
+            DeleteVM(-1, TRUE); // now do the stuff we missed
 
             // now try to make the default ones
             CreateAllVMs();
+            v.sWheelOffset = 0;    // start back at the top of the tiles
             break;
 
         // Delete this instance, and choose another
@@ -5434,7 +5435,6 @@ break;
         // don't do more than one zoom level at a time, require 10 jiffy delay
         if (fZoom && v.cVM && ullJif - ullZoomJif >10)
         {
-
             if (offset > 0)    // zoom in
             {
                 POINT pt;
@@ -5470,7 +5470,7 @@ break;
         }
         else if (!fZoom && v.fTiling && v.cVM)
         {
-            v.sWheelOffset += (offset / 15); // how much did we scroll? Very slow on the surface, but any faster is unusable on normal pads.
+            v.sWheelOffset += (offset / 15); // how much did we scroll?
             ScrollTiles();
         }
         

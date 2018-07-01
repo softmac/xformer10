@@ -2893,7 +2893,8 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                     {
                         //ODS("DISK READ REQUEST sector %d @%03x\n", rgSIO[2] | ((int)rgSIO[3] << 8), wScan);
                         SERIN = 0xff;    // flag to say we haven't reported any data back yet
-                        fSERIN = (wScan + SIO_DELAY);    // waiting less than this hangs apps who aren't ready for the data
+                        // First delay is extra long for spin-up, Flight Simulator II hangs waiting < 20
+                        fSERIN = (wScan + SIO_DELAY * 2);    // waiting less than this hangs apps who aren't ready for the data
                         if (fSERIN >= MAXY)
                             fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
@@ -2977,7 +2978,7 @@ BOOL __cdecl ExecuteAtari(int iVM, BOOL fStep, BOOL fCont)
                 else if (SERIN == 0xff && (rgSIO[1] == 0x52 || rgSIO[1] == 0x53))    // nothing sent yet
                 {
                     SERIN = 0x41;    // ack
-                    //ODS("SERIN: ACK\n");
+                    //ODS("SERIN: ACK @%03x\n", wScan);
                 }
 
                 // we don't support this yet, so send NAK
