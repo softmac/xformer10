@@ -128,9 +128,9 @@ int AddVM(int type, BOOL fAll)
         rgvm[iVM].fSound = TRUE;
         rgvm[iVM].fJoystick = TRUE;
 
-        // if this is our first VM...
+        // if this is our first VM. Create this resource now while lots of memory is or we'll be too fragmented later
         if (v.cVM == 1)
-            fNeedTiledBitmap = TRUE;    // it might be too early to create it without a DC
+            fNeedTiledBitmap = !CreateTiledBitmap(); // it's OK if it fails, we'll try again later
 
         if (fAll)
         {
@@ -292,8 +292,8 @@ BOOL CreateAllVMs()
             if (FInitVM(vmNew))
             {
                 f = ColdStart(vmNew);
-                if (f && vi.hdc)
-                    f = CreateNewBitmap(vmNew);    // we might not have a window yet, we'll do it when we do
+                if (f)
+                    f = CreateNewBitmap(vmNew);
             }
             if (!f)
                 DeleteVM(vmNew, TRUE);
@@ -458,7 +458,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 if (f)
                 {
                     v.cVM++;
-                    if (f && vi.hdc)
+                    if (f)
                         f = CreateNewBitmap(i);
                     if (!f)
                         // with v.cVM upated, fValidVM set and the bitmap created, this function will now work
