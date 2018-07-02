@@ -1537,17 +1537,17 @@ int CALLBACK WinMain(
 	// to allow hot-plugging
 	InitJoysticks();
 
-    // Create a main window for this application instance - default size for now
+    // Create a main window for this application instance - 
     // We need to do this before processing drag/drop or restoring our state, as we need an hdc!
 
     vi.hWnd = CreateWindowEx(0L,
         vi.szAppName,       // See RegisterClass() call.
         vi.szTitle,         // Text for window title bar.
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX,
-        100,    // X posisition
-        100,    // Y position
-        640, // Window width
-        480, // Window height
+        v.rectWinPos.left,    // X posisition
+        v.rectWinPos.top,    // Y position
+        v.rectWinPos.right - v.rectWinPos.left, // Window width
+        v.rectWinPos.bottom - v.rectWinPos.top, // Window height
         NULL,            // Overlapped windows have no parent.
         NULL,            // Use the window class menu.
         hInstance,       // This instance owns this window.
@@ -1585,12 +1585,8 @@ int CALLBACK WinMain(
 
     // drag and drop a single file shouldn't be tiled, but re-loading your preference that way should
     else if (fSkipLoad)
-    {
         v.fTiling = FALSE;
-        // !!! If the saved size is a small window, allowed because of tiling, we'll start up this 
-        // drag/drop VM single sized, not double sized!
-    }
-
+  
     // Select the first instance loaded as the current. We must have set tiled/not tiled already to init threads properly
     if (iVMx >= 0)
     {
@@ -1600,7 +1596,7 @@ int CALLBACK WinMain(
 
     // If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
     if (!fSkipLoad && v.fSaveOnExit)
-        fProps = LoadProperties(lpLoad, FALSE);
+        /* fProps = */ LoadProperties(lpLoad, FALSE);   // don't forget saved window position just because restoring failed!
 
     // If we didn't restore/drag any VM's
     if (v.cVM == 0)
@@ -1689,19 +1685,11 @@ int CALLBACK WinMain(
 
     //printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 
-    int ws = v.swWindowState;   // remember if we wanted to come up maximized (from our restored state)
-
-    // Now make the window the proper restored size (we had to create it before we restored its previous size)
-    // This will change v.swWindowState to restored
-    SetWindowPos(vi.hWnd, NULL, v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right - v.rectWinPos.left,
-        v.rectWinPos.bottom - v.rectWinPos.top, 0);
-
-    // remember if we wanted to come up maximized
-    v.swWindowState = ws;
-
     // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb
-    ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED: nCmdShow);
-
+    // Make sure to come up initially in the same state as we closed, for the sWheelOffset number to make sense
+    // I'm not sure how, but even if we come up maximized, we're properly shrinking back to the last restored window size
+    ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED : nCmdShow);
+    
     UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
 
 #if defined(ATARIST) || defined(SOFTMAC)
