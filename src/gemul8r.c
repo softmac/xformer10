@@ -1379,6 +1379,8 @@ int CALLBACK WinMain(
     MSG msg;
     BOOL fProps;
 
+    //MessageBox(NULL, NULL, NULL, MB_OK);
+
     // init the VM structure sizes so they look valid
     // create the thread's message queue
     for (int ii = 0; ii < MAX_VM; ii++)
@@ -1401,11 +1403,7 @@ int CALLBACK WinMain(
 
     GetSystemInfo(&vi.si);
 
-    // It's rude to store settings globally in the WINDOWS directory
-    // since there may be multiple users on the machine (i.e. Windows XP).
-    // So we check to see that IE4.71 or higher is running and if so use
-    // the per-user application directory
-
+    // get our application directory (where we save our data)
     if (S_OK == SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, (char *)&vi.szWindowsDir))
     {
         strcat(vi.szWindowsDir, "\\Emulators");

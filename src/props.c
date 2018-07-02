@@ -388,7 +388,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         // non-persistable pointers need to be refreshed
         // and only use VM's that we can handle in this build
 
-        char *pPersist = malloc(65536);
+        char *pPersist = NULL;
+        int  cbPersist = 0;
 
         for (int i = 0; i < MAX_VM; i++)
         {
@@ -436,10 +437,19 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                     f = FALSE;
                     if (l)    // that's a L, not a 1.
                     {
-                        pPersist = realloc(pPersist, cb);
+                        if (cb > cbPersist)
+                        {
+                            pPersist = realloc(pPersist, cb);
+                            if (pPersist)
+                                cbPersist = cb;
+                            else
+                                cbPersist = 0;
+                        }
+
                         l = 0;
                         if (pPersist)
                             l = _read(h, pPersist, cb);
+
                         if (l == (int)cb) {
                             if (FLoadStateVM(i, pPersist, cb))
                                 f = TRUE;
