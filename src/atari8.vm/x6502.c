@@ -1853,7 +1853,7 @@ HANDLER(op6C)
         regPC = READ_WORD(iVM, regEA);
         
         // detect our BASIC loader, that means we need BASIC
-        if (ramtop == 0xc000 && regPC == 0x712 && rgbMem[0x710] == 0xca && rgbMem[0x711] == 0xfe)
+        if (ramtop == 0xc000 && regPC == 0x70a && rgbMem[0x708] == 0xca && rgbMem[0x709] == 0xfe)
             KillMePleaseBASIC(iVM);
 
         // detect another common BASIC loader in the boot sectors (not the AUTORUN.SYS kind) - Crickets
