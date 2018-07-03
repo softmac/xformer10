@@ -276,7 +276,7 @@ void BtoPch(char *pch, unsigned b)
 
 // return FALSE when somebody quits
 //
-BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
+BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
 {
     char chCom;                 /* command character */
     unsigned char ch;
@@ -289,7 +289,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
     char pInst[MAX_PATH];
     pInst[0] = 0;
-    CreateInstanceName(iVM, pInst);
+    CreateInstanceName(iVM /*((CANDYHW *)candy)->m_iVM*/, pInst);
 
     while (1)
     {
@@ -315,8 +315,8 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
 
 
         w = regPC;
-        CchDisAsm(iVM, &w); // don't alter the actual PC
-        CchShowRegs(iVM);
+        CchDisAsm(candy, &w); // don't alter the actual PC
+        CchShowRegs(candy);
         uMemDasm = regPC;    // 'd' and 'm' dumps will start here
         uMemDump = regPC;
         chLast = 0;            // forget whatever the last cmd was
@@ -345,8 +345,8 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
             {
                 // clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
                 for (int i = 0; i < MAX_VM; i++)
-                    if (vrgcandy[i])
-                        vrgcandy[i]->m_bp = 0xffff;
+                    if (rgvm[i].pvmi == &vmi800)    // this VM is one of us
+                        ((CANDYHW *)(vrgvmi[i].pPrivate))->m_bp = 0xffff; // OK to start poking around in its private data
 
                 fTrace = FALSE;
                 vi.fInDebugger = FALSE;
@@ -398,7 +398,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                     {
                         if (uMemDump <= 0xffff)
                         {
-                            BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtariMON(iVM, uMemDump));
+                            BtoPch(&rgchOut[7 + 3 * cNum + (cNum >= HEXCOLS / 2)], ch = PeekBAtariMON(candy, uMemDump));
                             rgchOut[cNum + 58] = ((ch >= 0x20) && (ch < 0x80)) ? ch : '.';
                         }
 
@@ -422,7 +422,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 {
                     if (uMemDasm <= 0xffff)
                     {
-                        CchDisAsm(iVM, &uMemDasm);
+                        CchDisAsm(candy, &uMemDasm);
                         Cconws((char *)szCR);
                     }
                     else
@@ -443,16 +443,16 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 /* dump/modify registers */
 
                 w = regPC;
-                CchDisAsm(iVM, &w); // don't alter the actual PC
-                CchShowRegs(iVM);
+                CchDisAsm(candy, &w); // don't alter the actual PC
+                CchShowRegs(candy);
             }
 
             else if (chCom == 'C')
             {
-                ColdStart(v.iVM);
+                ColdStart(iVM);
                 w = regPC;
-                CchDisAsm(iVM, &w);
-                CchShowRegs(iVM);
+                CchDisAsm(candy, &w);
+                CchShowRegs(candy);
                 uMemDasm = regPC; // is this handy or mean?
             }
             else if (chCom == 'P')
@@ -462,7 +462,7 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 {
                     // if space was next, then another good number
                     while (FSkipSpace() == TRUE && FGetByte(&u2) && u1 < 0x10000)
-                        PokeBAtariMON(iVM, u1++, (BYTE)u2);
+                        PokeBAtariMON(candy, u1++, (BYTE)u2);
                 }
             }
 
@@ -490,14 +490,14 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
                 do { // do at least 1 thing, don't get stuck at the breakpoint
                     
                     do {
-                        FExecVM(v.iVM, TRUE, FALSE);// execute it and show the resulting register values
+                        FExecVM(iVM, TRUE, FALSE);// execute it and show the resulting register values
                     } while (wSIORTS && !fTrace); // we don't want to exit this, but we will at the end of frame, so go back in
 
                     RenderBitmap();
 
                     w = regPC;
-                    CchDisAsm(iVM, &w);          // show the next instruction that will run
-                    CchShowRegs(iVM);
+                    CchDisAsm(candy, &w);          // show the next instruction that will run
+                    CchShowRegs(candy);
 
                     if (GetAsyncKeyState(VK_END) & 0x8000)
                         break;
@@ -567,8 +567,8 @@ BOOL __cdecl MonAtari(int iVM)            /* the 6502 monitor */
     return TRUE;
 }
 
-void CchShowRegs(int iVM)
-    {
+void CchShowRegs(void *candy)
+{
     
     printf("(%03x/%02x) ", wScan, wCycle);
 
@@ -585,16 +585,15 @@ void CchShowRegs(int iVM)
         (regP & CBIT) ? 'C' : '.');
 
     printf("%02X %02X %02X\n",
-        cpuPeekB(iVM, ((regSP + 1) & 255) + 0x100),
-        cpuPeekB(iVM, ((regSP + 2) & 255) + 0x100),
-        cpuPeekB(iVM, ((regSP + 3) & 255) + 0x100));
-    }
-
+        cpuPeekB(candy, ((regSP + 1) & 255) + 0x100),
+        cpuPeekB(candy, ((regSP + 2) & 255) + 0x100),
+        cpuPeekB(candy, ((regSP + 3) & 255) + 0x100));
+}
 
 /* Disassemble instruction at location uMem to space filled buffer pch. */
 /* Returns with puMem incremented appropriate number of bytes. */
 
-void CchDisAsm(int iVM, WORD *puMem)
+void CchDisAsm(void *candy, WORD *puMem)
 {
     char rgch[32];
     char *pch = rgch;
@@ -612,7 +611,7 @@ void CchDisAsm(int iVM, WORD *puMem)
     pch += 5;
 
     /* get opcode */
-    bOpcode = cpuPeekB(iVM, *puMem);
+    bOpcode = cpuPeekB(candy, *puMem);
     BtoPch(pch, bOpcode);
 
     /* get packed opcode mnemonic and addressing mode */
@@ -634,7 +633,7 @@ void CchDisAsm(int iVM, WORD *puMem)
             (*puMem) += 3;
             return;
         }
-        BtoPch(pch + 6, cpuPeekB(iVM, *puMem + 2));
+        BtoPch(pch + 6, cpuPeekB(candy, *puMem + 2));
 
     /* one operand */
     case 0x01:
@@ -649,7 +648,7 @@ void CchDisAsm(int iVM, WORD *puMem)
             (*puMem) += 2;
             return;
         }
-        BtoPch(pch + 3, cpuPeekB(iVM, *puMem + 1));
+        BtoPch(pch + 3, cpuPeekB(candy, *puMem + 1));
 
     /* no operands */
     case 0x00:
@@ -673,21 +672,21 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x01:
         pch = Blit("#$", pch);
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         *puMem += 1;
         pch += 2;
         break;
 
     case 0x02:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         *puMem += 1;
         break;
 
     case 0x03:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         pch = Blit(",X",pch);
         *puMem += 1;
@@ -695,7 +694,7 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x04:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         pch = Blit(",Y",pch);
         *puMem += 1;
@@ -703,7 +702,7 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x05:
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         pch = Blit(",X)", pch);
         *puMem += 1;
@@ -711,7 +710,7 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x06:
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         pch = Blit("),Y", pch);
         *puMem += 1;
@@ -719,18 +718,18 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x07:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
+        BtoPch(pch, cpuPeekB(candy, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         *puMem += 2;
         break;
 
     case 0x08:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
+        BtoPch(pch, cpuPeekB(candy, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         *puMem += 2;
         pch = Blit(",X", pch);
@@ -738,9 +737,9 @@ void CchDisAsm(int iVM, WORD *puMem)
 
     case 0x09:
         *pch++ = '$';
-        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
+        BtoPch(pch, cpuPeekB(candy, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         *puMem += 2;
         pch = Blit(",Y", pch);
@@ -755,7 +754,7 @@ void CchDisAsm(int iVM, WORD *puMem)
         unsigned uMem;
 
         *pch++ = '$';
-        uMem = (*puMem + 1 + (int)((char)cpuPeekB(iVM, *puMem)));
+        uMem = (*puMem + 1 + (int)((char)cpuPeekB(candy, *puMem)));
         BtoPch(pch, uMem>>8);
         pch += 2;
         BtoPch(pch, (char)uMem);
@@ -767,9 +766,9 @@ void CchDisAsm(int iVM, WORD *puMem)
     case 0x0C:
 
         pch = Blit("($", pch);
-        BtoPch(pch, cpuPeekB(iVM, *puMem + 1));
+        BtoPch(pch, cpuPeekB(candy, *puMem + 1));
         pch += 2;
-        BtoPch(pch, cpuPeekB(iVM, *puMem));
+        BtoPch(pch, cpuPeekB(candy, *puMem));
         pch += 2;
         *pch++ = ')';
         *puMem += 2;

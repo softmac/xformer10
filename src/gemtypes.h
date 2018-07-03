@@ -84,16 +84,19 @@
 
 typedef unsigned long int  ADDR;
 
-typedef void(__cdecl *PFN) (int x, ...);
-typedef BOOL(__cdecl *PFNL)(int x, ...);
-typedef ULONG(__cdecl *PFNLL)(int x, ...);
-typedef WORD(__cdecl *PFNW)(int x, ...);
-typedef BYTE(__cdecl *PFNB)(int x, ...);
-typedef BYTE *(__cdecl *PFNP)(int x, ...);
-typedef void *(__fastcall *PHNDLR)(void *, long);
+typedef BOOL(__cdecl *PFNB)(void *, ...);
+typedef BOOL(__cdecl *PFNBPPV)(void **, ...);
+typedef ULONG(__cdecl *PFNUL)(void *, ...);
+typedef BYTE *(__cdecl *PFNPB)(void *, ...);
+typedef HRESULT (__cdecl *PFNH)(void *, ...);
 
-typedef BYTE(__fastcall *PFNREAD)(const int, ADDR);
-typedef BOOL(__fastcall *PFNWRITE)(const int, ADDR, BYTE);
+typedef LONG(__cdecl *PFNL)(int, ...);
+//typedef void *(__fastcall *PHNDLR)(void *, long);
+//typedef void(__cdecl *PFN) (int x, ...);
+//typedef WORD(__cdecl *PFNW)(int x, ...);
+
+typedef BYTE(__fastcall *PFNREAD)(void *, ADDR);
+typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 
 #include "gemul8r.h"    // build flags
 #include "blocklib\blockdev.h"
@@ -228,7 +231,8 @@ typedef struct
 //
 typedef struct _vminfo
 {
-    PFNL pfnVm;             // function to handle VM operations
+    PFNB pfnVm;             // function to handle VM operations
+   
     ULONG ver;              // version
     char *pchModel;         // default verbose name for this VM
     ULONG wfHW;             // bit vector of supported hardware models
@@ -238,49 +242,52 @@ typedef struct _vminfo
     ULONG wfMon;            // bit vector of supported monitors
     
     // new things added to capabilities to avoid hacky "if (FIs...)" and #ifdef
-    UINT uScreenX;            // how wide is this machine's screen?
-    UINT uScreenY;            // how tall is this machine's screen?
-    int  planes;            // how many colours we support (this power of 2)
+    UINT uScreenX;           // how wide is this machine's screen?
+    UINT uScreenY;           // how tall is this machine's screen?
+    int  planes;             // how many colours we support (this power of 2)
     BYTE *rgbRainbow;        // the 256 colour palette for planes == 8
-    BOOL fUsesCart;            // can you plug cartridges into this machine? (ATARI 800 only)
-    BOOL fUsesMouse;        // does this VM type support a mouse?
-    BOOL fUsesJoystick;        // does this VM type support joysticks?
-    char szFilter[120];        // string of extensions supported for OpenFile dlg
-    char szCartFilter[120]; // if you support a cartridge, their extensions
+    BOOL fUsesCart;          // can you plug cartridges into this machine? (ATARI 800 only)
+    BOOL fUsesMouse;         // does this VM type support a mouse?
+    BOOL fUsesJoystick;      // does this VM type support joysticks?
+    char szFilter[120];      // string of extensions supported for OpenFile dlg
+    char szCartFilter[120];  // if you support a cartridge, their extensions
 
-    PFNL pfnInstall;        // VM installation (init to say what VM type it is going to be)
-    PFNL pfnUnInstall;      // VM de-installation
-    PFNL pfnInit;           // VM initialization (load any cartridge data, etc.)
-    PFNL pfnUnInit;         // VM uninit
-    PFNL pfnInitDisks;      // VM disk initialization
-    PFNL pfnWriteProtectDisk;// VM disk write protected?
-    PFNL pfnMountDisk;      // VM disk initialization
-    PFNL pfnUnInitDisks;    // VM disk uninitialization
-    PFNL pfnUnmountDisk;    // VM disk uninitialization
-    PFNL pfnColdboot;       // VM resets hardware (coldboot)
-    PFNL pfnWarmboot;       // VM resets hardware (warmboot)
-    PFNL pfnExec;           // VM execute code
-    PFNL pfnTrace;          // Execute one single instruction in the VM
-    PFNL pfnWinMsg;         // handles Windows messages
-    BOOL(__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
-    PFNL pfnDumpHW;         // dumps hardware state
-    PFNL pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
-    
+    PFNBPPV pfnInstall;      // VM installation (init to say what VM type it is going to be)
+    PFNB pfnUnInstall;      // VM de-installation
+    PFNB pfnInit;           // VM initialization (load any cartridge data, etc.)
+    PFNB pfnUnInit;         // VM uninit
+    PFNB pfnInitDisks;      // VM disk initialization
+    PFNB pfnWriteProtectDisk;// VM disk write protected?
+    PFNB pfnMountDisk;      // VM disk initialization
+    PFNB pfnUnInitDisks;    // VM disk uninitialization
+    PFNB pfnUnmountDisk;    // VM disk uninitialization
+    PFNB pfnColdboot;       // VM resets hardware (coldboot)
+    PFNB pfnWarmboot;       // VM resets hardware (warmboot)
+    PFNB pfnExec;           // VM execute code
+    PFNB pfnTrace;          // Execute one single instruction in the VM
+    PFNB pfnWinMsg;         // handles Windows messages
+    PFNB pfnDumpRegs;       // Display the VM's CPU registers as ASCII
+    PFNB pfnDumpHW;         // dumps hardware state
+    PFNB pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
+   
     // these are probably unnecessary - it's between you and your CPU, not the VM manager
-    PFNREAD pfnReadHWByte;     // reads a byte from the VM
-    PFNW pfnReadHWWord;     // reads a word from the VM
-    PFNLL pfnReadHWLong;     // reads a long from the VM
-    PFNWRITE pfnWriteHWByte;    // writes a byte to the VM
-    PFNL pfnWriteHWWord;    // writes a word to the VM
-    PFNL pfnWriteHWLong;    // writes a long to the VM
-    PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
-    PFNL pfnUnlockBlock;    // release memory block in VM
-    PFNP pfnMapAddress;     // convert virtual machine address to flat address
-    PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
+    // they're for sure not used on ATARI
+
+    PFNH pfnReadHWByte;      // reads a byte from the VM
+    PFNH pfnReadHWWord;      // reads a word from the VM
+    PFNH pfnReadHWLong;      // reads a long from the VM
+    PFNB pfnWriteHWByte;     // writes a byte to the VM
+    PFNB pfnWriteHWWord;     // writes a word to the VM
+    PFNB pfnWriteHWLong;     // writes a long to the VM
+    PFNUL pfnLockBlock;      // lock and returns pointer to memory block in VM
+    PFNUL pfnUnlockBlock;    // release memory block in VM
+    PFNPB pfnMapAddress;     // convert virtual machine address to flat address
+    PFNPB pfnMapAddressRW;   // convert virtual machine address to flat address
 
     // back to being necessary
-    PFNL pfnSaveState;      // save snapshot to disk
-    PFNL pfnLoadState;      // load snapshot from disk and resume
+    
+    PFNB pfnSaveState;      // save snapshot to disk
+    PFNB pfnLoadState;      // load snapshot from disk and resume
 } VMINFO, *PVMINFO;
 
 // and here are the structures used by each VM type
@@ -411,7 +418,10 @@ extern VM    rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
 //
 typedef struct VMINST
 {
-    int      iVM;             // index into rgvm, which instance this is
+    int iVM;                // index into rgvm, which instance this is
+
+    void *pPrivate;         // the private VM data to pass to the VM
+    int iPrivateSize;       // size of the private data
 
     void *pvBits;           // pointer to current bitmap
     HBITMAP hbm;            // handle of bitmap
@@ -1060,7 +1070,7 @@ BOOL InitPrinter(int);
 BOOL UnInitPrinter(void);
 BOOL ByteToPrinter(int, unsigned char);
 BOOL FlushToPrinter(int);
-BOOL FPrinterReady();
+BOOL FPrinterReady(int);
 
 // props.c
 PVMINFO DetermineVMType(int);
@@ -1093,12 +1103,12 @@ BOOL FWriteSerialPort(BYTE b);
 
 // sound.c
 //void TestSound(void);
-void SoundDoneCallback(int, int);
+void SoundDoneCallback(void *, int);
 //void UpdateVoice(int iVoice, ULONG new_frequency, BOOL new_distortion, ULONG new_volume);
 void InitJoysticks();
 //void CaptureJoysticks();
 //void ReleaseJoysticks();
-void InitMIDI(int);
+void InitMIDI(void *);
 void InitSound();
 void UninitSound();
 
@@ -1111,9 +1121,6 @@ void UnlockSurface();
 void ClearSurface();
 //BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
 //BOOL FCyclePalette(BOOL fForward);
-
-// xatari.c
-void ForceRedraw(int iVM);
 
 //
 // Debug functions

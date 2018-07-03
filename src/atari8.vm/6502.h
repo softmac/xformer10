@@ -19,44 +19,44 @@
 // !!! It shouldn't be ATARI specific?, get rid of every reference to CANDY, keep it's own thread-safe state
 
 // !!! don't call this directly
-void __cdecl Go6502(const int);
+void __cdecl Go6502(void *candy);
 
-__inline BOOL cpuExec(const int iVM)
+__inline BOOL cpuExec(void *candy)
 {
-    Go6502(iVM);
+    Go6502(candy);
     return TRUE;
 }
 
 // !!! The monitor should use this
-__inline BOOL cpuDisasm(const int iVM, char *pch, ADDR *pPC)
+__inline BOOL cpuDisasm(void *candy, char *pch, ADDR *pPC)
 {
     // stub out for now
 
-    iVM;  pch; pPC;
+    candy;  pch; pPC;
 
     return TRUE;
 }
 
-extern BOOL ProcessScanLine(int);
+extern BOOL ProcessScanLine(void *);
 
 // jump tables
-typedef void(__fastcall * PFNOP)(const int iVM);
+typedef void(__fastcall * PFNOP)(void *candy);
 PFNOP jump_tab[256];
 
-typedef BYTE(__fastcall * PFNREAD)(const int iVM, ADDR addr);
-typedef BOOL(__fastcall * PFNWRITE)(const int iVM, ADDR addr, BYTE b);
+typedef BYTE(__fastcall * PFNREAD)(void *pPrivate, ADDR addr);
+typedef BOOL(__fastcall * PFNWRITE)(void *pPrivate, ADDR addr, BYTE b);
 
 // call these when you want quick read/writes, with no special case registers or other side effects
 // In other words, zero page or stack memory
 
-BYTE __forceinline __fastcall cpuPeekB(const int iVM, ADDR addr)
+BYTE __forceinline __fastcall cpuPeekB(void *candy, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
     return rgbMem[addr];
 }
 
-BOOL __forceinline __fastcall cpuPokeB(const int iVM, ADDR addr, BYTE b)
+BOOL __forceinline __fastcall cpuPokeB(void *candy, ADDR addr, BYTE b)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -64,15 +64,15 @@ BOOL __forceinline __fastcall cpuPokeB(const int iVM, ADDR addr, BYTE b)
     return TRUE;
 }
 
-__inline WORD cpuPeekW(const int iVM, ADDR addr)
+__inline WORD cpuPeekW(void *candy, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
-    return cpuPeekB(iVM, addr) | (cpuPeekB(iVM, addr + 1) << 8);
+    return cpuPeekB(candy, addr) | (cpuPeekB(candy, addr + 1) << 8);
 }
 
 // not really used, if it ever is, make sure it doesn't need to do any special casing
-__inline BOOL cpuPokeW(const int iVM, ADDR addr, WORD w)
+__inline BOOL cpuPokeW(void *candy, ADDR addr, WORD w)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
@@ -94,7 +94,7 @@ __inline BOOL cpuInit(PFNREAD pvmPeekB, PFNWRITE pvmPokeB)
     return TRUE;
 }
 
-__inline BOOL cpuReset(const int iVM)
+__inline BOOL cpuReset(void *candy)
 {
 
     // clear all registers
@@ -107,7 +107,7 @@ __inline BOOL cpuReset(const int iVM)
     // set initial SP = $FF
 
     regSP = 0x1FF;
-    regPC = cpuPeekW(iVM, 0xFFFC);
+    regPC = cpuPeekW(candy, 0xFFFC);
 
     return TRUE;
 }

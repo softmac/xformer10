@@ -116,7 +116,7 @@ int AddVM(int type, BOOL fAll)
 
     BOOL f = FALSE;
     if (rgvm[iVM].pvmi)
-        f = FInstallVM(iVM, rgvm[iVM].pvmi, type);
+        f = FInstallVM(&vrgvmi[iVM].pPrivate, &vrgvmi[iVM].iPrivateSize, iVM, rgvm[iVM].pvmi, type);
 
     if (f)
     {
@@ -176,6 +176,8 @@ void DeleteVM(int iVM, BOOL fFixMenus)
 
         FUnInitVM(iVM);
         FUnInstallVM(iVM);
+        vrgvmi[iVM].pPrivate = NULL;
+        vrgvmi[iVM].iPrivateSize = 0;
         rgvm[iVM].fValidVM = FALSE;
 
         v.cVM--;    // one fewer valid instance now
@@ -385,11 +387,11 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         if (!szIn && !v.fSaveOnExit)
             fPropsOnly = TRUE;
 
+        BYTE *pPersist = NULL;
+        int   cbPersist = 0;
+
         // non-persistable pointers need to be refreshed
         // and only use VM's that we can handle in this build
-
-        char *pPersist = NULL;
-        int  cbPersist = 0;
 
         for (int i = 0; i < MAX_VM; i++)
         {
@@ -425,33 +427,29 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             // we just loaded a valid instance off disk. Install and Init it
             if (f && rgvm[i].fValidVM)
             {
-                f = FInstallVM(i, rgvm[i].pvmi, c);
+                f = FInstallVM(&vrgvmi[i].pPrivate, &vrgvmi[i].iPrivateSize, i, rgvm[i].pvmi, c);
 
                 if (f)
                 {
                     // get the size of the persisted data
-                    DWORD cb;
-                    l = _read(h, &cb, sizeof(DWORD));
+                    int cb;
+                    l = _read(h, &cb, sizeof(int));
 
                     // either restore from the persisted data, or just Init a blank VM if something goes wrong
                     f = FALSE;
-                    if (l)    // that's a L, not a 1.
+                    if (l == sizeof(int) && cb == vrgvmi[i].iPrivateSize)
                     {
                         if (cb > cbPersist)
-                        {
-                            pPersist = realloc(pPersist, cb);
-                            if (pPersist)
-                                cbPersist = cb;
-                            else
-                                cbPersist = 0;
-                        }
+                            pPersist = realloc(pPersist, cb); // just one load buffer to avoid fragmenting
 
                         l = 0;
                         if (pPersist)
+                        {
+                            cbPersist = cb;
                             l = _read(h, pPersist, cb);
-
-                        if (l == (int)cb) {
-                            if (FLoadStateVM(i, pPersist, cb))
+                        }
+                        if (l == cb) {
+                            if (FLoadStateVM(i, pPersist))
                                 f = TRUE;
                         }
                     }
@@ -460,6 +458,8 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                     {
                         FUnInitVM(i);
                         FUnInstallVM(i);
+                        vrgvmi[i].pPrivate = NULL;
+                        vrgvmi[i].iPrivateSize = 0;
                     }
                 }
 
@@ -591,16 +591,14 @@ BOOL SaveProperties(char *szIn)
                     l = _write(h, &rgvm[i], sizeof(VM));
                     if (l == sizeof(VM))
                     {
-                        DWORD cb;
-                        char *pPersist;
-                        if (FSaveStateVM(i, &pPersist, (int *)&cb))
+                        if (FSaveStateVM(i)) // give the VM a chance for any last minute jiggering, currently a NOP
                         {
                             // save the state of this VM - size first to prevent reading garbage and thinking its valid
-                            l = _write(h, &cb, sizeof(DWORD));
-                            if (l == sizeof(DWORD))
+                            l = _write(h, &vrgvmi[i].iPrivateSize, sizeof(int));
+                            if (l == sizeof(int))
                             {
-                                l = _write(h, pPersist, cb);
-                                if (l == (int)cb)
+                                l = _write(h, vrgvmi[i].pPrivate, vrgvmi[i].iPrivateSize);
+                                if (l == vrgvmi[i].iPrivateSize)
                                     f = TRUE;    // it all worked! Something was saved
                             }
                         }

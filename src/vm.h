@@ -86,100 +86,100 @@ typedef unsigned long int  ADDR;
 // some functions can operate on any instance, and they take a parameter (which instance)
 // and need to look at the state of that instance
 
-BOOL __inline FInstallVM(int iVM, PVMINFO pvmi, int type)
+BOOL __inline FInstallVM(void **pPrivateX, int *iPrivateSizeX, int iVM, PVMINFO pvmi, int type)
 {
-    return rgvm[iVM].pvmi->pfnInstall(iVM, pvmi, type);
+    return rgvm[iVM].pvmi->pfnInstall(pPrivateX, iPrivateSizeX, iVM, pvmi, type);
 }
 
 BOOL __inline FUnInstallVM(int iVM)
 {
-	return rgvm[iVM].pvmi->pfnUnInstall(iVM);
+	return rgvm[iVM].pvmi->pfnUnInstall(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FInitVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnInit(iVM);
+    return rgvm[iVM].pvmi->pfnInit(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FUnInitVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnUnInit(iVM);
+    return rgvm[iVM].pvmi->pfnUnInit(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FInitDisksVM(int iVM)
 {
-	return rgvm[iVM].pvmi->pfnInitDisks(iVM);
+	return rgvm[iVM].pvmi->pfnInitDisks(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FUnInitDisksVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnUnInitDisks(iVM);
+    return rgvm[iVM].pvmi->pfnUnInitDisks(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FColdbootVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnColdboot(iVM);
+    return rgvm[iVM].pvmi->pfnColdboot(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FWarmbootVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnWarmboot(iVM);
+    return rgvm[iVM].pvmi->pfnWarmboot(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FExecVM(int iVM, BOOL fStep, BOOL fCont)
 {
-	return rgvm[iVM].pvmi->pfnExec(iVM, fStep, fCont);
+	return rgvm[iVM].pvmi->pfnExec(vrgvmi[iVM].pPrivate, fStep, fCont);
 }
 
-BOOL __inline FSaveStateVM(int iVM, char **ppPersist, int *pcbPersist)
+BOOL __inline FSaveStateVM(int iVM)
 {
-	return rgvm[iVM].pvmi->pfnSaveState(iVM, ppPersist, pcbPersist);
+	return rgvm[iVM].pvmi->pfnSaveState(vrgvmi[iVM].pPrivate);
 }
 
-BOOL __inline FLoadStateVM(int iVM, char *pPersist, int cbPersist)
+BOOL __inline FLoadStateVM(int iVM, void *pNew)
 {
-	return rgvm[iVM].pvmi->pfnLoadState(iVM, pPersist, cbPersist);
+	return rgvm[iVM].pvmi->pfnLoadState(pNew, vrgvmi[iVM].pPrivate, vrgvmi[iVM].iPrivateSize);
 }
 
 BOOL __inline FWriteProtectDiskVM(int iVM, int i, BOOL fSet, BOOL fWP)
 {
-    return rgvm[iVM].pvmi->pfnWriteProtectDisk(iVM, i, fSet, fWP);
+    return rgvm[iVM].pvmi->pfnWriteProtectDisk(vrgvmi[iVM].pPrivate, i, fSet, fWP);
 }
 
 BOOL __inline FMountDiskVM(int iVM, int i)
 {
-    return rgvm[iVM].pvmi->pfnMountDisk(iVM, i);
+    return rgvm[iVM].pvmi->pfnMountDisk(vrgvmi[iVM].pPrivate, i);
 }
 
 BOOL __inline FUnmountDiskVM(int iVM, int i)
 {
-    return rgvm[iVM].pvmi->pfnUnmountDisk(iVM, i);
+    return rgvm[iVM].pvmi->pfnUnmountDisk(vrgvmi[iVM].pPrivate, i);
 }
 
 BOOL __inline FWinMsgVM(int iVM, HWND hWnd, UINT msg, WPARAM uParam, LPARAM lParam)
 {
-    return rgvm[iVM].pvmi->pfnWinMsg(iVM, hWnd, msg, uParam, lParam);
+    return rgvm[iVM].pvmi->pfnWinMsg(vrgvmi[iVM].pPrivate, hWnd, msg, uParam, lParam);
 }
 
 BOOL __cdecl m68k_DumpRegs(int iVM);
 
 BOOL __inline FDumpRegsVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnDumpRegs(iVM);
+    return rgvm[iVM].pvmi->pfnDumpRegs(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FDumpHWVM(int iVM)
 {
-    return rgvm[iVM].pvmi->pfnDumpHW(iVM);
+    return rgvm[iVM].pvmi->pfnDumpHW(vrgvmi[iVM].pPrivate);
 }
 
 BOOL __inline FMonVM(int iVM)
 {
-	return rgvm[iVM].pvmi->pfnMon(iVM);
+	return rgvm[iVM].pvmi->pfnMon(vrgvmi[iVM].pPrivate);
 }
 
 //
-// !!! These are probably unnecessary - it's between the VM and its CPU, not the VM Manager to know anything about
+// These do not apply to ATARI 800
 //
 
 void __fastcall ZapRange(ULONG addr, ULONG cb);
@@ -188,7 +188,7 @@ BYTE __inline vmPeekB(int iVM, ULONG ea)
 {
     BYTE b = 0;
 
-	rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, &b);
+	rgvm[iVM].pvmi->pfnReadHWByte(vrgvmi[iVM].pPrivate, ea, &b);
 
     return b;
 }
@@ -197,7 +197,7 @@ WORD __inline vmPeekW(int iVM, ULONG ea)
 {
     WORD w = 0;
 
-    rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, &w);
+    rgvm[iVM].pvmi->pfnReadHWWord(vrgvmi[iVM].pPrivate, ea, &w);
 
     return w;
 }
@@ -206,7 +206,7 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
 {
     ULONG l = 0;
 
-    rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, &l);
+    rgvm[iVM].pvmi->pfnReadHWLong(vrgvmi[iVM].pPrivate, ea, &l);
 
     return l;
 }
@@ -214,52 +214,56 @@ ULONG __inline vmPeekL(int iVM, ULONG ea)
 BOOL __inline vmPokeB(int iVM, ULONG ea, BYTE b)
 {
 	ZapRange(ea, sizeof(BYTE));
-	return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, &b);
+	return rgvm[iVM].pvmi->pfnWriteHWByte(vrgvmi[iVM].pPrivate, ea, &b);
 }
 
 BOOL __inline vmPokeW(int iVM, ULONG ea, WORD w)
 {
 	ZapRange(ea, sizeof(WORD));
-	return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, &w);
+	return rgvm[iVM].pvmi->pfnWriteHWWord(vrgvmi[iVM].pPrivate, ea, &w);
 }
 
 BOOL __inline vmPokeL(int iVM, ULONG ea, ULONG l)
 {
 	ZapRange(ea, sizeof(LONG));
-	return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, &l);
+	return rgvm[iVM].pvmi->pfnWriteHWLong(vrgvmi[iVM].pPrivate, ea, &l);
 }
+
+// !!! So what does pfnReadHW* actually return?
 
 HRESULT __inline ReadPhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
-    return rgvm[iVM].pvmi->pfnReadHWByte(iVM, ea, pb);
+    return rgvm[iVM].pvmi->pfnReadHWByte(vrgvmi[iVM].pPrivate, ea, pb);
 }
 
 HRESULT __inline ReadPhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
-    return rgvm[iVM].pvmi->pfnReadHWWord(iVM, ea, pw);
+    return rgvm[iVM].pvmi->pfnReadHWWord(vrgvmi[iVM].pPrivate, ea, pw);
 }
 
 HRESULT __inline ReadPhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
-    return rgvm[iVM].pvmi->pfnReadHWLong(iVM, ea, pl);
+    return rgvm[iVM].pvmi->pfnReadHWLong(vrgvmi[iVM].pPrivate, ea, pl);
 }
+
+// !!! Huh? A minute ago pfnWriteHW* returned a BOOL
 
 HRESULT __inline WritePhysicalByte(int iVM, ULONG ea, BYTE *pb)
 {
     ZapRange(ea, sizeof(BYTE));
-    return rgvm[iVM].pvmi->pfnWriteHWByte(iVM, ea, pb);
+    return rgvm[iVM].pvmi->pfnWriteHWByte(vrgvmi[iVM].pPrivate, ea, pb);
 }
 
 HRESULT __inline WritePhysicalWord(int iVM, ULONG ea, WORD *pw)
 {
     ZapRange(ea, sizeof(WORD));
-    return rgvm[iVM].pvmi->pfnWriteHWWord(iVM, ea, pw);
+    return rgvm[iVM].pvmi->pfnWriteHWWord(vrgvmi[iVM].pPrivate, ea, pw);
 }
 
 HRESULT __inline WritePhysicalLong(int iVM, ULONG ea, ULONG *pl)
 {
     ZapRange(ea, sizeof(LONG));
-    return rgvm[iVM].pvmi->pfnWriteHWLong(iVM, ea, pl);
+    return rgvm[iVM].pvmi->pfnWriteHWLong(vrgvmi[iVM].pPrivate, ea, pl);
 }
 
 ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
@@ -270,7 +274,7 @@ ULONG __inline LockMemoryVM(int iVM, ULONG ea, ULONG cb, void **ppv)
     if (rgvm[iVM].pvmi->pfnLockBlock == NULL)
         return FALSE;
 
-    return rgvm[iVM].pvmi->pfnLockBlock(iVM, ea, cb, ppv);
+    return rgvm[iVM].pvmi->pfnLockBlock(vrgvmi[iVM].pPrivate, ea, cb, ppv);
 }
 
 ULONG __inline UnlockMemoryVM(int iVM, ULONG ea, ULONG cb)
@@ -281,24 +285,21 @@ ULONG __inline UnlockMemoryVM(int iVM, ULONG ea, ULONG cb)
     if (rgvm[iVM].pvmi->pfnUnlockBlock == NULL)
         return FALSE;
 
-    return rgvm[iVM].pvmi->pfnUnlockBlock(iVM, ea, cb);
+    return rgvm[iVM].pvmi->pfnUnlockBlock(vrgvmi[iVM].pPrivate, ea, cb);
 }
 
 __inline BYTE * MapAddressVM(int iVM, ULONG ea)
 {
-    return rgvm[iVM].pvmi->pfnMapAddress(iVM, ea);
+    return rgvm[iVM].pvmi->pfnMapAddress(vrgvmi[iVM].pPrivate, ea);
 }
 
 __inline BYTE * MapWritableAddressVM(int iVM, ULONG ea)
 {
-    return rgvm[iVM].pvmi->pfnMapAddressRW(iVM, ea);
+    return rgvm[iVM].pvmi->pfnMapAddressRW(vrgvmi[iVM].pPrivate, ea);
 }
-
-// END of UNNECESSARY BLOCK
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif // __VM_INCLUDED__
-

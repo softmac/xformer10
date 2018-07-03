@@ -58,7 +58,7 @@ void DumpBlocks()
 //BYTE oldflags;
 
 
-void InitBanks(int iVM)
+void InitBanks(void *candy)
 {
     if (mdXLXE != md800)
     {
@@ -100,7 +100,7 @@ void InitBanks(int iVM)
 // Routine to swap the Atari ROMs in and out of address space.
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
-BOOL __cdecl SwapMem(int iVM, BYTE xmask, BYTE flags)
+BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
 {
     if (mdXLXE == md800)
         return TRUE;
