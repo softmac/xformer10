@@ -1989,7 +1989,9 @@ int CALLBACK WinMain(
                     BOOL fXOK = FALSE;
                     FUnInitVM(i);
                     FUnInstallVM(i);
-                    if (FInstallVM(i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
+                    vrgvmi[i].pPrivate = NULL;
+                    vrgvmi[i].iPrivateSize = 0;
+                    if (FInstallVM(&vrgvmi[i].pPrivate, &vrgvmi[i].iPrivateSize, i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
                         if (FInitVM(i))
                             if (ColdStart(i))
                                 fXOK = TRUE;
@@ -5014,7 +5016,9 @@ break;
                         BOOL fOK = FALSE;
                         FUnInitVM(v.iVM);
                         FUnInstallVM(v.iVM);
-                        if (FInstallVM(v.iVM, pvmi, type))
+                        vrgvmi[v.iVM].pPrivate = NULL;
+                        vrgvmi[v.iVM].iPrivateSize = 0;
+                        if (FInstallVM(&vrgvmi[v.iVM].pPrivate, &vrgvmi[v.iVM].iPrivateSize, v.iVM, pvmi, type))
                             if (FInitVM(v.iVM))
                                 if (ColdStart(v.iVM))
                                     fOK = TRUE;
@@ -5043,12 +5047,10 @@ break;
             // SHIFT actively pressed for that to work
             if (v.iVM != -1)
             {
-                char *pCandy;
-                int cb;
-                if (FSaveStateVM(v.iVM, &pCandy, &cb))
+                if (FSaveStateVM(v.iVM)) // NOP
                 {
                     // !!! I put ramtop at the top of the candy structure
-                    WORD *ramtop = (WORD *)pCandy;
+                    WORD *ramtop = (WORD *)vrgvmi[v.iVM].pPrivate;
                     if (*ramtop == 0xC000)
                         *ramtop = 0xA000;
                     else

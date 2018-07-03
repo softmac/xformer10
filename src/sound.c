@@ -61,6 +61,7 @@ static PULSE pulse[4] = { {0 },{0},{0},{0} };    // only need to init pos
 // the old values to use to catch up to the present, when they have just been changed
 static VOICE rgvoice[4] = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
 static ULONG sAUDCTL = 0;
+
 #endif
 
 
@@ -101,7 +102,9 @@ void CALLBACK MyWaveOutProc(
 
 #ifndef NDEBUG
     // this might not have been the case when the buffer was written, so we might report bogus data when switching. but who cares
+#undef iVM
     BOOL fPal50 = v.iVM >= -1 && rgvm[v.iVM].fEmuPAL && !v.fTiling;
+#define iVM CANDY_STATE(iVM)
 
     if (uMsg == WOM_DONE) {
         int cx = 0;
@@ -123,17 +126,21 @@ void CALLBACK MyWaveOutProc(
 // This is OK not being thread safe, because only one thread is allowed in at a time, and we never switch which
 // thread is allowed in unless all threads are asleep
 //
-void SoundDoneCallback(int iVM, int iCurSample)
+void SoundDoneCallback(void *candy, int iCurSample)
 {
     // We do 50fps only if PAL and not tiling
     BOOL fPal50 = fPAL && !v.fTiling;
     LPWAVEHDR pwhdr = fPal50 ? vi.rgwhdrP : vi.rgwhdrN;
     int SAMPLES_PER_VOICE = fPal50 ? SAMPLES_PAL : SAMPLES_NTSC;
 
+#undef iVM
+
     // Only do sound for the VM in focus, this code is not thread safe
     // We only switch VMs when all threads are asleep
-    if ((v.fTiling && sVM != iVM) || (!v.fTiling && v.iVM != iVM))
+    if ((v.fTiling && sVM != ((CANDYHW *)candy)->m_iVM) || (!v.fTiling && v.iVM != ((CANDYHW *)candy)->m_iVM))
         return;
+
+#define iVM CANDY_STATE(iVM)
 
     // if we have reset since last we were called, init this variable again
     if (wFrame < sOldFrame)
@@ -976,6 +983,8 @@ void InitSound()
             waveOutPrepareHeader(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
             waveOutPrepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
 
+#undef iVM
+
             if (iHdr < 2)
             {
                 // we only go into 50fps for a solo PAL VM
@@ -984,6 +993,9 @@ void InitSound()
                 else
                     waveOutWrite(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
             }
+
+#define iVM CANDY_STATE(iVM)
+
             else
             {
                 vi.rgwhdrN[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
@@ -995,7 +1007,7 @@ void InitSound()
 }
 
 // do we really want to allow each VM to independently decide to do MIDI or not?
-void InitMIDI(int iVM)
+void InitMIDI(void *candy)
 {
     MIDIINCAPS  mic;
     MIDIOUTCAPS moc;

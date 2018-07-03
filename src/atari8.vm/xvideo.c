@@ -113,7 +113,7 @@ static const ULONG BitsToByteMask[16] =
     0xFFFFFFFF,
 };
 
-void ShowCountDownLine(int iVM)
+void ShowCountDownLine(void *candy)
 {
     int i = wScan - (STARTSCAN + wcScans - 12);
 
@@ -654,7 +654,7 @@ void CreatePMGTable()
 }
 
 
-void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
+void DrawPlayers(void *candy, BYTE *qb, unsigned start, unsigned stop)
 {
     BYTE b2;
     BYTE c;
@@ -797,7 +797,7 @@ void DrawPlayers(int iVM, BYTE *qb, unsigned start, unsigned stop)
     *(ULONG *)PXPL &= 0x070B0D0E;
 }
 
-void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, BYTE *rgFifth)
+void DrawMissiles(void *candy, BYTE* qb, int fFifth, unsigned start, unsigned stop, BYTE *rgFifth)
 {
     BYTE b2;
     BYTE c;
@@ -886,13 +886,13 @@ void DrawMissiles(int iVM, BYTE* qb, int fFifth, unsigned start, unsigned stop, 
     }
 }
 
-__inline void IncDLPC(int iVM)
+__inline void IncDLPC(void *candy)
 {
     DLPC = (DLPC & 0xFC00) | ((DLPC+1) & 0x03FF);
 }
 
 // Given our current scan mode, how many bits is it convenient to write at a time?
-short BitsAtATime(int iVM)
+short BitsAtATime(void *candy)
 {
     short it = mpMdBytes[sl.modelo] >> 3;    // how many multiples of 8 bytes per scan line in narrow mode
     short i = 8;        // assume 8
@@ -904,7 +904,7 @@ short BitsAtATime(int iVM)
 }
 
 // Same question, but how much do we shift by to mult/divide by that number?
-short ShiftBitsAtATime(int iVM)
+short ShiftBitsAtATime(void *candy)
 {
     short it = mpMdBytes[sl.modelo] >> 3;    // how many multiples of 8 bytes per scan line in narrow mode
     short i = 3;        // assume 8 (3 shifts)
@@ -917,7 +917,7 @@ short ShiftBitsAtATime(int iVM)
 
 // !!! Why can't this live in atari800.c ?
 __declspec(noinline)
-BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
+BOOL __fastcall PokeBAtariDL(void *candy, ADDR addr, BYTE b)
 {
     // we are writing into the line of screen RAM that we are current displaying
     // handle that with cycle accuracy instead of scan line accuracy or the wrong thing is drawn (Turmoil)
@@ -925,9 +925,9 @@ BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
     Assert(addr < ramtop);
 
     if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
-        ProcessScanLine(iVM);
+        ProcessScanLine(candy);
 
-    return cpuPokeB(iVM, addr, b);
+    return cpuPokeB(candy, addr, b);
 }
 
 
@@ -948,7 +948,7 @@ BOOL __fastcall PokeBAtariDL(int iVM, ADDR addr, BYTE b)
 // INITIAL SET UP WHEN WE FIRST START A SCAN LINE
 // call before Go6502 to learn all about this scan line to know how many cycles can execute during it
 //
-void PSLPrepare(int iVM)
+void PSLPrepare(void *candy)
 {
     if (PSL == 0 || PSL >= wSLEnd)    // or just trust the caller and don't check
     {
@@ -980,15 +980,15 @@ void PSLPrepare(int iVM)
 
             if (fDumpHW)
                 printf("Fetching DL byte at scan %d, DLPC=%04X, byte=%02X\n",
-                    wScan, DLPC, cpuPeekB(iVM, DLPC));
+                    wScan, DLPC, cpuPeekB(candy, DLPC));
 #endif
 
-            sl.modehi = cpuPeekB(iVM, DLPC);
+            sl.modehi = cpuPeekB(candy, DLPC);
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
             //sl.modehi |= (sl.modelo << 4);   // hide original mode up here (technically correct?)
             //ODS("%04x: scan %03x FETCH %01x %01x\n", DLPC, wScan, sl.modehi, sl.modelo);
-            IncDLPC(iVM);
+            IncDLPC(candy);
 
             fFetch = FALSE;
 
@@ -1029,9 +1029,9 @@ void PSLPrepare(int iVM)
                 {
                     WORD w;
 
-                    w = cpuPeekB(iVM, DLPC);
-                    IncDLPC(iVM);
-                    w |= (cpuPeekB(iVM, DLPC) << 8);
+                    w = cpuPeekB(candy, DLPC);
+                    IncDLPC(candy);
+                    w |= (cpuPeekB(candy, DLPC) << 8);
 
                     DLPC = w;
                     //ODS("Scan %04x JVB\n", wScan);
@@ -1057,10 +1057,10 @@ void PSLPrepare(int iVM)
                         write_tab[iVM][b2] = cpuPokeB;
 #endif
 
-                    wAddr = cpuPeekB(iVM, DLPC);
-                    IncDLPC(iVM);
-                    wAddr |= (cpuPeekB(iVM, DLPC) << 8);
-                    IncDLPC(iVM);
+                    wAddr = cpuPeekB(candy, DLPC);
+                    IncDLPC(candy);
+                    wAddr |= (cpuPeekB(candy, DLPC) << 8);
+                    IncDLPC(candy);
                 }
                 break;
             }
@@ -1186,18 +1186,18 @@ void PSLPrepare(int iVM)
             if (sl.dmactl & 0x10)
             {
                 // !!! VDELAY affects this too, but in an odd way such that nobody is likely to be using it
-                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1024 + wScan);
-                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1280 + wScan);
-                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1536 + wScan);
-                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 1792 + wScan);
+                pmg.grafp0 = cpuPeekB(candy, (pmg.pmbase << 8) + 1024 + wScan);
+                pmg.grafp1 = cpuPeekB(candy, (pmg.pmbase << 8) + 1280 + wScan);
+                pmg.grafp2 = cpuPeekB(candy, (pmg.pmbase << 8) + 1536 + wScan);
+                pmg.grafp3 = cpuPeekB(candy, (pmg.pmbase << 8) + 1792 + wScan);
             }
             // double line resolution
             else
             {
-                pmg.grafp0 = cpuPeekB(iVM, (pmg.pmbase << 8) + 512 + ((wScan - ((VDELAY >> 4) & 1)) >> 1));
-                pmg.grafp1 = cpuPeekB(iVM, (pmg.pmbase << 8) + 640 + ((wScan - ((VDELAY >> 5) & 1)) >> 1));
-                pmg.grafp2 = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + ((wScan - ((VDELAY >> 6) & 1)) >> 1));
-                pmg.grafp3 = cpuPeekB(iVM, (pmg.pmbase << 8) + 896 + ((wScan - ((VDELAY >> 7) & 1)) >> 1));
+                pmg.grafp0 = cpuPeekB(candy, (pmg.pmbase << 8) + 512 + ((wScan - ((VDELAY >> 4) & 1)) >> 1));
+                pmg.grafp1 = cpuPeekB(candy, (pmg.pmbase << 8) + 640 + ((wScan - ((VDELAY >> 5) & 1)) >> 1));
+                pmg.grafp2 = cpuPeekB(candy, (pmg.pmbase << 8) + 768 + ((wScan - ((VDELAY >> 6) & 1)) >> 1));
+                pmg.grafp3 = cpuPeekB(candy, (pmg.pmbase << 8) + 896 + ((wScan - ((VDELAY >> 7) & 1)) >> 1));
             }
         }
 
@@ -1206,15 +1206,15 @@ void PSLPrepare(int iVM)
         {
             // single res - !!! VDELAY ignored as well
             if (sl.dmactl & 0x10)
-                pmg.grafm = cpuPeekB(iVM, (pmg.pmbase << 8) + 768 + wScan);
+                pmg.grafm = cpuPeekB(candy, (pmg.pmbase << 8) + 768 + wScan);
             // double res
             else
             {
                 pmg.grafm = 0;
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 0) & 1)) >> 1)) & 0x3);    //M0
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 1) & 1)) >> 1)) & 0xc);    //M1
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 2) & 1)) >> 1)) & 0x30);   //M2
-                pmg.grafm |= (cpuPeekB(iVM, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 3) & 1)) >> 1)) & 0xc0);   //M3
+                pmg.grafm |= (cpuPeekB(candy, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 0) & 1)) >> 1)) & 0x3);    //M0
+                pmg.grafm |= (cpuPeekB(candy, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 1) & 1)) >> 1)) & 0xc);    //M1
+                pmg.grafm |= (cpuPeekB(candy, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 2) & 1)) >> 1)) & 0x30);   //M2
+                pmg.grafm |= (cpuPeekB(candy, (pmg.pmbase << 8) + 384 + ((wScan - ((VDELAY >> 3) & 1)) >> 1)) & 0xc0);   //M3
             }
         }
 
@@ -1272,7 +1272,7 @@ void PSLPrepare(int iVM)
 
 // WHEN DONE, MOVE ON TO THE NEXT SCAN LINE NEXT TIME WE'RE CALLED
 //
-void PSLPostpare(int iVM)
+void PSLPostpare(void *candy)
 {
     if (PSL >= wSLEnd)      // we are at least at the last pixel to do (may be < X8 if we're a tile partially off the right side of the screen)
     {
@@ -1307,7 +1307,7 @@ void PSLPostpare(int iVM)
 // we call this from a couple places, so make sure we do the same thing every time
 // fGTIA and fHiRes must be set first
 //
-void UpdateColourRegisters(int iVM)
+void UpdateColourRegisters(void *candy)
 {
     // update the colour registers
 
@@ -1341,7 +1341,7 @@ void UpdateColourRegisters(int iVM)
 
 // RE-READ ALL THE H/W REGISTERS TO ALLOW THINGS TO CHANGE MID-SCAN LINE
 //
-void PSLReadRegs(int iVM, short start, short stop)
+void PSLReadRegs(void *candy, short start, short stop)
 {
     int i;
 
@@ -1379,7 +1379,7 @@ void PSLReadRegs(int iVM, short start, short stop)
     pmg.fHiRes = (sl.modelo == 2 || sl.modelo == 3 || sl.modelo == 15);
 
     // fGTIA and fHiRes must be set first
-    UpdateColourRegisters(iVM);
+    UpdateColourRegisters(candy);
 
     // check if GRAFPX or GRAFM are being used (PMG DMA is only fetched once per scan line, but these can change more often)
     if (!((sl.dmactl & 0x08) && (GRACTL & 2)))
@@ -1577,7 +1577,7 @@ void PSLReadRegs(int iVM, short start, short stop)
 // start and stop are already on a BitsAtATime boundary for whatever graphics mode we are doing
 // (a multiple of 8, 16 or 32 from the end of the left black bar, depending on if we're in a high, medium or lo-res mode).
 
-void PSLInternal(int iVM, unsigned start, unsigned stop, unsigned i, unsigned iTop, unsigned bbars, RECT *prectTile)
+void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigned iTop, unsigned bbars, RECT *prectTile)
 {
     if (start >= stop)
         return;
@@ -1763,7 +1763,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             if ((sl.chactl & 4) && sl.modelo == 3)
             {
@@ -1790,7 +1790,7 @@ if (sl.modelo < 2 || iTop > i)
                     vpix23 = (vpix >= 8 && (b1 & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
                     // sl.chbase is already on a proper page boundary
-                    vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7f) << 3) + vpix23);
+                    vv = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7f) << 3) + vpix23);
                 }
                 // we ARE in the blank part
                 else {
@@ -1816,7 +1816,7 @@ if (sl.modelo < 2 || iTop > i)
                     // partial shifting means we also need to look at a second character intruding into our space
                     // do the same exact thing again
                     int index = 1;
-                    BYTE rgb = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
+                    BYTE rgb = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
 
                     if ((sl.chactl & 4) && sl.modelo == 3)
                     {
@@ -1833,7 +1833,7 @@ if (sl.modelo < 2 || iTop > i)
                         vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
 
                         // sl.chbase is on a proper page boundary
-                        vv = cpuPeekB(iVM, (sl.chbase << 8) + ((rgb & 0x7f) << 3) + vpix23);
+                        vv = cpuPeekB(candy, (sl.chbase << 8) + ((rgb & 0x7f) << 3) + vpix23);
                     }
                     // we ARE in the blank part
                     else {
@@ -1863,11 +1863,11 @@ if (sl.modelo < 2 || iTop > i)
             {
                 if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
                     // use sl.chbase not CHBASE because its already anded with $fc or $fe
-                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+                    b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
-                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+                    b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 else if ((vpix >= 8) && ((b1 & 0x7F) >= 0x60))
-                    b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
+                    b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix - 8);
                 else
                     b2 = 0;
 
@@ -2062,7 +2062,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             if (hshift)
             {
@@ -2072,21 +2072,21 @@ if (sl.modelo < 2 || iTop > i)
 
                 // see comments for modes 2 & 3
 
-                vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+                vv = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                 u = vv;
 
                 if (hshift % 8)
                 {
                     int index = 1;
-                    vv = cpuPeekB(iVM, (sl.chbase << 8) +
-                                ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x7f) << 3) + vpix);
+                    vv = cpuPeekB(candy, (sl.chbase << 8) +
+                                ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x7f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
 
                 b2 = (BYTE)(u >> hshift);
             }
             else
-                b2 = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+                b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
 
             for (j = 0; j < 4; j++)
             {
@@ -2116,7 +2116,7 @@ if (sl.modelo < 2 || iTop > i)
                     // which character was shifted into this position? Pay attention to its high bit to switch colours
                     int index = (hshift + 7 - 2 * j) / 8;
 
-                    if (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x80)
+                    if (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x80)
                         Col.col3 = sl.colpf3;
                     else
                         Col.col3 = sl.colpf2;
@@ -2145,7 +2145,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b1 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             Col.col1 = sl.colpf[b1 >> 6];
 
@@ -2157,14 +2157,14 @@ if (sl.modelo < 2 || iTop > i)
 
                 // see comments for modes 2 & 3
                
-                vv = cpuPeekB(iVM, (sl.chbase << 8) + ((b1 & 0x3F) << 3) + vpix);
+                vv = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x3F) << 3) + vpix);
                 u = vv;
 
                 if (hshift % 8)
                 {
                     int index = 1;
-                    vv = cpuPeekB(iVM, (sl.chbase << 8) +
-                                ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x3f) << 3) + vpix);
+                    vv = cpuPeekB(candy, (sl.chbase << 8) +
+                                ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x3f) << 3) + vpix);
                     u |= (vv << (index << 3));
                 }
 
@@ -2175,7 +2175,7 @@ if (sl.modelo < 2 || iTop > i)
                     if (b2 & 0x80)
                     {
                         if (j < hshift)    // hshift restricted to 7 or less, so this is sufficient
-                            Col.col1 = sl.colpf[cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) >> 6];
+                            Col.col1 = sl.colpf[cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) >> 6];
                         else
                             Col.col1 = sl.colpf[b1 >> 6];
 
@@ -2194,7 +2194,7 @@ if (sl.modelo < 2 || iTop > i)
             }
             else
             {
-                b2 = cpuPeekB(iVM, (sl.chbase << 8)
+                b2 = cpuPeekB(candy, (sl.chbase << 8)
                     + ((b1 & 0x3F) << 3) + vpix);
 
                 const ULONG Fill1 = 0x01010101 * Col.col1;
@@ -2241,7 +2241,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2251,7 +2251,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
+                u = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what 1/2-bit position in the WORD u do we start copying from?
@@ -2279,7 +2279,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2289,7 +2289,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
+                u = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what 1/2-bit position in the WORD u do we start copying from?
@@ -2318,7 +2318,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2330,7 +2330,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
+                u = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit position in the WORD u do we start copying from?
@@ -2359,7 +2359,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2369,7 +2369,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
+                u = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit position in the WORD u do we start copying from?
@@ -2399,7 +2399,7 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             WORD u = b2;
 
@@ -2409,7 +2409,7 @@ if (sl.modelo < 2 || iTop > i)
                 // non-zero horizontal scroll
 
                 // this shift may involve our byte and the one before it
-                u = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
+                u = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) << 8) | (BYTE)b2;
             }
 
             // what bit pair position in the WORD u do we start copying from?
@@ -2459,11 +2459,11 @@ if (sl.modelo < 2 || iTop > i)
         const ULONG Fill1PMG = 0x01010101 * colpf1Save;
         const ULONG Fill2 = 0x01010101 * Col.col2;
 
-        WORD u = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
+        WORD u = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             u = (u << 8) | (BYTE)b2;
 
@@ -2499,7 +2499,7 @@ if (sl.modelo < 2 || iTop > i)
 
                 qch += sizeof(ULONG);
 
-                BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
+                BYTE bPeekAhead = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
 
                 BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
                 ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
@@ -2555,7 +2555,7 @@ if (sl.modelo < 2 || iTop > i)
 
                 qch += sizeof(ULONG);
 
-                BYTE bPeekAhead = (cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
+                BYTE bPeekAhead = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
                 BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
                 ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
                 SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
@@ -2577,14 +2577,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
@@ -2613,14 +2613,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = (b2 >> 4);
@@ -2680,14 +2680,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
             // GTIA only allows scrolling on a nibble boundary, so this is the only case we care about
             // use low nibble of previous byte
             if (hshift & 0x04)
             {
                 b2 = b2 >> 4;
-                b2 |= ((cpuPeekB(iVM, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
+                b2 |= ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x0f) << 4);
             }
 
             Col.col1 = ((b2 >> 4) << 4);
@@ -2728,7 +2728,7 @@ if (sl.modelo < 2 || iTop > i)
     // may have been altered if we were in BITFIELD mode b/c PMG are active. Put them back to what they were
     if (sl.fpmg && !pmg.fGTIA)
     {
-        UpdateColourRegisters(iVM);
+        UpdateColourRegisters(candy);
     }
 
     // even with Fetch DMA off, PMG DMA might be on
@@ -2747,8 +2747,8 @@ if (sl.modelo < 2 || iTop > i)
 
         // now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
         // tell them what range they are to fill in data for (start to stop)
-        DrawPlayers(iVM, (rgpix + ((NTSCx - X8) >> 1)), start, stop);
-        DrawMissiles(iVM, (rgpix + ((NTSCx - X8) >> 1)), sl.prior & 16, start, stop, rgFifth);    // 5th player?
+        DrawPlayers(candy, (rgpix + ((NTSCx - X8) >> 1)), start, stop);
+        DrawMissiles(candy, (rgpix + ((NTSCx - X8) >> 1)), sl.prior & 16, start, stop, rgFifth);    // 5th player?
 
     #ifndef NDEBUG
         if (0)
@@ -2950,7 +2950,7 @@ if (sl.modelo < 2 || iTop > i)
 
     if (cntTick)
     {
-        ShowCountDownLine(iVM);
+        ShowCountDownLine(candy);
     }
 
 #if 0 // rainbow, was #ifndef NDEBUG
@@ -3019,7 +3019,7 @@ if (sl.modelo < 2 || iTop > i)
 // with wLeft <= 0 to finish up.
 // Returns the last pixel processed
 //
-BOOL ProcessScanLine(int iVM)
+BOOL ProcessScanLine(void *candy)
 {
     // don't do anything in the invisible top and bottom sections
     if (wScan < STARTSCAN || wScan >= STARTSCAN + wcScans)
@@ -3086,24 +3086,24 @@ BOOL ProcessScanLine(int iVM)
             i = 0;
 
         // i is a bit index, now make it a segment index, where each scan mode likes to create so many bits at a time per segment
-        i /= BitsAtATime(iVM);
+        i /= BitsAtATime(candy);
 
         // and where do we stop drawing? Don't go into the right hand bar
         iTop = cclock - bbars;
         if (cclock <= bbars)
             iTop = 0;    // inside the left side bar
         else if (iTop > X8 - bbars - bbars)
-            iTop = (X8 - bbars - bbars) / BitsAtATime(iVM);    // inside the right side bar
+            iTop = (X8 - bbars - bbars) / BitsAtATime(candy);    // inside the right side bar
         else
         {
             iTop -= 1;    // any remainder needs to increase the quotient by 1 (any partial segment required fills the whole segment)
-            iTop = iTop / BitsAtATime(iVM) + 1;
+            iTop = iTop / BitsAtATime(candy) + 1;
         }
 
         // We kind of have to draw more than asked to, so increment our bounds
         if (iTop > 0)
         {
-            short newTop = iTop * BitsAtATime(iVM) + bbars;
+            short newTop = iTop * BitsAtATime(candy) + bbars;
             if (newTop > cclock)
             {
                 cclock = newTop;
@@ -3114,7 +3114,7 @@ BOOL ProcessScanLine(int iVM)
 
     // now we are responsible for drawing starting from location cclockPrev up to but not including cclock
 
-    PSLReadRegs(iVM, cclockPrev, cclock);    // read our hardware registers to find brand-new values to use starting this cycle
+    PSLReadRegs(candy, cclockPrev, cclock);    // read our hardware registers to find brand-new values to use starting this cycle
 
     if (cclock <= cclockPrev)
         return TRUE;    // nothing to do except read new values into the registers
@@ -3134,9 +3134,9 @@ BOOL ProcessScanLine(int iVM)
             else
             {
                 pmg.hposPixEarliest -= bbars;
-                pmg.hposPixEarliest >>= ShiftBitsAtATime(iVM);
+                pmg.hposPixEarliest >>= ShiftBitsAtATime(candy);
                 iEarly = pmg.hposPixEarliest;
-                pmg.hposPixEarliest <<= ShiftBitsAtATime(iVM);
+                pmg.hposPixEarliest <<= ShiftBitsAtATime(candy);
                 pmg.hposPixEarliest += bbars;
             }
         }
@@ -3150,9 +3150,9 @@ BOOL ProcessScanLine(int iVM)
             else
             {
                 pmg.hposPixLatest -= bbars;
-                pmg.hposPixLatest = ((pmg.hposPixLatest - 1) >> ShiftBitsAtATime(iVM)) + 1;
+                pmg.hposPixLatest = ((pmg.hposPixLatest - 1) >> ShiftBitsAtATime(candy)) + 1;
                 iLate = pmg.hposPixLatest;
-                pmg.hposPixLatest <<= ShiftBitsAtATime(iVM);
+                pmg.hposPixLatest <<= ShiftBitsAtATime(candy);
                 pmg.hposPixLatest += bbars;
             }
         }
@@ -3163,31 +3163,24 @@ BOOL ProcessScanLine(int iVM)
         //ODS("          %d-%d (%d-%d)\n", pmg.hposPixLatest, cclock, iLate, iTop);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &sRectTile[iVM]);
   
         sl.fpmg = TRUE;
-        PSLInternal(iVM, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest),
+        PSLInternal(candy, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest),
                                 max(i, iEarly), min(iTop, iLate), bbars, &sRectTile[iVM]);
 
         sl.fpmg = FALSE;
-        PSLInternal(iVM, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &sRectTile[iVM]);
     }
     else
     {
         //ODS("%d %d-%d (%d-%d)\n", wScan, cclockPrev, cclock, i, iTop);
-        PSLInternal(iVM, cclockPrev, cclock, i, iTop, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, cclockPrev, cclock, i, iTop, bbars, &sRectTile[iVM]);
     }
 
-    PSLPostpare(iVM);    // see if we're done this scan line and be ready to do the next one
+    PSLPostpare(candy);    // see if we're done this scan line and be ready to do the next one
 
     return TRUE;
 }
 
-void ForceRedraw(int iVM)
-{
-    iVM;
-    //memset(rgsl,0,sizeof(rgsl));
-}
-
-#endif // XFORMER
-
+#endif

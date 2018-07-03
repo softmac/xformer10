@@ -82,16 +82,16 @@ int __cdecl xprintf(const char *format, ...)
 
 #else
 // this is for when you don't know if you need to do special tricks for a register or not
-__inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
+__inline uint8_t READ_BYTE(void *candy, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
     Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
 //    if ((0x04000000u >> (ea >> 11)) & 1)
-        return (*pfnPeekB)(iVM, ea);
+        return (*pfnPeekB)(candy, ea);
 //    else
-//        return cpuPeekB(iVM, ea);
+//        return cpuPeekB(candy, ea);
 }
 #endif
 
@@ -100,37 +100,37 @@ __inline uint8_t READ_BYTE(const int iVM, uint32_t ea)
 #define WRITE_BYTE write_tab[iVM][regEA >> 8]
 
 #else
-__inline void WRITE_BYTE(const int iVM, uint32_t ea, uint8_t val)
+__inline void WRITE_BYTE(void *candy, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
     Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
-    (*pfnPokeB)(iVM, ea, val);
+    (*pfnPokeB)(candy, ea, val);
 }
 #endif
 
-__inline uint16_t READ_WORD(const int iVM, uint32_t ea)
+__inline uint16_t READ_WORD(void *candy, uint32_t ea)
 {
     //Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
-    return READ_BYTE(iVM, ea) | (READ_BYTE(iVM, ea + 1) << 8);
+    return READ_BYTE(candy, ea) | (READ_BYTE(candy, ea + 1) << 8);
 }
 
-__inline void WRITE_WORD(const int iVM, uint32_t ea, uint16_t val)
+__inline void WRITE_WORD(void *candy, uint32_t ea, uint16_t val)
 {
     //Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
-    WRITE_BYTE(iVM, ea, val & 255);
+    WRITE_BYTE(candy, ea, val & 255);
     ea++;   // macro only works with ea, not ea + 1
-    WRITE_BYTE(iVM, ea, ((val >> 8) & 255));
+    WRITE_BYTE(candy, ea, ((val >> 8) & 255));
 }
 
 // dummy opcode handler to force stop emulating 6502
 
-void __fastcall Stop6502(const int iVM)
+void __fastcall Stop6502(void *candy)
 {
-    (void)iVM;
+    (void)candy;
 }
 
 //////////////////////////////////////////////////////////////////
@@ -144,10 +144,10 @@ void __fastcall Stop6502(const int iVM)
 // it's really handy for debugging to see what cycle of the scan line we're on.
 // !!! when wCycle is 0xff, we have passed the end of the scan line, so the next instruction displayed by the monitor
 // may NOT be what actually executes, it may be the first instr of an interrupt instead
-#define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[rgbMem[regPC++]])(iVM); } }
+#define HANDLER_END() { wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff; if (regPC != bp && !fTrace && wLeft > wNMI) (*jump_tab[rgbMem[regPC++]])(candy); } }
 #else
 #if USE_JUMP_TABLE
-#define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[rgbMem[regPC++]]; (*p)(iVM); } }
+#define HANDLER_END() { PFNOP p = Stop6502; if (wLeft > wNMI) p = jump_tab[rgbMem[regPC++]]; (*p)(candy); } }
 #else
 // the switch statement only does one instruction at a time (no tail calling) so no need to check wLeft against wNMI
 #define HANDLER_END() { } }
@@ -157,7 +157,7 @@ void __fastcall Stop6502(const int iVM)
 // this used to not let a scan line end until there's an instruction that affects the PC
 #define HANDLER_END_FLOW() HANDLER_END()
 
-#define HANDLER(opcode) void __fastcall opcode (const int iVM) {
+#define HANDLER(opcode) void __fastcall opcode (void *candy) {
 
 #if 0
     xprintf("PC:%04X A:%02X X:%02X Y:%02X SP:%02X  ", \
@@ -173,13 +173,13 @@ void __fastcall Stop6502(const int iVM)
     xprintf("\n");
 #endif
 
-#define HELPER(opcode) __forceinline __fastcall opcode (const int iVM) {
+#define HELPER(opcode) __forceinline __fastcall opcode (void *candy) {
 
-#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (const int iVM, arg1) {
+#define HELPER1(opcode, arg1) __forceinline __fastcall opcode (void *candy, arg1) {
 
-#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (const int iVM, arg1, arg2) {
+#define HELPER2(opcode, arg1, arg2) __forceinline __fastcall opcode (void *candy, arg1, arg2) {
 
-#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode (const int iVM, arg1, arg2, arg3) {
+#define HELPER3(opcode, arg1, arg2, arg3) __forceinline __fastcall opcode (void *candy, arg1, arg2, arg3) {
 
 // For addressing modes where we know we won't be above stack memory and needing special register values, we can directly do a CPU read.
 // Otherwise, our READ_ WRITE_ helper functions will check ramtop etc., but be one comparison/potential branch slower
@@ -187,7 +187,7 @@ void __fastcall Stop6502(const int iVM)
 
 void HELPER(EA_imm)
 {
-    regEA = cpuPeekB(iVM, regPC++);    // assume < ramtop, if we're executing code in register space, heaven help you anyway
+    regEA = cpuPeekB(candy, regPC++);    // assume < ramtop, if we're executing code in register space, heaven help you anyway
 } }
 
 // the Read versions do the indirection through EA to get the contents, the Write versions don't
@@ -195,87 +195,87 @@ void HELPER(EA_imm)
 // zp
 void HELPER(EA_zpR)
 {
-    regEA = cpuPeekB(iVM, regPC++); regEA = cpuPeekB(iVM, regEA);
+    regEA = cpuPeekB(candy, regPC++); regEA = cpuPeekB(candy, regEA);
 } }
 void HELPER(EA_zpW)
 {
-    regEA = cpuPeekB(iVM, regPC++);
+    regEA = cpuPeekB(candy, regPC++);
 } }
 
 // zp,X
 void HELPER(EA_zpXR)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regX) & 255; regEA = cpuPeekB(iVM, regEA);
+    regEA = (cpuPeekB(candy, regPC++) + regX) & 255; regEA = cpuPeekB(candy, regEA);
 } }
 void HELPER(EA_zpXW)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regX) & 255;
+    regEA = (cpuPeekB(candy, regPC++) + regX) & 255;
 } }
 
 // zp,Y
 void HELPER(EA_zpYR)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regY) & 255; regEA = cpuPeekB(iVM, regEA);
+    regEA = (cpuPeekB(candy, regPC++) + regY) & 255; regEA = cpuPeekB(candy, regEA);
 } }
 void HELPER(EA_zpYW)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regY) & 255;
+    regEA = (cpuPeekB(candy, regPC++) + regY) & 255;
 } }
 
 // (zp,X) - the indexing and zp parts can safely do cpuPeek*
 void HELPER(EA_zpXindR)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regX) & 255; regEA = cpuPeekW(iVM, regEA); regEA = READ_BYTE(iVM, regEA);
+    regEA = (cpuPeekB(candy, regPC++) + regX) & 255; regEA = cpuPeekW(candy, regEA); regEA = READ_BYTE(candy, regEA);
 } }
 void HELPER(EA_zpXindW)
 {
-    regEA = (cpuPeekB(iVM, regPC++) + regX) & 255; regEA = cpuPeekW(iVM, regEA);
+    regEA = (cpuPeekB(candy, regPC++) + regX) & 255; regEA = cpuPeekW(candy, regEA);
 } }
 
 // (zp),y
 void HELPER(EA_zpYindR)
 {
-    regEA = cpuPeekB(iVM, regPC++); regEA = cpuPeekW(iVM, regEA) + regY; 
+    regEA = cpuPeekB(candy, regPC++); regEA = cpuPeekW(candy, regEA) + regY; 
     wLeft -= ((BYTE)regEA < (BYTE)(regEA - regY));  // extra cycle for crossing page boundary
-    regEA = READ_BYTE(iVM, regEA);
+    regEA = READ_BYTE(candy, regEA);
 } }
 void HELPER(EA_zpYindW)
 {
-    regEA = cpuPeekB(iVM, regPC++); regEA = cpuPeekW(iVM, regEA) + regY;
+    regEA = cpuPeekB(candy, regPC++); regEA = cpuPeekW(candy, regEA) + regY;
 } }
 
 // abs
 void HELPER(EA_absR)
 {
-    regEA = cpuPeekW(iVM, regPC); regPC += 2; regEA = READ_BYTE(iVM, regEA);
+    regEA = cpuPeekW(candy, regPC); regPC += 2; regEA = READ_BYTE(candy, regEA);
 } }
 void HELPER(EA_absW)
 {
-    regEA = cpuPeekW(iVM, regPC); regPC += 2;
+    regEA = cpuPeekW(candy, regPC); regPC += 2;
 } }
 
 // abs,X
 void HELPER(EA_absXR)
 {
-    regEA = cpuPeekW(iVM, regPC) + regX; regPC += 2; 
+    regEA = cpuPeekW(candy, regPC) + regX; regPC += 2; 
     wLeft -= ((BYTE)regEA < (BYTE)(regEA - regX));  // extra cycle for crossing page boundary
-    regEA = READ_BYTE(iVM, regEA);
+    regEA = READ_BYTE(candy, regEA);
 } }
 void HELPER(EA_absXW)
 {
-    regEA = cpuPeekW(iVM, regPC) + regX; regPC += 2;
+    regEA = cpuPeekW(candy, regPC) + regX; regPC += 2;
 } }
 
 // abs,Y
 void HELPER(EA_absYR)
 {
-    regEA = cpuPeekW(iVM, regPC) + regY; regPC += 2; 
+    regEA = cpuPeekW(candy, regPC) + regY; regPC += 2; 
     wLeft -= ((BYTE)regEA < (BYTE)(regEA - regY));  // extra cycle for crossing page boundary
-    regEA = READ_BYTE(iVM, regEA);
+    regEA = READ_BYTE(candy, regEA);
 } }
 void HELPER(EA_absYW)
 {
-    regEA = cpuPeekW(iVM, regPC) + regY; regPC += 2;
+    regEA = cpuPeekW(candy, regPC) + regY; regPC += 2;
 } }
 
 #define ADD_COUT_VEC(sum, op1, op2) \
@@ -313,48 +313,48 @@ void HELPER3(update_VCC, BYTE diff, BYTE op1, BYTE op2) { srC = 0x80 & ~SUB_COUT
 
 void HELPER(AND_com)
 {
-    regA &= (BYTE)regEA; update_NZ(iVM, regA);
+    regA &= (BYTE)regEA; update_NZ(candy, regA);
 } }
 
 void HELPER(ORA_com)
 {
-    regA |= (BYTE)regEA; update_NZ(iVM, regA);
+    regA |= (BYTE)regEA; update_NZ(candy, regA);
 } }
 
 void HELPER(EOR_com)
 {
-    regA ^= (BYTE)regEA; update_NZ(iVM, regA);
+    regA ^= (BYTE)regEA; update_NZ(candy, regA);
 } }
 
 void HELPER(LDA_com)
 {
-    regA = (BYTE)regEA; update_NZ(iVM, regA);
+    regA = (BYTE)regEA; update_NZ(candy, regA);
 } }
 
 void HELPER(LDX_com)
 {
-    regX = (BYTE)regEA; update_NZ(iVM, regX);
+    regX = (BYTE)regEA; update_NZ(candy, regX);
 } }
 
 void HELPER(LDY_com)
 {
-    regY = (BYTE)regEA; update_NZ(iVM, regY);
+    regY = (BYTE)regEA; update_NZ(candy, regY);
 } }
 
 void HELPER1(ST_zp, BYTE x)
 {
-    WRITE_BYTE(iVM, regEA, x);    // ZP may hold screen RAM, which we have to trap writes to
+    WRITE_BYTE(candy, regEA, x);    // ZP may hold screen RAM, which we have to trap writes to
 } }
 
 void HELPER1(ST_com, BYTE x)
 {
-    WRITE_BYTE(iVM, regEA, x);
+    WRITE_BYTE(candy, regEA, x);
 } }
 
 void HELPER1(Jcc_com, int f)
 {
     // taking a branch is an extra cycle. Crossing a page boundary from the instruction after the branch is an extra cycle.
-    WORD offset = (signed short)(signed char)cpuPeekB(iVM, regPC++); wLeft -= 2;
+    WORD offset = (signed short)(signed char)cpuPeekB(candy, regPC++); wLeft -= 2;
     if (f)
     {
         wLeft -= ((regPC & 0xff00) == ((regPC + offset) & 0xff00)) ? 0 : 1;
@@ -372,122 +372,122 @@ void HELPER(BIT_com)
 
 void HELPER(INC_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA) + 1;
+    BYTE b = READ_BYTE(candy, regEA) + 1;
 
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
 } }
 
 // zp versions of the macros do the quicker direct lookup without a compare to test for special register read
 void HELPER(INC_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA) + 1;
+    BYTE b = cpuPeekB(candy, regEA) + 1;
 
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
 } }
 
 void HELPER(DEC_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA) - 1;
+    BYTE b = READ_BYTE(candy, regEA) - 1;
 
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
 } }
 
 void HELPER(DEC_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA) - 1;
+    BYTE b = cpuPeekB(candy, regEA) - 1;
 
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
 } }
 
 void HELPER(ASL_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA);
+    BYTE b = READ_BYTE(candy, regEA);
     BYTE newC = b & 0x80;
 
     b += b;
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(ASL_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA);
+    BYTE b = cpuPeekB(candy, regEA);
     BYTE newC = b & 0x80;
 
     b += b;
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(LSR_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA);
+    BYTE b = READ_BYTE(candy, regEA);
     BYTE newC = b << 7;
 
     b = b >> 1;
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(LSR_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA);
+    BYTE b = cpuPeekB(candy, regEA);
     BYTE newC = b << 7;
 
     b = b >> 1;
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(ROL_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA);
+    BYTE b = READ_BYTE(candy, regEA);
     BYTE newC = b & 0x80;
 
     b += b + (srC != 0);
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(ROL_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA);
+    BYTE b = cpuPeekB(candy, regEA);
     BYTE newC = b & 0x80;
 
     b += b + (srC != 0);
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(ROR_mem)
 {
-    BYTE b = READ_BYTE(iVM, regEA);
+    BYTE b = READ_BYTE(candy, regEA);
     BYTE newC = b << 7;
 
     b = (b >> 1) | (srC & 0x80);
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
 void HELPER(ROR_zp)
 {
-    BYTE b = cpuPeekB(iVM, regEA);
+    BYTE b = cpuPeekB(candy, regEA);
     BYTE newC = b << 7;
 
     b = (b >> 1) | (srC & 0x80);
-    ST_com(iVM, b);
-    update_NZ(iVM, b);
+    ST_com(candy, b);
+    update_NZ(candy, b);
     srC = newC;
 } }
 
@@ -522,8 +522,8 @@ void HELPER1(CMP_com, BYTE reg)
     BYTE op2 = (BYTE)regEA;
     BYTE diff = reg - op2;
 
-    update_NZ(iVM, diff);
-    update_CC(iVM, diff, reg, op2);
+    update_NZ(candy, diff);
+    update_CC(candy, diff, reg, op2);
 } }
 
 void HELPER(ADC_com)
@@ -532,7 +532,7 @@ void HELPER(ADC_com)
     BYTE tCF = (srC != 0);
     BYTE sum = regA + op2 + tCF;
 
-    update_VC(iVM, sum, regA, op2);
+    update_VC(candy, sum, regA, op2);
 
     if (srD)
         {
@@ -552,7 +552,7 @@ void HELPER(ADC_com)
         }
 
     regA = sum;
-    update_NZ(iVM, sum);
+    update_NZ(candy, sum);
 } }
 
 void HELPER(SBC_com)
@@ -561,7 +561,7 @@ void HELPER(SBC_com)
     BYTE tCF = (srC == 0);
     BYTE diff = regA - op2 - tCF;
 
-    update_VCC(iVM, diff, regA, op2);
+    update_VCC(candy, diff, regA, op2);
 
     if (srD)
         {
@@ -581,20 +581,20 @@ void HELPER(SBC_com)
         }
 
     regA = diff;
-    update_NZ(iVM, diff);
+    update_NZ(candy, diff);
 } }
 
 void HELPER1(PushByte, BYTE b)
 {
-    cpuPokeB(iVM, regSP, b);
+    cpuPokeB(candy, regSP, b);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
 void HELPER1(PushWord, WORD w)
 {
-    cpuPokeB(iVM, regSP, w >> 8);
+    cpuPokeB(candy, regSP, w >> 8);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
-    cpuPokeB(iVM, regSP, w & 0xFF);
+    cpuPokeB(candy, regSP, w & 0xFF);
     regSP = 0x100 | ((regSP - 1) & 0xFF);
 } }
 
@@ -603,7 +603,7 @@ BYTE HELPER(PopByte)
     BYTE b;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    b = cpuPeekB(iVM, regSP);
+    b = cpuPeekB(candy, regSP);
 
     return b;
 } }
@@ -613,14 +613,14 @@ WORD HELPER(PopWord)
     WORD w;
 
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w = cpuPeekB(iVM, regSP);
+    w = cpuPeekB(candy, regSP);
     regSP = 0x100 | ((regSP + 1) & 0xFF);
-    w |= cpuPeekB(iVM, regSP) << 8;
+    w |= cpuPeekB(candy, regSP) << 8;
 
     return w;
 } }
 
-__inline void SIOCheck(const int iVM)
+__inline void SIOCheck(void *candy)
 {
     // !!! You can't set a bp on $e459, $e959 or anything inside SIO
 
@@ -643,7 +643,7 @@ __inline void SIOCheck(const int iVM)
     // But it's much slower doing the beeps in real time so let's leave the hack in for now
     
     //BOOL sd;
-    //SIOGetInfo(iVM, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL);
+    //SIOGetInfo(candy, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL);
     //if (rgbMem[0x302] != 0x53 && !(rgbMem[0x302] == 0x52 && sd))
     
     {
@@ -654,9 +654,9 @@ __inline void SIOCheck(const int iVM)
                 (rgbMem[regPC + 1] == 0x00 && rgbMem[regPC + 2] == 0xce))) // hack for PAL TRANSLATOR
         {
             // this is our SIO hook!
-            PackP(iVM);
-            SIOV(iVM);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
-            UnpackP(iVM);
+            PackP(candy);
+            SIOV(candy);  // if we don't do this now, an interrupt hitting at the same time will screw up the stack
+            UnpackP(candy);
 
             // With SIO happening instantaneously, you don't see the nice splash screens of many apps, so deliberately take
             // a little bit of time (but not nearly as much as it would really take)
@@ -684,7 +684,7 @@ __inline void SIOCheck(const int iVM)
             rgbMem[0xd194] = 0x68;  // pla
             rgbMem[0xd195] = 0x28;  // plp
             rgbMem[0xd196] = 0x60;
-            PushWord(iVM, regPC - 1);
+            PushWord(candy, regPC - 1);
 
             if (vi.fInDebugger && !vi.fExecuting && fTrace)
             {
@@ -699,9 +699,9 @@ __inline void SIOCheck(const int iVM)
         else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
             // this is our XE BUS hook!
-            PackP(iVM);
-            SIOV(iVM);
-            UnpackP(iVM);
+            PackP(candy);
+            SIOV(candy);
+            UnpackP(candy);
         }
         else if (regPC >= 0xD700 && regPC <= 0xD7FF)
             Assert(FALSE);  // Wrong VM? !!! $d600 binary loader hack will hit this
@@ -714,7 +714,7 @@ HANDLER(KIL)
 {
     ODS("KIL OPCODE!\n");
 
-    KillMePlease(iVM);
+    KillMePlease(candy);
 
     wLeft -= 2; // Must be non-zero! Or we stack fault in long BRK chains that call this
     HANDLER_END();
@@ -730,16 +730,16 @@ HANDLER(op00)
     // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
     // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there
     if (regPC >= 0xc000 /* && regPC < 0xd000 */ && mdXLXE == md800)
-        KIL(iVM);
+        KIL(candy);
 
-    PackP(iVM);    // we'll be pushing it
+    PackP(candy);    // we'll be pushing it
     if (!(regP & IBIT))
     {
-        Interrupt(iVM, TRUE);
-        regPC = cpuPeekW(iVM, 0xFFFE);
+        Interrupt(candy, TRUE);
+        regPC = cpuPeekW(candy, 0xFFFE);
         //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
     }
-    UnpackP(iVM);
+    UnpackP(candy);
 
     wLeft -= 7;
     HANDLER_END_FLOW();
@@ -749,8 +749,8 @@ HANDLER(op00)
 
 HANDLER(op01)
 {
-    EA_zpXindR(iVM);
-    ORA_com(iVM);
+    EA_zpXindR(candy);
+    ORA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -759,10 +759,10 @@ HANDLER(op01)
 
 HANDLER(op03)
 {
-    EA_zpXindW(iVM);                // the W version of these macros doesn't indirect the second time yet
-    ASL_mem(iVM);                   // because this needs to alter the EA (which isn't zero page any longer, so don't use the _zp macro)
-    regEA = READ_BYTE(iVM, regEA);  // then this part does the indirection that the R version of the macro would have done
-    ORA_com(iVM);                   // so this can act on the new contents
+    EA_zpXindW(candy);                // the W version of these macros doesn't indirect the second time yet
+    ASL_mem(candy);                   // because this needs to alter the EA (which isn't zero page any longer, so don't use the _zp macro)
+    regEA = READ_BYTE(candy, regEA);  // then this part does the indirection that the R version of the macro would have done
+    ORA_com(candy);                   // so this can act on the new contents
     wLeft -= 6;
     HANDLER_END();
 }
@@ -780,8 +780,8 @@ HANDLER(op04)
 
 HANDLER(op05)
 {
-    EA_zpR(iVM);
-    ORA_com(iVM);
+    EA_zpR(candy);
+    ORA_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -790,8 +790,8 @@ HANDLER(op05)
 
 HANDLER(op06)
 {
-    EA_zpW(iVM);
-    ASL_zp(iVM);
+    EA_zpW(candy);
+    ASL_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -800,10 +800,10 @@ HANDLER(op06)
 
 HANDLER(op07)
 {
-    EA_zpW(iVM);
-    ASL_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_zpW(candy);
+    ASL_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -812,8 +812,8 @@ HANDLER(op07)
 
 HANDLER(op08)
 {
-    PackP(iVM);
-    PushByte(iVM, regP);
+    PackP(candy);
+    PushByte(candy, regP);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -822,8 +822,8 @@ HANDLER(op08)
 
 HANDLER(op09)
 {
-    EA_imm(iVM);
-    ORA_com(iVM);
+    EA_imm(candy);
+    ORA_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -835,7 +835,7 @@ HANDLER(op0A)
     BYTE newC = regA & 0x80;
 
     regA += regA;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
     wLeft -= 2;
     HANDLER_END();
@@ -845,8 +845,8 @@ HANDLER(op0A)
 
 HANDLER(op0B)
 {
-    EA_imm(iVM);
-    AND_com(iVM);
+    EA_imm(candy);
+    AND_com(candy);
     srC = regA & 0x80;
     wLeft -= 2;
     HANDLER_END();
@@ -865,8 +865,8 @@ HANDLER(op0C)
 
 HANDLER(op0D)
 {
-    EA_absR(iVM);
-    ORA_com(iVM);
+    EA_absR(candy);
+    ORA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -875,8 +875,8 @@ HANDLER(op0D)
 
 HANDLER(op0E)
 {
-    EA_absW(iVM);
-    ASL_mem(iVM);
+    EA_absW(candy);
+    ASL_mem(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -885,10 +885,10 @@ HANDLER(op0E)
 
 HANDLER(op0F)
 {
-    EA_absW(iVM);
-    ASL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_absW(candy);
+    ASL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -897,7 +897,7 @@ HANDLER(op0F)
 
 HANDLER(op10)
 {
-    Jcc_com(iVM, (srN & 0x80) == 0);
+    Jcc_com(candy, (srN & 0x80) == 0);
     HANDLER_END_FLOW();
 }
 
@@ -905,8 +905,8 @@ HANDLER(op10)
 
 HANDLER(op11)
 {
-    EA_zpYindR(iVM);
-    ORA_com(iVM);
+    EA_zpYindR(candy);
+    ORA_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -915,10 +915,10 @@ HANDLER(op11)
 
 HANDLER(op13)
 {
-    EA_zpYindW(iVM);
-    ASL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_zpYindW(candy);
+    ASL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 5;     // best guess
     HANDLER_END();
 }
@@ -936,8 +936,8 @@ HANDLER(op14)
 
 HANDLER(op15)
 {
-    EA_zpXR(iVM);
-    ORA_com(iVM);
+    EA_zpXR(candy);
+    ORA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -946,8 +946,8 @@ HANDLER(op15)
 
 HANDLER(op16)
 {
-    EA_zpXW(iVM);
-    ASL_zp(iVM);
+    EA_zpXW(candy);
+    ASL_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -956,10 +956,10 @@ HANDLER(op16)
 
 HANDLER(op17)
 {
-    EA_zpXW(iVM);
-    ASL_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_zpXW(candy);
+    ASL_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -977,8 +977,8 @@ HANDLER(op18)
 
 HANDLER(op19)
 {
-    EA_absYR(iVM);
-    ORA_com(iVM);
+    EA_absYR(candy);
+    ORA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -995,10 +995,10 @@ HANDLER(op1A)
 
 HANDLER(op1B)
 {
-    EA_absYW(iVM);
-    ASL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_absYW(candy);
+    ASL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1016,8 +1016,8 @@ HANDLER(op1C)
 
 HANDLER(op1D)
 {
-    EA_absXR(iVM);
-    ORA_com(iVM);
+    EA_absXR(candy);
+    ORA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1026,8 +1026,8 @@ HANDLER(op1D)
 
 HANDLER(op1E)
 {
-    EA_absXW(iVM);
-    ASL_mem(iVM);
+    EA_absXW(candy);
+    ASL_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1036,10 +1036,10 @@ HANDLER(op1E)
 
 HANDLER(op1F)
 {
-    EA_absXW(iVM);
-    ASL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ORA_com(iVM);
+    EA_absXW(candy);
+    ASL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ORA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1048,14 +1048,14 @@ HANDLER(op1F)
 
 HANDLER(op20)
 {
-    EA_absW(iVM);
+    EA_absW(candy);
 
-    PushWord(iVM, regPC - 1);
+    PushWord(candy, regPC - 1);
 
     regPC = regEA;
     wLeft -= 6;
 
-    SIOCheck(iVM);  // SIO hack
+    SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1064,8 +1064,8 @@ HANDLER(op20)
 
 HANDLER(op21)
 {
-    EA_zpXindR(iVM);
-    AND_com(iVM);
+    EA_zpXindR(candy);
+    AND_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1074,10 +1074,10 @@ HANDLER(op21)
 
 HANDLER(op23)
 {
-    EA_zpXindW(iVM);
-    ROL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_zpXindW(candy);
+    ROL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 6; // best guess
     HANDLER_END();
 }
@@ -1086,8 +1086,8 @@ HANDLER(op23)
 
 HANDLER(op24)
 {
-    EA_zpR(iVM);
-    BIT_com(iVM);
+    EA_zpR(candy);
+    BIT_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -1096,8 +1096,8 @@ HANDLER(op24)
 
 HANDLER(op25)
 {
-    EA_zpR(iVM);
-    AND_com(iVM);
+    EA_zpR(candy);
+    AND_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -1106,8 +1106,8 @@ HANDLER(op25)
 
 HANDLER(op26)
 {
-    EA_zpW(iVM);
-    ROL_zp(iVM);
+    EA_zpW(candy);
+    ROL_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1116,10 +1116,10 @@ HANDLER(op26)
 
 HANDLER(op27)
 {
-    EA_zpW(iVM);
-    ROL_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_zpW(candy);
+    ROL_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1128,9 +1128,9 @@ HANDLER(op27)
 
 HANDLER(op28)
 {
-    regP = PopByte(iVM);
+    regP = PopByte(candy);
     regP |= 0x10;    // force srB
-    UnpackP(iVM);
+    UnpackP(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1139,8 +1139,8 @@ HANDLER(op28)
 
 HANDLER(op29)
 {
-    EA_imm(iVM);
-    AND_com(iVM);
+    EA_imm(candy);
+    AND_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -1152,7 +1152,7 @@ HANDLER(op2A)
     BYTE newC = regA & 0x80;
 
     regA += regA + (srC != 0);
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
     wLeft -= 2;
     HANDLER_END();
@@ -1162,8 +1162,8 @@ HANDLER(op2A)
 
 HANDLER(op2B)
 {
-    EA_imm(iVM);
-    AND_com(iVM);
+    EA_imm(candy);
+    AND_com(candy);
     srC = regA & 0x80;
     wLeft -= 2;
     HANDLER_END();
@@ -1173,8 +1173,8 @@ HANDLER(op2B)
 
 HANDLER(op2C)
 {
-    EA_absR(iVM);
-    BIT_com(iVM);
+    EA_absR(candy);
+    BIT_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1183,8 +1183,8 @@ HANDLER(op2C)
 
 HANDLER(op2D)
 {
-    EA_absR(iVM);
-    AND_com(iVM);
+    EA_absR(candy);
+    AND_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1193,8 +1193,8 @@ HANDLER(op2D)
 
 HANDLER(op2E)
 {
-    EA_absW(iVM);
-    ROL_mem(iVM);
+    EA_absW(candy);
+    ROL_mem(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1203,10 +1203,10 @@ HANDLER(op2E)
 
 HANDLER(op2F)
 {
-    EA_absW(iVM);
-    ROL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_absW(candy);
+    ROL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1215,7 +1215,7 @@ HANDLER(op2F)
 
 HANDLER(op30)
 {
-    Jcc_com(iVM, (srN & 0x80) != 0);
+    Jcc_com(candy, (srN & 0x80) != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1223,8 +1223,8 @@ HANDLER(op30)
 
 HANDLER(op31)
 {
-    EA_zpYindR(iVM);
-    AND_com(iVM);
+    EA_zpYindR(candy);
+    AND_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1233,10 +1233,10 @@ HANDLER(op31)
 
 HANDLER(op33)
 {
-    EA_zpYindW(iVM);
-    ROL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_zpYindW(candy);
+    ROL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 6; // best guess
     HANDLER_END();
 }
@@ -1254,8 +1254,8 @@ HANDLER(op34)
 
 HANDLER(op35)
 {
-    EA_zpXR(iVM);
-    AND_com(iVM);
+    EA_zpXR(candy);
+    AND_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1264,8 +1264,8 @@ HANDLER(op35)
 
 HANDLER(op36)
 {
-    EA_zpXW(iVM);
-    ROL_zp(iVM);
+    EA_zpXW(candy);
+    ROL_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1274,10 +1274,10 @@ HANDLER(op36)
 
 HANDLER(op37)
 {
-    EA_zpXW(iVM);
-    ROL_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_zpXW(candy);
+    ROL_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1295,8 +1295,8 @@ HANDLER(op38)
 
 HANDLER(op39)
 {
-    EA_absYR(iVM);
-    AND_com(iVM);
+    EA_absYR(candy);
+    AND_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1313,10 +1313,10 @@ HANDLER(op3A)
 
 HANDLER(op3B)
 {
-    EA_absYW(iVM);
-    ROL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_absYW(candy);
+    ROL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1334,8 +1334,8 @@ HANDLER(op3C)
 
 HANDLER(op3D)
 {
-    EA_absXR(iVM);
-    AND_com(iVM);
+    EA_absXR(candy);
+    AND_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1344,8 +1344,8 @@ HANDLER(op3D)
 
 HANDLER(op3E)
 {
-    EA_absXW(iVM);
-    ROL_mem(iVM);
+    EA_absXW(candy);
+    ROL_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1354,10 +1354,10 @@ HANDLER(op3E)
 
 HANDLER(op3F)
 {
-    EA_absXW(iVM);
-    ROL_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    AND_com(iVM);
+    EA_absXW(candy);
+    ROL_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    AND_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1366,10 +1366,10 @@ HANDLER(op3F)
 
 HANDLER(op40)
 {
-    regP = PopByte(iVM);
+    regP = PopByte(candy);
     regP |= 0x10;    // force srB
-    UnpackP(iVM);
-    regPC = PopWord(iVM);
+    UnpackP(candy);
+    regPC = PopWord(candy);
     
     // I'm not sure which one this is, but assume DLI for now
     if (fInVBI && fInDLI)
@@ -1394,8 +1394,8 @@ HANDLER(op40)
 
 HANDLER(op41)
 {
-    EA_zpXindR(iVM);
-    EOR_com(iVM);
+    EA_zpXindR(candy);
+    EOR_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1404,10 +1404,10 @@ HANDLER(op41)
 
 HANDLER(op43)
 {
-    EA_zpXindW(iVM);
-    LSR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_zpXindW(candy);
+    LSR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1425,8 +1425,8 @@ HANDLER(op44)
 
 HANDLER(op45)
 {
-    EA_zpR(iVM);
-    EOR_com(iVM);
+    EA_zpR(candy);
+    EOR_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -1435,8 +1435,8 @@ HANDLER(op45)
 
 HANDLER(op46)
 {
-    EA_zpW(iVM);
-    LSR_zp(iVM);
+    EA_zpW(candy);
+    LSR_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1445,10 +1445,10 @@ HANDLER(op46)
 
 HANDLER(op47)
 {
-    EA_zpW(iVM);
-    LSR_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_zpW(candy);
+    LSR_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1457,7 +1457,7 @@ HANDLER(op47)
 
 HANDLER(op48)
 {
-    PushByte(iVM, regA);
+    PushByte(candy, regA);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -1466,8 +1466,8 @@ HANDLER(op48)
 
 HANDLER(op49)
 {
-    EA_imm(iVM);
-    EOR_com(iVM);
+    EA_imm(candy);
+    EOR_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -1479,7 +1479,7 @@ HANDLER(op4A)
     BYTE newC = regA << 7;
 
     regA >>= 1;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
     wLeft -= 2;
     HANDLER_END();
@@ -1489,12 +1489,12 @@ HANDLER(op4A)
 
 HANDLER(op4B)
 {
-    EA_imm(iVM);
-    AND_com(iVM);
+    EA_imm(candy);
+    AND_com(candy);
     
     BYTE newC = regA << 7;
     regA >>= 1;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
     
     wLeft -= 2; // best guess
@@ -1505,12 +1505,12 @@ HANDLER(op4B)
 
 HANDLER(op4C)
 {
-    EA_absW(iVM);
+    EA_absW(candy);
 
     regPC = regEA;
     wLeft -= 3;
 
-    SIOCheck(iVM);  // SIO hack
+    SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1519,8 +1519,8 @@ HANDLER(op4C)
 
 HANDLER(op4D)
 {
-    EA_absR(iVM);
-    EOR_com(iVM);
+    EA_absR(candy);
+    EOR_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1529,8 +1529,8 @@ HANDLER(op4D)
 
 HANDLER(op4E)
 {
-    EA_absW(iVM);
-    LSR_mem(iVM);
+    EA_absW(candy);
+    LSR_mem(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1539,10 +1539,10 @@ HANDLER(op4E)
 
 HANDLER(op4F)
 {
-    EA_absW(iVM);
-    LSR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_absW(candy);
+    LSR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1551,7 +1551,7 @@ HANDLER(op4F)
 
 HANDLER(op50)
 {
-    Jcc_com(iVM, srV == 0);
+    Jcc_com(candy, srV == 0);
     HANDLER_END_FLOW();
 }
 
@@ -1559,8 +1559,8 @@ HANDLER(op50)
 
 HANDLER(op51)
 {
-    EA_zpYindR(iVM);
-    EOR_com(iVM);
+    EA_zpYindR(candy);
+    EOR_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1569,10 +1569,10 @@ HANDLER(op51)
 
 HANDLER(op53)
 {
-    EA_zpYindW(iVM);
-    LSR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_zpYindW(candy);
+    LSR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 5; // best guess
     HANDLER_END();
 }
@@ -1590,8 +1590,8 @@ HANDLER(op54)
 
 HANDLER(op55)
 {
-    EA_zpXR(iVM);
-    EOR_com(iVM);
+    EA_zpXR(candy);
+    EOR_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1600,8 +1600,8 @@ HANDLER(op55)
 
 HANDLER(op56)
 {
-    EA_zpXW(iVM);
-    LSR_zp(iVM);
+    EA_zpXW(candy);
+    LSR_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1610,10 +1610,10 @@ HANDLER(op56)
 
 HANDLER(op57)
 {
-    EA_zpXW(iVM);
-    LSR_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_zpXW(candy);
+    LSR_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1631,8 +1631,8 @@ HANDLER(op58)
 
 HANDLER(op59)
 {
-    EA_absYR(iVM);
-    EOR_com(iVM);
+    EA_absYR(candy);
+    EOR_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1649,10 +1649,10 @@ HANDLER(op5A)
 
 HANDLER(op5B)
 {
-    EA_absYW(iVM);
-    LSR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_absYW(candy);
+    LSR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1670,8 +1670,8 @@ HANDLER(op5C)
 
 HANDLER(op5D)
 {
-    EA_absXR(iVM);
-    EOR_com(iVM);
+    EA_absXR(candy);
+    EOR_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1680,8 +1680,8 @@ HANDLER(op5D)
 
 HANDLER(op5E)
 {
-    EA_absXW(iVM);
-    LSR_mem(iVM);
+    EA_absXW(candy);
+    LSR_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1690,10 +1690,10 @@ HANDLER(op5E)
 
 HANDLER(op5F)
 {
-    EA_absXW(iVM);
-    LSR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    EOR_com(iVM);
+    EA_absXW(candy);
+    LSR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    EOR_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -1702,7 +1702,7 @@ HANDLER(op5F)
 
 HANDLER(op60)
 {
-    regPC = PopWord(iVM) + 1;
+    regPC = PopWord(candy) + 1;
     wLeft -= 6;
 
 #ifndef NDEBUG
@@ -1715,7 +1715,7 @@ HANDLER(op60)
     }
 #endif
 
-    SIOCheck(iVM);  // SIO hack
+    SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1724,8 +1724,8 @@ HANDLER(op60)
 
 HANDLER(op61)
 {
-    EA_zpXindR(iVM);
-    ADC_com(iVM);
+    EA_zpXindR(candy);
+    ADC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1734,10 +1734,10 @@ HANDLER(op61)
 
 HANDLER(op63)
 {
-    EA_zpXindW(iVM);
-    ROR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_zpXindW(candy);
+    ROR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 6; // best guess
     HANDLER_END();
 }
@@ -1755,8 +1755,8 @@ HANDLER(op64)
 
 HANDLER(op65)
 {
-    EA_zpR(iVM);
-    ADC_com(iVM);
+    EA_zpR(candy);
+    ADC_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -1765,8 +1765,8 @@ HANDLER(op65)
 
 HANDLER(op66)
 {
-    EA_zpW(iVM);
-    ROR_zp(iVM);
+    EA_zpW(candy);
+    ROR_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1775,10 +1775,10 @@ HANDLER(op66)
 
 HANDLER(op67)
 {
-    EA_zpW(iVM);
-    ROR_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_zpW(candy);
+    ROR_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1787,8 +1787,8 @@ HANDLER(op67)
 
 HANDLER(op68)
 {
-    regA = PopByte(iVM);
-    update_NZ(iVM, regA);
+    regA = PopByte(candy);
+    update_NZ(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1797,8 +1797,8 @@ HANDLER(op68)
 
 HANDLER(op69)
 {
-    EA_imm(iVM);
-    ADC_com(iVM);
+    EA_imm(candy);
+    ADC_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -1810,7 +1810,7 @@ HANDLER(op6A)
     BYTE newC = regA << 7;
 
     regA = (regA >> 1) | (srC & 0x80);
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
     wLeft -= 2;
     HANDLER_END();
@@ -1820,22 +1820,22 @@ HANDLER(op6A)
 
 HANDLER(op6B)
 {
-    EA_imm(iVM);
+    EA_imm(candy);
 
 #if 0
-    ADC_com(iVM);
+    ADC_com(candy);
     BYTE xC = srC;
     BYTE xV = srV;
-    SBC_com(iVM);   // the purpose is to set the carry but not change A, but this is wrong
+    SBC_com(candy);   // the purpose is to set the carry but not change A, but this is wrong
     srC = xC;
     srV = xV;
 #endif
 
-    AND_com(iVM);
+    AND_com(candy);
 
     BYTE newC = regA << 7;
     regA = (regA >> 1) | (srC & 0x80);
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     srC = newC;
 
     wLeft -= 2; // best guess
@@ -1846,19 +1846,19 @@ HANDLER(op6B)
 
 HANDLER(op6C)
 {
-    EA_absW(iVM);
+    EA_absW(candy);
 
     if (regEA == 0xc)
     {
-        regPC = READ_WORD(iVM, regEA);
+        regPC = READ_WORD(candy, regEA);
         
         // detect our BASIC loader, that means we need BASIC
         if (ramtop == 0xc000 && regPC == 0x70a && rgbMem[0x708] == 0xca && rgbMem[0x709] == 0xfe)
-            KillMePleaseBASIC(iVM);
+            KillMePleaseBASIC(candy);
 
         // detect another common BASIC loader in the boot sectors (not the AUTORUN.SYS kind) - Crickets
         if (ramtop == 0xc000 && regPC == 0x70a && rgbMem[0x720] == 0x95 && rgbMem[0x721] == 0x80)
-            KillMePleaseBASIC(iVM);
+            KillMePleaseBASIC(candy);
     }
     
     else if (regEA == 0x2e0)
@@ -1872,12 +1872,12 @@ HANDLER(op6C)
             rgbMem[0x2e1] = rgbMem[0x48];
         }
 
-        regPC = READ_WORD(iVM, regEA);
+        regPC = READ_WORD(candy, regEA);
     }
 
     else if (regEA == 0x2e2)
     {
-        regPC = READ_WORD(iVM, regEA);
+        regPC = READ_WORD(candy, regEA);
 
         // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
         // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
@@ -1895,13 +1895,13 @@ HANDLER(op6C)
                 BYTE b = rgbMem[i];
                 if (rgbMem[regPC] != 0x60 && b >= 0x1a && b <= 0x3e && rgbMem[i + 1] == 3 && (b == 0x1a || (rgbMem[i + 6] == 3 && rgbMem[i + 5] == b + 1)))
                 {
-                    KillMePleaseBASIC(iVM); // do NOT post ToggleBasic msg, that only works on current active VM!
+                    KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
                 }
                 // demo_1b.atr writes to the screen and presses return continuously by poking $34a,$d @ i=$62e
                 // I wonder if anybody else does something similar... !!! will this false positive without the test for i == $62e?
                 if (b == 0x4a && rgbMem[i + 1] == 3 && rgbMem[i - 2] == 0xd)
                 {
-                    KillMePleaseBASIC(iVM);
+                    KillMePleaseBASIC(candy);
                 }
             }
         }
@@ -1911,15 +1911,15 @@ HANDLER(op6C)
     {
         if ((regEA & 0xff) == 0xff)   // famous 6502 bug
         {
-            regPC = READ_BYTE(iVM, regEA) | (READ_BYTE(iVM, regEA & 0xff00) << 8);
+            regPC = READ_BYTE(candy, regEA) | (READ_BYTE(candy, regEA & 0xff00) << 8);
         }
         else
-            regPC = READ_WORD(iVM, regEA);
+            regPC = READ_WORD(candy, regEA);
     }
 
     wLeft -= 5;
 
-    SIOCheck(iVM);  // SIO hack
+    SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
 }
@@ -1928,8 +1928,8 @@ HANDLER(op6C)
 
 HANDLER(op6D)
 {
-    EA_absR(iVM);
-    ADC_com(iVM);
+    EA_absR(candy);
+    ADC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -1938,8 +1938,8 @@ HANDLER(op6D)
 
 HANDLER(op6E)
 {
-    EA_absW(iVM);
-    ROR_mem(iVM);
+    EA_absW(candy);
+    ROR_mem(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1948,10 +1948,10 @@ HANDLER(op6E)
 
 HANDLER(op6F)
 {
-    EA_absW(iVM);
-    ROR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_absW(candy);
+    ROR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -1960,7 +1960,7 @@ HANDLER(op6F)
 
 HANDLER(op70)
 {
-    Jcc_com(iVM, srV != 0);
+    Jcc_com(candy, srV != 0);
     HANDLER_END_FLOW();
 }
 
@@ -1968,8 +1968,8 @@ HANDLER(op70)
 
 HANDLER(op71)
 {
-    EA_zpYindR(iVM);
-    ADC_com(iVM);
+    EA_zpYindR(candy);
+    ADC_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -1978,10 +1978,10 @@ HANDLER(op71)
 
 HANDLER(op73)
 {
-    EA_zpYindW(iVM);
-    ROR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_zpYindW(candy);
+    ROR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 5; // best guess
     HANDLER_END();
 }
@@ -1999,8 +1999,8 @@ HANDLER(op74)
 
 HANDLER(op75)
 {
-    EA_zpXR(iVM);
-    ADC_com(iVM);
+    EA_zpXR(candy);
+    ADC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2009,8 +2009,8 @@ HANDLER(op75)
 
 HANDLER(op76)
 {
-    EA_zpXW(iVM);
-    ROR_zp(iVM);
+    EA_zpXW(candy);
+    ROR_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2019,10 +2019,10 @@ HANDLER(op76)
 
 HANDLER(op77)
 {
-    EA_zpXW(iVM);
-    ROR_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_zpXW(candy);
+    ROR_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2040,8 +2040,8 @@ HANDLER(op78)
 
 HANDLER(op79)
 {
-    EA_absYR(iVM);
-    ADC_com(iVM);
+    EA_absYR(candy);
+    ADC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2058,10 +2058,10 @@ HANDLER(op7A)
 
 HANDLER(op7B)
 {
-    EA_absYW(iVM);
-    ROR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_absYW(candy);
+    ROR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -2079,8 +2079,8 @@ HANDLER(op7C)
 
 HANDLER(op7D)
 {
-    EA_absXR(iVM);
-    ADC_com(iVM);
+    EA_absXR(candy);
+    ADC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2089,8 +2089,8 @@ HANDLER(op7D)
 
 HANDLER(op7E)
 {
-    EA_absXW(iVM);
-    ROR_mem(iVM);
+    EA_absXW(candy);
+    ROR_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -2099,10 +2099,10 @@ HANDLER(op7E)
 
 HANDLER(op7F)
 {
-    EA_absXW(iVM);
-    ROR_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    ADC_com(iVM);
+    EA_absXW(candy);
+    ROR_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    ADC_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -2115,8 +2115,8 @@ HANDLER(op80)
     // Bin1-Bin3 puts the start addr in (43,44) and the end addr in (45,46), and does a NOP # secret instruction.
     if (regPC == 0x0872 || regPC == 0xd772)
     {
-        WORD ws = READ_WORD(iVM, 0x43);
-        WORD we = READ_WORD(iVM, 0x45);
+        WORD ws = READ_WORD(candy, 0x43);
+        WORD we = READ_WORD(candy, 0x45);
 
         //ODS("Loading segment %04x-%04x\n", ws, we);
 
@@ -2127,7 +2127,7 @@ HANDLER(op80)
         if (!fAltBinLoader && ws < 0xa80 && we >= 0x700)
         {
             fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
-            KillMeSoftlyPlease(iVM);
+            KillMeSoftlyPlease(candy);
         }
 
         // also, remember the start address of the most recent segment loaded for the $2e0 hack in JMP (ind)
@@ -2165,7 +2165,7 @@ HANDLER(op80)
             if (chk != chkA)
             {
                 fAltBinLoader = TRUE;   // try the other loader relocated in ROM
-                KillMeSoftlyPlease(iVM);
+                KillMeSoftlyPlease(candy);
             }
         }
 
@@ -2191,8 +2191,8 @@ HANDLER(op80)
 
 HANDLER(op81)
 {
-    EA_zpXindW(iVM);
-    ST_com(iVM, regA);
+    EA_zpXindW(candy);
+    ST_com(candy, regA);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2211,8 +2211,8 @@ HANDLER(op82)
 HANDLER(op83)
 {
 
-    EA_zpXindW(iVM);
-    ST_com(iVM, regA & regX);
+    EA_zpXindW(candy);
+    ST_com(candy, regA & regX);
     wLeft -= 6;    // best guess
     HANDLER_END();
 }
@@ -2222,8 +2222,8 @@ HANDLER(op83)
 HANDLER(op84)
 {
 
-    EA_zpW(iVM);
-    ST_zp(iVM, regY);
+    EA_zpW(candy);
+    ST_zp(candy, regY);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2232,8 +2232,8 @@ HANDLER(op84)
 
 HANDLER(op85)
 {
-    EA_zpW(iVM);
-    ST_zp(iVM, regA);
+    EA_zpW(candy);
+    ST_zp(candy, regA);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2242,8 +2242,8 @@ HANDLER(op85)
 
 HANDLER(op86)
 {
-    EA_zpW(iVM);
-    ST_zp(iVM, regX);
+    EA_zpW(candy);
+    ST_zp(candy, regX);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2252,8 +2252,8 @@ HANDLER(op86)
 
 HANDLER(op87)
 {
-    EA_zpW(iVM);
-    ST_zp(iVM, regA & regX);
+    EA_zpW(candy);
+    ST_zp(candy, regA & regX);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2262,7 +2262,7 @@ HANDLER(op87)
 
 HANDLER(op88)
 {
-    update_NZ(iVM, --regY);
+    update_NZ(candy, --regY);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2271,7 +2271,7 @@ HANDLER(op88)
 
 HANDLER(op89)
 {
-    EA_imm(iVM);
+    EA_imm(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2281,7 +2281,7 @@ HANDLER(op89)
 HANDLER(op8A)
 {
     regA = regX;
-    update_NZ(iVM, regX);
+    update_NZ(candy, regX);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2290,9 +2290,9 @@ HANDLER(op8A)
 
 HANDLER(op8B)
 {
-    EA_imm(iVM);
+    EA_imm(candy);
     regA = regX;    // Altirra says regA &= regX;
-    AND_com(iVM);
+    AND_com(candy);
     wLeft -= 2; // best guess
     HANDLER_END()
 }
@@ -2301,8 +2301,8 @@ HANDLER(op8B)
 
 HANDLER(op8C)
 {
-    EA_absW(iVM);
-    ST_com(iVM, regY);
+    EA_absW(candy);
+    ST_com(candy, regY);
     wLeft -= 4;
     HANDLER_END()
 }
@@ -2311,8 +2311,8 @@ HANDLER(op8C)
 
 HANDLER(op8D)
 {
-    EA_absW(iVM);
-    ST_com(iVM, regA);
+    EA_absW(candy);
+    ST_com(candy, regA);
     wLeft -= 4;    // note that the decrementing comes last, after the STA, so STA WSYNC sees the old value
     HANDLER_END();
 }
@@ -2321,8 +2321,8 @@ HANDLER(op8D)
 
 HANDLER(op8E)
 {
-    EA_absW(iVM);
-    ST_com(iVM, regX);
+    EA_absW(candy);
+    ST_com(candy, regX);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2331,8 +2331,8 @@ HANDLER(op8E)
 
 HANDLER(op8F)
 {
-    EA_absW(iVM);
-    ST_com(iVM, regA & regX);
+    EA_absW(candy);
+    ST_com(candy, regA & regX);
     wLeft -= 4; // best guess
     HANDLER_END();
 }
@@ -2341,7 +2341,7 @@ HANDLER(op8F)
 
 HANDLER(op90)
 {
-    Jcc_com(iVM, (srC & 0x80) == 0);
+    Jcc_com(candy, (srC & 0x80) == 0);
     HANDLER_END_FLOW();
 }
 
@@ -2349,8 +2349,8 @@ HANDLER(op90)
 
 HANDLER(op91)
 {
-    EA_zpYindW(iVM);
-    ST_com(iVM, regA);
+    EA_zpYindW(candy);
+    ST_com(candy, regA);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2359,11 +2359,11 @@ HANDLER(op91)
 
 HANDLER(op93)
 {
-    regEA = cpuPeekB(iVM, regPC++);
-    regEA = cpuPeekW(iVM, regEA);
+    regEA = cpuPeekB(candy, regPC++);
+    regEA = cpuPeekW(candy, regEA);
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // some sources say + 1, some don't, but all say to do it pre-indexing
     regEA += regY;
-    ST_com(iVM, regA & regX & b);           // Altirra says unstable implementation
+    ST_com(candy, regA & regX & b);           // Altirra says unstable implementation
     wLeft -= 6;     // best guess
     HANDLER_END();
 }
@@ -2372,8 +2372,8 @@ HANDLER(op93)
 
 HANDLER(op94)
 {
-    EA_zpXW(iVM);
-    ST_com(iVM, regY);
+    EA_zpXW(candy);
+    ST_com(candy, regY);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2382,8 +2382,8 @@ HANDLER(op94)
 
 HANDLER(op95)
 {
-    EA_zpXW(iVM);
-    ST_com(iVM, regA);
+    EA_zpXW(candy);
+    ST_com(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2392,8 +2392,8 @@ HANDLER(op95)
 
 HANDLER(op96)
 {
-    EA_zpYW(iVM);
-    ST_com(iVM, regX);
+    EA_zpYW(candy);
+    ST_com(candy, regX);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2402,8 +2402,8 @@ HANDLER(op96)
 
 HANDLER(op97)
 {
-    EA_zpYW(iVM);
-    ST_com(iVM, regA & regX);
+    EA_zpYW(candy);
+    ST_com(candy, regA & regX);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2413,7 +2413,7 @@ HANDLER(op97)
 HANDLER(op98)
 {
     regA = regY;
-    update_NZ(iVM, regY);
+    update_NZ(candy, regY);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2422,8 +2422,8 @@ HANDLER(op98)
 
 HANDLER(op99)
 {
-    EA_absYW(iVM);
-    ST_com(iVM, regA);
+    EA_absYW(candy);
+    ST_com(candy, regA);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -2441,11 +2441,11 @@ HANDLER(op9A)
 
 HANDLER(op9B)
 {
-    regEA = cpuPeekW(iVM, regPC);
+    regEA = cpuPeekW(candy, regPC);
     regPC += 2;
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
     regEA += regY;
-    ST_com(iVM, regA & regX & b);
+    ST_com(candy, regA & regX & b);
     regSP = (regA & regX) | 0x100;
     wLeft -= 5;     // best guess
     HANDLER_END();
@@ -2455,7 +2455,7 @@ HANDLER(op9B)
 
 HANDLER(op9C)
 {
-    regEA = cpuPeekW(iVM, regPC);
+    regEA = cpuPeekW(candy, regPC);
     regPC += 2;
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
 
@@ -2468,7 +2468,7 @@ HANDLER(op9C)
     else
         regEA += regX;
 
-    ST_com(iVM, regY & b);
+    ST_com(candy, regY & b);
 
     wLeft -= 5;     // best guess
     HANDLER_END();
@@ -2478,8 +2478,8 @@ HANDLER(op9C)
 
 HANDLER(op9D)
 {
-    EA_absXW(iVM);
-    ST_com(iVM, regA);
+    EA_absXW(candy);
+    ST_com(candy, regA);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -2488,7 +2488,7 @@ HANDLER(op9D)
 
 HANDLER(op9E)
 {
-    regEA = cpuPeekW(iVM, regPC);
+    regEA = cpuPeekW(candy, regPC);
     regPC += 2;
     BYTE b = ((regEA & 0xff00) >> 8) + 1;   // pre-indexing
 
@@ -2501,7 +2501,7 @@ HANDLER(op9E)
     else
         regEA += regY;
 
-    ST_com(iVM, regX & b);
+    ST_com(candy, regX & b);
 
     wLeft -= 5;     // best guess
     HANDLER_END();
@@ -2511,8 +2511,8 @@ HANDLER(op9E)
 
 HANDLER(op9F)
 {
-    EA_absYW(iVM);
-    ST_com(iVM, regA & regX);
+    EA_absYW(candy);
+    ST_com(candy, regA & regX);
     wLeft -= 5; // best guess
     HANDLER_END();
 }
@@ -2521,8 +2521,8 @@ HANDLER(op9F)
 
 HANDLER(opA0)
 {
-    EA_imm(iVM);
-    LDY_com(iVM);
+    EA_imm(candy);
+    LDY_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2531,8 +2531,8 @@ HANDLER(opA0)
 
 HANDLER(opA1)
 {
-    EA_zpXindR(iVM);
-    LDA_com(iVM);
+    EA_zpXindR(candy);
+    LDA_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2541,8 +2541,8 @@ HANDLER(opA1)
 
 HANDLER(opA2)
 {
-    EA_imm(iVM);
-    LDX_com(iVM);
+    EA_imm(candy);
+    LDX_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2551,9 +2551,9 @@ HANDLER(opA2)
 
 HANDLER(opA3)
 {
-    EA_zpXindR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_zpXindR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2562,8 +2562,8 @@ HANDLER(opA3)
 
 HANDLER(opA4)
 {
-    EA_zpR(iVM);
-    LDY_com(iVM);
+    EA_zpR(candy);
+    LDY_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2572,8 +2572,8 @@ HANDLER(opA4)
 
 HANDLER(opA5)
 {
-    EA_zpR(iVM);
-    LDA_com(iVM);
+    EA_zpR(candy);
+    LDA_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2582,8 +2582,8 @@ HANDLER(opA5)
 
 HANDLER(opA6)
 {
-    EA_zpR(iVM);
-    LDX_com(iVM);
+    EA_zpR(candy);
+    LDX_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2592,9 +2592,9 @@ HANDLER(opA6)
 
 HANDLER(opA7)
 {
-    EA_zpR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_zpR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2604,7 +2604,7 @@ HANDLER(opA7)
 HANDLER(opA8)
 {
     regY = regA;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2613,8 +2613,8 @@ HANDLER(opA8)
 
 HANDLER(opA9)
 {
-    EA_imm(iVM);
-    LDA_com(iVM);
+    EA_imm(candy);
+    LDA_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2624,7 +2624,7 @@ HANDLER(opA9)
 HANDLER(opAA)
 {
     regX = regA;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2633,10 +2633,10 @@ HANDLER(opAA)
 
 HANDLER(opAB)
 {
-    EA_imm(iVM);
+    EA_imm(candy);
     regEA = regA | 0xee & (BYTE)regEA;
-    LDX_com(iVM);
-    LDA_com(iVM);
+    LDX_com(candy);
+    LDA_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2645,8 +2645,8 @@ HANDLER(opAB)
 
 HANDLER(opAC)
 {
-    EA_absR(iVM);
-    LDY_com(iVM);
+    EA_absR(candy);
+    LDY_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2655,8 +2655,8 @@ HANDLER(opAC)
 
 HANDLER(opAD)
 {
-    EA_absR(iVM);
-    LDA_com(iVM);
+    EA_absR(candy);
+    LDA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2665,8 +2665,8 @@ HANDLER(opAD)
 
 HANDLER(opAE)
 {
-    EA_absR(iVM);
-    LDX_com(iVM);
+    EA_absR(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2675,9 +2675,9 @@ HANDLER(opAE)
 
 HANDLER(opAF)
 {
-    EA_absR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_absR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2686,7 +2686,7 @@ HANDLER(opAF)
 
 HANDLER(opB0)
 {
-    Jcc_com(iVM, (srC & 0x80) != 0);
+    Jcc_com(candy, (srC & 0x80) != 0);
     HANDLER_END_FLOW();
 }
 
@@ -2694,8 +2694,8 @@ HANDLER(opB0)
 
 HANDLER(opB1)
 {
-    EA_zpYindR(iVM);
-    LDA_com(iVM);
+    EA_zpYindR(candy);
+    LDA_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -2704,9 +2704,9 @@ HANDLER(opB1)
 
 HANDLER(opB3)
 {
-    EA_zpYindR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_zpYindR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -2715,8 +2715,8 @@ HANDLER(opB3)
 
 HANDLER(opB4)
 {
-    EA_zpXR(iVM);
-    LDY_com(iVM);
+    EA_zpXR(candy);
+    LDY_com(candy);
     wLeft -= 4;
     HANDLER_END()
 }
@@ -2725,8 +2725,8 @@ HANDLER(opB4)
 
 HANDLER(opB5)
 {
-    EA_zpXR(iVM);
-    LDA_com(iVM);
+    EA_zpXR(candy);
+    LDA_com(candy);
     wLeft -= 4;
     HANDLER_END()
 }
@@ -2735,8 +2735,8 @@ HANDLER(opB5)
 
 HANDLER(opB6)
 {
-    EA_zpYR(iVM);
-    LDX_com(iVM);
+    EA_zpYR(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END()
 }
@@ -2745,9 +2745,9 @@ HANDLER(opB6)
 
 HANDLER(opB7)
 {
-    EA_zpYR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_zpYR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END()
 }
@@ -2765,8 +2765,8 @@ HANDLER(opB8)
 
 HANDLER(opB9)
 {
-    EA_absYR(iVM);
-    LDA_com(iVM);
+    EA_absYR(candy);
+    LDA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2776,7 +2776,7 @@ HANDLER(opB9)
 HANDLER(opBA)
 {
     regX = (BYTE)(regSP & 255);
-    update_NZ(iVM, regX);
+    update_NZ(candy, regX);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2785,11 +2785,11 @@ HANDLER(opBA)
 
 HANDLER(opBB)
 {
-    EA_absR(iVM);
+    EA_absR(candy);
     regA = (BYTE)regEA & (BYTE)regSP;
     regX = regA;
     regSP = regA | 0x100;
-    update_NZ(iVM, regA);
+    update_NZ(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2798,8 +2798,8 @@ HANDLER(opBB)
 
 HANDLER(opBC)
 {
-    EA_absXR(iVM);
-    LDY_com(iVM);
+    EA_absXR(candy);
+    LDY_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2808,8 +2808,8 @@ HANDLER(opBC)
 
 HANDLER(opBD)
 {
-    EA_absXR(iVM);
-    LDA_com(iVM);
+    EA_absXR(candy);
+    LDA_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2818,8 +2818,8 @@ HANDLER(opBD)
 
 HANDLER(opBE)
 {
-    EA_absYR(iVM);
-    LDX_com(iVM);
+    EA_absYR(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2828,9 +2828,9 @@ HANDLER(opBE)
 
 HANDLER(opBF)
 {
-    EA_absYR(iVM);
-    LDA_com(iVM);
-    LDX_com(iVM);
+    EA_absYR(candy);
+    LDA_com(candy);
+    LDX_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2839,8 +2839,8 @@ HANDLER(opBF)
 
 HANDLER(opC0)
 {
-    EA_imm(iVM);
-    CMP_com(iVM, regY);
+    EA_imm(candy);
+    CMP_com(candy, regY);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2849,8 +2849,8 @@ HANDLER(opC0)
 
 HANDLER(opC1)
 {
-    EA_zpXindR(iVM);
-    CMP_com(iVM, regA);
+    EA_zpXindR(candy);
+    CMP_com(candy, regA);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -2868,10 +2868,10 @@ HANDLER(opC2)
 
 HANDLER(opC3)
 {
-    EA_zpXindW(iVM);
-    DEC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_zpXindW(candy);
+    DEC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 6;     // best guess
     HANDLER_END();
 }
@@ -2880,8 +2880,8 @@ HANDLER(opC3)
 
 HANDLER(opC4)
 {
-    EA_zpR(iVM);
-    CMP_com(iVM, regY);
+    EA_zpR(candy);
+    CMP_com(candy, regY);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2890,8 +2890,8 @@ HANDLER(opC4)
 
 HANDLER(opC5)
 {
-    EA_zpR(iVM);
-    CMP_com(iVM, regA);
+    EA_zpR(candy);
+    CMP_com(candy, regA);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -2900,8 +2900,8 @@ HANDLER(opC5)
 
 HANDLER(opC6)
 {
-    EA_zpW(iVM);
-    DEC_zp(iVM);
+    EA_zpW(candy);
+    DEC_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -2910,10 +2910,10 @@ HANDLER(opC6)
 
 HANDLER(opC7)
 {
-    EA_zpW(iVM);
-    DEC_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_zpW(candy);
+    DEC_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 5;
     HANDLER_END()
 }
@@ -2922,7 +2922,7 @@ HANDLER(opC7)
 
 HANDLER(opC8)
 {
-    update_NZ(iVM, ++regY);
+    update_NZ(candy, ++regY);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2931,8 +2931,8 @@ HANDLER(opC8)
 
 HANDLER(opC9)
 {
-    EA_imm(iVM);
-    CMP_com(iVM, regA);
+    EA_imm(candy);
+    CMP_com(candy, regA);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2941,7 +2941,7 @@ HANDLER(opC9)
 
 HANDLER(opCA)
 {
-    update_NZ(iVM, --regX);
+    update_NZ(candy, --regX);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -2950,13 +2950,13 @@ HANDLER(opCA)
 
 HANDLER(opCB)
 {
-    EA_imm(iVM);
+    EA_imm(candy);
     
     BYTE op2 = (BYTE)regEA;
     BYTE tCF = 0;   // carry not used in this subtraction
     BYTE diff = (regA & regX) - op2 - tCF;
 
-    update_CC(iVM, diff, regA & regX, op2);    // V flag not to be affected by this instruction
+    update_CC(candy, diff, regA & regX, op2);    // V flag not to be affected by this instruction
 
     if (srD)
     {
@@ -2976,7 +2976,7 @@ HANDLER(opCB)
     }
 
     regX = diff;
-    update_NZ(iVM, diff);
+    update_NZ(candy, diff);
     
     wLeft -= 2;
     HANDLER_END();
@@ -2986,8 +2986,8 @@ HANDLER(opCB)
 
 HANDLER(opCC)
 {
-    EA_absR(iVM);
-    CMP_com(iVM, regY);
+    EA_absR(candy);
+    CMP_com(candy, regY);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -2996,8 +2996,8 @@ HANDLER(opCC)
 
 HANDLER(opCD)
 {
-    EA_absR(iVM);
-    CMP_com(iVM, regA);
+    EA_absR(candy);
+    CMP_com(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3006,8 +3006,8 @@ HANDLER(opCD)
 
 HANDLER(opCE)
 {
-    EA_absW(iVM);
-    DEC_mem(iVM);
+    EA_absW(candy);
+    DEC_mem(candy);
     wLeft -= 6;
     HANDLER_END()
 }
@@ -3016,10 +3016,10 @@ HANDLER(opCE)
 
 HANDLER(opCF)
 {
-    EA_absW(iVM);
-    DEC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_absW(candy);
+    DEC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 6;
     HANDLER_END()
 }
@@ -3028,7 +3028,7 @@ HANDLER(opCF)
 
 HANDLER(opD0)
 {
-    Jcc_com(iVM, srZ != 0);
+    Jcc_com(candy, srZ != 0);
     HANDLER_END_FLOW();
 }
 
@@ -3036,8 +3036,8 @@ HANDLER(opD0)
 
 HANDLER(opD1)
 {
-    EA_zpYindR(iVM);
-    CMP_com(iVM, regA);
+    EA_zpYindR(candy);
+    CMP_com(candy, regA);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -3046,10 +3046,10 @@ HANDLER(opD1)
 
 HANDLER(opD3)
 {
-    EA_zpYindW(iVM);
-    DEC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_zpYindW(candy);
+    DEC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 5;     // best guess
     HANDLER_END();
 }
@@ -3067,8 +3067,8 @@ HANDLER(opD4)
 
 HANDLER(opD5)
 {
-    EA_zpXR(iVM);
-    CMP_com(iVM, regA);
+    EA_zpXR(candy);
+    CMP_com(candy, regA);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3077,8 +3077,8 @@ HANDLER(opD5)
 
 HANDLER(opD6)
 {
-    EA_zpXW(iVM);
-    DEC_zp(iVM);
+    EA_zpXW(candy);
+    DEC_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3087,10 +3087,10 @@ HANDLER(opD6)
 
 HANDLER(opD7)
 {
-    EA_zpXW(iVM);
-    DEC_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_zpXW(candy);
+    DEC_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 6;     // best guess
     HANDLER_END();
 }
@@ -3109,8 +3109,8 @@ HANDLER(opD8)
 
 HANDLER(opD9)
 {
-    EA_absYR(iVM);
-    CMP_com(iVM, regA);
+    EA_absYR(candy);
+    CMP_com(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3127,10 +3127,10 @@ HANDLER(opDA)
 
 HANDLER(opDB)
 {
-    EA_absYW(iVM);
-    DEC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_absYW(candy);
+    DEC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 7; // best guess
     HANDLER_END();
 }
@@ -3148,8 +3148,8 @@ HANDLER(opDC)
 
 HANDLER(opDD)
 {
-    EA_absXR(iVM);
-    CMP_com(iVM, regA);
+    EA_absXR(candy);
+    CMP_com(candy, regA);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3158,8 +3158,8 @@ HANDLER(opDD)
 
 HANDLER(opDE)
 {
-    EA_absXW(iVM);
-    DEC_mem(iVM);
+    EA_absXW(candy);
+    DEC_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -3168,10 +3168,10 @@ HANDLER(opDE)
 
 HANDLER(opDF)
 {
-    EA_absXW(iVM);
-    DEC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    CMP_com(iVM, regA);
+    EA_absXW(candy);
+    DEC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    CMP_com(candy, regA);
     wLeft -= 7; // best guess
     HANDLER_END();
 }
@@ -3180,8 +3180,8 @@ HANDLER(opDF)
 
 HANDLER(opE0)
 {
-    EA_imm(iVM);
-    CMP_com(iVM, regX);
+    EA_imm(candy);
+    CMP_com(candy, regX);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -3190,8 +3190,8 @@ HANDLER(opE0)
 
 HANDLER(opE1)
 {
-    EA_zpXindR(iVM);
-    SBC_com(iVM);
+    EA_zpXindR(candy);
+    SBC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3208,10 +3208,10 @@ HANDLER(opE2)
 
 HANDLER(opE3)
 {
-    EA_zpXindW(iVM);
-    INC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_zpXindW(candy);
+    INC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 6; // best guess
     HANDLER_END();
 }
@@ -3220,8 +3220,8 @@ HANDLER(opE3)
 
 HANDLER(opE4)
 {
-    EA_zpR(iVM);
-    CMP_com(iVM, regX);
+    EA_zpR(candy);
+    CMP_com(candy, regX);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -3230,8 +3230,8 @@ HANDLER(opE4)
 
 HANDLER(opE5)
 {
-    EA_zpR(iVM);
-    SBC_com(iVM);
+    EA_zpR(candy);
+    SBC_com(candy);
     wLeft -= 3;
     HANDLER_END();
 }
@@ -3240,8 +3240,8 @@ HANDLER(opE5)
 
 HANDLER(opE6)
 {
-    EA_zpW(iVM);
-    INC_zp(iVM);
+    EA_zpW(candy);
+    INC_zp(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -3250,10 +3250,10 @@ HANDLER(opE6)
 
 HANDLER(opE7)
 {
-    EA_zpW(iVM);
-    INC_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_zpW(candy);
+    INC_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -3262,7 +3262,7 @@ HANDLER(opE7)
 
 HANDLER(opE8)
 {
-    update_NZ(iVM, ++regX);
+    update_NZ(candy, ++regX);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -3271,8 +3271,8 @@ HANDLER(opE8)
 
 HANDLER(opE9)
 {
-    EA_imm(iVM);
-    SBC_com(iVM);
+    EA_imm(candy);
+    SBC_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -3289,8 +3289,8 @@ HANDLER(opEA)
 
 HANDLER(opEB)
 {
-    EA_imm(iVM);
-    SBC_com(iVM);
+    EA_imm(candy);
+    SBC_com(candy);
     wLeft -= 2;
     HANDLER_END();
 }
@@ -3299,8 +3299,8 @@ HANDLER(opEB)
 
 HANDLER(opEC)
 {
-    EA_absR(iVM);
-    CMP_com(iVM, regX);
+    EA_absR(candy);
+    CMP_com(candy, regX);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3309,8 +3309,8 @@ HANDLER(opEC)
 
 HANDLER(opED)
 {
-    EA_absR(iVM);
-    SBC_com(iVM);
+    EA_absR(candy);
+    SBC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3319,8 +3319,8 @@ HANDLER(opED)
 
 HANDLER(opEE)
 {
-    EA_absW(iVM);
-    INC_mem(iVM);
+    EA_absW(candy);
+    INC_mem(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3329,10 +3329,10 @@ HANDLER(opEE)
 
 HANDLER(opEF)
 {
-    EA_absW(iVM);
-    INC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_absW(candy);
+    INC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3341,7 +3341,7 @@ HANDLER(opEF)
 
 HANDLER(opF0)
 {
-    Jcc_com(iVM, srZ == 0);
+    Jcc_com(candy, srZ == 0);
     HANDLER_END_FLOW();
 }
 
@@ -3349,8 +3349,8 @@ HANDLER(opF0)
 
 HANDLER(opF1)
 {
-    EA_zpYindR(iVM);
-    SBC_com(iVM);
+    EA_zpYindR(candy);
+    SBC_com(candy);
     wLeft -= 5;
     HANDLER_END();
 }
@@ -3359,10 +3359,10 @@ HANDLER(opF1)
 
 HANDLER(opF3)
 {
-    EA_zpYindW(iVM);
-    INC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_zpYindW(candy);
+    INC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 5;     // best guess
     HANDLER_END();
 }
@@ -3380,8 +3380,8 @@ HANDLER(opF4)
 
 HANDLER(opF5)
 {
-    EA_zpXR(iVM);
-    SBC_com(iVM);
+    EA_zpXR(candy);
+    SBC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3390,8 +3390,8 @@ HANDLER(opF5)
 
 HANDLER(opF6)
 {
-    EA_zpXW(iVM);
-    INC_zp(iVM);
+    EA_zpXW(candy);
+    INC_zp(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3400,10 +3400,10 @@ HANDLER(opF6)
 
 HANDLER(opF7)
 {
-    EA_zpXW(iVM);
-    INC_zp(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_zpXW(candy);
+    INC_zp(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 6;
     HANDLER_END();
 }
@@ -3421,8 +3421,8 @@ HANDLER(opF8)
 
 HANDLER(opF9)
 {
-    EA_absYR(iVM);
-    SBC_com(iVM);
+    EA_absYR(candy);
+    SBC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3439,10 +3439,10 @@ HANDLER(opFA)
 
 HANDLER(opFB)
 {
-    EA_absYW(iVM);
-    INC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_absYW(candy);
+    INC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -3460,8 +3460,8 @@ HANDLER(opFC)
 
 HANDLER(opFD)
 {
-    EA_absXR(iVM);
-    SBC_com(iVM);
+    EA_absXR(candy);
+    SBC_com(candy);
     wLeft -= 4;
     HANDLER_END();
 }
@@ -3470,8 +3470,8 @@ HANDLER(opFD)
 
 HANDLER(opFE)
 {
-    EA_absXW(iVM);
-    INC_mem(iVM);
+    EA_absXW(candy);
+    INC_mem(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -3480,10 +3480,10 @@ HANDLER(opFE)
 
 HANDLER(opFF)
 {
-    EA_absXW(iVM);
-    INC_mem(iVM);
-    regEA = READ_BYTE(iVM, regEA);
-    SBC_com(iVM);
+    EA_absXW(candy);
+    INC_mem(candy);
+    regEA = READ_BYTE(candy, regEA);
+    SBC_com(candy);
     wLeft -= 7;
     HANDLER_END();
 }
@@ -3493,7 +3493,7 @@ HANDLER(opFF)
 HANDLER(unused)
 {
     regPC--;
-    ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", iVM, cpuPeekB(iVM, regPC), regPC);
+    ODS("(%d) UNIMPLEMENTED 6502 OPCODE $%02x USED at $%04x!\n", candy, cpuPeekB(candy, regPC), regPC);
     regPC++;
     wLeft -= 2; // must be non-zero or we could stack fault
     HANDLER_END();
@@ -3765,11 +3765,11 @@ PFNOP jump_tab[256] =
 //
 // If "wNMI" is positive, stop at that point to perform an NMI, and then continue down to 0
 
-void __cdecl Go6502(const int iVM)
+void __cdecl Go6502(void *candy)
 {
     // trying to execute in register space is a bad sign (except our SIO hack lives there) - doesn't appear to help
     //if ((regPC >= 0xd000 && regPC < 0xd180) || (regPC >= 0xd1a0 && regPC < 0xd800))
-    //    KIL(iVM);
+    //    KIL(candy);
 
     //ODS("Scan %04x : %02x %02x\n", wScan, wLeft, wNMI);
     if (wLeft <= wNMI)    // we're starting past the NMI point, so just do the rest of the line
@@ -3790,7 +3790,7 @@ void __cdecl Go6502(const int iVM)
 
     // do not check your breakpoint here, you'll keep hitting it every time you try and execute and never get anywhere
 
-    UnpackP(iVM);
+    UnpackP(candy);
 
 #if 0
         BYTE t, t2;
@@ -3806,10 +3806,10 @@ void __cdecl Go6502(const int iVM)
 
             // Start executing
 #if USE_JUMP_TABLE
-            (*jump_tab[cpuPeekB(iVM, regPC++)])(iVM);
+            (*jump_tab[cpuPeekB(candy, regPC++)])(candy);
 #else
             do {
-                switch (cpuPeekB(iVM, regPC++))
+                switch (cpuPeekB(candy, regPC++))
                 {
                 default:
                     Assert(0);    // hint to the compiler that this is unreachable to optimize away the bounds check
@@ -3829,985 +3829,985 @@ void __cdecl Go6502(const int iVM)
                 case 0xB2:
                 case 0xD2:
                 case 0xF2:
-                    KIL(iVM);
+                    KIL(candy);
                     break;
 
                 // !!! Other web documentation besides Altirra may have different or better implementations of the secret opcodes
 
                 case 0x00:   // BRK
-                    op00(iVM);
+                    op00(candy);
                     break;
 
                 case 0x01:   // ORA (zp,X)
-                    op01(iVM);
+                    op01(candy);
                     break;
 
                 case 0x03:   // UNDOCUMENTED
-                    op03(iVM);
+                    op03(candy);
                     break;
 
                 case 0x04:   // UNDOCUMENTED
-                    op04(iVM);
+                    op04(candy);
                     break;
 
                 case 0x05:   // ORA zp
-                    op05(iVM);
+                    op05(candy);
                     break;
 
                 case 0x06:   // ASL zp
-                    op06(iVM);
+                    op06(candy);
                     break;
 
                 case 0x07:   // UNDOCUMENTED
-                    op07(iVM);
+                    op07(candy);
                     break;
 
                 case 0x08:   // PHP
-                    op08(iVM);
+                    op08(candy);
                     break;
 
                 case 0x09:   // ORA #
-                    op09(iVM);
+                    op09(candy);
                     break;
 
                 case 0x0A:   // ASL A
-                    op0A(iVM);
+                    op0A(candy);
                     break;
 
                 case 0x0B:   // ANC #
-                    op0B(iVM);
+                    op0B(candy);
                     break;
 
                 case 0x0C:   // UNDOCUMENTED
-                    op0C(iVM);
+                    op0C(candy);
                     break;
 
                 case 0x0D:   // ORA abs
-                    op0D(iVM);
+                    op0D(candy);
                     break;
 
                 case 0x0E:   // ASL abs
-                    op0E(iVM);
+                    op0E(candy);
                     break;
 
                 case 0x0F:   // SLO abs
-                    op0F(iVM);
+                    op0F(candy);
                     break;
 
                 case 0x10:   // BPL rel8
-                    op10(iVM);
+                    op10(candy);
                     break;
 
                 case 0x11:   // ORA (zp),Y
-                    op11(iVM);
+                    op11(candy);
                     break;
 
                 case 0x13:   // UNDOCUMENTED
-                    op13(iVM);
+                    op13(candy);
                     break;
 
                 case 0x14:   // UNDOCUMENTED
-                    op14(iVM);
+                    op14(candy);
                     break;
 
                 case 0x15:   // ORA zp,Y
-                    op15(iVM);
+                    op15(candy);
                     break;
 
                 case 0x16:   // ASL zp,Y
-                    op16(iVM);
+                    op16(candy);
                     break;
 
                 case 0x17:   // UNDOCUMENTED
-                    op17(iVM);
+                    op17(candy);
                     break;
 
                 case 0x18:   // CLC
-                    op18(iVM);
+                    op18(candy);
                     break;
 
                 case 0x19:   // ORA abs,Y
-                    op19(iVM);
+                    op19(candy);
                     break;
 
                 case 0x1A:   // UNDOCUMENTED
-                    op1A(iVM);
+                    op1A(candy);
                     break;
 
                 case 0x1B:   // SLO abs,Y
-                    op1B(iVM);
+                    op1B(candy);
                     break;
 
                 case 0x1C:   // UNDOCUMENTED
-                    op1C(iVM);
+                    op1C(candy);
                     break;
 
                 case 0x1D:   // ORA abs,X
-                    op1D(iVM);
+                    op1D(candy);
                     break;
 
                 case 0x1E:   // ASL abs,X
-                    op1E(iVM);
+                    op1E(candy);
                     break;
 
                 case 0x1F:   // SLO abs,X
-                    op1F(iVM);
+                    op1F(candy);
                     break;
 
                 case 0x20:   // JSR abs
-                    op20(iVM);
+                    op20(candy);
                     break;
 
                 case 0x21:   // AND (zp,X)
-                    op21(iVM);
+                    op21(candy);
                     break;
 
                 case 0x23:   // RLA (zp,X)
-                    op23(iVM);
+                    op23(candy);
                     break;
 
                 case 0x24:   // BIT zp
-                    op24(iVM);
+                    op24(candy);
                     break;
 
                 case 0x25:   // AND zp
-                    op25(iVM);
+                    op25(candy);
                     break;
 
                 case 0x26:   // ROL zp
-                    op26(iVM);
+                    op26(candy);
                     break;
 
                 case 0x27:   // RLA zp
-                    op27(iVM);
+                    op27(candy);
                     break;
 
                 case 0x28:   // PLP
-                    op28(iVM);
+                    op28(candy);
                     break;
 
                 case 0x29:   // AND #
-                    op29(iVM);
+                    op29(candy);
                     break;
 
                 case 0x2A:   // ROL A
-                    op2A(iVM);
+                    op2A(candy);
                     break;
 
                 case 0x2B:   // ANC #
-                    op2B(iVM);
+                    op2B(candy);
                     break;
 
                 case 0x2C:   // BIT abs
-                    op2C(iVM);
+                    op2C(candy);
                     break;
 
                 case 0x2D:   // AND abs
-                    op2D(iVM);
+                    op2D(candy);
                     break;
 
                 case 0x2E:   // ROL abs
-                    op2E(iVM);
+                    op2E(candy);
                     break;
 
                 case 0x2F:   // UNDOCUMENTED
-                    op2F(iVM);
+                    op2F(candy);
                     break;
 
                 case 0x30:   // BMI rel8
-                    op30(iVM);
+                    op30(candy);
                     break;
 
                 case 0x31:   // AND (zp),Y
-                    op31(iVM);
+                    op31(candy);
                     break;
 
                 case 0x33:   // UNDOCUMENTED
-                    op33(iVM);
+                    op33(candy);
                     break;
 
                 case 0x34:   // UNDOCUMENTED
-                    op34(iVM);
+                    op34(candy);
                     break;
 
                 case 0x35:   // AND zp,X
-                    op35(iVM);
+                    op35(candy);
                     break;
 
                 case 0x36:   // ROL zp,X
-                    op36(iVM);
+                    op36(candy);
                     break;
 
                 case 0x37:   // RLA zp,X
-                    op37(iVM);
+                    op37(candy);
                     break;
 
                 case 0x38:   // SEC
-                    op38(iVM);
+                    op38(candy);
                     break;
 
                 case 0x39:   // AND abs,Y
-                    op39(iVM);
+                    op39(candy);
                     break;
 
                 case 0x3A:   // UNDOCUMENTED
-                    op3A(iVM);
+                    op3A(candy);
                     break;
 
                 case 0x3B:   // RLA abs,Y
-                    op3B(iVM);
+                    op3B(candy);
                     break;
 
                 case 0x3C:   // UNDOCUMENTED
-                    op3C(iVM);
+                    op3C(candy);
                     break;
 
                 case 0x3D:   // AND abs,X
-                    op3D(iVM);
+                    op3D(candy);
                     break;
 
                 case 0x3E:   // ROL abs,X
-                    op3E(iVM);
+                    op3E(candy);
                     break;
 
                 case 0x3F:   // UNDOCUMENTED
-                    op3F(iVM);
+                    op3F(candy);
                     break;
 
                 case 0x40:   // RTI
-                    op40(iVM);
+                    op40(candy);
                     break;
 
                 case 0x41:   // EOR (zp,X)
-                    op41(iVM);
+                    op41(candy);
                     break;
 
                 case 0x43:   // SRE (zp,X)
-                    op43(iVM);
+                    op43(candy);
                     break;
                 
                 case 0x44:   // UNDOCUMENTED
-                    op44(iVM);
+                    op44(candy);
                     break;
 
                 case 0x45:   // EOR zp
-                    op45(iVM);
+                    op45(candy);
                     break;
 
                 case 0x46:   // LSR zp
-                    op46(iVM);
+                    op46(candy);
                     break;
 
                 case 0x47:   // SRE zp
-                    op47(iVM);
+                    op47(candy);
                     break;
                 
                 case 0x48:   // PHA
-                    op48(iVM);
+                    op48(candy);
                     break;
 
                 case 0x49:   // EOR #
-                    op49(iVM);
+                    op49(candy);
                     break;
 
                 case 0x4A:   // LSR A
-                    op4A(iVM);
+                    op4A(candy);
                     break;
 
                 case 0x4B:   // ASR #
-                    op4B(iVM);
+                    op4B(candy);
                     break;
 
                 case 0x4C:   // JMP abs
-                    op4C(iVM);
+                    op4C(candy);
                     break;
 
                 case 0x4D:   // EOR abs
-                    op4D(iVM);
+                    op4D(candy);
                     break;
 
                 case 0x4E:   // LSR abs
-                    op4E(iVM);
+                    op4E(candy);
                     break;
 
                 case 0x4F:   // SRE abs
-                    op4F(iVM);
+                    op4F(candy);
                     break;
 
                 case 0x50:   // BVC rel8
-                    op50(iVM);
+                    op50(candy);
                     break;
 
                 case 0x51:   // EOR (zp),Y
-                    op51(iVM);
+                    op51(candy);
                     break;
 
                 case 0x53:   // SRE (zp),Y
-                    op53(iVM);
+                    op53(candy);
                     break;
                 
                 case 0x54:   // UNDOCUMENTED
-                    op54(iVM);
+                    op54(candy);
                     break;
 
                 case 0x55:   // EOR zp,X
-                    op55(iVM);
+                    op55(candy);
                     break;
 
                 case 0x56:   // LSR zp,X
-                    op56(iVM);
+                    op56(candy);
                     break;
 
                 case 0x57:   // UNDOCUMENTED
-                    op57(iVM);
+                    op57(candy);
                     break;
 
                 case 0x58:   // CLI
-                    op58(iVM);
+                    op58(candy);
                     break;
 
                 case 0x59:   // EOR abs,Y
-                    op59(iVM);
+                    op59(candy);
                     break;
 
                 case 0x5A:   // UNDOCUMENTED
-                    op5A(iVM);
+                    op5A(candy);
                     break;
 
                 case 0x5B:   // SRE abs,Y
-                    op5B(iVM);
+                    op5B(candy);
                     break;
 
                 case 0x5C:   // UNDOCUMENTED
-                    op5C(iVM);
+                    op5C(candy);
                     break;
 
                 case 0x5D:   // EOR abs,X
-                    op5D(iVM);
+                    op5D(candy);
                     break;
 
                 case 0x5E:   // LSR abs,X
-                    op5E(iVM);
+                    op5E(candy);
                     break;
 
                 case 0x5F:   // UNDOCUMENTED
-                    op5F(iVM);
+                    op5F(candy);
                     break;
 
                 case 0x60:   // RTS
-                    op60(iVM);
+                    op60(candy);
                     break;
 
                 case 0x61:   // ADC (zp,X)
-                    op61(iVM);
+                    op61(candy);
                     break;
 
                 case 0x63:   // UNDOCUMENTED
-                    op63(iVM);
+                    op63(candy);
                     break;
 
                 case 0x64:   // UNDOCUMENTED
-                    op64(iVM);
+                    op64(candy);
                     break;
 
                 case 0x65:   // ADC zp
-                    op65(iVM);
+                    op65(candy);
                     break;
 
                 case 0x66:   // ROR zp
-                    op66(iVM);
+                    op66(candy);
                     break;
 
                 case 0x67:   // UNDOCUMENTED
-                    op67(iVM);
+                    op67(candy);
                     break;
 
                 case 0x68:   // PLA
-                    op68(iVM);
+                    op68(candy);
                     break;
 
                 case 0x69:   // ADC #
-                    op69(iVM);
+                    op69(candy);
                     break;
 
                 case 0x6A:   // ROR A
-                    op6A(iVM);
+                    op6A(candy);
                     break;
 
                 case 0x6B:   // ARR #
-                    op6B(iVM);
+                    op6B(candy);
                     break;
 
                 case 0x6C:   // JMP (abs)
-                    op6C(iVM);
+                    op6C(candy);
                     break;
 
                 case 0x6D:   // ADC abs
-                    op6D(iVM);
+                    op6D(candy);
                     break;
 
                 case 0x6E:   // ROR abs
-                    op6E(iVM);
+                    op6E(candy);
                     break;
 
                 case 0x6F:   // UNDOCUMENTED
-                    op6F(iVM);
+                    op6F(candy);
                     break;
 
                 case 0x70:   // BVS rel8
-                    op70(iVM);
+                    op70(candy);
                     break;
 
                 case 0x71:   // ADC (zp),Y
-                    op71(iVM);
+                    op71(candy);
                     break;
 
                 case 0x73:   // RRA (zp),Y
-                    op73(iVM);
+                    op73(candy);
                     break;
 
                 case 0x74:   // UNDOCUMENTED
-                    op74(iVM);
+                    op74(candy);
                     break;
 
                 case 0x75:   // ADC zp,X
-                    op75(iVM);
+                    op75(candy);
                     break;
 
                 case 0x76:   // ROR zp,X
-                    op76(iVM);
+                    op76(candy);
                     break;
 
                 case 0x77:   // UNDOCUMENTED
-                    op77(iVM);
+                    op77(candy);
                     break;
 
                 case 0x78:   // SEI
-                    op78(iVM);
+                    op78(candy);
                     break;
 
                 case 0x79:   // ADC abs,Y
-                    op79(iVM);
+                    op79(candy);
                     break;
 
                 case 0x7A:   // NOP
-                    op7A(iVM);
+                    op7A(candy);
                     break;
 
                 case 0x7B:   // RRA abs,Y
-                    op7B(iVM);
+                    op7B(candy);
                     break;
 
                 case 0x7C:   // UNDOCUMENTED
-                    op7C(iVM);
+                    op7C(candy);
                     break;
 
                 case 0x7D:   // ADC abs,X
-                    op7D(iVM);
+                    op7D(candy);
                     break;
 
                 case 0x7E:   // ROR abs,X
-                    op7E(iVM);
+                    op7E(candy);
                     break;
 
                 case 0x7F:   // RRA abs,X
-                    op7F(iVM);
+                    op7F(candy);
                     break;
 
                 case 0x80:   // UNDOCUMENTED
-                    op80(iVM);
+                    op80(candy);
                     break;
 
                 case 0x81:   // STA (zp),Y
-                    op81(iVM);
+                    op81(candy);
                     break;
 
                 case 0x82:   // NOP #
-                    op82(iVM);
+                    op82(candy);
                     break;
 
                 case 0x83:   // UNDOCUMENTED
-                    op83(iVM);
+                    op83(candy);
                     break;
 
                 case 0x84:   // STY zp
-                    op84(iVM);
+                    op84(candy);
                     break;
 
                 case 0x85:   // STA zp
-                    op85(iVM);
+                    op85(candy);
                     break;
 
                 case 0x86:   // STX zp
-                    op86(iVM);
+                    op86(candy);
                     break;
 
                 case 0x87:   // UNDOCUMENTED
-                    op87(iVM);
+                    op87(candy);
                     break;
 
                 case 0x88:   // DEY
-                    op88(iVM);
+                    op88(candy);
                     break;
 
                 case 0x89:   // UNDOCUMENTED
-                    op89(iVM);
+                    op89(candy);
                     break;
 
                 case 0x8A:   // TXA
-                    op8A(iVM);
+                    op8A(candy);
                     break;
 
                 case 0x8B:   // UNDOCUMENTED
-                    op8B(iVM);
+                    op8B(candy);
                     break;
 
                 case 0x8C:   // STY abs
-                    op8C(iVM);
+                    op8C(candy);
                     break;
 
                 case 0x8D:   // STA abs
-                    op8D(iVM);
+                    op8D(candy);
                     break;
 
                 case 0x8E:   // STX abs
-                    op8E(iVM);
+                    op8E(candy);
                     break;
 
                 case 0x8F:   // UNDOCUMENTED
-                    op8F(iVM);
+                    op8F(candy);
                     break;
 
                 case 0x90:   // BCC rel8
-                    op90(iVM);
+                    op90(candy);
                     break;
 
                 case 0x91:   // STA (zp),Y
-                    op91(iVM);
+                    op91(candy);
                     break;
 
                 case 0x93:   // SHA (zp),Y
-                    op93(iVM);
+                    op93(candy);
                     break;
 
                 case 0x94:   // STY zp,X
-                    op94(iVM);
+                    op94(candy);
                     break;
 
                 case 0x95:   // STA zp,X
-                    op95(iVM);
+                    op95(candy);
                     break;
 
                 case 0x96:   // STX zp,X
-                    op96(iVM);
+                    op96(candy);
                     break;
 
                 case 0x97:   // SAX zp,Y (NOT zp,X)
-                    op97(iVM);
+                    op97(candy);
                     break;
 
                 case 0x98:   // TYA
-                    op98(iVM);
+                    op98(candy);
                     break;
 
                 case 0x99:   // STA abs,Y
-                    op99(iVM);
+                    op99(candy);
                     break;
 
                 case 0x9A:   // TXS
-                    op9A(iVM);
+                    op9A(candy);
                     break;
 
                 case 0x9B:   // SHS abs,Y
-                    op9B(iVM);
+                    op9B(candy);
                     break;
 
                 case 0x9C:   // SHY abs,X
-                    op9B(iVM);
+                    op9B(candy);
                     break;
 
                 case 0x9D:   // STA abs,X
-                    op9D(iVM);
+                    op9D(candy);
                     break;
 
                 case 0x9E:   // STA abs,X
-                    op9E(iVM);
+                    op9E(candy);
                     break;
 
                 case 0x9F:   // SAX abs,Y (NOT ,X)
-                    op9F(iVM);
+                    op9F(candy);
                     break;
 
                 case 0xA0:   // LDY #
-                    opA0(iVM);
+                    opA0(candy);
                     break;
 
                 case 0xA1:   // LDA (zp,X)
-                    opA1(iVM);
+                    opA1(candy);
                     break;
 
                 case 0xA2:   // LDX #
-                    opA2(iVM);
+                    opA2(candy);
                     break;
 
                 case 0xA3:   // LAX (zp,X)
-                    opA3(iVM);
+                    opA3(candy);
                     break;
 
                 case 0xA4:   // LDY zp
-                    opA4(iVM);
+                    opA4(candy);
                     break;
 
                 case 0xA5:   // LDA zp
-                    opA5(iVM);
+                    opA5(candy);
                     break;
 
                 case 0xA6:   // LDX zp
-                    opA6(iVM);
+                    opA6(candy);
                     break;
 
                 case 0xA7:   // LAX zp
-                    opA7(iVM);
+                    opA7(candy);
                     break;
 
                 case 0xA8:   // TAY
-                    opA8(iVM);
+                    opA8(candy);
                     break;
 
                 case 0xA9:   // LDA #
-                    opA9(iVM);
+                    opA9(candy);
                     break;
 
                 case 0xAA:   // TAX
-                    opAA(iVM);
+                    opAA(candy);
                     break;
 
                 case 0xAB:   // UNDOCUMENTED
-                    opAB(iVM);
+                    opAB(candy);
                     break;
 
                 case 0xAC:   // LDY abs
-                    opAC(iVM);
+                    opAC(candy);
                     break;
 
                 case 0xAD:   // LDA abs
-                    opAD(iVM);
+                    opAD(candy);
                     break;
 
                 case 0xAE:   // LDX abs
-                    opAE(iVM);
+                    opAE(candy);
                     break;
 
                 case 0xAF:   // UNDOCUMENTED
-                    opAF(iVM);
+                    opAF(candy);
                     break;
 
                 case 0xB0:   // BCS rel8
-                    opB0(iVM);
+                    opB0(candy);
                     break;
 
                 case 0xB1:   // LDA (zp),Y
-                    opB1(iVM);
+                    opB1(candy);
                     break;
 
                 case 0xB3:   // LAX (zp),Y
-                    opB3(iVM);
+                    opB3(candy);
                     break;
 
                 case 0xB4:   // LDY zp,X
-                    opB4(iVM);
+                    opB4(candy);
                     break;
 
                 case 0xB5:   // LDA zp,X
-                    opB5(iVM);
+                    opB5(candy);
                     break;
 
                 case 0xB6:   // LDX zp,Y
-                    opB6(iVM);
+                    opB6(candy);
                     break;
 
                 case 0xB7:   // LAX zp,Y
-                    opB7(iVM);
+                    opB7(candy);
                     break;
 
                 case 0xB8:   // CLV
-                    opB8(iVM);
+                    opB8(candy);
                     break;
 
                 case 0xB9:   // LDA abs,Y
-                    opB9(iVM);
+                    opB9(candy);
                     break;
 
                 case 0xBA:   // TSX
-                    opBA(iVM);
+                    opBA(candy);
                     break;
 
                 case 0xBB:   // LAS abs
-                    opBB(iVM);
+                    opBB(candy);
                     break;
 
                 case 0xBC:   // LDY abs,X
-                    opBC(iVM);
+                    opBC(candy);
                     break;
 
                 case 0xBD:   // LDA abs,X
-                    opBD(iVM);
+                    opBD(candy);
                     break;
 
                 case 0xBE:   // LDX abs,Y
-                    opBE(iVM);
+                    opBE(candy);
                     break;
 
                 case 0xBF:   // LAX abs,Y (NOT ,X)
-                    opBF(iVM);
+                    opBF(candy);
                     break;
 
                 case 0xC0:   // CPY #
-                    opC0(iVM);
+                    opC0(candy);
                     break;
 
                 case 0xC1:   // CMP (zp,X)
-                    opC1(iVM);
+                    opC1(candy);
                     break;
 
                 case 0xC2:   // UNDOCUMENTED
-                    opC2(iVM);
+                    opC2(candy);
                     break;
 
                 case 0xC3:   // UNDOCUMENTED
-                    opC3(iVM);
+                    opC3(candy);
                     break;
 
                 case 0xC4:   // CPY zp
-                    opC4(iVM);
+                    opC4(candy);
                     break;
 
                 case 0xC5:   // CMP zp
-                    opC5(iVM);
+                    opC5(candy);
                     break;
 
                 case 0xC6:   // DEC zp
-                    opC6(iVM);
+                    opC6(candy);
                     break;
 
                 case 0xC7:   // DCP zp
-                    opC7(iVM);
+                    opC7(candy);
                     break;
 
                 case 0xC8:   // INY
-                    opC8(iVM);
+                    opC8(candy);
                     break;
 
                 case 0xC9:   // CMP #
-                    opC9(iVM);
+                    opC9(candy);
                     break;
 
                 case 0xCA:   // DEX
-                    opCA(iVM);
+                    opCA(candy);
                     break;
 
                 case 0xCB:   // SBX #
-                    opCB(iVM);
+                    opCB(candy);
                     break;
 
                 case 0xCC:   // CPY abs
-                    opCC(iVM);
+                    opCC(candy);
                     break;
 
                 case 0xCD:   // CMP abs
-                    opCD(iVM);
+                    opCD(candy);
                     break;
 
                 case 0xCE:   // DEC abs
-                    opCE(iVM);
+                    opCE(candy);
                     break;
 
                 case 0xCF:   // DCP abs
-                    opCF(iVM);
+                    opCF(candy);
                     break;
 
                 case 0xD0:   // BNE rel8
-                    opD0(iVM);
+                    opD0(candy);
                     break;
 
                 case 0xD1:   // CMP (zp),Y
-                    opD1(iVM);
+                    opD1(candy);
                     break;
 
                 case 0xD3:   // UNDOCUMENTED
-                    opD3(iVM);
+                    opD3(candy);
                     break;
 
                 case 0xD4:   // UNDOCUMENTED
-                    opD4(iVM);
+                    opD4(candy);
                     break;
 
                 case 0xD5:   // CMP zp,X
-                    opD5(iVM);
+                    opD5(candy);
                     break;
 
                 case 0xD6:   // DEC zp,X
-                    opD6(iVM);
+                    opD6(candy);
                     break;
 
                 case 0xD7:   // DCP zp,X
-                    opD7(iVM);
+                    opD7(candy);
                     break;
 
                 case 0xD8:   // CLD
-                    opD8(iVM);
+                    opD8(candy);
                     break;
 
                 case 0xD9:   // CMP abs,Y
-                    opD9(iVM);
+                    opD9(candy);
                     break;
 
                 case 0xDA:   // NOP
-                    opDA(iVM);
+                    opDA(candy);
                     break;
 
                 case 0xDB:   // DCP abs,Y
-                    opDB(iVM);
+                    opDB(candy);
                     break;
 
                 case 0xDC:   // UNDOCUMENTED
-                    opDC(iVM);
+                    opDC(candy);
                     break;
 
                 case 0xDD:   // CMP abs,X
-                    opDD(iVM);
+                    opDD(candy);
                     break;
 
                 case 0xDE:   // DEC abs,X
-                    opDE(iVM);
+                    opDE(candy);
                     break;
 
                 case 0xDF:   // UNDOCUMENTED
-                    opDF(iVM);
+                    opDF(candy);
                     break;
 
                 case 0xE0:   // CPX #
-                    opE0(iVM);
+                    opE0(candy);
                     break;
 
                 case 0xE1:   // SBC (zp,X)
-                    opE1(iVM);
+                    opE1(candy);
                     break;
 
                 case 0xE2:   // UNDOCUMENTED
-                    opE2(iVM);
+                    opE2(candy);
                     break;
 
                 case 0xE3:   // ISB (zp,X)
-                    opE3(iVM);
+                    opE3(candy);
                     break;
 
                 case 0xE4:   // CPX zp
-                    opE4(iVM);
+                    opE4(candy);
                     break;
 
                 case 0xE5:   // SBC zp
-                    opE5(iVM);
+                    opE5(candy);
                     break;
 
                 case 0xE6:   // INC zp
-                    opE6(iVM);
+                    opE6(candy);
                     break;
 
                 case 0xE7:   // UNDOCUMENTED
-                    opE7(iVM);
+                    opE7(candy);
                     break;
 
                 case 0xE8:   // INX
-                    opE8(iVM);
+                    opE8(candy);
                     break;
 
                 case 0xE9:   // SBC #
-                    opE9(iVM);
+                    opE9(candy);
                     break;
 
                 case 0xEA:   // NOP
-                    opEA(iVM);
+                    opEA(candy);
                     break;
 
                 case 0xEB:   // UNDOCUMENTED
-                    opEB(iVM);
+                    opEB(candy);
                     break;
 
                 case 0xEC:   // CPX abs
-                    opEC(iVM);
+                    opEC(candy);
                     break;
 
                 case 0xED:   // SBC abs
-                    opED(iVM);
+                    opED(candy);
                     break;
 
                 case 0xEE:   // INC abs
-                    opEE(iVM);
+                    opEE(candy);
                     break;
 
                 case 0xEF:   // ISB abs
-                    opEF(iVM);
+                    opEF(candy);
                     break;
 
                 case 0xF0:   // BEQ rel8
-                    opF0(iVM);
+                    opF0(candy);
                     break;
 
                 case 0xF1:   // SBC (zp),Y
-                    opF1(iVM);
+                    opF1(candy);
                     break;
 
                 case 0xF3:   // ISB (zp),Y
-                    opF3(iVM);
+                    opF3(candy);
                     break;
 
                 case 0xF4:   // NOP zp,X
-                    opF4(iVM);
+                    opF4(candy);
                     break;
 
                 case 0xF5:   // SBC zp,X
-                    opF5(iVM);
+                    opF5(candy);
                     break;
 
                 case 0xF6:   // INC zp,X
-                    opF6(iVM);
+                    opF6(candy);
                     break;
 
                 case 0xF7:   // ISB zp,X (NOT ,Y)
-                    opF7(iVM);
+                    opF7(candy);
                     break;
 
                 case 0xF8:   // SED
-                    opF8(iVM);
+                    opF8(candy);
                     break;
 
                 case 0xF9:   // SBC abs,Y
-                    opF9(iVM);
+                    opF9(candy);
                     break;
 
                 case 0xFA:   // UNDOCUMENTED
-                    opFA(iVM);
+                    opFA(candy);
                     break;
 
                 case 0xFB:   // ISB abs,Y
-                    opFB(iVM);
+                    opFB(candy);
                     break;
 
                 case 0xFC:   // NOP abs,X
-                    opFC(iVM);
+                    opFC(candy);
                     break;
 
                 case 0xFD:   // SBC abs,X
-                    opFD(iVM);
+                    opFD(candy);
                     break;
 
                 case 0xFE:   // INC abs,X
-                    opFE(iVM);
+                    opFE(candy);
                     break;
 
                 case 0xFF:   // ISB abs,X
-                    opFF(iVM);
+                    opFF(candy);
                     break;
                 }
 #ifdef NDEBUG
@@ -4832,17 +4832,17 @@ void __cdecl Go6502(const int iVM)
 
                 // VBI enabled, generate VBI by setting PC to VBI routine. When it's done we'll go back to what we were doing before.
                 if (NMIEN & 0x40) {
-                    PackP(iVM);    // we're inside Go6502 so we need to pack our flags to push them on the stack
+                    PackP(candy);    // we're inside Go6502 so we need to pack our flags to push them on the stack
                     //ODS("VBI at %04x %02x\n", wFrame, wLeft);
                     //if (wNMI - wLeft > 4)
                     //    ODS("DELAY!\n");
-                    Interrupt(iVM, FALSE);
-                    regPC = cpuPeekW(iVM, 0xFFFA);
-                    UnpackP(iVM);   // unpack the I bit being set
+                    Interrupt(candy, FALSE);
+                    regPC = cpuPeekW(candy, 0xFFFA);
+                    UnpackP(candy);   // unpack the I bit being set
                     
                     // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
                     if (fInVBI)
-                        SwitchToPAL(iVM);
+                        SwitchToPAL(candy);
                     fInVBI++;;
 
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
@@ -4856,11 +4856,11 @@ void __cdecl Go6502(const int iVM)
                 
                 if (NMIEN & 0x80)    // DLI enabled
                 {
-                    PackP(iVM);
+                    PackP(candy);
                     //ODS("DLI at %02x\n", wLeft);
-                    Interrupt(iVM, FALSE);
-                    regPC = cpuPeekW(iVM, 0xFFFA);
-                    UnpackP(iVM);   // unpack the I bit being set
+                    Interrupt(candy, FALSE);
+                    regPC = cpuPeekW(candy, 0xFFFA);
+                    UnpackP(candy);   // unpack the I bit being set
 
                     // We're still in the last VBI? And we're not one of those post-VBI DLI's?
                     // Must be a PAL app that's spoiled by how long these can be
@@ -4870,7 +4870,7 @@ void __cdecl Go6502(const int iVM)
                         // this happened last frame too, we're PAL. NTSC programs occasionally do this, like MULE every
                         // 4 frames, but never consecutively like a PAL program would.
                         if (fDLIinVBI == wFrame - 1)
-                            SwitchToPAL(iVM);
+                            SwitchToPAL(candy);
                         fDLIinVBI = wFrame;
                     }
                     fInDLI++;
@@ -4889,5 +4889,5 @@ void __cdecl Go6502(const int iVM)
 
     } while (wLeft > 0);
 
-    PackP(iVM);
+    PackP(candy);
 }

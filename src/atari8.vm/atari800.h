@@ -141,7 +141,6 @@ BYTE rgPMGMap[65536];
 #define CART_SPARTA     21
 
 #define MAX_CART_SIZE 1048576 + 16 // 1MB cart with 16 byte header
-BYTE *rgbSwapCart[MAX_VM];      // Contents of the cartridges, not persisted but reloaded
 
 #if USE_PEEK_TABLE
 // quickly peek and poke to the right page w/o branching using jump tables
@@ -151,15 +150,27 @@ PFNREAD read_tab[MAX_VM][256];
 PFNWRITE write_tab[MAX_VM][256];
 #endif
 
-// bare wire SIO stuff to support apps too stupid to know the OS has a routine to do this for you
+// xsio.c stuff
+typedef struct
+{
+    WORD mode;
+    int  h;
+    WORD fWP;
+    WORD wSectorMac;
+    WORD ofs;
+    //    char *pbRAMdisk;
+    char path[80];
+    char name[12];
+    ULONG cb;   // size of file when mode == MD_FILE*
+} DRIVE;
+
+#define MAX_DRIVES 2
 
 // !!! This delay between byte reads seems to make beeps at the proper rate. The initial delay
 // for the first byte is going to be twice as long (for spin-up). Spy vs Spy Arctic hangs if the doubled
 // delay is < 13, and Flight Simulator II hangs if it's < 20
 #define SIO_DELAY 13
 
-// Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
-BYTE sectorSIO[MAX_VM][128];    // disk sector, not persisted but reloaded
 
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
@@ -171,19 +182,6 @@ BYTE poly17[(1 << 17) - 1];
 int poly4pos[4], poly5pos[4], poly9pos[4], poly17pos[4];     // each voice keeps track of its own poly position
 unsigned int random17pos;    // needs to be unsigned
 ULONGLONG random17last;    // cycle count last time a random number was asked for
-
-// Time Travel stuff
-
-BOOL TimeTravel(unsigned);
-BOOL TimeTravelPrepare(unsigned, BOOL);
-BOOL TimeTravelReset(unsigned);
-BOOL TimeTravelInit(unsigned);
-void TimeTravelFree(unsigned);
-BOOL TimeTravelFixPoint(unsigned);
-
-ULONGLONG ullTimeTravelTime[MAX_VM];    // the time stamp of a snapshot
-char cTimeTravelPos[MAX_VM]; // which is the current snapshot?
-char *Time[MAX_VM][3];       // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
 
 //
 // Scan line structure
@@ -331,6 +329,31 @@ typedef struct
 
 #pragma pack(4)
 
+// Each VM has data that is never persisted. By giving them their own structure, most indexes will all be near the top 
+// of the structure and can be dereferenced quickly (vs hiding them at the end of the CANDYHW structure).
+// So put the shortest stuff first
+
+typedef struct
+{
+    ULONGLONG m_ullTimeTravelTime;    // the time stamp of a snapshot
+    char m_cTimeTravelPos; // which is the current snapshot?
+    char *m_Time[3];       // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
+
+    DRIVE m_rgDrives[MAX_DRIVES];
+
+    // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
+    BYTE m_sectorSIO[128];    // disk sector, not persisted but reloaded
+
+    BYTE *m_rgbSwapCart;      // Contents of the cartridges, not persisted but reloaded
+} CANDY_UNPERSISTED;
+
+#define ullTimeTravelTime        ((CANDYHW *)candy)->m_candyx->m_ullTimeTravelTime
+#define cTimeTravelPos           ((CANDYHW *)candy)->m_candyx->m_cTimeTravelPos
+#define Time                     ((CANDYHW *)candy)->m_candyx->m_Time
+#define rgDrives                 ((CANDYHW *)candy)->m_candyx->m_rgDrives
+#define sectorSIO                ((CANDYHW *)candy)->m_candyx->m_sectorSIO
+#define rgbSwapCart              ((CANDYHW *)candy)->m_candyx->m_rgbSwapCart
+
 // CANDY - our persistable state, including SL (scan line) and PMG (player-missile graphics)
 
 typedef struct
@@ -338,8 +361,12 @@ typedef struct
     // !!! THIS MUST STAY AT THE TIPPY TOP until I support GEM knowing about BASIC in a non-hacky way
     WORD m_ramtop;
 
+    int m_iVM;  // which VM we are (to Gem) to access the GEM data about us
+
     // most ofen accessed variables go first!
-    int m_dwSize;
+    int m_dwCandySize;
+
+    CANDY_UNPERSISTED *m_candyx;
 
     // 6502 register context - BELONGS IN CPU NOT HERE !!!
     WORD m_regPC, m_regSP;
@@ -347,7 +374,7 @@ typedef struct
     WORD m_regEA;
 
     // the 8 status bits must be together and in the same order as in the 6502
-    unsigned char     m_srN;
+    unsigned char    m_srN;
     unsigned char    m_srV;
     unsigned char    m_srB;
     unsigned char    m_srD;
@@ -458,12 +485,9 @@ typedef struct
 
 #pragma pack()
 
-extern CANDYHW *vrgcandy[MAX_VM];
+#define CANDY_STATE(name) ((CANDYHW *)candy)->m_##name
 
-// make sure your local variable iVM is set to the instance you are before using
-#define CANDY_STATE(name) vrgcandy[iVM]->m_##name
-
-//#define dwSize        CANDY_STATE(dwSize)
+#define dwCandySize   CANDY_STATE(dwCandySize)
 #define rgbMem        CANDY_STATE(rgbMem)
 #define regPC         CANDY_STATE(regPC)
 #define regSP         CANDY_STATE(regSP)
@@ -479,6 +503,7 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define srI           CANDY_STATE(srI)
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
+#define iVM           CANDY_STATE(iVM)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waiting CANDY_STATE(WSYNC_Waiting)
 #define PSL           CANDY_STATE(PSL)
@@ -557,13 +582,23 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define rgbSwapBASIC  (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE)
 #define rgbXEMem      (&CANDY_STATE(rgbXLExtMem) + SELF_SIZE + C000_SIZE + D800_SIZE + BASIC_SIZE)
 
+// Time Travel stuff
+
+BOOL TimeTravel(void *);
+BOOL TimeTravelPrepare(void *, BOOL);
+BOOL TimeTravelReset(void *);
+BOOL TimeTravelInit(void *);
+void TimeTravelFree(void *);
+BOOL TimeTravelFixPoint(void *);
+
+
 #include "6502.h"
 
 //
 // Shift key status bits (are returned by PC BIOS)
 //
 
-#define wRCtrl      0x80    // specifically, right control
+#define wRCtrl    0x80    // specifically, right control
 #define wCapsLock 0x40
 #define wNumLock  0x20
 #define wScrlLock 0x10
@@ -571,16 +606,19 @@ extern CANDYHW *vrgcandy[MAX_VM];
 #define wCtrl     0x04
 #define wAnyShift 0x03
 
-
 //
 // Platform specific stuff
 //
 
-#define pbshift _pbshift(iVM)
-__inline BYTE *_pbshift(int iVM)
+#define pbshift &bshftByte;
+
+#if 0
+_pbshift(void *candy)
+__inline BYTE *_pbshift(void *candy)
 {
     return &bshftByte;
 }
+#endif
 
 //
 // 6502 condition codes in P register: NV_BDIZC
@@ -816,31 +854,30 @@ __inline BYTE *_pbshift(int iVM)
 // Function prototypes
 //
 
-void KillMePlease(int);
-void KillMePleaseXE(int);
-void KillMePleaseBASIC(int);
-void KillMeSoftlyPlease(int);
-void SwitchToPAL(int);
-void Interrupt(int, BOOL);
-void CheckKey(int, BOOL, WORD);
-void UpdatePorts(int);
-void SIOV(int);
-BYTE SIOReadSector(int, int);
-void SIOGetInfo(int, int, BOOL *, BOOL *, BOOL *, BOOL *);
-BOOL GetWriteProtectDrive(int, int);
-BOOL SetWriteProtectDrive(int, int, BOOL);
-void DeleteDrive(int, int);
-BOOL AddDrive(int, int, BYTE *);
+void KillMePlease(void *);
+void KillMePleaseXE(void *);
+void KillMePleaseBASIC(void *);
+void KillMeSoftlyPlease(void *);
+void SwitchToPAL(void *);
+void Interrupt(void *, BOOL);
+void CheckKey(void *, BOOL, WORD);
+void UpdatePorts(void *);
+void SIOV(void *);
+BYTE SIOReadSector(void *, int);
+void SIOGetInfo(void *, int, BOOL *, BOOL *, BOOL *, BOOL *);
+BOOL GetWriteProtectDrive(void *, int);
+BOOL SetWriteProtectDrive(void *, int, BOOL);
+void DeleteDrive(void *, int);
+BOOL AddDrive(void *, int, BYTE *);
 void CreateDMATables();
 void CreatePMGTable();
-void PSLPrepare(int);    // call at the beginning of the scan line to get the mode
-BOOL ProcessScanLine(int);
-void ForceRedraw(int);
-BOOL __cdecl SwapMem(int, BYTE mask, BYTE flags);
-void InitBanks(int);
-void CchDisAsm(int, WORD *puMem);
-void CchShowRegs(int);
-void ControlKeyUp8(int);
+void PSLPrepare(void *);    // call at the beginning of the scan line to get the mode
+BOOL ProcessScanLine(void *);
+BOOL SwapMem(void *, BYTE mask, BYTE flags);
+void InitBanks(void *);
+void CchDisAsm(void *, WORD *puMem);
+void CchShowRegs(void *);
+void ControlKeyUp8(void *);
 
 //extern int fXFCable;    // appears to be unused
 //int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
@@ -877,51 +914,51 @@ extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 // Function prototypes of the Atari 800 VM API
 //
 
-BOOL __cdecl InstallAtari(int, PVMINFO, int);
-BOOL __cdecl UnInstallAtari(int);
-BOOL __cdecl InitAtari(int);
-BOOL __cdecl UninitAtari(int);
-BOOL __cdecl InitAtariDisks(int);
-BOOL __cdecl MountAtariDisk(int, int);
-BOOL __cdecl UninitAtariDisks(int);
-BOOL __cdecl UnmountAtariDisk(int, int);
-BOOL __cdecl WriteProtectAtariDisk(int, int, BOOL, BOOL);
-BOOL __cdecl WarmbootAtari(int);
-BOOL __cdecl ColdbootAtari(int);
-BOOL __cdecl SaveStateAtari(int, char **, int *);
-BOOL __cdecl LoadStateAtari(int, char *, int);
-BOOL __cdecl DumpHWAtari(int);
-BOOL __cdecl TraceAtari(int, BOOL, BOOL);
-BOOL __cdecl ExecuteAtari(int, BOOL, BOOL);
-BOOL __cdecl KeyAtari(int, HWND, UINT, WPARAM, LPARAM);
-BOOL __cdecl DumpRegsAtari(int);
-BOOL __cdecl MonAtari(int);
+BOOL __cdecl InstallAtari(void **, int *, int, PVMINFO, int);
+BOOL __cdecl UnInstallAtari(void *);
+BOOL __cdecl InitAtari(void *);
+BOOL __cdecl UninitAtari(void *);
+BOOL __cdecl InitAtariDisks(void *);
+BOOL __cdecl MountAtariDisk(void *, int);
+BOOL __cdecl UninitAtariDisks(void *);
+BOOL __cdecl UnmountAtariDisk(void *, int);
+BOOL __cdecl WriteProtectAtariDisk(void *, int, BOOL, BOOL);
+BOOL __cdecl WarmbootAtari(void *);
+BOOL __cdecl ColdbootAtari(void *);
+BOOL __cdecl SaveStateAtari(void *);
+BOOL __cdecl LoadStateAtari(void *, void *, int);
+BOOL __cdecl DumpHWAtari(void *);
+BOOL __cdecl TraceAtari(void *, BOOL, BOOL);
+BOOL __cdecl ExecuteAtari(void *, BOOL, BOOL);
+BOOL __cdecl KeyAtari(void *, HWND, UINT, WPARAM, LPARAM);
+BOOL __cdecl DumpRegsAtari(void *);
+BOOL __cdecl MonAtari(void *);
 
-WORD __cdecl PeekWAtari(int, ADDR addr);
-ULONG __cdecl PeekLAtari(int, ADDR addr);
-BOOL  __cdecl PokeLAtari(int, ADDR addr, ULONG l);
-BOOL  __cdecl PokeWAtari(int, ADDR addr, WORD w);
+WORD __cdecl PeekWAtari(void *, ADDR addr);
+ULONG __cdecl PeekLAtari(void *, ADDR addr);
+BOOL  __cdecl PokeLAtari(void *, ADDR addr, ULONG l);
+BOOL  __cdecl PokeWAtari(void *, ADDR addr, WORD w);
 
 // all the possible PEEK routines, based on address, for the jump table version
-BYTE __forceinline __fastcall PeekBAtariHW(int, ADDR addr); // d0, d2, d3, d4
-BYTE __forceinline __fastcall PeekBAtariBB(int, ADDR addr); // 8f, 9f for BountyBob bank select
-BYTE __forceinline __fastcall PeekBAtariBS(int, ADDR addr); // d5 for other cartridge bank select
+BYTE __forceinline __fastcall PeekBAtariHW(void *, ADDR addr); // d0, d2, d3, d4
+BYTE __forceinline __fastcall PeekBAtariBB(void *, ADDR addr); // 8f, 9f for BountyBob bank select
+BYTE __forceinline __fastcall PeekBAtariBS(void *, ADDR addr); // d5 for other cartridge bank select
 
-BYTE __forceinline __fastcall PeekBAtari(int, ADDR addr);   // non-jump table single entry point
+BYTE __forceinline __fastcall PeekBAtari(void *, ADDR addr);   // non-jump table single entry point
 
-BYTE PeekBAtariMON(int, ADDR addr);   // something the monitor is allowed to call
+BYTE PeekBAtariMON(void *, ADDR addr);   // something the monitor is allowed to call
 
 // all the possible POKE routines, based on address, for the jump table version
-BOOL  __forceinline __fastcall PokeBAtariDL(int, ADDR, BYTE);   // screen RAM
-BOOL  __forceinline __fastcall PokeBAtariBB(int, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
-BOOL  __forceinline __fastcall PokeBAtariNULL(int, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
-BOOL  __forceinline __fastcall PokeBAtariOS(int, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
-BOOL  __forceinline __fastcall PokeBAtariHW(int, ADDR, BYTE);   // d000-d4ff
-BOOL  __forceinline __fastcall PokeBAtariBS(int, ADDR, BYTE);   // d500-d5ff
+BOOL  __forceinline __fastcall PokeBAtariDL(void *, ADDR, BYTE);   // screen RAM
+BOOL  __forceinline __fastcall PokeBAtariBB(void *, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
+BOOL  __forceinline __fastcall PokeBAtariNULL(void *, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
+BOOL  __forceinline __fastcall PokeBAtariOS(void *, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
+BOOL  __forceinline __fastcall PokeBAtariHW(void *, ADDR, BYTE);   // d000-d4ff
+BOOL  __forceinline __fastcall PokeBAtariBS(void *, ADDR, BYTE);   // d500-d5ff
 
-BOOL  __forceinline __fastcall PokeBAtari(int, ADDR, BYTE);     // non-jump table single entry point
+BOOL  __forceinline __fastcall PokeBAtari(void *, ADDR, BYTE);     // non-jump table single entry point
 
-BOOL  PokeBAtariMON(int, ADDR, BYTE); // something the monitor is allowed to call
+BOOL  PokeBAtariMON(void *, ADDR, BYTE); // something the monitor is allowed to call
 
 //
 // Map C runtime file i/o calls to appropriate 32-bit calls
@@ -960,6 +997,6 @@ BOOL  PokeBAtariMON(int, ADDR, BYTE); // something the monitor is allowed to cal
 
 #ifndef NDEBUG
 #undef Assert
-#define Assert(f) _800_assert((f), __FILE__, __LINE__, iVM)
-extern __inline void _800_assert(int f, char *file, int line, int iVM);
+#define Assert(f) _800_assert((f), __FILE__, __LINE__, candy)
+extern __inline void _800_assert(int f, char *file, int line, void *);
 #endif

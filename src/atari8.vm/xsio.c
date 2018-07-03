@@ -29,23 +29,6 @@
 #define SIO_NAK     0x8B
 #define SIO_DEVDONE 0x90
 
-typedef struct
-{
-    WORD mode;
-    int  h;
-    WORD fWP;
-    WORD wSectorMac;
-    WORD ofs;
-//    char *pbRAMdisk;
-    char path[80];
-    char name[12];
-    ULONG cb;   // size of file when mode == MD_FILE*
-} DRIVE;
-
-#define MAX_DRIVES 2
-
-DRIVE rgDrives[MAX_VM][MAX_DRIVES];
-
 #define MD_OFF  0
 #define MD_SD   1
 #define MD_ED   2
@@ -646,28 +629,28 @@ BOOL IsEmpty(char *cc)
     return TRUE;
 }
 
-BOOL GetWriteProtectDrive(int iVM, int i)
+BOOL GetWriteProtectDrive(void *candy, int i)
 {
-    return rgDrives[iVM][i].fWP;
+    return rgDrives[i].fWP;
 }
 
-BOOL SetWriteProtectDrive(int iVM, int i, BOOL fWP)
+BOOL SetWriteProtectDrive(void *candy, int i, BOOL fWP)
 {
-    WORD mode = rgDrives[iVM][i].mode;
+    WORD mode = rgDrives[i].mode;
     // you can't un-write protect a binary file masquerading as a disk image, bad things will happen
     if ((mode != MD_FILE && mode != MD_FILEBIN && mode != MD_FILEBAS) || fWP)
-        rgDrives[iVM][i].fWP = (WORD)fWP;
-    return rgDrives[iVM][i].fWP;
+        rgDrives[i].fWP = (WORD)fWP;
+    return rgDrives[i].fWP;
 }
 
 // make an ATARI compatible filename - 8.3 without the dot
-void AtariFNFromPath(int iVM, int i, BYTE *spec)
+void AtariFNFromPath(void *candy, int i, BYTE *spec)
 {
     // start with every filename character a space
     int l, d, s, m;
     for (l = 0; l < 11; l++)
-        rgDrives[iVM][i].name[l] = ' ';
-    rgDrives[iVM][i].name[11] = 0;
+        rgDrives[i].name[l] = ' ';
+    rgDrives[i].name[11] = 0;
 
     // look backwards for a '.' or '\'
 
@@ -685,9 +668,9 @@ void AtariFNFromPath(int iVM, int i, BYTE *spec)
         for (s = 1; s < 4 && l + s < m; s++)
         {
             if (spec[l + s] >= 'a' && spec[l + s] <= 'z')
-                rgDrives[iVM][i].name[7 + s] = spec[l + s] - 'a' + 'A';    // only upper case allowed
+                rgDrives[i].name[7 + s] = spec[l + s] - 'a' + 'A';    // only upper case allowed
             else if ((spec[l + s] >= 'A' && spec[l + s] <= 'Z') || (spec[l + s] >= '0' && spec[l + s] <= '9'))
-                rgDrives[iVM][i].name[7 + s] = spec[l + s];
+                rgDrives[i].name[7 + s] = spec[l + s];
             else
                 l++;    // illegal character, skip it
         }
@@ -703,25 +686,25 @@ void AtariFNFromPath(int iVM, int i, BYTE *spec)
         for (l++; l < d && l - s < 8; l++)
         {
             if (spec[l] >= 'a' && spec[l] <= 'z')
-                rgDrives[iVM][i].name[l - s] = spec[l] - 'a' + 'A';
+                rgDrives[i].name[l - s] = spec[l] - 'a' + 'A';
             else if ((spec[l] >= 'A' && spec[l] <= 'Z') || (spec[l] >= '0' && spec[l] <= '9' && s != l))
-                rgDrives[iVM][i].name[l - s] = spec[l];
+                rgDrives[i].name[l - s] = spec[l];
             else
                 s++;    // illegal character, or starts with number, skip it
         }
     }
 }
 
-void DeleteDrive(int iVM, int i)
+void DeleteDrive(void *candy, int i)
 {
-    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != -1))
-        _close(rgDrives[iVM][i].h);
+    if ((rgDrives[i].h > 0) && (rgDrives[i].h != -1))
+        _close(rgDrives[i].h);
 
-    rgDrives[iVM][i].mode = MD_OFF;
-    rgDrives[iVM][i].h    = -1;
+    rgDrives[i].mode = MD_OFF;
+    rgDrives[i].h    = -1;
 }
 
-BOOL AddDrive(int iVM, int i, BYTE *pchPath)
+BOOL AddDrive(void *candy, int i, BYTE *pchPath)
 {
     int h, sc=0;
 
@@ -729,19 +712,19 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
         {
         if (fXFCable && pchPath[2] == ':')
             {
-            rgDrives[iVM][i].mode = MD_EXT;
+            rgDrives[i].mode = MD_EXT;
             return TRUE;
             }
         }
 
-    if ((rgDrives[iVM][i].h > 0) && (rgDrives[iVM][i].h != -1))
-        _close(rgDrives[iVM][i].h);
-    rgDrives[iVM][i].h = -1;
+    if ((rgDrives[i].h > 0) && (rgDrives[i].h != -1))
+        _close(rgDrives[i].h);
+    rgDrives[i].h = -1;
 
     h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
     // do not alter right protect status per disk, let it be remembered for a drive
-    //rgDrives[iVM][i].fWP = 1;
+    //rgDrives[i].fWP = 1;
 
     if (h == -1)
     {
@@ -749,33 +732,33 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
         if (h == -1)
             goto Lbadfile;
 
-        rgDrives[iVM][i].fWP = 1;  // file is read-only or in use
+        rgDrives[i].fWP = 1;  // file is read-only or in use
     }
 
-    rgDrives[iVM][i].h = h;
-    rgDrives[iVM][i].wSectorMac = 720;
-    rgDrives[iVM][i].mode = MD_SD;
-    strcpy(rgDrives[iVM][i].path, (const char *)pchPath);
+    rgDrives[i].h = h;
+    rgDrives[i].wSectorMac = 720;
+    rgDrives[i].mode = MD_SD;
+    strcpy(rgDrives[i].path, (const char *)pchPath);
 
     if (_read(h,&sc,2) == 2)
     {
         ULONG l;
 
         l = _lseek(h,0,SEEK_END);
-        rgDrives[iVM][i].cb = l;
+        rgDrives[i].cb = l;
         _lseek(h,2,SEEK_SET);
 
         if (sc == 0x296)
         {
             // it's an SIO2PC created image
 
-            rgDrives[iVM][i].ofs = 16;
+            rgDrives[i].ofs = 16;
             _read(h,&l,2);                     // size lo
             _read(h,&sc,2);                     // bytes/sec
             _read(h,(((char *)&l) + 2),2);     // size hi
 
             l = l << 4;
-            rgDrives[iVM][i].wSectorMac = (WORD)(l / sc);
+            rgDrives[i].wSectorMac = (WORD)(l / sc);
 
             if (sc == 256)
             {
@@ -783,7 +766,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
 
                 // Normally, the first three sectors are packed into the first 384 bytes. Then there is 384 blank bytes.
                 // Then starts sector 4 at offset $300
-                rgDrives[iVM][i].mode = MD_DD;
+                rgDrives[i].mode = MD_DD;
 
                 // Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
                 // 128-256 will be empty only in this version. Also make sure sector 1 is not empty. We want a blank disk
@@ -794,7 +777,7 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                             if (_lseek(h, 16, SEEK_SET) == 16)
                                 if (_read(h, cc, 128) == 128)
                                     if (!IsEmpty(cc))
-                                        rgDrives[iVM][i].mode = MD_DD_OLD_ATR1;
+                                        rgDrives[i].mode = MD_DD_OLD_ATR1;
 
                 // Other old broken .ATR files have sector 4 start right at offset 384 w/o any blank space
                 // 384-512 will not be blank only in this version. But if sector 4 is blank, we won't realize it's this kind of file,
@@ -803,8 +786,8 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                     if (_read(h, cc, 128) == 128)
                         if (!IsEmpty(cc) || l == 0x2ce80)
                         {
-                            rgDrives[iVM][i].mode = MD_DD_OLD_ATR2;
-                            rgDrives[iVM][i].wSectorMac = 720;  // it looked like 718 before because it's shorter
+                            rgDrives[i].mode = MD_DD_OLD_ATR2;
+                            rgDrives[i].wSectorMac = 720;  // it looked like 718 before because it's shorter
                         }
             }
         }
@@ -813,25 +796,25 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             // assume it's a Xformer Cable created image
             // so just check for density
        
-            rgDrives[iVM][i].ofs = 0;
+            rgDrives[i].ofs = 0;
 
-            char *path = rgDrives[iVM][i].path;
+            char *path = rgDrives[i].path;
             int pl = strlen(path);
 
             if (l == 368640)
             {
-                rgDrives[iVM][i].mode = MD_QD;
-                rgDrives[iVM][i].wSectorMac = 1440;
+                rgDrives[i].mode = MD_QD;
+                rgDrives[i].wSectorMac = 1440;
             }
             else if (l == 184320)
             {
-                rgDrives[iVM][i].mode = MD_DD;
-                rgDrives[iVM][i].wSectorMac = 720;
+                rgDrives[i].mode = MD_DD;
+                rgDrives[i].wSectorMac = 720;
             }
             else if (l == 133120)
             {
-                rgDrives[iVM][i].mode = MD_ED;
-                rgDrives[iVM][i].wSectorMac = 1040;
+                rgDrives[i].mode = MD_ED;
+                rgDrives[i].wSectorMac = 1040;
             }
             
             // somehow, there are XFD files out there not the right size. We better work with them, that's our format!
@@ -839,8 +822,8 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             // and therefore a good candidate for an XFD file. Also if our extension is XFD.
             else if (l == 92160 || (l < 133120 && sc == 0x300) || (pl >=3 && !_stricmp(&path[pl - 3], "xfd")))
             {
-                rgDrives[iVM][i].mode = MD_SD;
-                rgDrives[iVM][i].wSectorMac = 720;
+                rgDrives[i].mode = MD_SD;
+                rgDrives[i].wSectorMac = 720;
             }
             
             else if ((l > 0) && (l <= 368640 /* was 88375 */))
@@ -848,21 +831,21 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
                 // it might be a BASIC or EXE file that we fake up as a virtual disk
 
                 if (sc == 0xffff)
-                    rgDrives[iVM][i].mode = MD_FILEBIN;     // ATARI binary file
+                    rgDrives[i].mode = MD_FILEBIN;     // ATARI binary file
                 else if (sc == 0x0000)
                 {
-                    rgDrives[iVM][i].mode = MD_FILEBAS;     // ATARI BASIC tokenized file (I hope)
+                    rgDrives[i].mode = MD_FILEBAS;     // ATARI BASIC tokenized file (I hope)
                     ramtop = 0xa000;                        // we'll need the basic cartridge
                 }
                 else
-                    rgDrives[iVM][i].mode = MD_FILE;        // who knows?
+                    rgDrives[i].mode = MD_FILE;        // who knows?
 
                 // how many 125 byte sectors fit in a file this big, plus 3 boot sectors plus 9 directory sectors + 1 partial
-                rgDrives[iVM][i].wSectorMac = (WORD)max(720, l / 125 + 13);
-                rgDrives[iVM][i].fWP = 1;  // force read-only for fake disks that can't be written to
-                rgDrives[iVM][i].cb = l;
+                rgDrives[i].wSectorMac = (WORD)max(720, l / 125 + 13);
+                rgDrives[i].fWP = 1;  // force read-only for fake disks that can't be written to
+                rgDrives[i].cb = l;
 
-                AtariFNFromPath(iVM, i, pchPath);  // make an ATARI compatible filename
+                AtariFNFromPath(candy, i, pchPath);  // make an ATARI compatible filename
 
 #if 0
                 // REVIEW: why did I do this?
@@ -879,12 +862,12 @@ BOOL AddDrive(int iVM, int i, BYTE *pchPath)
             {
                 // invalid disk image
 Lbadfile:
-                rgDrives[iVM][i].mode = MD_OFF;
+                rgDrives[i].mode = MD_OFF;
             }
         }
     }
     else
-        rgDrives[iVM][i].ofs = 0;
+        rgDrives[i].ofs = 0;
 
 //            _close(h);
     return TRUE;
@@ -897,7 +880,7 @@ Lbadfile:
 // !!! What is this?
 // XL/XE serial I/O handler
 //
-void BUS1(int iVM)
+void BUS1(void *candy)
 {
     WORD wRetStat = 1;
     WORD wStat = 0;
@@ -973,9 +956,9 @@ void BUS1(int iVM)
 
         if (fConcurrent)
             {
-            cpuPokeB (iVM, 746,0);   // error bits
-            cpuPokeB (iVM, 748,0);   // unknown
-            cpuPokeB (iVM, 749,0);   // characters to be sent
+            cpuPokeB (candy, 746,0);   // error bits
+            cpuPokeB (candy, 748,0);   // unknown
+            cpuPokeB (candy, 749,0);   // characters to be sent
 
             // do character pending
 
@@ -984,16 +967,16 @@ void BUS1(int iVM)
 #endif
 
             if (0x0100 & wStat)
-                cpuPokeB (iVM, 747,1);
+                cpuPokeB (candy, 747,1);
             else
-                cpuPokeB (iVM, 747,0);
+                cpuPokeB (candy, 747,0);
 //    printf("%d",cpuPeekB(747)); fflush(stdout);
             }
         else
             {
             // block mode status
 
-            cpuPokeB (iVM, 746,0);   // error bits
+            cpuPokeB (candy, 746,0);   // error bits
 
             // BIOS returns CD in bit 7, DSR in bit 5, CTS in bit 4
             // Atari needs CD in bit 3, DSR in bit 7, CTS in bit 5
@@ -1003,7 +986,7 @@ void BUS1(int iVM)
             wStat |= oldstat;
             oldstat = (BYTE)(wStat >> 1) & 0x54;
 
-            cpuPokeB (iVM, 747,(BYTE)wStat);   // handshake bits
+            cpuPokeB (candy, 747,(BYTE)wStat);   // handshake bits
             }
 
         break;
@@ -1013,7 +996,7 @@ void BUS1(int iVM)
         printf("XIO %d, aux1 = %d, aux2 = %d\n", cpuPeekB(0x22), cpuPeekB(0x2A), cpuPeekB(0x2B));
 #endif
 
-        switch (cpuPeekB(iVM, 0x22))
+        switch (cpuPeekB(candy, 0x22))
             {
         default:
             break;
@@ -1028,7 +1011,7 @@ void BUS1(int iVM)
             {
             int baud = 300;
 
-            switch (cpuPeekB(iVM, 0x2A) & 15)
+            switch (cpuPeekB(candy, 0x2A) & 15)
                 {
             default:
                 break;
@@ -1077,7 +1060,7 @@ void BUS1(int iVM)
 
         case 38:     // translation and parity
 
-            mdTranslation = cpuPeekB(iVM, 0x2A) & 48;
+            mdTranslation = cpuPeekB(candy, 0x2A) & 48;
 #if DEBUGCOM
             printf("mdTranslation set to %d\n", mdTranslation);
 #endif
@@ -1097,11 +1080,11 @@ void BUS1(int iVM)
             break;
 
         // !!! WTF? This breaks Sparta Dos SP32D, because this is the external PIA H/W device bank #
-        //cpuPokeB (iVM, 583, cpuPeekB(iVM, 247) | 1); // tell OS that device 1 is a CIO device
+        //cpuPokeB (candy, 583, cpuPeekB(candy, 247) | 1); // tell OS that device 1 is a CIO device
 
-        cpuPokeB (iVM, 797,'R');
-        cpuPokeB (iVM, 798,0x8F);
-        cpuPokeB (iVM, 799,0xE4);
+        cpuPokeB (candy, 797,'R');
+        cpuPokeB (candy, 798,0x8F);
+        cpuPokeB (candy, 799,0xE4);
         break;
 
     case 0x70:  // SIO vector   !!! What to do?
@@ -1111,14 +1094,14 @@ void BUS1(int iVM)
         break;
     }
 
-    cpuPokeB (iVM, 0x343,(BYTE)wRetStat);
+    cpuPokeB (candy, 0x343,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat & 0x80) ? 0 : ZBIT);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
     regP |= CBIT; // indicate that command completed successfully
 
-    //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+    //regPC = cpuPeekW(candy, regSP + 1) + 1;        // do an RTS
     //regSP = (regSP + 2) & 255 | 256;
 
     // the stack might wrap!
@@ -1132,24 +1115,24 @@ void BUS1(int iVM)
 
 // SIO Bare bones, get some information that's private to this file
 //
-void SIOGetInfo(int iVM, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *pfwp)
+void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *pfwp)
 {
-    WORD md = rgDrives[iVM][drive].mode;
+    WORD md = rgDrives[drive].mode;
 
     if (psd)
-        *psd = (rgDrives[iVM][drive].mode == MD_SD);
+        *psd = (rgDrives[drive].mode == MD_SD);
     if (ped)
-        *ped = (rgDrives[iVM][drive].mode == MD_ED);
+        *ped = (rgDrives[drive].mode == MD_ED);
     if (pdd)
         *pdd = (md == MD_QD) || (md == MD_DD) || (md == MD_DD_OLD_ATR1) || (md == MD_DD_OLD_ATR2) || (md == MD_HD) || (md == MD_RD);
     if (pfwp)
-        *pfwp = rgDrives[iVM][drive].fWP;
+        *pfwp = rgDrives[drive].fWP;
 }
 
 
 // SIO Bare bones read a sector, return checksum for those rolling their own and not using SIOV
 //
-BYTE SIOReadSector(int iVM, int wDrive)
+BYTE SIOReadSector(void *candy, int wDrive)
 {
     WORD wDev, wCom, wStat, wSector;
     WORD  wBytes;
@@ -1165,7 +1148,7 @@ BYTE SIOReadSector(int iVM, int wDrive)
     wBytes = 128;
     wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
 
-    pdrive = &rgDrives[iVM][wDrive];
+    pdrive = &rgDrives[wDrive];
 
     md = pdrive->mode;
 
@@ -1192,7 +1175,7 @@ BYTE SIOReadSector(int iVM, int wDrive)
 
     _lseek(pdrive->h, (ULONG)((wSector - 1) * lcbSector) + cbSIO2PCFudge, SEEK_SET);
 
-    if (_read(pdrive->h, sectorSIO[iVM], wBytes) < wBytes)
+    if (_read(pdrive->h, sectorSIO, wBytes) < wBytes)
         return 0;
 
     /* the disk # is valid, the sector # is valid, # bytes is valid */
@@ -1201,7 +1184,7 @@ BYTE SIOReadSector(int iVM, int wDrive)
     WORD ck = 0;
     for (int i = 0; i < 128; i++)
     {
-        ck += sectorSIO[iVM][i];
+        ck += sectorSIO[i];
         if (ck > 0xff)
         {
             ck = ck & 0xff;
@@ -1215,7 +1198,7 @@ BYTE SIOReadSector(int iVM, int wDrive)
 
 // ATARI 800 serial I/O handler
 //
-void SIOV(int iVM)
+void SIOV(void *candy)
 {
     WORD wDev, wDrive, wCom, wStat, wBuff, wSector, bAux1, bAux2;
     WORD  wBytes;
@@ -1231,7 +1214,7 @@ void SIOV(int iVM)
     // we're the 800 SIO routine. Otherwise, BUS1 is the XL/XE version
     if (regPC != 0xE459 && regPC != 0xE959)
     {
-        BUS1(iVM);
+        BUS1(candy);
         return;
     }
 
@@ -1248,16 +1231,16 @@ void SIOV(int iVM)
     printf("Aux2 = %2x\n", cpuPeekB(0x30B));
 #endif
 
-    wDev = cpuPeekB(iVM, 0x300);
-    wDrive = cpuPeekB(iVM, 0x301)-1;
-    wCom = cpuPeekB(iVM, 0x302);
-    wStat = cpuPeekB(iVM, 0x303);
-    wBuff = cpuPeekW(iVM, 0x304);
-    wTimeout = cpuPeekW(iVM, 0x306);
-    wBytes = cpuPeekW(iVM, 0x308);
-    wSector = cpuPeekW(iVM, 0x30A);
-    bAux1 = cpuPeekB(iVM, 0x30A);
-    bAux2 = cpuPeekB(iVM, 0x30B);
+    wDev = cpuPeekB(candy, 0x300);
+    wDrive = cpuPeekB(candy, 0x301)-1;
+    wCom = cpuPeekB(candy, 0x302);
+    wStat = cpuPeekB(candy, 0x303);
+    wBuff = cpuPeekW(candy, 0x304);
+    wTimeout = cpuPeekW(candy, 0x306);
+    wBytes = cpuPeekW(candy, 0x308);
+    wSector = cpuPeekW(candy, 0x30A);
+    bAux1 = cpuPeekB(candy, 0x30A);
+    bAux2 = cpuPeekB(candy, 0x30B);
 
 #if 0
     if (wCom == 0x52)
@@ -1279,7 +1262,7 @@ void SIOV(int iVM)
         if ((wDrive < 0) || (wDrive >= MAX_DRIVES))
             goto lCable;
 
-        pdrive = &rgDrives[iVM][wDrive];
+        pdrive = &rgDrives[wDrive];
 
         md = pdrive->mode;
 
@@ -1352,11 +1335,11 @@ lNAK:
           /*  printf("SIO command 'S'\n"); */
 
             /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
-            cpuPokeB (iVM, wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (pdrive->fWP ? 8 : 0));
+            cpuPokeB (candy, wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (pdrive->fWP ? 8 : 0));
 
-            cpuPokeB (iVM, wBuff++, 0xFF);         /* controller */
-            cpuPokeB (iVM, wBuff++, 0xE0);         /* format timeout */
-            cpuPokeB (iVM, wBuff, 0x00);           /* unused */
+            cpuPokeB (candy, wBuff++, 0xFF);         /* controller */
+            cpuPokeB (candy, wBuff++, 0xE0);         /* format timeout */
+            cpuPokeB (candy, wBuff, 0x00);           /* unused */
             break;
 
         /* get configuration */
@@ -1365,38 +1348,38 @@ lNAK:
             if (md == MD_HD)
                 {
                 pdrive->wSectorMac--;
-                cpuPokeB (iVM, wBuff++, 1);   /* tracks */
-                cpuPokeB (iVM, wBuff++, 0);    /* ?? */
-                cpuPokeB (iVM, wBuff++, pdrive->wSectorMac & 255);   /* ?? */
-                cpuPokeB (iVM, wBuff++, pdrive->wSectorMac >> 8);    /* sectors/track */
-                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
+                cpuPokeB (candy, wBuff++, 1);   /* tracks */
+                cpuPokeB (candy, wBuff++, 0);    /* ?? */
+                cpuPokeB (candy, wBuff++, pdrive->wSectorMac & 255);   /* ?? */
+                cpuPokeB (candy, wBuff++, pdrive->wSectorMac >> 8);    /* sectors/track */
+                cpuPokeB (candy, wBuff++, 0x00);         /* ?? */
                 pdrive->wSectorMac++;
                 }
             else
                 {
-                cpuPokeB (iVM, wBuff++, 0x28);         /* tracks */
-                cpuPokeB (iVM, wBuff++, 0x02);         /* ?? */
-                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
-                cpuPokeB (iVM, wBuff++, (md == MD_ED) ? 0x1A : 0x12); /* secs/track */
-                cpuPokeB (iVM, wBuff++, 0x00);         /* ?? */
+                cpuPokeB (candy, wBuff++, 0x28);         /* tracks */
+                cpuPokeB (candy, wBuff++, 0x02);         /* ?? */
+                cpuPokeB (candy, wBuff++, 0x00);         /* ?? */
+                cpuPokeB (candy, wBuff++, (md == MD_ED) ? 0x1A : 0x12); /* secs/track */
+                cpuPokeB (candy, wBuff++, 0x00);         /* ?? */
                 }
 
             if (fDD)
                 {
-                cpuPokeB (iVM, wBuff++, 0x04);     /* density: 4 = dbl  0 = sng */
-                cpuPokeB (iVM, wBuff++, 0x01);     /* bytes/sector hi */
-                cpuPokeB (iVM, wBuff++, 0x00);     /* bytes/sector lo */
+                cpuPokeB (candy, wBuff++, 0x04);     /* density: 4 = dbl  0 = sng */
+                cpuPokeB (candy, wBuff++, 0x01);     /* bytes/sector hi */
+                cpuPokeB (candy, wBuff++, 0x00);     /* bytes/sector lo */
                 }
             else
                 {
-                cpuPokeB (iVM, wBuff++, 0x00);     /* density: 4 = dbl  0 = sng */
-                cpuPokeB (iVM, wBuff++, 0x00);     /* bytes/sector hi */
-                cpuPokeB (iVM, wBuff++, 0x80);     /* bytes/sector lo */
+                cpuPokeB (candy, wBuff++, 0x00);     /* density: 4 = dbl  0 = sng */
+                cpuPokeB (candy, wBuff++, 0x00);     /* bytes/sector hi */
+                cpuPokeB (candy, wBuff++, 0x80);     /* bytes/sector lo */
                 }
-            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
-            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
-            cpuPokeB (iVM, wBuff++, 0xFF);         /* unused */
-            cpuPokeB (iVM, wBuff, 0xFF);           /* unused */
+            cpuPokeB (candy, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (candy, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (candy, wBuff++, 0xFF);         /* unused */
+            cpuPokeB (candy, wBuff, 0xFF);           /* unused */
             break;
 
         /* set configuration - we don't support it */
@@ -1613,7 +1596,7 @@ lNAK:
                     BYTE c128[256]; // largest sector size
                     int wBX = _read(pdrive->h, c128, wBytes);
                     for (int iw = 0; iw < wBX; iw++)
-                        PokeBAtari(iVM, wBuff + iw, c128[iw]);
+                        PokeBAtari(candy, wBuff + iw, c128[iw]);
 
                     if (wBX < wBytes)
                         wRetStat = SIO_DEVDONE;
@@ -1753,7 +1736,7 @@ lCable:
 
 lExit:
     //ODS("SIOV %02x into %04x aux %04x returns %02x\n", wCom, wBuff, wSector, wRetStat);
-    cpuPokeB (iVM, 0x303,(BYTE)wRetStat);
+    cpuPokeB (candy, 0x303,(BYTE)wRetStat);
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
@@ -1761,13 +1744,13 @@ lExit:
     rgbMem[0x42] = 0;   // SIO turns CRITIC off so entire VBI can run next time (Shamus loaded from Preppie II disk needs this)
     
     // Cosmic balance hangs without this as the timer 4 interrupt swallows it whole
-    PokeBAtari(iVM, 0xd20f, 0x13); // SKCTL - SIO also leaves POKEY in async receive mode stopping timers 3 and 4
+    PokeBAtari(candy, 0xd20f, 0x13); // SKCTL - SIO also leaves POKEY in async receive mode stopping timers 3 and 4
 
     // The real SIO also copies the IRQEN shadow to IRQEN, that's not the VBI that does it, so we need to do this
     // or the keyboard IRQ is left turned off and the keyboard stops working (Floyd of the Jungle)
-    PokeBAtari(iVM, 0xd20e, rgbMem[0x10]);
+    PokeBAtari(candy, 0xd20e, rgbMem[0x10]);
    
-    //regPC = cpuPeekW(iVM, regSP + 1) + 1;        // do an RTS
+    //regPC = cpuPeekW(candy, regSP + 1) + 1;        // do an RTS
     //regSP = (regSP + 2) & 255 | 256;
 
     // the stack might wrap!
@@ -1784,7 +1767,7 @@ lExit:
 
 
 #if 0
-void InitSIOV(int iVM, int argc, char **argv)
+void InitSIOV(void *candy, int argc, char **argv)
 {
     int i, iArgv = 0;
 
@@ -1830,7 +1813,7 @@ void InitSIOV(int iVM, int argc, char **argv)
 
         case 'T':
         case 't':
-            *pbshift &= ~wScrlLock;
+            bshftByte &= ~wScrlLock;
             break;
 
         case 'C':
@@ -1867,7 +1850,7 @@ void InitSIOV(int iVM, int argc, char **argv)
         case 'K':
         case 'k':
             if (argv[iArgv][2] == ':')
-                ReadCart(iVM, &argv[iArgv][3]);
+                ReadCart(candy, &argv[iArgv][3]);
             break;
 
 #ifndef HWIN32
@@ -1908,10 +1891,10 @@ void InitSIOV(int iVM, int argc, char **argv)
     {
         if (i < argc)
         {
-            AddDrive(iVM, i, argv[i + iArgv]);
+            AddDrive(candy, i, argv[i + iArgv]);
         }
         else
-            rgDrives[iVM][i].mode = MD_OFF;
+            rgDrives[i].mode = MD_OFF;
     }
 }
 #endif
