@@ -13,6 +13,8 @@
 
 ****************************************************************************/
 
+#pragma warning (disable:4206) // nonstandard extension: translation unit empty
+
 #if defined(ATARIST) || defined(SOFTMAC)
 
 #define _CRT_SECURE_NO_WARNINGS

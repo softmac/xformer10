@@ -1148,6 +1148,9 @@ BYTE SIOReadSector(void *candy, int wDrive)
     wBytes = 128;
     wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
 
+    if (wDrive < 1 || wDrive > 4)
+        return 0;
+
     pdrive = &rgDrives[wDrive];
 
     md = pdrive->mode;

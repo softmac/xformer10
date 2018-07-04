@@ -53,6 +53,8 @@
 #include <VersionHelpers.h>
 #include <windowsx.h>
 
+#pragma warning(disable:4706) // assignment within conditional expression
+
 // you remember our main data structures from gemtypes.h, right?
 
 PROPS v;                // global persistable stuff
@@ -440,7 +442,9 @@ void SacrificeVM()
 {
     for (int ix = 0; ix < MAX_VM; ix++)
     {
-        if (rgvm[ix].fValidVM)
+        // DO NOT sacrifice the visible roulette tiles or you will blow up!
+        // !!! We'll hang if we're so low on memory we can't keep 1 VM
+        if (rgvm[ix].fValidVM && ix != v.iVM && ix != sVMNext && ix != sVMPrev)
         {
             DeleteVM(ix, FALSE);    // sorry, you are the sacrifice
             break;
@@ -453,8 +457,8 @@ void SacrificeVM()
 //
 BOOL InitThreads()
 {
-    // if we saved space to make sure making these wouldn't run out of memory, free that now
-    if (pThreadReserve)
+    // if we saved space to make sure making VMs for all the tiles wouldn't run out of memory, free that as soon as we tile
+    if (pThreadReserve && v.fTiling)
     {
         free(pThreadReserve);
         pThreadReserve = NULL;
@@ -480,6 +484,8 @@ ThreadTry:
 
             if (ThreadStuff[ii].hGoEvent)
                 CloseHandle(ThreadStuff[ii].hGoEvent);
+            if (ThreadStuff[ii].hThread)
+                CloseHandle(ThreadStuff[ii].hThread);
             if (hDoneEvent[ii])
                 CloseHandle(hDoneEvent[ii]);
         }
@@ -499,6 +505,8 @@ ThreadTry:
         if (v.fTiling)
         {
             ThreadStuff = malloc(v.cVM * sizeof(ThreadStuffS));
+            memset(ThreadStuff, 0, sizeof(ThreadStuffS));
+
             hDoneEvent = malloc(v.cVM * sizeof(HANDLE));
             if (!ThreadStuff || !hDoneEvent)
                 goto ThreadFail;
@@ -544,9 +552,11 @@ ThreadTry:
                         // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                         if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
 #ifdef NDEBUG
-                            !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                            !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads,
+                                    STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #else   // debug needs twice the stack
-                            !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)cThreads, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                            !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)cThreads,
+                                    STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #endif
 #pragma warning(pop)
                         {
@@ -595,6 +605,8 @@ ThreadTry:
             int numt = sPan ? 2 : 1;    // is there a 2nd VM showing because we're scrolling?
             //ODS("Need %d threads\n", numt);
             ThreadStuff = malloc(sizeof(ThreadStuffS) * numt);
+            if (ThreadStuff)
+                memset(ThreadStuff, 0, sizeof(ThreadStuffS) * numt);
             hDoneEvent = malloc(sizeof(HANDLE) * numt);
             if (!ThreadStuff || !hDoneEvent)
                 goto ThreadFail;
@@ -617,9 +629,11 @@ ThreadTry:
                 // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                 if (!ThreadStuff[x].hGoEvent || !hDoneEvent[x] ||
 #ifdef NDEBUG
-                    !CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
+                            STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #else   // debug needs twice the stack
-                    !CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)x, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL))
+                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)x,
+                            STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #endif
 #pragma warning(pop)
                 {
@@ -636,8 +650,8 @@ ThreadTry:
                     }
                     goto ThreadFail;
                 }
+                cThreads++;
             }
-            cThreads = numt;
         }
     }
     
@@ -1255,7 +1269,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     else
                         DeleteVM(iVM, FALSE);   // !!! we do the quick version! Caller must do the rest
 
-                }    // using drag/drop, just move on with our lives if there's an error
+                }    // !!! if error is likely to mean OOM, then give up the loop!
             }
 
             // a cartridge
@@ -1280,7 +1294,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     else
                         DeleteVM(iVM, FALSE);    // bad cartridge? Don't show an empty VM, just kill it
 
-                }    // using drag/drop, just move on with our lives if there's an error
+                }    // !!! if error is likely to mean OOM, then give up the loop!
             }
 
             // found a .gem file. Only notice it if it's the first/only thing being dragged.
@@ -1861,6 +1875,8 @@ int CALLBACK WinMain(
                     
                     DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
 
+                    InitThreads();  // if we deleted a visible VM, we'd hang
+
                     if (fx)
                         fNeedTiledBitmap = FALSE;
                 }
@@ -2072,7 +2088,9 @@ int CALLBACK WinMain(
         // The Macros will ONLY use PAL timing when we're not tiling, tiled PAL gets 60Hz like NTSC
         ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? PAL_CLK : NTSC_CLK;
         ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? JIFP : JIFN;
-        if (fBrakes && (cCur < ullsec))
+        
+        // Don't spin in a tight loop doing nothing while minimized
+        if ((fBrakes || !cThreads) && (cCur < ullsec))
         {
             while (cCur < ulljif)
             {
@@ -2759,7 +2777,7 @@ Ltryagain:
 
     if (vrgvmi[iVM].hbm == NULL || vrgvmi[iVM].hdcMem == NULL)
         return FALSE;
-
+    
     vrgvmi[iVM].hbmOld = SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbm);
 
     SetBitmapColors(iVM);

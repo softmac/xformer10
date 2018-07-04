@@ -536,7 +536,7 @@ BOOL TimeTravel(void *candy)
 
     // Two 5-second snapshots ago will be from 10-15 seconds back in time
 
-    f = LoadStateAtari(Time[cTimeTravelPos], candy, dwCandySize);    // restore our snapshot, and create a new anchor point here
+    f = LoadStateAtari(Time[cTimeTravelPos], candy, dwCandySize, iVM);    // restore our snapshot, and create a new anchor point here
 
     // lift up the control and ALT keys, do NOT remember their state from before (or we start continuous firing, etc.)
     ControlKeyUp8(candy);
@@ -2123,12 +2123,17 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
 //
 BOOL __cdecl UnInstallAtari(void *candy)
 {
-    TimeTravelFree(candy);
+    if (candy)
+    {
+        TimeTravelFree(candy);
 
-    // GEM is responsible for knowing not to use it anymore
-    free(((CANDYHW *)candy)->m_candyx);
-    free(candy);
+        // GEM is responsible for knowing not to use it anymore
     
+        if (((CANDYHW *)candy)->m_candyx)
+            free(((CANDYHW *)candy)->m_candyx);
+        free(candy);
+    }
+
     return TRUE;
 }
 
@@ -2539,7 +2544,7 @@ BOOL __cdecl SaveStateAtari(void *candy)
 // Either INIT is called followed by ColdBoot, or this, not both, so do what we need to do to restore our state
 // without resetting anything
 //
-BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
+BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMNum)
 {
     if (cbPersist != dwCandySize || candy == NULL || pPersist == NULL)
         return FALSE;
@@ -2550,6 +2555,9 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
     // copy the new state over.
     _fmemcpy(candy, pPersist, cbPersist);
 
+    // and give it a new VM number
+    ((CANDYHW *)candy)->m_iVM = iVMNum;
+
     // restore the pointer
     ((CANDYHW *)candy)->m_candyx = uncandy;
 
@@ -2559,7 +2567,8 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
     BOOL f = InitAtariDisks(candy);
 
     // 2. If we were in the middle of reading a sector through SIO, restore that data
-    SIOReadSector(candy, rgSIO[0] - 0x31);
+    if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x34 && rgSIO[1] == 0x52)
+        SIOReadSector(candy, rgSIO[0] - 0x31);
 
     if (!f)
         return f;

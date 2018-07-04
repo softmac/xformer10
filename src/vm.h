@@ -138,7 +138,7 @@ BOOL __inline FSaveStateVM(int iVM)
 
 BOOL __inline FLoadStateVM(int iVM, void *pNew)
 {
-	return rgvm[iVM].pvmi->pfnLoadState(pNew, vrgvmi[iVM].pPrivate, vrgvmi[iVM].iPrivateSize);
+	return rgvm[iVM].pvmi->pfnLoadState(pNew, vrgvmi[iVM].pPrivate, vrgvmi[iVM].iPrivateSize, iVM);
 }
 
 BOOL __inline FWriteProtectDiskVM(int iVM, int i, BOOL fSet, BOOL fWP)

@@ -182,12 +182,19 @@ void DeleteVM(int iVM, BOOL fFixMenus)
 
         v.cVM--;    // one fewer valid instance now
 
-        // we can't roulette anymore with only 1 thing
-        if (sPan && v.cVM == 1)
+        // we need fresh threads for different VMs if we're killing any visible roulette tile
+        // if we're down to one tile now, we must also stop panning.
+        if (sPan && (v.cVM == 1 || iVM == sVMPrev || iVM == sVMNext))
         {
-            sPan = 0;
+            if (v.cVM == 1)
+                sPan = 0;
+            SelectInstance(iVM);    // select new current and panning neighbours
             InitThreads();
         }
+
+        // We're deleting ourself and NOT going to make new threads! We'll crash.
+        if (iVM == v.iVM && !fFixMenus)
+            fFixMenus = TRUE;
 
         v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
         sVM = -1;              // the one in focus may be gone
@@ -524,8 +531,10 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         }
 #endif
 
+#if 0
     // if we only partially loaded, but failed, free the stuff that did load
-    // !!! We could keep some loaded, but then re-saving it will lose some info and they might not realize.
+    // !!! They might re-save and not realize they lost data, but I think it's worse to fail to load in 
+    // a large tiled session on OOM... we should load what we can
     if (!f && v.cVM)
     {
         for (int z = 0; z < MAX_VM; z++)
@@ -536,6 +545,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         DeleteVM(-1, TRUE); // now do the stuff we skipped
         return FALSE;
     }
+#endif
 
     // we only need to have loaded VMs to succeed, if we wanted to.
     return f && (fPropsOnly || v.cVM);

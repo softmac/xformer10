@@ -926,7 +926,7 @@ BOOL __cdecl WriteProtectAtariDisk(void *, int, BOOL, BOOL);
 BOOL __cdecl WarmbootAtari(void *);
 BOOL __cdecl ColdbootAtari(void *);
 BOOL __cdecl SaveStateAtari(void *);
-BOOL __cdecl LoadStateAtari(void *, void *, int);
+BOOL __cdecl LoadStateAtari(void *, void *, int, int);
 BOOL __cdecl DumpHWAtari(void *);
 BOOL __cdecl TraceAtari(void *, BOOL, BOOL);
 BOOL __cdecl ExecuteAtari(void *, BOOL, BOOL);
