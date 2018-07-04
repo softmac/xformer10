@@ -655,8 +655,8 @@ void DoVBI(void *candy)
             JOYCAPS jc = vi.rgjc[joy];
 
             MMRESULT mm = joyGetPosEx(vi.rgjn[joy], &ji);
-            //ODS("x=%04x y=%04x u=%04x b=%04x\n", ji.dwXpos, ji.dwYpos, ji.dwUpos, ji.dwButtonNumber);
-
+            //ODS("Joy %d: x=%04x y=%04x u=%04x b=%04x\n", joy, ji.dwXpos, ji.dwYpos, ji.dwUpos, ji.dwButtons);
+            
             if (mm == 0) {
 
                 // if this axis ever goes non-zero, it's an XBOX joystick and we can use the right joystick safely as a paddle!
@@ -734,10 +734,10 @@ void DoVBI(void *candy)
                     // extra buttons become START SELECT OPTION for tablet mode
                     if (!fJoyCONSOL && ji.dwButtons >= 2 && ji.dwButtons <= 8)
                     {
-                        CONSOL &= ~(ji.dwButtonNumber >> 1);	// button goes down
+                        CONSOL &= ~(ji.dwButtons >> 1);	// button goes down
                         fJoyCONSOL = TRUE;				// we were the cause
                     }
-                    else if (fJoyCONSOL && ji.dwButtonNumber == 0)
+                    else if (fJoyCONSOL && ji.dwButtons == 0)
                     {
                         CONSOL |= 7;						// don't lift up buttons we didn't press
                         fJoyCONSOL = FALSE;
@@ -785,9 +785,9 @@ void DoVBI(void *candy)
 
                         (*pB) |= (12 << ((joy & 1) << 2));                  // assume buttons not pressed
 
-                        if (ji.dwButtonNumber == 1)
+                        if (ji.dwButtons == 1)
                             (*pB) &= ~(4 << ((joy & 1) << 2));              // left
-                        else if (ji.dwButtonNumber == 2)
+                        else if (ji.dwButtons == 2)
                             (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
                         UpdatePorts(candy);

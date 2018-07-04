@@ -1110,7 +1110,7 @@ void InitJoysticks()
                     vi.rgjt[j] = JT_DRIVING;    // x centred, y is special value, up or down? Driving controller
                 else
                     vi.rgjt[j] = JT_PADDLE;
-                //ODS("Joy device = %d", vi.rgjt[j]);
+                //ODS("Joy device = %d\n", vi.rgjt[j]);
 
                 vi.rgjc[j] = jc;    // joy caps
                 vi.rgjn[j++] = i;    // which joystick ID this is
