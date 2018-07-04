@@ -196,7 +196,6 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         if (iVM == v.iVM && !fFixMenus)
             fFixMenus = TRUE;
 
-        v.sWheelOffset = 0;    // we may be scrolled further than is possible given we have fewer of them now
         sVM = -1;              // the one in focus may be gone
 
         if (!v.cVM)
@@ -213,7 +212,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         // !!! this will never work until we compact hundreds of individual variables that are [MAX_VM]
         // including the private VM data we know nothing about
 #if 0   
-        
+
         // now compact our array - overlapping regions
 
         // just one thing to compact
@@ -242,6 +241,16 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         SelectInstance(v.iVM);   // best guess at the next VM to get focus
         DisplayStatus(v.iVM);    // or name of last VM erased would stay on title bar
         FixAllMenus(TRUE);
+      
+        // we may be scrolled further than is possible given we have fewer of them now. You can only scroll the extent to which
+        // the bottom of the tiles is beyond the bottom of the window
+        RECT rc;
+        GetClientRect(vi.hWnd, &rc);
+        int last = (v.cVM == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
+        if (v.sWheelOffset < last)
+            v.sWheelOffset = last;
+
+        // this will use the new wheel offset
         InitThreads();
     }
 }
