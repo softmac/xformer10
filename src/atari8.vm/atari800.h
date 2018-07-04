@@ -366,7 +366,11 @@ typedef struct
     // most ofen accessed variables go first!
     int m_dwCandySize;
 
-    CANDY_UNPERSISTED *m_candyx;
+    union
+    {
+        CANDY_UNPERSISTED *m_candyx;    // same size for 32 and 64 bit versions
+        LONGLONG ll1;
+    };
 
     // 6502 register context - BELONGS IN CPU NOT HERE !!!
     WORD m_regPC, m_regSP;

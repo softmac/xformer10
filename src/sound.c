@@ -383,7 +383,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
         }
         else {
-            memset(pb, 0x00, (iCurSample - sOldSample) * 2);    // 16 bit signed MONO silence for this portion
+            memset((PBYTE)pb, 0x00, (iCurSample - sOldSample) * 2);    // 16 bit signed MONO silence for this portion
         }
 
         sOldSample = iCurSample; // next time start writing here
@@ -1074,7 +1074,7 @@ void InitJoysticks()
     // 16 seems to be common, and the 2nd and subsequent joysticks might be a sparse matrix so check them all
     nj = min(nj, NUM_JOYDEVS);
 
-    memset (&vi.rgji, 0, sizeof(vi.rgji));
+    memset((PBYTE)&vi.rgji, 0, sizeof(vi.rgji));
 
     for (i = 0; i < nj; i++)
     {
@@ -1110,6 +1110,7 @@ void InitJoysticks()
                     vi.rgjt[j] = JT_DRIVING;    // x centred, y is special value, up or down? Driving controller
                 else
                     vi.rgjt[j] = JT_PADDLE;
+                //ODS("Joy device = %d", vi.rgjt[j]);
 
                 vi.rgjc[j] = jc;    // joy caps
                 vi.rgjn[j++] = i;    // which joystick ID this is

@@ -331,7 +331,7 @@ int __stdcall CntReadDiskDirectory(DISKINFO *pdi, char *szDir, WIN32_FIND_DATA *
                     parentID = SwapL(pKey->dirID);
 
                     pRec = (REC *)(void *)&pKey->sz[cbName + ((cbName & 1) == 0)];
-Assert((((ULONG)pRec) & 1) == 0);
+Assert((((ULONG)(LONGLONG)pRec) & 1) == 0);
                     type = pRec->bType;
 
                     if (cbKey < 7)
@@ -450,8 +450,8 @@ Lfindit:
 
         for (;;)
             {
-            int cchCwd = strlen(pdi->szCwd);
-            int cchDir = strlen(szDir);
+            int cchCwd = (int)strlen(pdi->szCwd);
+            int cchDir = (int)strlen(szDir);
             unsigned char sz[MAX_PATH];
 
             if (cchCwd == cchDir)
