@@ -799,7 +799,7 @@ BOOL AddDrive(void *candy, int i, BYTE *pchPath)
             rgDrives[i].ofs = 0;
 
             char *path = rgDrives[i].path;
-            int pl = strlen(path);
+            int pl = (int)strlen(path);
 
             if (l == 368640)
             {
@@ -1517,7 +1517,7 @@ lNAK:
                         rgbMem[wBuff + 2] = (BYTE)((pdrive->cb + 124L) / 32000L);
                         rgbMem[wBuff + 3] = 4;
                         rgbMem[wBuff + 4] = 0x00;
-                        memcpy(&rgbMem[wBuff + 5], pdrive->name, 11);
+                        memcpy(&rgbMem[wBuff + 5], (BYTE *)pdrive->name, 11);
                     }
                     else if (wSector >= 4)
                     {

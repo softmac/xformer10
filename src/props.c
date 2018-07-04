@@ -246,7 +246,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         // the bottom of the tiles is beyond the bottom of the window
         RECT rc;
         GetClientRect(vi.hWnd, &rc);
-        int last = (v.cVM == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
+        int last = (v.cVM == 0 || sTilesPerRow == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
         if (v.sWheelOffset < last)
             v.sWheelOffset = last;
 

@@ -416,7 +416,7 @@ ULONGLONG GetMs()
 //
 DWORD WINAPI VMThread(LPVOID l)
 {
-    int iV = (int)l;    // remember which visible tile # we are
+    int iV = (int)(LONGLONG)l;    // remember which visible tile # we are
     
     while (1)
     {
@@ -1076,13 +1076,13 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
             if (ffd.cFileName[0] == '.')
                 continue;
 
-            int len = strlen(ffd.cFileName);
+            int len = (int)strlen(ffd.cFileName);
 
             // the first one we find becomes a candidate to be returned
             if (fFirst)
             {
                 // copy over the * with the returned filename to create the filespec
-                dirlen = strlen(lpF) - 1;   // how long the dir name is, without the trailing *
+                dirlen = (int)strlen(lpF) - 1;   // how long the dir name is, without the trailing *
                 strcpy(lpF + dirlen, ffd.cFileName);
                 fFirst = FALSE;
                 sFile += len - 2;   // (we removed the * and the NULL)
@@ -1095,7 +1095,7 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
                     // realloc if we need to to make room
                     if (*szCmdLineUsed + dirlen + len + 3 > *szCmdLine)    // room for quotes and a NULL
                     {
-                        int off = lpCmdLine - *lpCmdLineStart;  // where in the buffer we are
+                        int off = (int)(lpCmdLine - *lpCmdLineStart);  // where in the buffer we are
                         *lpCmdLineStart = realloc(*lpCmdLineStart, *szCmdLineUsed + 65536);
                         if (!(*lpCmdLineStart))
                         {
@@ -1218,7 +1218,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
     LPSTR lpLoad = NULL;
 
     // make a copy of the cmd line parameters (and remember its starting point) so we can grow it to add dir contents
-    int szCmdLineUsed = strlen(lpCmdLine);  // used portion of buffer, not including NULL
+    int szCmdLineUsed = (int)strlen(lpCmdLine);  // used portion of buffer, not including NULL
     int szCmdLine;          // size of buffer
     LPSTR lpCmdLineStart = NULL;   // beginning of buffer
     if (szCmdLineUsed)
@@ -6059,7 +6059,7 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
         strcpy(psz, OpenFileName.lpstrFile);
 
         // remember the folder the chosen file is in, so Browsing for a folder dialog can default to the same place
-        int c = strlen(psz) - 1;
+        int c = (int)strlen(psz) - 1;
         while (c >= 0 && psz[c] != '\\')
             c--;
         if (c >= 2)
