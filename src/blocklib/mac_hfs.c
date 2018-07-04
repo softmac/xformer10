@@ -15,6 +15,8 @@
 
 #include "precomp.h"
 
+#pragma warning (disable:4201) // nameless struct/union
+
 #pragma pack(1)
 
 typedef struct node_descriptor
