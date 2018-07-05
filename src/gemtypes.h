@@ -116,7 +116,8 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 //
 // maximum number of virtual machines !!! make this more dynamic
 //
-#define MAX_VM 8192
+#define MAX_VM 65536
+#define MAX_VM_MENUS 64 // no need to show thousands of them in the menus
 
 #define HCLOCKS 114         // in both NTSC & PAL
 
@@ -146,6 +147,7 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 int sTilesPerRow;           // how many tiles we are currently fitting per row
 extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
 POINT sTileSize;            // the size of the tiles, we have to pick one when mixing VM types
+int sMaxTiles;              // how many can possibly fit on all multimons when maximized?
 
 WORD fBrakes;               // run at full speed or emulated speed?
 WORD fBrakesSave;           // remember last state when pasting
@@ -359,10 +361,6 @@ typedef struct
 
     // Many global settings from Gemulator 98/99/2000 are now
     // VM specific so that things like boot disk don't conflict.
-    // For backward compatibility with Gemulator 98/99/2000
-    // the total size of szModel and flags must be 32 bytes
-
-    // 32 bits of unsigned values and flags
 
     int      fSound:1;      // enable sound output
     int      fJoystick:1;   // enable joystick support
@@ -382,7 +380,10 @@ typedef struct
     int      xQuickBaud:1;  // Acceleration: activate fast baud rates
     
     int      fEmuPAL:1;        // emulate PAL
-
+    
+    BOOL     fTimeTravelEnabled;    
+    BOOL     fTimeTravelFixed;  // using fixed points vs 13 second jumps
+    
     // UNUSED
     int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
     
@@ -426,10 +427,7 @@ typedef struct VMINST
     void *pPrivate;         // the private VM data to pass to the VM
     int iPrivateSize;       // size of the private data
 
-    void *pvBits;           // pointer to current bitmap
-    HBITMAP hbm;            // handle of bitmap
-    HBITMAP hbmOld;         // handle of previous bitmap
-    HDC  hdcMem;            // hdc of memory context
+    int iVisibleTile;       // which visible tile we are, that's the screen buffer to use
 
     BOOL fWantDebugger;     // EXEC failed, use it to figure out which VM wants the debugger
 
@@ -442,10 +440,6 @@ typedef struct VMINST
 } VMINST, *PVMINST;
 
 extern VMINST vrgvmi[MAX_VM];
-
-// use these at your own risk, the concept of a "current" one only applies to the main gem app (not thread safe to use these)
-//#define vvmi  (*(VMINST *)&vrgvmi[iVM])
-//#define vmCur (*vi.pvmCur)
 
 //
 // PROPS - global persistable data for the whole session
@@ -472,7 +466,6 @@ typedef struct
     BOOL     vRefresh : 8;    // monitor refresh rate
     int      swWindowState;    // were we restored? maximized? minimized?
     RECT     rectWinPos;    // saved window pos (want top left corner only)
-    BOOL     fTimeTravelFixed; // we chose a point to go back to, so stop saving periodically
     int      sWheelOffset;           // for scrolling tiles using the pad or touchscreen
     char     lpCurrentDir[MAX_PATH]; // the current directory the user has browsed to in the dialog boxes
 
@@ -605,13 +598,6 @@ typedef struct
     BYTE *pbFrameBuf;   // frame buffer in shared memory
     BYTE *pbAudioBuf;   // audio buffer in shared memory
 
-    // bit tiled bitmap
-    HANDLE hdcTiled;
-    HANDLE hbmTiled;
-    HANDLE hbmTiledOld;
-    void *pTiledBits;
-    BITMAPINFOHEADER bmiTiled;
-
     HANDLE hAccelTable; // accelerator table
     HWND hWnd;          // main window handle
     HMENU hMenu;        // pop-up menu handle
@@ -702,8 +688,18 @@ typedef struct
 extern INST vi;
 
 //
-// per-VM HW info needed by every VM type. STHW is a superset of this structure, not persisted
+// global graphics data about the bitmaps the tiles draw into, not persisted.
 //
+
+typedef struct
+{
+    HDC hdcMem;
+    HBITMAP hbmOld;
+    HBITMAP hbm;
+    void *pvBits;
+    BITMAPINFOHEADER bmi;
+} BMTILE;
+
 typedef struct _vmhw
 {
     // current graphics mode settings - mostly copied from the VMINFO the VM provides to us, but we
@@ -716,7 +712,6 @@ typedef struct _vmhw
     BOOL fMono;         // true if emulating mono (using the mono bitmap) - 2 colour only
     BOOL fGrey;         // true if grey scale
 
-    BITMAPINFOHEADER bmiHeader;
     union
     {
         RGBQUAD rgrgb[256];
@@ -724,10 +719,21 @@ typedef struct _vmhw
         ULONG    lrgb[256];
     };
 
+    // the one big tiled bitmap for when we do a single blit (tiled mode with a good video card)
+    HANDLE hdcTiled;
+    HANDLE hbmTiled;
+    HANDLE hbmTiledOld;
+    void *pTiledBits;
+    BITMAPINFOHEADER bmiTiled;
+
+    // the dcs and bitmaps for each individual visible tile (for non-tiled mode or tiled mode with a sucky video card)
+    // we keep around one structure for as many tiles as are possibly visible at once
+    BMTILE *pbmTile;
+    int numTiles;
+
 } VMHW;
 
-VMHW vvmhw[MAX_VM];
-
+VMHW vvmhw;
 
 //
 // Monitor types
@@ -1038,7 +1044,7 @@ extern char const * const rgszVM[];
 void CreateInstanceName(int, LPSTR);
 //void UpdateMenuCheckmarks();
 //BOOL FVerifyMenuOption();
-BOOL CreateNewBitmap(int);
+BOOL CreateNewBitmaps();
 BOOL CreateTiledBitmap();
 void GetPosFromTile(int, RECT *);
 void RenderBitmap();

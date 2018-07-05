@@ -128,7 +128,7 @@ void ShowCountDownLine(void *candy)
         RECT rectC = { 0 };
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
-            qch = vi.pTiledBits;
+            qch = vvmhw.pTiledBits;
             RECT rect;
             GetPosFromTile(iVM, &rect);
             GetClientRect(vi.hWnd, &rectC);
@@ -137,7 +137,8 @@ void ShowCountDownLine(void *candy)
             qch += rect.top * stride + rect.left;
         }
         else
-            qch = vrgvmi[iVM].pvBits;
+            // User screen buffer # = to which visible tile we are!
+            qch = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
         
         BYTE colfg;
 
@@ -157,7 +158,7 @@ void ShowCountDownLine(void *candy)
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
             qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else
@@ -1330,7 +1331,7 @@ void UpdateColourRegisters(void *candy)
     //pmg.colpm0 = pmg.colpm1 = pmg.colpm2 = pmg.colpm3 = 245;
 
     // in greyscale mode, just use luminences
-    if (vvmhw[iVM].fGrey)
+    if (FGreyFromBf(rgvm[iVM].bfMon))
     {
         sl.colpfX &= 0x0f0f0f0f;
         pmg.colpmX &= 0x0f0f0f0f;
@@ -1601,14 +1602,14 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
     if (v.fTiling && !v.fMyVideoCardSucks)
     {
-        qch0 = vi.pTiledBits;
+        qch0 = vvmhw.pTiledBits;
         GetClientRect(vi.hWnd, &rectC);
         // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
         int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
         qch0 += prectTile->top * stride + prectTile->left;
     }
     else
-        qch0 = vrgvmi[iVM].pvBits;
+        qch0 = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
 
     BYTE * __restrict qch = qch0;
 
@@ -1666,7 +1667,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
             qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else
@@ -2736,14 +2737,14 @@ if (sl.modelo < 2 || iTop > i)
     {
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
-            qch = vi.pTiledBits;
+            qch = vvmhw.pTiledBits;
             // We are being told what piece of the big bitmap we are writing into (sRectTile) and the size of the entire bitmap (sRectC)
             // as well as its stride (sStride).
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             qch += sRectTile[iVM].top * sStride + sRectTile[iVM].left;
         }
         else
-            qch = vrgvmi[iVM].pvBits;
+            qch = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
 
         // now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
         // tell them what range they are to fill in data for (start to stop)
@@ -2768,7 +2769,7 @@ if (sl.modelo < 2 || iTop > i)
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
             int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
             qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vi.pTiledBits) || qch >= (BYTE *)(vi.pTiledBits) + stride * rectC.bottom)
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
                 return;
         }
         else

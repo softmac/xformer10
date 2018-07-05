@@ -161,19 +161,6 @@ void DeleteVM(int iVM, BOOL fFixMenus)
 
         //ODS("Delete %d\n", iVM);
 
-        if (vrgvmi[iVM].hdcMem)
-        {
-            SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
-            DeleteDC(vrgvmi[iVM].hdcMem);
-            vrgvmi[iVM].hdcMem = NULL;
-        }
-
-        if (vrgvmi[iVM].hbm)
-        {
-            DeleteObject(vrgvmi[iVM].hbm);
-            vrgvmi[iVM].hbm = NULL;
-        }
-
         FUnInitVM(iVM);
         FUnInstallVM(iVM);
         vrgvmi[iVM].pPrivate = NULL;
@@ -308,11 +295,7 @@ BOOL CreateAllVMs()
 
             f = FALSE;
             if (FInitVM(vmNew))
-            {
                 f = ColdStart(vmNew);
-                if (f)
-                    f = CreateNewBitmap(vmNew);
-            }
             if (!f)
                 DeleteVM(vmNew, TRUE);
             else
@@ -424,10 +407,6 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 break;
             }
 
-            // !!! Monitor type is not persisted, so we need to re-generate it from the newly loaded rgvm structure
-            vvmhw[i].fMono = FMonoFromBf(rgvm[i].bfMon);
-            vvmhw[i].fGrey = FGreyFromBf(rgvm[i].bfMon);
-
             // what index, 0 based, is this bit?
             int c = -1, t = rgvm[i].bfHW;
             assert(t);
@@ -482,15 +461,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                 // make the screen buffer. If it's too soon (initial start up instead of Load through menu)
                 // it will happen when our window is created
                 if (f)
-                {
                     v.cVM++;
-                    if (f)
-                        f = CreateNewBitmap(i);
-                    if (!f)
-                        // with v.cVM upated, fValidVM set and the bitmap created, this function will now work
-                        // and it's needed to destroy the thread properly
-                        DeleteVM(i, TRUE);
-                }
             }
             if (!f)
             {

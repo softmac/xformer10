@@ -441,18 +441,21 @@ BOOL fDumpHW;
 BOOL TimeTravelInit(void *candy)
 {
     // Initialize Time Travel
-    for (unsigned i = 0; i < 3; i++)
-    {
-        if (!Time[i])
-            Time[i] = malloc(dwCandySize);
-        if (!Time[i])
-        {
-            TimeTravelFree(candy);
-            return FALSE;
-        }
-        _fmemset(Time[i], 0, dwCandySize);
-    }
 
+    if (rgvm[iVM].fTimeTravelEnabled && !Time[0])
+    {
+        for (unsigned i = 0; i < 3; i++)
+        {
+            if (!Time[i])
+                Time[i] = malloc(dwCandySize);
+            if (!Time[i])
+            {
+                TimeTravelFree(candy);
+                return FALSE;
+            }
+            _fmemset(Time[i], 0, dwCandySize);
+        }
+    }
     return TRUE;
 }
 
@@ -472,7 +475,8 @@ void TimeTravelFree(void *candy)
 BOOL TimeTravelFixPoint(void *candy)
 {
     // Turn on this feature if not on. This is not part of the VM save state, it's a GEM global, so it doesn't matter when we do it
-    v.fTimeTravelFixed = TRUE;
+    rgvm[iVM].fTimeTravelEnabled = TRUE;
+    rgvm[iVM].fTimeTravelFixed = TRUE;
 
     FixAllMenus(FALSE); // GEM might not know this happened
 
@@ -490,14 +494,22 @@ BOOL TimeTravelFixPoint(void *candy)
 BOOL TimeTravelPrepare(void *candy, BOOL fForce)
 {
     // we aren't saving periodically for the time being, we have a fixed point
-    if (v.fTimeTravelFixed && !fForce)
+    if (rgvm[iVM].fTimeTravelFixed && !fForce)
+        return TRUE;
+
+    // we apparently have just been turned on. So init and set an anchor point to now.
+    if (rgvm[iVM].fTimeTravelEnabled && !Time[0])
+    {
+        if (!TimeTravelInit(candy) || !TimeTravelReset(candy))
+            return FALSE;
+    }
+
+    // nothing to do
+    if (!rgvm[iVM].fTimeTravelEnabled)
         return TRUE;
 
     BOOL f = TRUE;
-
-    const ULONGLONG s5 = 29830 * 60 * 5;    // 5 seconds
-
-    // assumes we only get called when we are the current VM
+    const ULONGLONG s5 = NTSC_CLK * 5;    // 5 seconds
 
     ULONGLONG cCur = GetCyclesN();  // always use the same NTSC clock, it doesn't matter
     ULONGLONG cTest = cCur - ullTimeTravelTime;
@@ -507,7 +519,7 @@ BOOL TimeTravelPrepare(void *candy, BOOL fForce)
     {
         f = SaveStateAtari(candy);
 
-        if (!f || Time[cTimeTravelPos] == NULL)
+        if (!f)
             return FALSE;
 
         _fmemcpy(Time[cTimeTravelPos], candy, dwCandySize);
@@ -525,14 +537,23 @@ BOOL TimeTravelPrepare(void *candy, BOOL fForce)
     return f;
 }
 
-// Omega13 - go back in time 13 seconds
+// Omega13 - go back in time 13 seconds. If TT is not on, turn it on for next time
 //
 BOOL TimeTravel(void *candy)
 {
-    BOOL f = FALSE;
+    rgvm[iVM].fTimeTravelEnabled = TRUE;
 
-    if (Time[cTimeTravelPos] == NULL)
-        return FALSE;
+    FixAllMenus(FALSE); // GEM might not know this happened
+
+    // not on... turn it on for next time
+    if (!Time[0])
+    {
+        if (!TimeTravelInit(candy) || !TimeTravelReset(candy))
+            return FALSE;
+        return FALSE;   // we didn't go back in time, did we?
+    }
+
+    BOOL f = FALSE;
 
     // Two 5-second snapshots ago will be from 10-15 seconds back in time
 
@@ -560,6 +581,9 @@ BOOL TimeTravel(void *candy)
 //
 BOOL TimeTravelReset(void *candy)
 {
+    if (!rgvm[iVM].fTimeTravelEnabled)
+        return TRUE;    // don't fail, we'll quit the VM thinking something's wrong!
+
     // reset our clock to "have not saved any states yet"
     ullTimeTravelTime = GetCyclesN();
     cTimeTravelPos = 0;
@@ -569,6 +593,7 @@ BOOL TimeTravelReset(void *candy)
     // VERY common if you Ctrl-F10 to cold start, it's pretty much guaranteed to happen.
     // If we closed using ALT-F4 it will have saved the state that ALT is down
     // any other key can still stick, but that's less confusing
+    // !!! Doing this instead of poking the saved shift byte off like TTPrepare() interferes a bit more with the VM
     // !!! joystick arrows stick too, and that's annoying. Need FLUSHVMINPUT in fn table
     ControlKeyUp8(candy);
 
@@ -2137,6 +2162,16 @@ BOOL __cdecl UnInstallAtari(void *candy)
     return TRUE;
 }
 
+BOOL __cdecl UnmountAtariDisks(void *candy)
+{
+    int i;
+
+    for (i = 0; i < rgvm[iVM].ivdMac; i++)
+        UnmountAtariDisk(candy, i);
+
+    return TRUE;
+}
+
 // Initialize a VM. Either call this to create a default new instance and then ColdBoot it,
 //or call LoadState to restore a previous one, not both.
 //
@@ -2146,13 +2181,9 @@ BOOL __cdecl InitAtari(void *candy)
 
     rgvm[iVM].fCPUAuto = TRUE;
     rgvm[iVM].bfCPU = cpu6502;
-    rgvm[iVM].ivdMac = sizeof(rgvm[0].rgvd) / sizeof(VD);    // we only have 8, others have 9
+    rgvm[iVM].ivdMac = MAX_DRIVES; // sizeof(rgvm[0].rgvd) / sizeof(VD);    // although we have room for 8, and others have 9
 
     rgvm[iVM].bfMon = monColrTV;
-
-    // need to be kept in sync with bfMon
-    vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
-    vvmhw[iVM].fGrey = FGreyFromBf(rgvm[iVM].bfMon);
 
     // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
     // Install may have a preference and set this already, in which case, don't change it
@@ -2215,7 +2246,7 @@ BOOL __cdecl UninitAtari(void *candy)
         free(rgbSwapCart);
     rgbSwapCart = NULL;
 
-    UninitAtariDisks(candy);
+    UnmountAtariDisks(candy);
 
     return TRUE;
 }
@@ -2253,7 +2284,24 @@ BOOL __cdecl MountAtariDisk(void *candy, int i)
     return f;
 }
 
+// spin the motors back up, our VMs will be needed soon
 BOOL __cdecl InitAtariDisks(void *candy)
+{
+    candy;
+    // let the motors spin themselves up if we actually use the drive, otherwise save lots of time doing nothing yet!
+    return TRUE;
+}
+
+// spin the motors back down, our VM won't be needed for a bit
+BOOL __cdecl UninitAtariDisks(void *candy)
+{
+    for (int i = 0; i < rgvm[iVM].ivdMac; i++)
+        CloseDrive(candy, i);
+        
+    return TRUE;
+}
+
+BOOL __cdecl MountAtariDisks(void *candy)
 {
     int i;
     BOOL f;
@@ -2273,16 +2321,6 @@ BOOL __cdecl UnmountAtariDisk(void *candy, int i)
 
     if (pvd->dt == DISK_IMAGE)
         DeleteDrive(candy, i);
-
-    return TRUE;
-}
-
-BOOL __cdecl UninitAtariDisks(void *candy)
-{
-    int i;
-
-    for (i = 0; i < rgvm[iVM].ivdMac; i++)
-        UnmountAtariDisk(candy, i);
 
     return TRUE;
 }
@@ -2347,7 +2385,7 @@ BOOL __cdecl WarmbootAtari(void *candy)
     wCycle = 0;
     PSL = 0;
     wSIORTS = 0;    // stop avoiding printing in the monitor
-    v.fTimeTravelFixed = FALSE;   // start periodically saving again
+    rgvm[iVM].fTimeTravelFixed = FALSE;   // start periodically saving again
     fCartNeedsSwap = FALSE; // or else we'll fault trying to swap a bogus bank in
 
     // SIO init
@@ -2398,7 +2436,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
     if (mdXLXE == md800)
         ResetPIA(candy);
 
-	BOOL f = InitAtariDisks(candy);
+	BOOL f = MountAtariDisks(candy);
 
     if (!f)
         return FALSE;
@@ -2564,7 +2602,7 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
     // Now fix our non-persistable data
 
     // 1. rgDrives info about the attached drives
-    BOOL f = InitAtariDisks(candy);
+    BOOL f = MountAtariDisks(candy);
 
     // 2. If we were in the middle of reading a sector through SIO, restore that data
     if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x34 && rgSIO[1] == 0x52)

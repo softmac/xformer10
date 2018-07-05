@@ -416,7 +416,7 @@ ULONGLONG GetMs()
 //
 DWORD WINAPI VMThread(LPVOID l)
 {
-    int iV = (int)(LONGLONG)l;    // remember which visible tile # we are
+    int iV = (int)(LONGLONG)l;    // remember which visible tile # we are (used in non-tiled mode to write to the proper bitmap)
     
     while (1)
     {
@@ -452,27 +452,17 @@ void SacrificeVM()
     }
 }
 
-// Must be called every time the size of the window or the display changes, or sWheelOffset moves, or a VM is created or destroyed
-// Figure out which tiles are visible and set up that many threads
-//
-BOOL InitThreads()
+void UninitThreads()
 {
-    // if we saved space to make sure making VMs for all the tiles wouldn't run out of memory, free that as soon as we tile
-    if (pThreadReserve && v.fTiling)
-    {
-        free(pThreadReserve);
-        pThreadReserve = NULL;
-    }
-
-    //ODS("InitThreads\n");
-    BOOL fNeedFix = FALSE;
-
-ThreadTry:
-
     for (int ii = 0; ii < cThreads; ii++)
     {
         if (ThreadStuff[ii].hGoEvent)
         {
+            // let the VM close its file handles for a while and save resources
+            // it may have been deleted since we last used it
+            if (rgvm[ThreadStuff[ii].iThreadVM].fValidVM)
+                FUnInitDisksVM(ThreadStuff[ii].iThreadVM);
+
             // kill the thread executing this event before deleting any of its objects
             ThreadStuff[ii].fKillThread = TRUE;
             if (ThreadStuff[ii].hGoEvent)
@@ -499,13 +489,34 @@ ThreadTry:
     hDoneEvent = NULL;
 
     cThreads = 0;
+}
+
+// Must be called every time the size of the window or the display changes, or sWheelOffset moves, or a VM is created or destroyed
+// Figure out which tiles are visible and set up that many threads
+//
+BOOL InitThreads()
+{
+    // if we saved space to make sure making VMs for all the tiles wouldn't run out of memory, free that as soon as we tile
+    if (pThreadReserve && v.fTiling)
+    {
+        free(pThreadReserve);
+        pThreadReserve = NULL;
+    }
+
+    //ODS("InitThreads\n");
+    BOOL fNeedFix = FALSE;
+
+ThreadTry:
+
+    UninitThreads();
 
     if (v.cVM)
     {
         if (v.fTiling)
         {
             ThreadStuff = malloc(v.cVM * sizeof(ThreadStuffS));
-            memset(ThreadStuff, 0, sizeof(ThreadStuffS));
+            if (ThreadStuff)
+                memset(ThreadStuff, 0, sizeof(ThreadStuffS));
 
             hDoneEvent = malloc(v.cVM * sizeof(HANDLE));
             if (!ThreadStuff || !hDoneEvent)
@@ -547,6 +558,9 @@ ThreadTry:
                         ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
                         hDoneEvent[cThreads] = CreateEvent(NULL, FALSE, FALSE, NULL);
 
+                        // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
+                        FInitDisksVM(ThreadStuff[cThreads].iThreadVM);
+
 #pragma warning(push)
 #pragma warning(disable:4152) // function/data pointer conversion
                         // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
@@ -571,6 +585,9 @@ ThreadTry:
                                 CloseHandle(hDoneEvent[cThreads]);
                                 hDoneEvent[cThreads] = NULL;
                             }
+
+                            FUnInitDisksVM(ThreadStuff[cThreads].iThreadVM);
+
                             goto ThreadFail;
                         }
                         cThreads++;
@@ -623,6 +640,12 @@ ThreadTry:
 
                 ThreadStuff[x].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
                 hDoneEvent[x] = CreateEvent(NULL, FALSE, FALSE, NULL);
+                
+                // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
+                FInitDisksVM(ThreadStuff[x].iThreadVM);
+
+                // give this thread a buffer to use for the screen
+                vrgvmi[ThreadStuff[x].iThreadVM].iVisibleTile = x;
 
 #pragma warning(push)
 #pragma warning(disable:4152) // function/data pointer conversion
@@ -648,6 +671,9 @@ ThreadTry:
                         CloseHandle(hDoneEvent[x]);
                         hDoneEvent[x] = NULL;
                     }
+
+                    FUnInitDisksVM(ThreadStuff[x].iThreadVM);
+
                     goto ThreadFail;
                 }
                 cThreads++;
@@ -722,18 +748,28 @@ void CreateVMMenu()
     int zLast = -1;
     BOOL fOK = TRUE;
 
-    int iFound = 0;
+    int iFound = 0, iWhich = v.cVM - 1;
     for (z = MAX_VM - 1; z >= 0; z--)
     {
         // every valid VM goes in the list
         if (rgvm[z].fValidVM)
         {
+            // don't show more than 64 of them in the menu, that will run out of memory and be ridiculous, besides
+            if (iWhich >= MAX_VM_MENUS)
+            {
+                iWhich--;
+                continue;
+            }
+            
             // we're counting backwards, so the first one found goes in as IDM_VM1, the highest identifier.
             if (iFound == 0)
             {
                 mii.fMask = MIIM_STRING;
                 mii.dwTypeData = mNew;
-                CreateInstanceName(z, mNew);    // get a name for it
+                if (iWhich == MAX_VM_MENUS - 1)
+                    strcpy(mNew, "ETC.");  // no need to keep going
+                else
+                    CreateInstanceName(z, mNew);    // get a name for it
                 SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
                 CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
                 EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
@@ -820,7 +856,7 @@ void CreateVMMenu()
     int first = max(1, v.cVM);
     if (!fOK)
         first = 1;
-    for (z = max(1, v.cVM); z < MAX_VM; z++)
+    for (z = first; z < MAX_VM_MENUS; z++)
         DeleteMenu(vi.hMenu, IDM_VM1 - z, 0);
 
     if (v.cVM == 0 || !fOK)
@@ -871,13 +907,15 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, v.fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, inst >= 0 && rgvm[inst].fTimeTravelEnabled ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, inst >= 0 && rgvm[inst].fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0 && rgvm[inst].fEmuPAL) ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0 && rgvm[inst].fTimeTravelEnabled) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);  // auto-enables
+    EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0 && rgvm[inst].fTimeTravelEnabled) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLORMONO, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLDSTART, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_WARMSTART, (inst >= 0) ? 0 : MF_GRAYED);
@@ -923,6 +961,14 @@ void FixAllMenus(BOOL fVM)
 
         EnableMenuItem(vi.hMenu, IDM_PASTEASCII, 0);
         EnableMenuItem(vi.hMenu, IDM_PASTEATASCII, 0);
+
+        // the hot key only applies if it's off, the hot key won't turn it off
+        if (rgvm[inst].fTimeTravelEnabled)
+            sprintf(mNew, "&Enable Time Travel");
+        else
+            sprintf(mNew, "&Enable Time Travel\tPg Up");
+        SetMenuItemInfo(vi.hMenu, IDM_ENABLETIMETRAVEL, FALSE, &mii);
+
     }
 
     // no active instance
@@ -1256,11 +1302,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
                     f = FALSE;
                     if (FInitVM(iVM))
-                    {
                         f = ColdStart(iVM);
-                        if (f)
-                            f = CreateNewBitmap(iVM);
-                    }
                     if (f)
                     {
                         if (piFirstVM && *piFirstVM == -1)
@@ -1281,11 +1323,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                     rgvm[iVM].rgcart.fCartIn = TRUE;
                     f = FALSE;
                     if (FInitVM(iVM))
-                    {
                         f = ColdStart(iVM);
-                        if (f)
-                            f = CreateNewBitmap(iVM);
-                    }
                     if (f)
                     {
                         if (piFirstVM && *piFirstVM == -1)
@@ -1355,8 +1393,8 @@ void CalcIntegerScale(int iVM)
 
     for (sScale = 16; sScale > 1; sScale--)
     {
-        int x = rect.right - (vvmhw[iVM].xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
-        int y = rect.bottom - (vvmhw[iVM].ypix * sScale);
+        int x = rect.right - (vvmhw.xpix /* * vi.fXscale */ * sScale);  // !!! no longer using fXscale/fYscale
+        int y = rect.bottom - (vvmhw.ypix * sScale);
 
         if ((x >= 0) && (y >= 0))
             break;
@@ -1529,14 +1567,14 @@ int CALLBACK WinMain(
 #endif // ATARIST
 
     // before memory fragments itself loading all the VMs, reserve space for a number of threads and a big bitmap for tiles
-    // = a rough estimate number of tiles that fit on a screen. Thread stack space is 64K retail, 128K debug.
+    // = the maximum number of tiles that fit on a screen including all multiple monitors. Thread stack space is 64K retail, 128K debug.
     // Otherwise creating the threads will fail and we'll have to kill a bunch of VMs to make space for them, way more than
     // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
-    int nT = (GetSystemMetrics(SM_CXSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYSCREEN) / 240 + 1);
+    sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
 #ifdef NDEBUG
-    pThreadReserve = malloc(nT * 65536 * 6);        // 6x 64K stack space seems to be needed
+    pThreadReserve = malloc(sMaxTiles * 65536 * 6);        // 6x 64K stack space seems to be needed
 #else
-    pThreadReserve = malloc(nT * 65536 * 2 * 4);    // 4x 128K stack space seems to be needed
+    pThreadReserve = malloc(sMaxTiles * 65536 * 2 * 4);    // 4x 128K stack space seems to be needed
 #endif
 
     if (!pThreadReserve)
@@ -1572,6 +1610,10 @@ int CALLBACK WinMain(
 
     // Attach the menu, make the window visible; update its client area; and return "success"
     SetMenu(vi.hWnd, vi.hMenu);
+
+    // we have to create enough bitmaps as there might possibly be tiles
+    if (!CreateNewBitmaps())
+        return FALSE;
 
     //MessageBox(vi.hWnd, "HI", NULL, MB_OK);
 
@@ -1967,7 +2009,7 @@ int CALLBACK WinMain(
             }
             else
             {
-                max = sScale * vvmhw[v.iVM].xpix;
+                max = sScale * vvmhw.xpix;
             }
 
             if (sPan != 0 && abs(sPan) < max / 2)
@@ -2180,7 +2222,7 @@ int PrintScreenStats()
 #if !defined(NDEBUG)
         //printf("Screen: %4d,%4d  Full: %4d,%4d  sx,sy: %4d,%4d  dx,dy: %4d,%4d  xpix,ypix: %4d,%4d  scale: %d,%d\n",
         //GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), GetSystemMetrics(SM_CXFULLSCREEN),
-        //GetSystemMetrics(SM_CYFULLSCREEN), vi.sx, vi.sy, vi.dx, vi.dy, vvmhw[v.iVM].xpix, vvmhw[v.iVM].ypix, vi.fXscale, vi.fYscale);
+        //GetSystemMetrics(SM_CYFULLSCREEN), vi.sx, vi.sy, vi.dx, vi.dy, vvmhw.xpix, vvmhw.ypix, vi.fXscale, vi.fYscale);
 
         //printf("        windows position x = %d, y = %d, r = %d, b = %d\n",
         //v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
@@ -2269,123 +2311,147 @@ void ShowWindowsMouse()
 
 ****************************************************************************/
 
-BOOL SetBitmapColors(int iVM)
+BOOL SetBitmapColors()
 {
-    int i;
-
-    // this VM is always or currently in Monochrome mode (2-color)
-    if (rgvm[iVM].pvmi->planes == 1 || vvmhw[iVM].fMono)
+    for (int nT = 0; nT < sMaxTiles; nT++)
     {
-        if (vi.fInDirectXMode)
-            return TRUE;
+        int i;
 
-        if (v.fNoMono)
-            {
-            vvmhw[iVM].rgrgb[0].rgbRed =
-            vvmhw[iVM].rgrgb[0].rgbGreen =
-            vvmhw[iVM].rgrgb[0].rgbBlue = 0;
-            vvmhw[iVM].rgrgb[0].rgbReserved = 0;
-
-            for (i = 1; i < 256; i++)
-                {
-                vvmhw[iVM].rgrgb[i].rgbRed =
-                vvmhw[iVM].rgrgb[i].rgbGreen =
-                vvmhw[iVM].rgrgb[i].rgbBlue = 0xFF;
-                vvmhw[iVM].rgrgb[i].rgbReserved = 0;
-                }
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vvmhw[iVM].rgrgb);
-            }
-        else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 2,   vvmhw[iVM].rgrgb);
-
-        return TRUE;
-    }
-
-    // we are 8 bit colour
-    else if (rgvm[iVM].pvmi->planes == 8)
-    {
-
-#if 0
-        // but are on a B&W monitor that does shades of grey
-        if (rgvm[iVM].bfMon == monGreyTV)
-
-            for (i = 0; i < 256; i++)
-            {
-                vvmhw[iVM].rgrgb[i].rgbRed =
-                vvmhw[iVM].rgrgb[i].rgbGreen =
-                vvmhw[iVM].rgrgb[i].rgbBlue =
-                 (rgvm[iVM].pvmi->rgbRainbow[i*3] + (rgvm[iVM].pvmi->rgbRainbow[i*3] >> 2)) +
-                 (rgvm[iVM].pvmi->rgbRainbow[i*3+1]  + (rgvm[iVM].pvmi->rgbRainbow[i*3+1] >> 2)) +
-                 (rgvm[iVM].pvmi->rgbRainbow[i*3+2]  + (rgvm[iVM].pvmi->rgbRainbow[i*3+2] >> 2));
-                vvmhw[iVM].rgrgb[i].rgbReserved = 0;
-        }
-        else
-#endif
-        for (i = 0; i < 256; i++)
+        // this VM is always or currently in Monochrome mode (2-color)
+        // !!! this code currently won't trigger
+        if (vvmhw.planes == 1 || vvmhw.fMono)
         {
-            vvmhw[iVM].rgrgb[i].rgbRed = (rgvm[iVM].pvmi->rgbRainbow[i*3] << 2) | (rgvm[iVM].pvmi->rgbRainbow[i*3] >> 5);
-            vvmhw[iVM].rgrgb[i].rgbGreen = (rgvm[iVM].pvmi->rgbRainbow[i*3+1] << 2) | (rgvm[iVM].pvmi->rgbRainbow[i*3+1] >> 5);
-            vvmhw[iVM].rgrgb[i].rgbBlue = (rgvm[iVM].pvmi->rgbRainbow[i*3+2] << 2) | (rgvm[iVM].pvmi->rgbRainbow[i*3+2] >> 5);
-            vvmhw[iVM].rgrgb[i].rgbReserved = 0;
+            if (vi.fInDirectXMode)
+                return TRUE;
 
-#if 0
-            //
-            // test code to dump the 256-colour palette as YUV values
-            //
-
+            if (v.fNoMono)
             {
-            int Y, U, V;
-            int R = vvmhw[iVM].rgrgb[i].rgbRed;
-            int G = vvmhw[iVM].rgrgb[i].rgbGreen;
-            int B = vvmhw[iVM].rgrgb[i].rgbBlue;
+                vvmhw.rgrgb[0].rgbRed =
+                    vvmhw.rgrgb[0].rgbGreen =
+                    vvmhw.rgrgb[0].rgbBlue = 0;
+                vvmhw.rgrgb[0].rgbReserved = 0;
 
-            // from http://en.wikipedia.org/wiki/YUV/RGB_conversion_formulas
-
-            Y = 66*R + 129*G + 25*B;
-            U = 112*B - 74*G - 38*R;
-            V = 112*R - 94*G - 18*B;
-
-            Y >>= 8;
-            U >>= 8;
-            V >>= 8;
-
-            Y += 16;
-            U += 128;
-            V += 128;
-
-            printf("i = %3d, RGB=%3d,%3d,%3d, YUV = %3d,%3d,%3d\n",
-                i, R, G, B, Y, U, V);
+                for (i = 1; i < 256; i++)
+                {
+                    vvmhw.rgrgb[i].rgbRed =
+                        vvmhw.rgrgb[i].rgbGreen =
+                        vvmhw.rgrgb[i].rgbBlue = 0xFF;
+                    vvmhw.rgrgb[i].rgbReserved = 0;
+                }
+                SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 256, vvmhw.rgrgb);
             }
-#endif
+            else
+                SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 2, vvmhw.rgrgb);
+
+            return TRUE;
         }
 
-        if (vi.fInDirectXMode)
-            ;//FChangePaletteEntries(0, 256, vvmhw[iVM].rgrgb);
-        else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 0, 256, vvmhw[iVM].rgrgb);
-        return TRUE;
-    }
+        // we are 8 bit colour
+        else if (vvmhw.planes == 8)
+        {
 
-    // 16 colour VM
-    else if (rgvm[iVM].pvmi->planes == 4)
-    {
-        if (vi.fInDirectXMode)
-            ;// FChangePaletteEntries(10, 16, vvmhw[iVM].rgrgb);
-        else
-            SetDIBColorTable(vrgvmi[iVM].hdcMem, 10, 16, vvmhw[iVM].rgrgb);
-    }
+#if 0
+            // but are on a B&W monitor that does shades of grey
+            if (rgvm[iVM].bfMon == monGreyTV)
 
+                for (i = 0; i < 256; i++)
+                {
+                    vvmhw[iVM].rgrgb[i].rgbRed =
+                        vvmhw[iVM].rgrgb[i].rgbGreen =
+                        vvmhw[iVM].rgrgb[i].rgbBlue =
+                        (rgvm[iVM].pvmi->rgbRainbow[i * 3] + (rgvm[iVM].pvmi->rgbRainbow[i * 3] >> 2)) +
+                        (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 1] + (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 1] >> 2)) +
+                        (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 2] + (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 2] >> 2));
+                    vvmhw[iVM].rgrgb[i].rgbReserved = 0;
+                }
+            else
+#endif
+                // !!! uses ATARI rainbow
+                for (i = 0; i < 256; i++)
+                {
+                    vvmhw.rgrgb[i].rgbRed = (vmi800.rgbRainbow[i * 3] << 2) | (vmi800.rgbRainbow[i * 3] >> 5);
+                    vvmhw.rgrgb[i].rgbGreen = (vmi800.rgbRainbow[i * 3 + 1] << 2) | (vmi800.rgbRainbow[i * 3 + 1] >> 5);
+                    vvmhw.rgrgb[i].rgbBlue = (vmi800.rgbRainbow[i * 3 + 2] << 2) | (vmi800.rgbRainbow[i * 3 + 2] >> 5);
+                    vvmhw.rgrgb[i].rgbReserved = 0;
+
+#if 0
+                    //
+                    // test code to dump the 256-colour palette as YUV values
+                    //
+
+                    {
+                        int Y, U, V;
+                        int R = vvmhw[iVM].rgrgb[i].rgbRed;
+                        int G = vvmhw[iVM].rgrgb[i].rgbGreen;
+                        int B = vvmhw[iVM].rgrgb[i].rgbBlue;
+
+                        // from http://en.wikipedia.org/wiki/YUV/RGB_conversion_formulas
+
+                        Y = 66 * R + 129 * G + 25 * B;
+                        U = 112 * B - 74 * G - 38 * R;
+                        V = 112 * R - 94 * G - 18 * B;
+
+                        Y >>= 8;
+                        U >>= 8;
+                        V >>= 8;
+
+                        Y += 16;
+                        U += 128;
+                        V += 128;
+
+                        printf("i = %3d, RGB=%3d,%3d,%3d, YUV = %3d,%3d,%3d\n",
+                            i, R, G, B, Y, U, V);
+                    }
+#endif
+                }
+
+            if (vi.fInDirectXMode)
+                ;//FChangePaletteEntries(0, 256, vvmhw[iVM].rgrgb);
+            else
+                SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 256, vvmhw.rgrgb);
+            return TRUE;
+        }
+
+        // 16 colours
+        else if (vvmhw.planes == 4)
+        {
+            if (vi.fInDirectXMode)
+                ;// FChangePaletteEntries(10, 16, vvmhw.rgrgb);
+            else
+                SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 10, 16, vvmhw.rgrgb);
+        }
+    }
     return TRUE;
 }
 
+// free the big single tile bitmap resources
+void DestroyTiledBitmap()
+{
+    if (vvmhw.hdcTiled)
+    {
+        SelectObject(vvmhw.hdcTiled, vvmhw.hbmTiledOld);    // don't destroy it with our bitmap attached
+        DeleteDC(vvmhw.hdcTiled);
+    }
+
+    vvmhw.hbmTiledOld = NULL;
+    vvmhw.hdcTiled = NULL;
+
+    if (vvmhw.hbmTiled)
+    {
+        DeleteObject(vvmhw.hbmTiled);
+        vvmhw.hbmTiled = NULL;
+    }
+    vvmhw.pTiledBits = NULL;
+}
 
 // CreateTiledBitmap
 // Make a big bitmap for the tiles they all share so there's only 1 BitBlt
-// !!! Almost a duplicate of CreateNewBitmap, only differs by size of bitmap.
-// !!! TODO - don't both create a big bitmap plus 1,000 little bitmaps, only do one based on fMyVideoCardSucks
+// !!! Almost a duplicate of CreateNewBitmaps, only differs by size of bitmap.
 //
 BOOL CreateTiledBitmap()
 {
+    DestroyTiledBitmap();
+
     RECT rect;
     GetClientRect(vi.hWnd, &rect); // size of tiled window
     
@@ -2394,56 +2460,29 @@ BOOL CreateTiledBitmap()
     // and needs to finish)
     rect.right += 32;
 
-    if (vi.hbmTiledOld)
-    {
-        SelectObject(vi.hdcTiled, vi.hbmTiledOld);
-        vi.hbmTiledOld = NULL;
-    }
+    // !!! always chooses 256 color bitmap buffer of the right size
 
-    if (vi.hbmTiled)
-    {
-        DeleteObject(vi.hbmTiled);
-        vi.hbmTiled = NULL;
-    }
+    vvmhw.bmiTiled.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+    vvmhw.bmiTiled.biWidth = rect.right;
+    vvmhw.bmiTiled.biHeight = -rect.bottom;
+    vvmhw.bmiTiled.biPlanes = 1;
+    vvmhw.bmiTiled.biBitCount = 8;
+    vvmhw.bmiTiled.biCompression = BI_RGB;
+    vvmhw.bmiTiled.biSizeImage = 0;
+    vvmhw.bmiTiled.biXPelsPerMeter = 2834;
+    vvmhw.bmiTiled.biYPelsPerMeter = 2834;
+    vvmhw.bmiTiled.biClrUsed = 256;  // (vvmhw.planes == 8) ? 256 : 26; // !!! 4 bit colour gets 10 extra colours?
+    vvmhw.bmiTiled.biClrImportant = 0;
 
-    if (vi.hdcTiled)
-    {
-        DeleteDC(vi.hdcTiled);
-        vi.hdcTiled = NULL;
-    }
+    vvmhw.hbmTiled = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vvmhw.bmiTiled, DIB_RGB_COLORS, &(vvmhw.pTiledBits), NULL, 0);
+    vvmhw.hdcTiled = CreateCompatibleDC(vi.hdc);
 
-    // create a 256 color bitmap buffer
-
-    vi.bmiTiled.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
-    vi.bmiTiled.biWidth = rect.right;
-    vi.bmiTiled.biHeight = -rect.bottom;
-    vi.bmiTiled.biPlanes = 1;
-    vi.bmiTiled.biBitCount = 8;
-    vi.bmiTiled.biCompression = BI_RGB;
-    vi.bmiTiled.biSizeImage = 0;
-    vi.bmiTiled.biXPelsPerMeter = 2834;
-    vi.bmiTiled.biYPelsPerMeter = 2834;
-    vi.bmiTiled.biClrUsed = 256;  // (rgvm[iVM].pvmi->planes == 8) ? 256 : 26; // !!! 4 bit colour gets 10 extra colours?
-    vi.bmiTiled.biClrImportant = 0;
-
-    vi.hbmTiled = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vi.bmiTiled, DIB_RGB_COLORS, &(vi.pTiledBits), NULL, 0);
-    vi.hdcTiled = CreateCompatibleDC(vi.hdc);
-
-    if (vi.hbmTiled == NULL || vi.hdcTiled == NULL)
+    if (vvmhw.hbmTiled == NULL || vvmhw.hdcTiled == NULL)
         return FALSE;
 
-    vi.hbmTiledOld = SelectObject(vi.hdcTiled, vi.hbmTiled);
+    vvmhw.hbmTiledOld = SelectObject(vvmhw.hdcTiled, vvmhw.hbmTiled);
     
-    int j;
-    for (j = 0; j < MAX_VM; j++)
-        if (rgvm[j].fValidVM)
-            break;
-
-    if (j < MAX_VM)
-        SetBitmapColors(j);
-
-    // SetBitmapColors sets the colours in that VM's personal bitmap, now set it in the tiled bitmap
-    SetDIBColorTable(vi.hdcTiled, 0, 256, vvmhw[j].rgrgb);
+    SetDIBColorTable(vvmhw.hdcTiled, 0, 256, vvmhw.rgrgb);  // same colour table as the smaller tiles use
 
 #if 0   // TODO, this code assumes 800 VMs only and breaks otherwise
     // we may have moved the window, so we need to move the mouse capture rectangle too
@@ -2454,408 +2493,398 @@ BOOL CreateTiledBitmap()
     }
 #endif
 
-    InvalidateRect(vi.hWnd, NULL, 0);
+    //InvalidateRect(vi.hWnd, NULL, 0);
 
     return TRUE;
 }
 
-
-/****************************************************************************
-
-    FUNCTION: CreateNewBitmap
-
-    PURPOSE:  Create a bitmap of the appropriate size and colors
-
-    COMMENTS: Updates globals v
-
-****************************************************************************/
-
-// This creates the HDC that holds the screen image for the instance
-// We create one for every instance right away, so we can tile them!
-//
-BOOL CreateNewBitmap(int iVM)
+// free the small individual tile bitmap resources
+void DestroyBitmaps()
 {
-    RECT rect;
-    ULONG x;
-    ULONG y;
+    for (int nT = 0; nT < vvmhw.numTiles; nT++)
+    {
+        if (vvmhw.pbmTile[nT].hdcMem)
+        {
+            SelectObject(vvmhw.pbmTile[nT].hdcMem, vvmhw.pbmTile[nT].hbmOld);
+            DeleteDC(vvmhw.pbmTile[nT].hdcMem);
+        }
 
-    // Do we want to force mono? Otherwise use this VM's # of colours
-    if (vvmhw[iVM].fMono)
-        vvmhw[iVM].planes = 1;
+        vvmhw.pbmTile[nT].hbmOld = NULL;
+        vvmhw.pbmTile[nT].hdcMem = NULL;
+
+        if (vvmhw.pbmTile[nT].hbm)
+        {
+            DeleteObject(vvmhw.pbmTile[nT].hbm);
+            vvmhw.pbmTile[nT].hbm = NULL;
+        }
+        vvmhw.pbmTile[nT].pvBits = NULL;
+    }
+    vvmhw.numTiles = 0;
+    free(vvmhw.pbmTile);
+}
+
+// Create the bitmaps for all the possibly visible tiles.
+//
+BOOL CreateNewBitmaps()
+{
+    DestroyBitmaps();
+
+    // !!! Only makes bitmaps suitable for ATARI 8 bit VMs right now
+
+    vvmhw.fMono = FMonoFromBf(monColrTV);   // !!! 
+    vvmhw.fGrey = FGreyFromBf(monColrTV);
+
+    if (vvmhw.fMono)
+        vvmhw.planes = 1;
     else
-        vvmhw[iVM].planes = rgvm[iVM].pvmi->planes;
+        vvmhw.planes = vmi800.planes;   // !!!
 
-    vvmhw[iVM].xpix = rgvm[iVM].pvmi->uScreenX;
-    vvmhw[iVM].ypix = rgvm[iVM].pvmi->uScreenY;
+    vvmhw.xpix = vmi800.uScreenX;       // !!!
+    vvmhw.ypix = vmi800.uScreenY;       // !!!
 
-    // Now that we have a size, figure out the proper integer scale to display it.
-    CalcIntegerScale(iVM);
+    vvmhw.pbmTile = malloc(sMaxTiles * sizeof(BMTILE));
+    if (!vvmhw.pbmTile)
+        return FALSE;
 
-    //PrintScreenStats();
-    //printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n", vvmhw[iVM].xpix, vvmhw[iVM].ypix, v.fFullScreen, v.fZoomColor);
+    for (int nT = 0; nT < sMaxTiles; nT++)
+    {
+        // true monochrome? (2-color) this section will never execute for now
+        if (vvmhw.fMono && !v.fNoMono)
+        {
+            vvmhw.pbmTile[nT].bmi.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+            vvmhw.pbmTile[nT].bmi.biWidth = vvmhw.xpix;
+            vvmhw.pbmTile[nT].bmi.biHeight = -vvmhw.ypix;
+            vvmhw.pbmTile[nT].bmi.biPlanes = 1;
+            vvmhw.pbmTile[nT].bmi.biBitCount = 1;
+            vvmhw.pbmTile[nT].bmi.biCompression = BI_RGB;
+            vvmhw.pbmTile[nT].bmi.biSizeImage = 0;
+            vvmhw.pbmTile[nT].bmi.biXPelsPerMeter = 2834;
+            vvmhw.pbmTile[nT].bmi.biYPelsPerMeter = 2834;
+            vvmhw.pbmTile[nT].bmi.biClrUsed = 0 * 2;
+            vvmhw.pbmTile[nT].bmi.biClrImportant = 0 * 2;
+            vvmhw.lrgb[0] = 0;
+            vvmhw.lrgb[1] = 0x00FFFFFF;
+
+            //vi.cbScan = (ULONG)(min(GetSystemMetric(SM_CXSCREEN, (ULONG)vvmhw.xpix) / 8);
+        }
+        else
+        {
+            // create a 256 color bitmap buffer - here are the perf numbers
+            // 8 bit - 485%     16 bit - 325%       24 bit - 420%       32 bit - 485%
+            // I conclude 32 bit is native format but the reduced data copying allows an extra table lookup for 8 bit
+
+            vvmhw.pbmTile[nT].bmi.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
+            vvmhw.pbmTile[nT].bmi.biWidth = vvmhw.xpix;
+            vvmhw.pbmTile[nT].bmi.biHeight = -vvmhw.ypix;
+            vvmhw.pbmTile[nT].bmi.biPlanes = 1;
+            vvmhw.pbmTile[nT].bmi.biBitCount = 8;
+            vvmhw.pbmTile[nT].bmi.biCompression = BI_RGB;
+            vvmhw.pbmTile[nT].bmi.biSizeImage = 0;
+            vvmhw.pbmTile[nT].bmi.biXPelsPerMeter = 2834;
+            vvmhw.pbmTile[nT].bmi.biYPelsPerMeter = 2834;
+            vvmhw.pbmTile[nT].bmi.biClrUsed = (vvmhw.planes == 8) ? 256 : 26; // !!! 4 bit colour gets 10 extra colours?
+            vvmhw.pbmTile[nT].bmi.biClrImportant = 0;
+
+            //vi.cbScan = (ULONG)(min(GetSystemMetric(SM_CXSCREEN, (ULONG)vvmhw.xpix) / 8);
+        }
+
+        // Create offscreen bitmap
+
+        vvmhw.pbmTile[nT].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vvmhw.pbmTile[nT].bmi,
+            DIB_RGB_COLORS, &(vvmhw.pbmTile[nT].pvBits), NULL, 0);
+        vvmhw.pbmTile[nT].hdcMem = CreateCompatibleDC(vi.hdc);
+
+        if (vvmhw.pbmTile[nT].hbm == NULL || vvmhw.pbmTile[nT].hdcMem == NULL)
+            return FALSE;
+
+        vvmhw.pbmTile[nT].hbmOld = SelectObject(vvmhw.pbmTile[nT].hdcMem, vvmhw.pbmTile[nT].hbm);
+
+        SetBitmapColors();
+    }
+    return TRUE;
 
 #if defined(ATARIST) || defined(SOFTMAC)
-    // Interlock to make sure video thread is not touching memory
-    while (0 != InterlockedCompareExchange(&vi.fVideoEnabled, FALSE, TRUE))
-        Sleep(10);
+        //PrintScreenStats();
+        //printf("Entering CreateNewBitmap: new x,y = %4d,%4d, fFull=%d, fZoom=%d\n", vvmhw[iVM].xpix, vvmhw[iVM].ypix, v.fFullScreen, v.fZoomColor);
 
-    MarkAllPagesClean();
+        // Interlock to make sure video thread is not touching memory
+        while (0 != InterlockedCompareExchange(&vi.fVideoEnabled, FALSE, TRUE))
+            Sleep(10);
+
+        MarkAllPagesClean();
+
+        UninitDrawing(!v.fFullScreen);
+        vi.fInDirectXMode = FALSE;
 #endif
-
-    UninitDrawing(!v.fFullScreen);
-    vi.fInDirectXMode = FALSE;
-
-    if (vrgvmi[iVM].hbmOld)
-        {
-        SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbmOld);
-        vrgvmi[iVM].hbmOld = NULL;
-        }
-
-    if (vrgvmi[iVM].hbm)
-        {
-        DeleteObject(vrgvmi[iVM].hbm);
-        vrgvmi[iVM].hbm = NULL;
-        }
-
-    if (vrgvmi[iVM].hdcMem)
-        {
-        DeleteDC(vrgvmi[iVM].hdcMem);
-        vrgvmi[iVM].hdcMem = NULL;
-        }
-
-    // initialize to some initial state, will be set further below
-    // !!! that's a scary global, kill these!
-
-    vi.sx = vvmhw[iVM].xpix;
-    vi.sy = vvmhw[iVM].ypix;
-    vi.dx = 0;
-    vi.dy = 0;
-    vi.fXscale = 1; // global size multiplier currently ignored
-    vi.fYscale = 1;
 
 #ifdef ALLOW_DIRECTX
-    if (vi.hWnd && v.fFullScreen && vi.fHaveFocus)
+        vi.fXscale = 1; // global size multiplier currently ignored
+        vi.fYscale = 1;
+
+        //vi.sx = vvmhw[iVM].xpix;
+        //vi.sy = vvmhw[iVM].ypix;
+        //vi.dx = 0;
+        //vi.dy = 0;
+
+        if (vi.hWnd && v.fFullScreen && vi.fHaveFocus)
         {
-        // Try to switch to DirectX mode
+            // Try to switch to DirectX mode
 
-        int sx=640, sy=400, bpp=8;
+            int sx = 640, sy = 400, bpp = 8;
 
-Ltry16bit:
+        Ltry16bit:
 
-        if (vvmhw.xpix >= 640 && vvmhw.ypix >= 400)
+            if (vvmhw.xpix >= 640 && vvmhw.ypix >= 400)
             {
-            sx = vvmhw.xpix;
-            sy = vvmhw.ypix;
+                sx = vvmhw.xpix;
+                sy = vvmhw.ypix;
             }
 
-        if (FIsMac(vmCur.bfHW) && vvmhw.ypix == 342)
+            if (FIsMac(vmCur.bfHW) && vvmhw.ypix == 342)
             {
-            sx = 512;
-            sy = 384;
+                sx = 512;
+                sy = 384;
             }
 
-        if (FIsAtari8bit(vmCur.bfHW))
+            if (FIsAtari8bit(vmCur.bfHW))
             {
-            if (v.fZoomColor)
+                if (v.fZoomColor)
                 {
-                sx = 320;
-                sy = 240;
+                    sx = 320;
+                    sy = 240;
                 }
+                else
+                {
+                    sx = 512;
+                    sy = 384;
+                }
+            }
+
+        Ltryagain:
+
+#if !defined(NDEBUG)
+            printf("trying sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
+#endif
+
+            if ((v.fNoDDraw < 2) && InitDrawing(&sx, &sy, &bpp, vi.hWnd, 0))
+            {
+                char *pb;
+                int cb;
+
+                vi.sx = sx;
+                vi.sy = sy;
+
+                // printf("succeeded sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
+
+                pb = (bpp == 8) && LockSurface(&cb);
+
+                if (pb)
+                {
+#if !defined(NDEBUG)
+                    printf("locked sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
+#endif
+
+                    UnlockSurface();
+                    ClearSurface();
+                    vi.fInDirectXMode = TRUE;
+    }
+}
             else
-                {
-                sx = 512;
-                sy = 384;
-                }
-            }
-
-Ltryagain:
-
-#if !defined(NDEBUG)
-        printf("trying sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
-#endif
-
-        if ((v.fNoDDraw < 2) && InitDrawing(&sx,&sy,&bpp,vi.hWnd,0))
             {
-            char *pb;
-            int cb;
-
-            vi.sx = sx;
-            vi.sy = sy;
-
-            // printf("succeeded sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
-
-            pb = (bpp == 8) && LockSurface(&cb);
-
-            if (pb)
+                if ((sx <= 320) && (sy < 240))
                 {
-#if !defined(NDEBUG)
-                printf("locked sx=%d sy=%d bpp=%d\n", sx, sy, bpp);
-#endif
-
-                UnlockSurface();
-                ClearSurface();
-                vi.fInDirectXMode = TRUE;
-                }
-            }
-        else
-            {
-            if ((sx <= 320) && (sy < 240))
-                {
-                sy = 240;
-                goto Ltryagain;
+                    sy = 240;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 512) && (sy < 384))
+                if ((sx <= 512) && (sy < 384))
                 {
-                sx = 512;
-                sy = 384;
-                goto Ltryagain;
+                    sx = 512;
+                    sy = 384;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 640) && (sy < 400))
+                if ((sx <= 640) && (sy < 400))
                 {
-                sx = 640;
-                sy = 400;
-                goto Ltryagain;
+                    sx = 640;
+                    sy = 400;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 640) && (sy < 480))
+                if ((sx <= 640) && (sy < 480))
                 {
-                sx = 640;
-                sy = 480;
-                goto Ltryagain;
+                    sx = 640;
+                    sy = 480;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 800) && (sy < 512))
+                if ((sx <= 800) && (sy < 512))
                 {
-                sx = 800;
-                sy = 512;
-                goto Ltryagain;
+                    sx = 800;
+                    sy = 512;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 800) && (sy < 600))
+                if ((sx <= 800) && (sy < 600))
                 {
-                sx = 800;
-                sy = 600;
-                goto Ltryagain;
+                    sx = 800;
+                    sy = 600;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 1024) && (sy < 768))
+                if ((sx <= 1024) && (sy < 768))
                 {
-                sx = 1024;
-                sy = 768;
-                goto Ltryagain;
+                    sx = 1024;
+                    sy = 768;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 1152) && (sy < 864))
+                if ((sx <= 1152) && (sy < 864))
                 {
-                sx = 1152;
-                sy = 864;
-                goto Ltryagain;
+                    sx = 1152;
+                    sy = 864;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 1280) && (sy < 1024))
+                if ((sx <= 1280) && (sy < 1024))
                 {
-                sx = 1280;
-                sy = 1024;
-                goto Ltryagain;
+                    sx = 1280;
+                    sy = 1024;
+                    goto Ltryagain;
                 }
 
-            // careful, this is a special case because X grows, y is fixed
+                // careful, this is a special case because X grows, y is fixed
 
-            if ((sx < 1600) && (sy <= 1024))
+                if ((sx < 1600) && (sy <= 1024))
                 {
-                sx = 1600;
-                sy = 1024;
-                goto Ltryagain;
+                    sx = 1600;
+                    sy = 1024;
+                    goto Ltryagain;
                 }
 
-            if ((sx <= 1600) && (sy < 1200))
+                if ((sx <= 1600) && (sy < 1200))
                 {
-                sx = 1600;
-                sy = 1200;
-                goto Ltryagain;
+                    sx = 1600;
+                    sy = 1200;
+                    goto Ltryagain;
                 }
 
-            // if we've exhausted all the modes, maybe the card can't do
-            // 256 color mode (3Dlabs cards!), try higher bit depths
+                // if we've exhausted all the modes, maybe the card can't do
+                // 256 color mode (3Dlabs cards!), try higher bit depths
 
-            if (bpp < 32)
+                if (bpp < 32)
                 {
-                sx=640;
-                sy=400;
-                bpp += 8;
-                goto Ltry16bit;
+                    sx = 640;
+                    sy = 400;
+                    bpp += 8;
+                    goto Ltry16bit;
                 }
 
-            // v.fFullScreen = FALSE;
+                // v.fFullScreen = FALSE;
             }
         }
-#endif
 
-    x = GetSystemMetrics(SM_CXSCREEN);
-    y = GetSystemMetrics(SM_CYSCREEN);
+        x = GetSystemMetrics(SM_CXSCREEN);
+        y = GetSystemMetrics(SM_CYSCREEN);
 
 #if !defined(NDEBUG)
-    PrintScreenStats();
+        PrintScreenStats();
 
-    if (vi.fInDirectXMode)
-        printf("CreateNewBitmap after DirectX mode change, x = %d, y = %d\n", x, y);
+        if (vi.fInDirectXMode)
+            printf("CreateNewBitmap after DirectX mode change, x = %d, y = %d\n", x, y);
 #endif
 
-    if (!vi.fInDirectXMode)
-    {
-        // very wide (e.g. 640x200) double the height
-        // to maintain a proper aspect ratio
-
-        int scan_double = ((vvmhw[iVM].xpix) >= (vvmhw[iVM].ypix * 3)) ? 2 : 1;
-
-#if 0
-        if (v.fZoomColor || v.fFullScreen)
+        if (!vi.fInDirectXMode)
         {
-        // now keep increasing the zoom until it doesn't fit
+            // very wide (e.g. 640x200) double the height
+            // to maintain a proper aspect ratio
 
-        while ((vvmhw[iVM].xpix * (vi.fXscale + 1) <= x) && (vvmhw[iVM].ypix * scan_double * (vi.fYscale + 1) <= y))
+            int scan_double = ((vvmhw[iVM].xpix) >= (vvmhw[iVM].ypix * 3)) ? 2 : 1;
+
+            if (v.fZoomColor || v.fFullScreen)
             {
-            vi.fXscale++;
-            vi.fYscale++;
+                // now keep increasing the zoom until it doesn't fit
+
+                while ((vvmhw[iVM].xpix * (vi.fXscale + 1) <= x) && (vvmhw[iVM].ypix * scan_double * (vi.fYscale + 1) <= y))
+                {
+                    vi.fXscale++;
+                    vi.fYscale++;
+                }
             }
+
+            vi.fYscale *= (char)scan_double; // won't overflow?
+
+            vi.sx = vvmhw[iVM].xpix /* * vi.fXscale */;
+            vi.sy = vvmhw[iVM].ypix /* * vi.fYscale */;
         }
-#endif
 
-        vi.fYscale *= (char)scan_double; // won't overflow?
+        //FCreateOurPalette();
 
-        vi.sx = vvmhw[iVM].xpix /* * vi.fXscale */;
-        vi.sy = vvmhw[iVM].ypix /* * vi.fYscale */;
-    }
+        // PrintScreenStats(); printf("Entering CreateNewBitmap: leaving critical section\n");
 
-    // true monochrome? (2-color)
-    if (vvmhw[iVM].fMono && !v.fNoMono)
-    {
-        vvmhw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
-        vvmhw[iVM].bmiHeader.biWidth = vvmhw[iVM].xpix;
-        vvmhw[iVM].bmiHeader.biHeight = -vvmhw[iVM].ypix;
-        vvmhw[iVM].bmiHeader.biPlanes = 1;
-        vvmhw[iVM].bmiHeader.biBitCount = 1;
-        vvmhw[iVM].bmiHeader.biCompression = BI_RGB;
-        vvmhw[iVM].bmiHeader.biSizeImage = 0;
-        vvmhw[iVM].bmiHeader.biXPelsPerMeter = 2834;
-        vvmhw[iVM].bmiHeader.biYPelsPerMeter = 2834;
-        vvmhw[iVM].bmiHeader.biClrUsed = 0*2;
-        vvmhw[iVM].bmiHeader.biClrImportant = 0*2;
-        vvmhw[iVM].lrgb[0] = 0;
-        vvmhw[iVM].lrgb[1] = 0x00FFFFFF;
+        v.rectWinPos = rectSav; // restore saved window position
 
-        vi.cbScan = (ULONG)(min(x, (ULONG)vvmhw[iVM].xpix) / 8);
-    }
-    else
-    {
-        // create a 256 color bitmap buffer - here are the perf numbers
-        // 8 bit - 485%     16 bit - 325%       24 bit - 420%       32 bit - 485%
-        // I conclude 32 bit is native format but the reduced data copying allows an extra table lookup for 8 bit
+        SetWindowPos(vi.hWnd, HWND_NOTOPMOST, v.rectWinPos.left, v.rectWinPos.top, 0, 0,
+            SWP_NOACTIVATE | SWP_NOSIZE);
 
-        vvmhw[iVM].bmiHeader.biSize = sizeof(BITMAPINFOHEADER) /* +sizeof(RGBQUAD)*2 */;
-        vvmhw[iVM].bmiHeader.biWidth = vvmhw[iVM].xpix;
-        vvmhw[iVM].bmiHeader.biHeight = -vvmhw[iVM].ypix;
-        vvmhw[iVM].bmiHeader.biPlanes = 1;
-        vvmhw[iVM].bmiHeader.biBitCount = 8;
-        vvmhw[iVM].bmiHeader.biCompression = BI_RGB;
-        vvmhw[iVM].bmiHeader.biSizeImage = 0;
-        vvmhw[iVM].bmiHeader.biXPelsPerMeter = 2834;
-        vvmhw[iVM].bmiHeader.biYPelsPerMeter = 2834;
-        vvmhw[iVM].bmiHeader.biClrUsed = (rgvm[iVM].pvmi->planes == 8) ? 256 : 26; // !!! 4 bit colour gets 10 extra colours?
-        vvmhw[iVM].bmiHeader.biClrImportant = 0;
+        //        printf("CreateNewBitmap setting windows position to x = %d, y = %d, r = %d, b = %d\n",
+        //             v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
 
-        vi.cbScan = (ULONG)(min(x, (ULONG)vvmhw[iVM].xpix));
-    }
+        GetClientRect(vi.hWnd, &rect);
 
-    // Create offscreen bitmap
-
-    vrgvmi[iVM].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vvmhw[iVM].bmiHeader,
-        DIB_RGB_COLORS, &(vrgvmi[iVM].pvBits), NULL, 0);
-    vrgvmi[iVM].hdcMem = CreateCompatibleDC(vi.hdc);
-
-    if (vrgvmi[iVM].hbm == NULL || vrgvmi[iVM].hdcMem == NULL)
-        return FALSE;
-    
-    vrgvmi[iVM].hbmOld = SelectObject(vrgvmi[iVM].hdcMem, vrgvmi[iVM].hbm);
-
-    SetBitmapColors(iVM);
-    //FCreateOurPalette();
-
-// PrintScreenStats(); printf("Entering CreateNewBitmap: leaving critical section\n");
-
-#if 0
-    v.rectWinPos = rectSav; // restore saved window position
-
-    SetWindowPos(vi.hWnd, HWND_NOTOPMOST, v.rectWinPos.left, v.rectWinPos.top, 0, 0,
-        SWP_NOACTIVATE | SWP_NOSIZE);
-
-//        printf("CreateNewBitmap setting windows position to x = %d, y = %d, r = %d, b = %d\n",
-//             v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
-
-    GetClientRect(vi.hWnd, &rect);
-
-    if ((rect.right < vvmhw[iVM].xpix) ||  (rect.bottom < vvmhw[iVM].ypix))
-    {
-        // This is in case WM_MIXMAXINFO is not issued on too small a window
-
-        SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix,
-            SWP_NOACTIVATE | SWP_NOMOVE);
-    }
-
-    if ((v.rectWinPos.left < -100) || (v.rectWinPos.top < -100))
-        if (!IsIconic(vi.hWnd))
+        if ((rect.right < vvmhw[iVM].xpix) || (rect.bottom < vvmhw[iVM].ypix))
         {
+            // This is in case WM_MIXMAXINFO is not issued on too small a window
+
+            SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix,
+                SWP_NOACTIVATE | SWP_NOMOVE);
+        }
+
+        if ((v.rectWinPos.left < -100) || (v.rectWinPos.top < -100))
+            if (!IsIconic(vi.hWnd))
+            {
 #if 1 // def QQQ
-            SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                SWP_NOACTIVATE | SWP_NOSIZE);
+                SetWindowPos(vi.hWnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                    SWP_NOACTIVATE | SWP_NOSIZE);
 #endif
-        }
-#endif
+            }
 
-    if (vi.fInDirectXMode)
-    {
-        // if in full screen mode, force the Windows mouse off
-
-        vi.fGEMMouse = vi.fVMCapture;
-
-        // in full screen mode, the window is the whole screen
-
-        vi.sx = GetSystemMetrics(SM_CXSCREEN);
-        vi.sy = GetSystemMetrics(SM_CYSCREEN);
-    }
-
-    // screen mode is now set, window size is set, zoom is set,
-    // so we can determine the x,y offset needed to center the display
-    // output in the window.
-    // works for both windowed and full screen modes since sx,sy are
-    // the window size
-
-    GetClientRect(vi.hWnd, &rect);
-
-    //printf("cnbm: client rect = %d, %d, %d, %d\n", rect.top, rect.left, rect.right, rect.bottom);
-
-    vi.sx = rect.right;
-    vi.sy = rect.bottom;
-
-    vi.dx = (vi.sx - (vvmhw[iVM].xpix /* * vi.fXscale */)) / 2;
-    vi.dy = (vi.sy - (vvmhw[iVM].ypix /* * vi.fYscale */)) / 2;
-
-    // we may have moved the window, so we need to move the mouse capture rectangle too
-
-    if (rgvm[iVM].pvmi->fUsesMouse && vi.fGEMMouse)
+        if (vi.fInDirectXMode)
         {
-        ShowWindowsMouse();
-        ShowGEMMouse();
+            // if in full screen mode, force the Windows mouse off
+
+            vi.fGEMMouse = vi.fVMCapture;
+
+            // in full screen mode, the window is the whole screen
+
+            vi.sx = GetSystemMetrics(SM_CXSCREEN);
+            vi.sy = GetSystemMetrics(SM_CYSCREEN);
         }
 
-    // PrintScreenStats(); printf("Entering CreateNewBitmap: after window adjustments\n");
+        // screen mode is now set, window size is set, zoom is set,
+        // so we can determine the x,y offset needed to center the display
+        // output in the window.
+        // works for both windowed and full screen modes since sx,sy are
+        // the window size
 
-    // DisplayStatus();
-    // Sleep(20);   // give other windows a chance to redraw
+        GetClientRect(vi.hWnd, &rect);
 
-    InvalidateRect(vi.hWnd, NULL, 0);
+        //printf("cnbm: client rect = %d, %d, %d, %d\n", rect.top, rect.left, rect.right, rect.bottom);
+
+        vi.sx = rect.right;
+        vi.sy = rect.bottom;
+
+        vi.dx = (vi.sx - (vvmhw[iVM].xpix /* * vi.fXscale */)) / 2;
+        vi.dy = (vi.sy - (vvmhw[iVM].ypix /* * vi.fYscale */)) / 2;
+
+        // we may have moved the window, so we need to move the mouse capture rectangle too
+
+        if (rgvm[iVM].pvmi->fUsesMouse && vi.fGEMMouse)
+        {
+            ShowWindowsMouse();
+            ShowGEMMouse();
+        }
+    }
 
 #if defined(ATARIST) || defined(SOFTMAC)
     MarkAllPagesDirty();
@@ -2864,8 +2893,9 @@ Ltryagain:
 
     vi.fVideoEnabled = TRUE;
 
-// PrintScreenStats(); printf("Entering CreateNewBitmap: done!\n");
     return TRUE;
+#endif
+
 }
 
 //
@@ -2875,7 +2905,6 @@ Ltryagain:
 BOOL FToggleMonitor(int iVM)
 {
     ULONG bfSav = rgvm[iVM].bfMon;
-    int i;
 
     // loop through all the bits in wfMon trying to find a different bit
 
@@ -2895,11 +2924,14 @@ BOOL FToggleMonitor(int iVM)
     if (bfSav == rgvm[iVM].bfMon)
         return FALSE;
 
+    return TRUE;
+
 #if 0
+    // we only support grey scale which just drops the chroma, we don't support mono and needing to swtich # of planes yet
+
     // We need to guard the video critical section since
     // we are modifying the global vvmhw.fMono which both
     // the pallete and redraw routines depend on.
-#endif
 
     vvmhw[iVM].rgrgb[0].rgbRed = 255;
     vvmhw[iVM].rgrgb[0].rgbGreen = 255;
@@ -2916,7 +2948,6 @@ BOOL FToggleMonitor(int iVM)
 
     vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
     vvmhw[iVM].fGrey = FGreyFromBf(rgvm[iVM].bfMon);
-
     SetBitmapColors(v.iVM);
 //    FCreateOurPalette();
 
@@ -2925,12 +2956,14 @@ BOOL FToggleMonitor(int iVM)
 #if defined(ATARIST) || defined(SOFTMAC)
     MarkAllPagesDirty();
 #endif
-
     return TRUE;
+#endif
 }
 
 //
-// Render the DIB section to the current window's device context
+// Render the screen. It may consist of tiles, or it may be stretched, or it may be preserving aspect ratio.
+// If tiled, your video card may suck (many blits from different off screen buffers) or not (one big blit)
+// If not tiled, there may be 1 or 2 VMs visible (roulette)
 //
 void RenderBitmap()
 {
@@ -2945,7 +2978,7 @@ void RenderBitmap()
         return;
     }
 
- renders++;
+    renders++;
 
 #if !defined(NDEBUG)
     //  printf("rnb: rect = %d %d %d %d\n", rect.left, rect.top, rect.right, rect.bottom);
@@ -2963,7 +2996,7 @@ void RenderBitmap()
             while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
                 iVM++;
 
-            int x, y, fDone = iVM;
+            int x, y, fDone = iVM, nT = 0;
             BOOL fBlack = FALSE;
 
             // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
@@ -2982,30 +3015,32 @@ void RenderBitmap()
                     if (y + sTileSize.y > 0 && !fBlack)
                     {
                         if (sVM == (int)iVM)
-                        {
+                        { 
                             // border around the one we're hovering over
                             int xw = sTileSize.x, yw = sTileSize.y;
-                            BitBlt(vi.hdc, x, y, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                            BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                            BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vrgvmi[iVM].hdcMem, 5, 5, SRCCOPY);
-                            BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
-                            BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vrgvmi[iVM].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x, y, xw, 5, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vvmhw.pbmTile[nT].hdcMem, 5, 5, SRCCOPY);
+                            BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
+                            BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
                         }
                         else
-                            BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, SRCCOPY);
+                            BitBlt(vi.hdc, x, y, vvmhw.xpix, vvmhw.ypix, vvmhw.pbmTile[nT].hdcMem, 0, 0, SRCCOPY);
                     }
                     else if (fBlack)
-                        BitBlt(vi.hdc, x, y, vvmhw[iVM].xpix, vvmhw[iVM].ypix, vrgvmi[iVM].hdcMem, 0, 0, BLACKNESS);
+                        BitBlt(vi.hdc, x, y, vvmhw.xpix, vvmhw.ypix, vvmhw.pbmTile[nT].hdcMem, 0, 0, BLACKNESS);
 
                     //StretchBlt(vi.hdc, x, y,
                     //    (vvmhw[iVM].xpix * vi.fXscale), (vvmhw[iVM].ypix * vi.fYscale),
-                    //    vrgvmi[iVM].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
+                    //    vvmhw.pbmTile[nT].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
 
                     // advance to the next valid bitmap
                     do
                     {
                         iVM = (iVM + 1) % MAX_VM;
-                    } while (vrgvmi[iVM].hdcMem == NULL);
+                    } while (!rgvm[iVM].fValidVM);
+
+                    nT++;   // keep track of visible tile #
 
                     // we've painted them all, now just black for the rest
                     if (fDone == (int)iVM)
@@ -3034,7 +3069,7 @@ void RenderBitmap()
                     ycur = abs(rectB.top);                   // top of tile off screen
 
                 // get a pointer to the top left of the current tile
-                BYTE *ptb = (BYTE *)(vi.pTiledBits);
+                BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
                 int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
                 ptb += rectB.top * stride + rectB.left;
 
@@ -3070,7 +3105,7 @@ void RenderBitmap()
                 // now black out the places where there are no tiles
 
                 // get a pointer to the top right of the last tile
-                BYTE *ptb = (BYTE *)(vi.pTiledBits);
+                BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
                 int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
                 ptb += ptBlack.y * stride + ptBlack.x;
 
@@ -3086,7 +3121,7 @@ void RenderBitmap()
 
                 // black out any bottom blank rows (if VMs are deleted, that could make some)
                 ycur = ptBlack.y + 240;
-                ptb = (BYTE *)(vi.pTiledBits);
+                ptb = (BYTE *)(vvmhw.pTiledBits);
                 ptb += (ptBlack.y + 240) * stride;
                 while (ycur < rect.bottom)
                 {
@@ -3097,8 +3132,8 @@ void RenderBitmap()
             }
 
             // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
-            if (vi.hdcTiled)
-                BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vi.hdcTiled, 0, 0, SRCCOPY);
+            if (vvmhw.hdcTiled)
+                BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vvmhw.hdcTiled, 0, 0, SRCCOPY);
         }
     }
 
@@ -3106,8 +3141,8 @@ void RenderBitmap()
     else if (v.fZoomColor)
     {
         // roulette mode position of main tile - sPan is bounded to client rect
-        int xp = vvmhw[iVM].xpix;
-        int yp = vvmhw[iVM].ypix;
+        int xp = vvmhw.xpix;
+        int yp = vvmhw.ypix;
         int rate = sPan * xp / rect.right;
         int dx = max(0, sPan); // max(0, min(sPan, rect.right));
         int dw = rect.right - abs(sPan);
@@ -3116,7 +3151,9 @@ void RenderBitmap()
         
         //ODS("sPan=%d, Dest=(%d,%d) Src=(%d,%d)\n", sPan, dx, dw, sx, sw);
 
-        StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[iVM].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        // The main VM is using off screen buffer #0. The one being rouletted on is using #1
+
+        StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vvmhw.pbmTile[0].hdcMem, sx, 0, sw, yp, SRCCOPY);
 
         // show the VM to the left (sPan will be zero if there's only 1 VM)
         if (sPan > 0)
@@ -3125,7 +3162,7 @@ void RenderBitmap()
             dx = 0;
             sx = sw;
             sw = xp - sw;
-            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[sVMPrev].hdcMem, sx, 0, sw, yp, SRCCOPY);
+            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vvmhw.pbmTile[1].hdcMem, sx, 0, sw, yp, SRCCOPY);
         }
         
         // show the VM to the right
@@ -3135,7 +3172,7 @@ void RenderBitmap()
             dw = 0 - sPan;
             sw = xp - sw;
             sx = 0;
-            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vrgvmi[sVMNext].hdcMem, sx, 0, sw, yp, SRCCOPY);
+            StretchBlt(vi.hdc, dx, rect.top, dw, rect.bottom, vvmhw.pbmTile[1].hdcMem, sx, 0, sw, yp, SRCCOPY);
         }
     }
     
@@ -3144,16 +3181,16 @@ void RenderBitmap()
     {
         int x, y;
 
-        x = rect.right - (vvmhw[iVM].xpix * sScale);
-        y = rect.bottom - (vvmhw[iVM].ypix * sScale);
-        int xp = vvmhw[iVM].xpix;
-        int yp = vvmhw[iVM].ypix;
+        x = rect.right - (vvmhw.xpix * sScale);
+        y = rect.bottom - (vvmhw.ypix * sScale);
+        int xp = vvmhw.xpix;
+        int yp = vvmhw.ypix;
 
         // Why did we not used to have to do this? Only necessary when coming out of zoom?
-        StretchBlt(vi.hdc, 0, 0, x / 2, rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2, 0, x / 2 + (xp * sScale), y / 2, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2, y / 2 + (yp * sScale), x / 2 + (xp * sScale), rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
-        StretchBlt(vi.hdc, x / 2 + (xp * sScale), 0, rect.right, rect.bottom, vrgvmi[iVM].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, 0, 0, x / 2, rect.bottom, vvmhw.pbmTile[0].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2, 0, x / 2 + (xp * sScale), y / 2, vvmhw.pbmTile[0].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2, y / 2 + (yp * sScale), x / 2 + (xp * sScale), rect.bottom, vvmhw.pbmTile[0].hdcMem, 0, 0, 0, 0, BLACKNESS);
+        StretchBlt(vi.hdc, x / 2 + (xp * sScale), 0, rect.right, rect.bottom, vvmhw.pbmTile[0].hdcMem, 0, 0, 0, 0, BLACKNESS);
 
         // main routlette tile position - sPan is bounded by xp * sScale
         int dx = max(0, sPan);
@@ -3161,7 +3198,9 @@ void RenderBitmap()
         int sx = max(0, 0 - sPan / sScale);
         int sw = xp - abs(sPan) / sScale;
 
-        StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[iVM].hdcMem, sx, 0, sw, yp, SRCCOPY);
+        // The main VM is using off screen buffer #0. The one being rouletted on is using #1
+
+        StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vvmhw.pbmTile[0].hdcMem, sx, 0, sw, yp, SRCCOPY);
 
         // show the VM to the left (sPan will be zero if there's only 1 VM)
         if (sPan > 0)
@@ -3170,7 +3209,7 @@ void RenderBitmap()
             dx = 0;
             sx = sw;
             sw = xp - sw;
-            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[sVMPrev].hdcMem, sx, 0, sw, yp, SRCCOPY);
+            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vvmhw.pbmTile[1].hdcMem, sx, 0, sw, yp, SRCCOPY);
         }
 
         // show the VM to the right
@@ -3180,7 +3219,7 @@ void RenderBitmap()
             dw = 0 - sPan;
             sw = xp - sw;
             sx = 0;
-            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vrgvmi[sVMNext].hdcMem, sx, 0, sw, yp, SRCCOPY);
+            StretchBlt(vi.hdc, x / 2 + dx, y / 2, dw, yp * sScale, vvmhw.pbmTile[1].hdcMem, sx, 0, sw, yp, SRCCOPY);
         }
     }
 
@@ -3469,7 +3508,7 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
             do
             {
                 iVM = (iVM + 1) % MAX_VM;
-            } while (vrgvmi[iVM].hdcMem == NULL);
+            } while (!rgvm[iVM].fValidVM);
 
             // we've reached the end of the tiles
             if (iVM == fDone)
@@ -3506,7 +3545,7 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 
     for (y = rect.top + v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
-        for (x = 0; x < nx * vvmhw[iVM].xpix; x += sTileSize.x /* * vi.fXscale*/)
+        for (x = 0; x < nx * vvmhw.xpix; x += sTileSize.x /* * vi.fXscale*/)
         {
             if ((xPos >= x) && (xPos < x + sTileSize.x /* * vi.fXscale */) &&
                 (yPos >= y) && (yPos < y + sTileSize.y /* * vi.fYscale */))
@@ -3523,7 +3562,7 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
             do
             {
                 iVM = (iVM + 1) % MAX_VM;
-            } while (vrgvmi[iVM].hdcMem == NULL);
+            } while (!rgvm[iVM].fValidVM);
 
             // we've reached the end of the tiles
             if (iVM == fDone)
@@ -4013,8 +4052,8 @@ LRESULT CALLBACK WndProc(
         RECT rect;
         GetWindowRect(hWnd, &rect);
         if (!v.fFullScreen)
-          if ((vvmhw[v.iVM].xpix /* * vi.fXscale */) < GetSystemMetrics(SM_CXSCREEN))
-          if ((vvmhw[v.iVM].ypix /* * vi.fYscale */) < GetSystemMetrics(SM_CYSCREEN))
+          if ((vvmhw.xpix /* * vi.fXscale */) < GetSystemMetrics(SM_CXSCREEN))
+          if ((vvmhw.ypix /* * vi.fYscale */) < GetSystemMetrics(SM_CYSCREEN))
           if (rect.left > 0 && rect.top > 0)
                 GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
@@ -4096,16 +4135,23 @@ LRESULT CALLBACK WndProc(
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
         }
 
-        for (int ii = 0; ii < MAX_VM; ii++)
-        {
-            if (rgvm[ii].fValidVM)
-                if (!CreateNewBitmap(ii))    // fix every instance's bitmap
-                    DeleteVM(ii, FALSE);     // do the quick version
-        }
-        DeleteVM(-1, TRUE); // now do the stuff we missed
+        // new screen size means a different number of tiles fit on the screen, make some new bitmaps
+        sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
         
-        if (!CreateTiledBitmap())   // !!! what to do on error besides try again later?
-            fNeedTiledBitmap = TRUE;
+        // don't kill the app if this fails, kill VMs until it succeeds
+        BOOL fS = FALSE;
+        while (!CreateNewBitmaps() && v.cVM)
+        {
+            SacrificeVM();
+            fS = TRUE;
+        }
+        if (fS)
+            DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
+
+        InitThreads();  // if we deleted a visible VM, we'd hang
+
+        if (!CreateTiledBitmap())
+            fNeedTiledBitmap = TRUE;    // we can try again later
 
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
@@ -4133,18 +4179,18 @@ LRESULT CALLBACK WndProc(
 
 break;
 #if 0
-        if ((vvmhw[v.iVM].xpix == 0) || (vvmhw[v.iVM].ypix == 0))
+        if ((vvmhw.xpix == 0) || (vvmhw.ypix == 0))
             return 0;
 
-        vi.fXscale = max(1, (lprect->right - lprect->left - thickX) /  vvmhw[v.iVM].xpix);
-        vi.fYscale = max(1, (lprect->bottom - lprect->top - thickY) /  vvmhw[v.iVM].ypix);
+        vi.fXscale = max(1, (lprect->right - lprect->left - thickX) /  vvmhw.xpix);
+        vi.fYscale = max(1, (lprect->bottom - lprect->top - thickY) /  vvmhw.ypix);
 
         vi.fYscale = vi.fXscale * ratio;
 
         if (1 /* fSnapping */)
             {
-            lprect->right = lprect->left + vvmhw[v.iVM].xpix * vi.fXscale + thickX;
-            lprect->bottom = lprect->top + vvmhw[v.iVM].ypix * vi.fYscale + thickY;
+            lprect->right = lprect->left + vvmhw.xpix * vi.fXscale + thickX;
+            lprect->bottom = lprect->top + vvmhw.ypix * vi.fYscale + thickY;
             }
 
         if (vi.fXscale == 1)
@@ -4173,7 +4219,7 @@ break;
             int thickX = rc1.right - rc1.left - (rc2.right - rc2.left); // (SM_CXSIZEFRAME) * 2; is wrong
             int thickY = rc1.bottom - rc1.top - (rc2.bottom - rc2.top); // (SM_CYSIZEFRAME) * 2 + (SM_CYCAPTION); also wrong
 
-            int scaleX = 1, scaleY = ((vvmhw[v.iVM].xpix) >= (vvmhw[v.iVM].ypix * 3)) ? 2 : 1;
+            int scaleX = 1, scaleY = ((vvmhw.xpix) >= (vvmhw.ypix * 3)) ? 2 : 1;
 
 #if !defined(NDEBUG) && 0
             printf("WM_GETMINMAXINFO, size(%d,%d) pos(%d,%d) min(%d,%d) max(%d,%d)\n",
@@ -4187,16 +4233,17 @@ break;
                 lpmm->ptMaxTrackSize.y);
 #endif
 
-            // Show a double sized screen of anything < 640x480
+            // Show a double sized screen of anything < 640x480 // !!! For now, these always match as our GEM tile size
+            // (vvmhw) is always set to ATARI's size.
             if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
             {
-                lpmm->ptMinTrackSize.x = max(vvmhw[v.iVM].xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX * 2) + thickX;
-                lpmm->ptMinTrackSize.y = max(vvmhw[v.iVM].ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY * 2) + thickY;
+                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX * 2) + thickX;
+                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY * 2) + thickY;
             }
             else
             {
-                lpmm->ptMinTrackSize.x = max(vvmhw[v.iVM].xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX) + thickX;
-                lpmm->ptMinTrackSize.y = max(vvmhw[v.iVM].ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY) + thickY;
+                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX) + thickX;
+                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY) + thickY;
             }
         }
         // default to 640x480 minimum if state-less
@@ -4208,20 +4255,20 @@ break;
         break;
 
 #if 0
-        if ((vvmhw[v.iVM].xpix == 0) || (vvmhw[v.iVM].ypix == 0))
+        if ((vvmhw.xpix == 0) || (vvmhw.ypix == 0))
             return 0;
 
         if (v.fFullScreen && vi.fHaveFocus)
             return 0;
 
-        while (((max(vvmhw[v.iVM].xpix * (scaleX + 1), X8) + thickX) < lpmm->ptMaxTrackSize.x) &&
-               ((max(vvmhw[v.iVM].ypix * (scaleX + 1) * scaleY, 200) + thickY) < lpmm->ptMaxTrackSize.y))
+        while (((max(vvmhw.xpix * (scaleX + 1), X8) + thickX) < lpmm->ptMaxTrackSize.x) &&
+               ((max(vvmhw.ypix * (scaleX + 1) * scaleY, 200) + thickY) < lpmm->ptMaxTrackSize.y))
             {
             scaleX++;
             }
 
-        lpmm->ptMaxTrackSize.x = max(vvmhw[v.iVM].xpix * scaleX, 320) + thickX;
-        lpmm->ptMaxTrackSize.y = max(vvmhw[v.iVM].ypix * scaleX * scaleY, 320) + thickY;
+        lpmm->ptMaxTrackSize.x = max(vvmhw.xpix * scaleX, 320) + thickX;
+        lpmm->ptMaxTrackSize.y = max(vvmhw.ypix * scaleX * scaleY, 320) + thickY;
 
 #if !defined(NDEBUG)
         printf("returning updated min(%d,%d) max(%d,%d)\n",
@@ -4323,10 +4370,6 @@ break;
 #endif
             UninitDrawing(TRUE);
             vi.fInDirectXMode = FALSE;
-
-            // !!! is this necessary?
-            if (!CreateNewBitmap(v.iVM))
-                DeleteVM(v.iVM, TRUE);
         }
 
         break;
@@ -4706,17 +4749,26 @@ break;
             else if (v.fTiling)
                 ;
 
-            // send it to our own and only place
+            // send it to our one and only place
             else
                 FWinMsgVM(v.iVM, vi.hWnd, WM_KEYDOWN, 0x22, 0x01510001);
 
+            break;
+
+        // toggle whether or not to use time travel at all. It's a big memory hog, so we can't do it automatically
+        // for 25,000 VMs
+        case IDM_ENABLETIMETRAVEL:
+            Assert(v.iVM >= 0);
+            rgvm[v.iVM].fTimeTravelEnabled = !rgvm[v.iVM].fTimeTravelEnabled;
+            FixAllMenus(FALSE);
             break;
 
         // toggle whether or not to use fixed time travel points
         // turning it on does NOT set a fixed point, it means the last thing saved a few seconds ago is the last thing it will
         // automatically save
         case IDM_USETIMETRAVELFIXPOINT:
-            v.fTimeTravelFixed = !v.fTimeTravelFixed;
+            Assert(v.iVM >= 0);
+            rgvm[v.iVM].fTimeTravelFixed = !rgvm[v.iVM].fTimeTravelFixed;
             FixAllMenus(FALSE);
             break;
 
@@ -4883,11 +4935,7 @@ break;
 
             BOOL fA = FALSE;
             if (vmNew != -1 && FInitVM(vmNew))
-            {
                 fA = ColdStart(vmNew);
-                if (fA)
-                    fA = CreateNewBitmap(vmNew);
-            }
             if (!fA)
                 DeleteVM(vmNew, TRUE);
             else
@@ -5197,7 +5245,7 @@ break;
                 vmachw.fDisk1Dirty = fTrue;
                 vmachw.fDisk2Dirty = fTrue;
 #endif
-                // vvmhw[v.iVM].fMediaChange = fTrue;
+                // vvmhw.fMediaChange = fTrue;
 
                 FMountDiskVM(v.iVM, 8);    // TODO make sure that unmounts first
             }
@@ -5433,7 +5481,7 @@ break;
             }
             else
             {
-                max = sScale * vvmhw[v.iVM].xpix;
+                max = sScale * vvmhw.xpix;
             }
 
             if (ns >= max)
@@ -5540,7 +5588,7 @@ break;
                 if (v.fZoomColor)
                     max = (short)rc.right;
                 else
-                    max = (short)(sScale * vvmhw[v.iVM].xpix);
+                    max = (short)(sScale * vvmhw.xpix);
 
                 // note the starting x and y position of the gesture
                 if (gi.dwFlags & GF_BEGIN)
@@ -5827,23 +5875,23 @@ break;
                 // the whole client area is the visible part of the ATARI screen
                 if (v.fZoomColor)
                 {
-                    LightPenX = (WORD)(xPos * vvmhw[v.iVM].xpix / rect.right);
-                    LightPenY = (WORD)(yPos * vvmhw[v.iVM].ypix / rect.bottom);
+                    LightPenX = (WORD)(xPos * vvmhw.xpix / rect.right);
+                    LightPenY = (WORD)(yPos * vvmhw.ypix / rect.bottom);
                 }
 
                 // the screen aspect ratio is preserved and it is a certain scale multiple
                 else
                 {
-                    int bb = (rect.right - sScale * vvmhw[v.iVM].xpix) / 2;    // black bar size on left
+                    int bb = (rect.right - sScale * vvmhw.xpix) / 2;    // black bar size on left
                     if (xPos > bb)
                         LightPenX = (WORD)((xPos - bb) / sScale);
-                    if (LightPenX >= vvmhw[v.iVM].xpix)
-                        LightPenX = (WORD)(vvmhw[v.iVM].xpix - 1);
-                    bb = (rect.bottom - sScale * vvmhw[v.iVM].ypix) / 2;    // black bar size on top
+                    if (LightPenX >= vvmhw.xpix)
+                        LightPenX = (WORD)(vvmhw.xpix - 1);
+                    bb = (rect.bottom - sScale * vvmhw.ypix) / 2;    // black bar size on top
                     if (yPos > bb)
                         LightPenY = (WORD)((yPos - bb) / sScale);
-                    if (LightPenY >= vvmhw[v.iVM].ypix)
-                        LightPenY = (WORD)(vvmhw[v.iVM].ypix - 1);
+                    if (LightPenY >= vvmhw.ypix)
+                        LightPenY = (WORD)(vvmhw.ypix - 1);
                 }
             }
         }
@@ -5903,17 +5951,13 @@ break;
             if (rgvm[z].fValidVM)
                 DeleteVM(z, FALSE);
         }
+        
         //  FixAllMenus(TRUE); SelectInstance(v.iVM); we're dying anyway
+        
         InitThreads();  // this will kill them and not init any new ones
 
-        if (vi.hdcTiled)
-        {
-            SelectObject(vi.hdcTiled, vi.hbmTiledOld);
-            DeleteDC(vi.hdcTiled);
-        }
-
-        if (vi.hbmTiled)
-            DeleteObject(vi.hbmTiled);
+        DestroyBitmaps();   // clean up
+        DestroyTiledBitmap();
 
         FInitSerialPort(0);
         ShowCursor(TRUE);

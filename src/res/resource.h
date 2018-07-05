@@ -7,7 +7,7 @@
 #define IDR_ACCEL                       104
 #define IDR_GEMMENU                     105
 
-#define IDM_VM1                         65530    // !!! leave lots of room for many more before this one (thousands)
+#define IDM_VM1                         65530    // leave room for 64 VMs in the menu, too many more is ridiculous
 
 #define IDM_ADDVM1                      40100 // and leave room for all 32 different possible VM types
 
@@ -42,6 +42,7 @@
 #define IDM_COLORMONO                   40189
 #define IDM_PASTEASCII                  40190
 #define IDM_PASTEATASCII                40191
+#define IDM_ENABLETIMETRAVEL            40192
 
 #define IDM_D1                          40200
 #define IDM_D2                          40201

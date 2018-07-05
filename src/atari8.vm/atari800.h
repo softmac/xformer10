@@ -159,7 +159,7 @@ typedef struct
     WORD wSectorMac;
     WORD ofs;
     //    char *pbRAMdisk;
-    char path[80];
+    char path[MAX_PATH];
     char name[12];
     ULONG cb;   // size of file when mode == MD_FILE*
 } DRIVE;
@@ -873,6 +873,7 @@ BOOL GetWriteProtectDrive(void *, int);
 BOOL SetWriteProtectDrive(void *, int, BOOL);
 void DeleteDrive(void *, int);
 BOOL AddDrive(void *, int, BYTE *);
+void CloseDrive(void *, int);
 void CreateDMATables();
 void CreatePMGTable();
 void PSLPrepare(void *);    // call at the beginning of the scan line to get the mode
