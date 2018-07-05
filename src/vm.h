@@ -106,11 +106,13 @@ BOOL __inline FUnInitVM(int iVM)
     return rgvm[iVM].pvmi->pfnUnInit(vrgvmi[iVM].pPrivate);
 }
 
+// called when the VM is going to be used again, re-open your file handles
 BOOL __inline FInitDisksVM(int iVM)
 {
 	return rgvm[iVM].pvmi->pfnInitDisks(vrgvmi[iVM].pPrivate);
 }
 
+// called when the VM is out of sight and can close its file handles to save resources
 BOOL __inline FUnInitDisksVM(int iVM)
 {
     return rgvm[iVM].pvmi->pfnUnInitDisks(vrgvmi[iVM].pPrivate);

@@ -129,11 +129,15 @@ BEGIN
         MENUITEM "Change &Type\tAlt+F10", IDM_CHANGEVM
         MENUITEM "&Debug Monitor\tPause", IDM_DEBUGGER
         MENUITEM SEPARATOR
-        MENUITEM "&Use Fixed Time Travel Points", IDM_USETIMETRAVELFIXPOINT
-        MENUITEM "Set Time Travel &Fixed Point\tPg Down", IDM_TIMETRAVELFIXPOINT
-        MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL
+        POPUP "Time Tra&vel..."
+        BEGIN
+            MENUITEM "&Enable Time Travel\tPg Up", IDM_ENABLETIMETRAVEL
+            MENUITEM "&Use Fixed Time Travel Points", IDM_USETIMETRAVELFIXPOINT
+            MENUITEM "Set Time Travel &Fixed Point\tPg Down", IDM_TIMETRAVELFIXPOINT
+            MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL
+        END
         MENUITEM SEPARATOR
-        MENUITEM "Emulate PAL\tAlt+F12", IDM_NTSCPAL
+        MENUITEM "&Emulate PAL\tAlt+F12", IDM_NTSCPAL
         MENUITEM "Switch &Monitor\tShift+F12", IDM_COLORMONO
         MENUITEM SEPARATOR
         MENUITEM "&Paste Text as ASCII", IDM_PASTEASCII
