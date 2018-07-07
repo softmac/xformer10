@@ -286,7 +286,7 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ucrtd.lib;vcruntimed.lib;msvcrtd.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ucrtd.lib;vcruntimed.lib;msvcrtd.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies);ole32.lib</AdditionalDependencies>
       <Version>9.96</Version>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
@@ -342,7 +342,7 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ucrtd.lib;vcruntimed.lib;msvcrtd.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ucrtd.lib;vcruntimed.lib;msvcrtd.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies);ole32.lib</AdditionalDependencies>
       <Version>9.96</Version>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
@@ -521,7 +521,7 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ucrt.lib;vcruntime.lib;msvcrt.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ucrt.lib;vcruntime.lib;msvcrt.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies);ole32.lib</AdditionalDependencies>
       <Version>9.96</Version>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
@@ -581,7 +581,7 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ucrt.lib;vcruntime.lib;msvcrt.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ucrt.lib;vcruntime.lib;msvcrt.lib;comdlg32.lib;ddraw.lib;gdi32.lib;kernel32.lib;shell32.lib;user32.lib;version.lib;winmm.lib;%(AdditionalDependencies);ole32.lib</AdditionalDependencies>
       <Version>9.96</Version>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>

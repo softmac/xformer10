@@ -4872,7 +4872,7 @@ break;
             // the choice they make here, or will OpenFile.wm
             bi.lParam = (LPARAM)v.lpCurrentDir;  // the only way to set an initial directory to show, stupid function
 
-            // !!! Make sure this dialog still works! CoInitialize(NULL); // this stupid function needs this
+            CoInitialize(NULL); // this stupid function may need this
             PIDLIST_ABSOLUTE pid = SHBrowseForFolder(&bi);
             if (pid)
             {
