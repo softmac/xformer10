@@ -27,17 +27,31 @@
 // (by calling ColdStart instead of ColdbootVM directly, at least for now)
 // OR we just LOADSTATE (to restore its state from disk) but NOT BOTH
 //
-// CreateNewBitmap creates the screen buffer for the instance. This must be done before EXEC, but after
-// our window is created
-//
+// CreateNewBitmaps is called at the beginning (and every WM_DISPLAYCHANGE) to make enough screen buffers
+// for as many tiles as are visible on our display (including multi-mon). In regular mode the first
+// screen buffer is used (perhaps a second one if you are rouletting (scrolling horizontally through
+// the VMs). In tiled mode, usually one big bitmap the size of the PC window (not the size of a VM screen)
+// is used (CreateTiledBitmap - a new one is made every time you finish resizing the window because
+// to do it during resizing flickers). Each VM blits to a piece of that memory, being careful not to
+// overwrite into the parts of the buffer owned by another VM, and the whole thing is efficiently
+// blitted in one go. If your video card sucks, there might be flickering, so we will use
+// the set of screen buffers we created in CreateNewBitmaps and do separate blits. This will look
+// better.
+// 
 // SelectInstance() makes an instance the current one, only a concept for which tile is showing when not in tiled mode
 //
-// To change out a cartridge, UnInit, then Init again. To change the VM type (eg. 800 to XL), UnInstall and Install again
+// To change out a cartridge, UnInit, then Init again. To change the VM type (eg. 800 to XL), UnInstall and Install again.
+// To change what disk is in the drive, just call FMountDiskVM.
 //
 // There are a number of threads equal to the number of visible tiles, each one to run that VM.
 //
 // While all the VMs are running, the main loop will tell each thread to GO, then wait for them all to be DONE.
 // If 1/60s hasn't passed yet and we're not in turbo mode, wait until it has. Repeat.
+// When a tile becomes visible (and is going to be in the list of VMs to be executed that round) call
+// FInitDisksVM to tell it it may need to open its file handle for the disk image it's using soon, although it can
+// probably delay that until there's actually disk activity. When the VM is becoming invisible (and taken off the list
+// of VMs being executed this round), call FUnInitDisksVM to tell it to close its file handles. Otherwise, you'll have
+// 30,000 file handles open the entire time if you have 30,000 tiles.
 //
 // Each thread simply waits for the GO event, sees if it is to GO or DIE, call EXECVM, signal DONE and repeat.
 //
@@ -68,7 +82,7 @@ const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 // and our other globals
 
 BOOL fDebug;
-int sVM = -1;    // the tile with focus
+int sVM = -1;       // the tile with focus
 
 int sPan;           // how far we've spun the roulette wheel
 int sVMPrev;        // which VMS become visible as you play VM roulette
@@ -173,7 +187,7 @@ void ODS(char *fmt, ...)
 // String must have enough space for MAX_PATH.
 void CreateInstanceName(int i, LPSTR lpInstName)
 {
-    LPSTR lp = NULL;
+    LPSTR lp = "";
     int z;
 
     // if this VM type suports cartridge and we have a loaded cartridge, find that name
@@ -183,7 +197,7 @@ void CreateInstanceName(int i, LPSTR lpInstName)
     }
 
     // otherwise, use a disk name
-    if (lp == NULL && rgvm[i].rgvd[0].sz)
+    if (lp[0] == 0 && rgvm[i].rgvd[0].sz)
     {
         lp = rgvm[i].rgvd[0].sz;
     }
@@ -465,17 +479,16 @@ void UninitThreads()
 
             // kill the thread executing this event before deleting any of its objects
             ThreadStuff[ii].fKillThread = TRUE;
-            if (ThreadStuff[ii].hGoEvent)
-            {
-                SetEvent(ThreadStuff[ii].hGoEvent);
-                if (hDoneEvent[ii])
-                    WaitForSingleObject(hDoneEvent[ii], INFINITE);
-            }
-
-            if (ThreadStuff[ii].hGoEvent)
-                CloseHandle(ThreadStuff[ii].hGoEvent);
+           
+            SetEvent(ThreadStuff[ii].hGoEvent);
+            if (hDoneEvent[ii])
+                WaitForSingleObject(hDoneEvent[ii], INFINITE);
+            
+            CloseHandle(ThreadStuff[ii].hGoEvent);
+            
             if (ThreadStuff[ii].hThread)
                 CloseHandle(ThreadStuff[ii].hThread);
+            
             if (hDoneEvent[ii])
                 CloseHandle(hDoneEvent[ii]);
         }
@@ -497,7 +510,8 @@ void UninitThreads()
 BOOL InitThreads()
 {
     // if we saved space to make sure making VMs for all the tiles wouldn't run out of memory, free that as soon as we tile
-    if (pThreadReserve && v.fTiling)
+    // and we've actually loaded everything in
+    if (pThreadReserve && v.fTiling && v.cVM)
     {
         free(pThreadReserve);
         pThreadReserve = NULL;
@@ -533,12 +547,7 @@ ThreadTry:
             int x, y, iDone = iVM;
             BOOL fFirst = TRUE;
 
-            // !!! the tile size will match the first VM in the list
-            sTileSize.x = rgvm[iVM].pvmi->uScreenX;
-            sTileSize.y = rgvm[iVM].pvmi->uScreenY;
-
-            int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
-            sTilesPerRow = nx;  // remember this
+            int nx = sTilesPerRow;
 
             for (y = v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
@@ -609,10 +618,28 @@ ThreadTry:
 
             if (cThreads < v.cVM)
             {
-                ThreadStuff = realloc(ThreadStuff, cThreads * sizeof(ThreadStuffS));
-                hDoneEvent = realloc(hDoneEvent, cThreads * sizeof(HANDLE));
-                if (cThreads && (!ThreadStuff || !hDoneEvent))
-                    goto ThreadFail;
+                if (cThreads)
+                {
+                    void *p1 = realloc(ThreadStuff, cThreads * sizeof(ThreadStuffS));
+                    void *p2 = realloc(hDoneEvent, cThreads * sizeof(HANDLE));
+                    if (!p1 || !p2)
+                    {
+                        free(ThreadStuff);
+                        free(hDoneEvent);
+                        ThreadStuff = NULL;
+                        hDoneEvent = NULL;
+                        goto ThreadFail;
+                    }
+                    ThreadStuff = p1;
+                    hDoneEvent = p2;
+                }
+                else
+                {
+                    free(ThreadStuff);
+                    free(hDoneEvent);
+                    ThreadStuff = NULL;
+                    hDoneEvent = NULL;
+                }
             }
         }
 
@@ -701,7 +728,7 @@ void CreateDebuggerWindow()
     if (vi.fParentCon)
         return;
 
-    // create a console window for debugging
+    // create a console window for debugging !!! Alloc or freopen could fail
 
     AllocConsole();
 
@@ -1142,14 +1169,19 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
                     if (*szCmdLineUsed + dirlen + len + 3 > *szCmdLine)    // room for quotes and a NULL
                     {
                         int off = (int)(lpCmdLine - *lpCmdLineStart);  // where in the buffer we are
-                        *lpCmdLineStart = realloc(*lpCmdLineStart, *szCmdLineUsed + 65536);
-                        if (!(*lpCmdLineStart))
+                        void *p1 = realloc(*lpCmdLineStart, *szCmdLineUsed + 65536 * 16);
+                        if (!(p1))
                         {
                             lpCmdLine = NULL;
+                            free(*lpCmdLineStart);
+                            *lpCmdLineStart = NULL;
                             break;
                         }
+                        else
+                            *lpCmdLineStart = p1;
+
                         lpCmdLine = *lpCmdLineStart + off;  // point to the same place in the moved buffer
-                        *szCmdLine = *szCmdLineUsed + 65536;
+                        *szCmdLine = *szCmdLineUsed + 65536 * 16;
                     }
 
                     // add the file to our list, which may have spaces in it, so we need to put quotes around the filespec
@@ -1258,8 +1290,13 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
 //
 LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
 {
-    if (piFirstVM)
-        *piFirstVM = -1;
+    if (!piFirstVM)
+        return NULL;
+
+    *piFirstVM = -1;
+
+    if (!lpCmdLine)
+        return NULL;
 
     LPSTR lpLoad = NULL;
 
@@ -1269,9 +1306,10 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
     LPSTR lpCmdLineStart = NULL;   // beginning of buffer
     if (szCmdLineUsed)
     {
-        szCmdLine = max(65536, szCmdLineUsed + 1);  // size of buffer
-        lpCmdLineStart = malloc(szCmdLine);    // beginning of buffer
-        strcpy(lpCmdLineStart, lpCmdLine);
+        szCmdLine = max(65536 * 16, szCmdLineUsed + 1);  // size of buffer
+        lpCmdLineStart = malloc(szCmdLine);         // beginning of buffer
+        if (lpCmdLineStart)
+            strcpy(lpCmdLineStart, lpCmdLine);
         lpCmdLine = lpCmdLineStart;  // current position in buffer as we read filenames
     }
 
@@ -1357,7 +1395,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
         }
     }
 
-    if (szCmdLineUsed)
+    if (lpCmdLineStart)
         free(lpCmdLineStart);
 
     return lpLoad;
@@ -1469,6 +1507,44 @@ int CALLBACK WinMain(
     InitProperties();
     fProps = LoadProperties(NULL, TRUE); // load our basic props only
 
+    // if we didn't restore a saved position, make a default location for our window
+    if (!fProps)
+    {
+        if (v.iVM >= 0)
+        {
+            v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
+            v.rectWinPos.right = v.rectWinPos.left;
+            v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
+            v.rectWinPos.bottom = v.rectWinPos.top;
+
+            // add our probable non-client area. !!! I can't get this right so I have to add 20 and 30 at least!
+            int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2 + 40;
+            int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
+
+            // if we're < 640 x 480, make it double sized
+            if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+            {
+                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;
+                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY * 2 + thickY;
+            }
+            else
+            {
+                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX + thickX;
+                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY + thickY;
+            }
+        }
+        else
+        {
+            // default to 640x480 if we're VM-less and stateless
+            v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
+            v.rectWinPos.right = v.rectWinPos.left + 640;
+            v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
+            v.rectWinPos.bottom = v.rectWinPos.top + 480;
+        }
+    }
+
+    //printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
+
     fBrakes = TRUE; // always start up in emulated speed mode
 
     // Save the instance handle in static variable, which will be used in
@@ -1572,9 +1648,9 @@ int CALLBACK WinMain(
     // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
     sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
 #ifdef NDEBUG
-    pThreadReserve = malloc(sMaxTiles * 65536 * 6);        // 6x 64K stack space seems to be needed
+    pThreadReserve = malloc(sMaxTiles * 65536 * 3 * 2);  // 64K/Thread + <128K/tile screen RAM, but we need twice that for some reason
 #else
-    pThreadReserve = malloc(sMaxTiles * 65536 * 2 * 4);    // 4x 128K stack space seems to be needed
+    pThreadReserve = malloc(sMaxTiles * 65536 * 4 * 2);  // 128K/Thread + <128K/tile screen RAM, but we need twice that
 #endif
 
     if (!pThreadReserve)
@@ -1608,16 +1684,14 @@ int CALLBACK WinMain(
     if (!vi.hWnd)
         return (FALSE);
 
-    // Attach the menu, make the window visible; update its client area; and return "success"
     SetMenu(vi.hWnd, vi.hMenu);
 
-    // we have to create enough bitmaps as there might possibly be tiles
+    // we have to create enough bitmaps as there might possibly be tiles. We need to have created our window for this to work,
+    // and we should do it BEFORE we set the proper size below, which needs this information
     if (!CreateNewBitmaps())
         return FALSE;
 
-    //MessageBox(vi.hWnd, "HI", NULL, MB_OK);
-
-    //char test[130] = "\"c:\\danny\\8bit\\atari\\_TEST\\HOH1.xex\"";
+    //char test[130] = "\"c:\\danny\\8bit\\AtariOnline.PL\"";
     //lpCmdLine = test;
 
     // load all of the files dragged onto us, including those in all subdirectories of directories!
@@ -1657,7 +1731,7 @@ int CALLBACK WinMain(
     {
         v.iVM = -1; // make sure the current one is invalid
 
-        // we don't need any anymore
+        // we don't need any anymore !!! or is that better than an empty window?
         //CreateAllVMs();
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -1676,9 +1750,13 @@ int CALLBACK WinMain(
 
     vi.fExecuting = TRUE;    // OK, go! This will get reset when a VM hits a breakpoint, or otherwise fails
 
-    FixAllMenus(TRUE);
-    // our first WM_SIZE will init the threads
+    // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb
+    // Make sure to come up initially in the same state as we closed, for the sWheelOffset number to make sense
+    // I'm not sure how, but even if we come up maximized, we're properly shrinking back to the last restored window size
+    ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED : nCmdShow);
 
+    FixAllMenus(TRUE);
+    
     // DirectX can fragment address space, so only preload if user wants to
     if (/* !vi.fWin32s && */ !v.fNoDDraw)
         {
@@ -1699,54 +1777,6 @@ int CALLBACK WinMain(
     if (NULL != vi.pvSCSIData)
         memset(vi.pvSCSIData, 0, 32*1024*1024);
 
-#endif // ATARIST
-
-    // if we didn't restore a saved position, make a default location for our window
-    if (!fProps)
-    {
-        if (v.iVM >= 0)
-        {
-            v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
-            v.rectWinPos.right = v.rectWinPos.left;
-            v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
-            v.rectWinPos.bottom = v.rectWinPos.top;
-
-            // add our probable non-client area. !!! I can't get this right so I have to add 20 and 30 at least!
-            int thickX = GetSystemMetrics(SM_CXSIZEFRAME) * 2 + 40;
-            int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
-
-            // if we're < 640 x 480, make it double sized
-            if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
-            {
-                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;
-                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY * 2 + thickY;
-            }
-            else
-            {
-                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX + thickX;
-                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY + thickY;
-            }
-        }
-        else
-        {
-            // default to 640x480 if we're VM-less and stateless
-            v.rectWinPos.left = min(50, (GetSystemMetrics(SM_CXSCREEN) - 640));
-            v.rectWinPos.right = v.rectWinPos.left + 640;
-            v.rectWinPos.top = min(50, (GetSystemMetrics(SM_CYSCREEN) - 420));
-            v.rectWinPos.bottom = v.rectWinPos.top + 480;
-        }
-    }
-
-    //printf("init: client rect = %d, %d, %d, %d\n", v.rectWinPos.left, v.rectWinPos.top, v.rectWinPos.right, v.rectWinPos.bottom);
-
-    // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb
-    // Make sure to come up initially in the same state as we closed, for the sWheelOffset number to make sense
-    // I'm not sure how, but even if we come up maximized, we're properly shrinking back to the last restored window size
-    ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED : nCmdShow);
-    
-    UpdateWindow(vi.hWnd);     // Sends WM_PAINT message
-
-#if defined(ATARIST) || defined(SOFTMAC)
     // Initialize SCSI
 
     if (!v.fNoSCSI)
@@ -2541,6 +2571,10 @@ BOOL CreateNewBitmaps()
 
     vvmhw.xpix = vmi800.uScreenX;       // !!!
     vvmhw.ypix = vmi800.uScreenY;       // !!!
+
+    // the tile size matches the native size of the VMs
+    sTileSize.x = vvmhw.xpix;
+    sTileSize.y = vvmhw.ypix;
 
     vvmhw.pbmTile = malloc(sMaxTiles * sizeof(BMTILE));
     if (!vvmhw.pbmTile)
@@ -3529,7 +3563,8 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 {
     RECT rect;
 
-    if (v.cVM == 0)
+    // don't /0
+    if (v.cVM == 0 || !sTileSize.x)
         return -1;
 
     GetClientRect(vi.hWnd, &rect);
@@ -4069,6 +4104,13 @@ LRESULT CALLBACK WndProc(
 #if !defined(NDEBUG)
         //printf("WM_SIZE x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
 #endif
+
+        // Each resize, re-calc how many tiles fit per row, it's used in many places. TileSize must already be set
+        // before the first resize
+        RECT rect;
+        GetClientRect(vi.hWnd, &rect);
+        Assert(sTileSize.x);
+        sTilesPerRow = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
 
         // This code hasn't been enabled in years
         if (vi.fInDirectXMode)
@@ -4633,9 +4675,6 @@ break;
             // things we need set up for tiled mode
             if (v.fTiling)
             {
-                if (!CreateTiledBitmap())   // what can we do on error besides try again later?
-                    fNeedTiledBitmap = TRUE;
-
                 // Set a logical current scroll position, but not if we're not initialized and would / 0
                 if (v.sWheelOffset && sTileSize.y)
                 {
@@ -4826,6 +4865,7 @@ break;
         case IDM_OPENFOLDER:
             BROWSEINFOA bi;
             CHAR fold[MAX_PATH];
+            fold[0] = 0;
             memset(&bi, 0, sizeof(BROWSEINFOA));
             
             bi.hwndOwner = vi.hWnd;
@@ -4840,13 +4880,16 @@ break;
 
             CoInitialize(NULL); // this stupid function needs this
             PIDLIST_ABSOLUTE pid = SHBrowseForFolder(&bi);
-            SHGetPathFromIDList(pid, fold);
-            CoTaskMemFree(pid);
-            
+            if (pid)
+            {
+                SHGetPathFromIDList(pid, fold);
+                CoTaskMemFree(pid);
+            }
+
             // Open everything in that folder and add to the currently open VMs. Select the first new thing opened.
             // Do nothing if the only thing in the folder is a .GEM file; that is opened through a separate menu item.
             // Go into TILED mode if opened something new and we now have >1 VM
-            int iVMx;
+            int iVMx = 0;
             OpenFolders(fold, &iVMx);
             if (iVMx >= 0)
             {
@@ -5869,7 +5912,6 @@ break;
             
             if (v.iVM > -1)
             {
-                RECT rect;
                 GetClientRect(vi.hWnd, &rect);
 
                 // the whole client area is the visible part of the ATARI screen

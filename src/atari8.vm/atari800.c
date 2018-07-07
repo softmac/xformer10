@@ -1030,10 +1030,18 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
         //      printf("size of %s is %d bytes\n", pch, cb);
         //      printf("pb = %04X\n", rgcart[iCartMac].pbData);
 
-        cb = _read(h, pb, cb);
+        if (pb)
+        {
+            cb = _read(h, pb, cb);
 
-        rgvm[iVM].rgcart.cbData = cb;
-        rgvm[iVM].rgcart.fCartIn = TRUE;
+            rgvm[iVM].rgcart.cbData = cb;
+            rgvm[iVM].rgcart.fCartIn = TRUE;
+        }
+        else
+        {
+            bCartType = 0;
+            goto exitCart;
+        }
     }
     else
     {
@@ -1327,7 +1335,7 @@ void SwapRAMCart(void *candy, WORD size, BYTE *pb, BYTE iBank)
 {
     Assert(size <= 0x4000);
 
-    BYTE swap[0x4000];  // big enough for 16K
+    BYTE swap[0x4000];  // big enough for 16K !!! large stack, but global isn't thread safe (total must be kept < 64K thread stack space)
 
     // !!! Sorry, if you swapped BASIC in when your cartridge was out, you're stuck that way until you swap BASIC out
     if (iSwapCart == iNumBanks && ramtop < 0xc000)
@@ -1808,8 +1816,10 @@ void ResetPokeyTimer(void *candy, int irq)
     ULONG f[4], c[4];
     int pCLK, pCLK28, pCLK114;
 
-    if (irq == 2 || irq < 0 || irq >= 4)
+    if (irq == 2)   // not implemented in 800
         return;
+
+    Assert(irq == 0 || irq == 1 || irq == 3);
 
     pCLK = fPAL ? PAL_CLK : NTSC_CLK;
     pCLK28 = pCLK / 28;
@@ -2109,23 +2119,15 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
     if (!ppPrivate)
         return FALSE;
 
-    *ppPrivate = malloc(candysize);
+    // quicker than malloc and this is in a loop in slow load-up code, the fewer calls the better
+    *ppPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, candysize + sizeof(CANDY_UNPERSISTED));
 
     if (*ppPrivate)
     {
-        _fmemset(*ppPrivate, 0, candysize);
         ((CANDYHW *)(*ppPrivate))->m_dwCandySize = candysize;
         ((CANDYHW *)(*ppPrivate))->m_iVM = iVMNum;
 
-        ((CANDYHW *)(*ppPrivate))->m_candyx = malloc(sizeof(CANDY_UNPERSISTED));
-        
-        if (((CANDYHW *)(*ppPrivate))->m_candyx)
-            _fmemset(((CANDYHW *)(*ppPrivate))->m_candyx, 0, sizeof(CANDY_UNPERSISTED));
-        else
-        {
-            free(*ppPrivate);
-            return FALSE;
-        }
+        ((CANDYHW *)(*ppPrivate))->m_candyx = (BYTE *)*ppPrivate + candysize;
     }
 
     else
@@ -2154,9 +2156,7 @@ BOOL __cdecl UnInstallAtari(void *candy)
 
         // GEM is responsible for knowing not to use it anymore
     
-        if (((CANDYHW *)candy)->m_candyx)
-            free(((CANDYHW *)candy)->m_candyx);
-        free(candy);
+        HeapFree(GetProcessHeap(), 0, candy);
     }
 
     return TRUE;
@@ -2239,14 +2239,14 @@ BOOL __cdecl UninitAtari(void *candy)
         rgbMem[0x9ffc] = 1;    // no R cart
         rgbMem[0xbffc] = 1;    // no L cart
         rgbMem[0xbffd] = 0;    // no special R cartridge
+
+        // free the cartridge
+        if (rgbSwapCart)
+            free(rgbSwapCart);
+        rgbSwapCart = NULL;
+
+        UnmountAtariDisks(candy);
     }
-
-    // free the cartridge
-    if (rgbSwapCart)
-        free(rgbSwapCart);
-    rgbSwapCart = NULL;
-
-    UnmountAtariDisks(candy);
 
     return TRUE;
 }
@@ -2457,8 +2457,10 @@ BOOL __cdecl ColdbootAtari(void *candy)
     // load the OS, erase all extra RAM
     InitBanks(candy);
 
-    // load the proper initial bank back into the cartridge, for cartridges with a RAM bank, make sure it isn't in RAM mode
+    // Load the proper initial bank back into the cartridge, for cartridges with a RAM bank, make sure it isn't in RAM mode
     // or it will just erase everything and go to memo pad.
+    // Cartridges must be read into memory now, not delayed, to secure the memory they need, it will fail and kill the VM
+    // if we do it later when memory is full
     ReadCart(candy, TRUE);
     InitCart(candy);
 

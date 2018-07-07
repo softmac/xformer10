@@ -1070,7 +1070,7 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 //LRESULT CALLBACK DisksDlg(HWND, UINT, WPARAM, LPARAM);
 //LRESULT CALLBACK FirstTimeProc(HWND, UINT, WPARAM, LPARAM);
 //LRESULT CALLBACK ChooseProc(HWND, UINT, WPARAM, LPARAM);
-void DisplayStatus();
+void DisplayStatus(int);
 //BOOL FCreateOurPalette();
 BOOL SetBitmapColors();
 

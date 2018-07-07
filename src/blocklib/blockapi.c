@@ -17,7 +17,7 @@
 
 enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
 {
-    char unsigned rgch[2048*10];
+    char unsigned rgch[2048];
 
     if (pdi->dt == DISK_NONE)
         return FS_RAW;

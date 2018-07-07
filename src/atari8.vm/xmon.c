@@ -181,7 +181,9 @@ void GetLine()
         cchIn--;
 
     Cconws((char *)szCR);
+
     /* terminate input line with a space and null */
+    // !!! Blows up if you type >80 characters
     rgchIn[cchIn] = ' ';
     rgchIn[cchIn+1] = 0;
     ichIn = 0;

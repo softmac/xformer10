@@ -168,11 +168,18 @@ BOOL AddEntryToPpfd(WIN32_FIND_DATA **ppfd, WIN32_FIND_DATA *pfd, ULONG count)
     if (ppfd)
         {
 #if USEHEAP
-        *ppfd = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+        void *p1 = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
             *ppfd, sizeof(WIN32_FIND_DATA) * (count+1));
 #else
-        *ppfd = realloc(*ppfd, sizeof(WIN32_FIND_DATA) * (count+1));
+        void *p1 = realloc(*ppfd, sizeof(WIN32_FIND_DATA) * (count+1));
 #endif
+        if (!p1)
+        {
+            free(*ppfd);
+            *ppfd = NULL;
+            return FALSE;
+        }
+        *ppfd = p1;
         (*ppfd)[count] = *pfd;
 
         return TRUE;
@@ -623,7 +630,7 @@ Lfindit:
             }
         }
     else if (pdi->fst == FS_ATARIDOS || pdi->fst == FS_MYDOS)
-        {
+    {
         ULONG lSize = GetFileSize(pdi->h, NULL);
         int cbSector = 128;
         //int vtocSec  = 360;
@@ -640,9 +647,9 @@ Lfindit:
         pdi->lpBuf = rgbA;
 
         if (FRawDiskRWPdi(pdi, 0))
-            {
+        {
             for (j = 0; j < 8*cbSector; j+=sizeof(AREC))
-                {
+            {
                 AREC *parec = (AREC *)&rgbA[j];
 
 #if TRACEDISK
@@ -653,7 +660,7 @@ Lfindit:
 #endif
 
                 if (parec->bFlags == 0x42 || parec->bFlags == 0x62)
-                    {
+                {
                     memset(&fd, 0, sizeof(fd));
                     SzFrom8_3((char *)&fd.cFileName, (char *)&parec->filename);
                     memcpy(fd.cAlternateFileName, &parec->wStart, 2);
@@ -666,12 +673,14 @@ Lfindit:
 
                     if (ppfd)
                         count += AddEntryToPpfd(ppfd, &fd, count);
-                    }
                 }
             }
         }
+    }
+
+#if 0   // uses 512K of stack space as written
     else if (pdi->fst == FS_FAT12 || pdi->fst == FS_FAT16)
-        {
+    {
         int rootSec;    // start of root directory sectors
         int croot;      // count of root directory sectors
         int cbSec;      // size of sectors (should be 512, larger for BGM)
@@ -699,7 +708,7 @@ Lfindit:
 
             for (i = 0; i < (int)(croot/(512/sizeof(MSREC))); i++)
                 {
-                unsigned char rgbBig[512*1024];
+                unsigned char rgbBig[512*1024]; // !!! on the stack ?!?
                 int cbBig = 512;
 
                 pdi->count = 1;
@@ -794,7 +803,8 @@ Lnextdir:
                     }
                 }
             }
-        }
+    }
+#endif
 
     strcpy(pdi->szCwd, szDir);
 
