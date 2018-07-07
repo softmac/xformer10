@@ -1202,6 +1202,8 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
             }
         } while (FindNextFile(hFind, &ffd) != 0);
         
+        FindClose(hFind);
+
         if (!lpCmdLine)
             break;      // realloc failed
 
