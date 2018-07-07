@@ -1401,7 +1401,6 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
     return lpLoad;
 }
 
-
 void CalcIntegerScale(int iVM)
 {
     RECT rect;
@@ -1416,18 +1415,6 @@ void CalcIntegerScale(int iVM)
         rect.left = 0;
         rect.top = 0;
     }
-
-    // if we weren't given a valid one but there is one, find it to get the proper size of a frame for this VM
-    if (iVM < 0 && v.cVM)
-    {
-        iVM++;
-        while (!rgvm[iVM].fValidVM && iVM < MAX_VM)
-            iVM++;
-        Assert(iVM < MAX_VM);
-    }
-
-    if (iVM < 0)
-        return;
 
     for (sScale = 16; sScale > 1; sScale--)
     {
@@ -4150,12 +4137,13 @@ LRESULT CALLBACK WndProc(
         // !!! This will waste time doing stuff while minimized
         if (v.fTiling && v.swWindowState != SW_SHOWMINIMIZED)
         {
-            fNeedTiledBitmap = TRUE;
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
             InitThreads();  // we keep a # of threads == # of visible tiles !!! error check?
         }
-        else if (v.fTiling)
-            InitThreads();  // save time by halting everything while minimized
+        
+        // new non-minimized size? We need a new bit bitmap of that size
+        if (v.swWindowState != SW_SHOWMINIMIZED)
+            fNeedTiledBitmap = TRUE;
 
         // figure out the new scaling factor for when we do integer scaled stretching
         CalcIntegerScale(v.iVM);

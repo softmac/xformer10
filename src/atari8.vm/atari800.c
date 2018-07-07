@@ -2127,7 +2127,7 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
         ((CANDYHW *)(*ppPrivate))->m_dwCandySize = candysize;
         ((CANDYHW *)(*ppPrivate))->m_iVM = iVMNum;
 
-        ((CANDYHW *)(*ppPrivate))->m_candyx = (BYTE *)*ppPrivate + candysize;
+        ((CANDYHW *)(*ppPrivate))->m_candyx = (void*)((BYTE *)*ppPrivate + candysize);
     }
 
     else
@@ -2436,10 +2436,8 @@ BOOL __cdecl ColdbootAtari(void *candy)
     if (mdXLXE == md800)
         ResetPIA(candy);
 
-	BOOL f = MountAtariDisks(candy);
-
-    if (!f)
-        return FALSE;
+    // Do NOT mount the drives yet, that opens files and takes forever and slows app startup
+    fDrivesNeedMounting = TRUE;
 
     //printf("ColdStart: mdXLXE = %d, ramtop = %04X\n", mdXLXE, ramtop);
 
@@ -2611,7 +2609,7 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
         SIOReadSector(candy, rgSIO[0] - 0x31);
 
     if (!f)
-        return f;
+        return f;   // !!! Is it really that big a deal? It means the file couldn't be opened, even in R/O
 
     // 3. If our saved state had a cartridge, load it back in, but do not reset to original bank
     ReadCart(candy, FALSE);
@@ -2688,6 +2686,21 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
     WORD MAXY = fPAL ? PAL_LPF : NTSC_LPF; // 312 or 262 lines per frame?
 
     BOOL fStop = 0;    // do not break out of big loop
+
+    // we delayed this so the app could start up quickly, since it doesn't alloc additional memory, we *can* delay it
+    if (fDrivesNeedMounting)
+    {
+        int rt = ramtop;
+        MountAtariDisks(candy); // failure is no big deal, just means the file can't be opened, not even in R/O
+        if (ramtop != rt)
+        {
+            // In the case where we load a .BAS file, we try to set ramtop to 0xa000, which can't be done anymore
+            // since we delayed the mounting, so we just need a reboot with BASIC.
+            Assert(ramtop == 0xa000);
+            KillMePleaseBASIC(candy);
+        }
+        fDrivesNeedMounting = FALSE;
+    }
 
     // to persist, we had to temporarily put the RAM saved in the cartridge space into memory that is persisted. Put it back.
     if (fCartNeedsSwap && ramtop == 0xc000)

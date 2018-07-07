@@ -441,6 +441,7 @@ typedef struct
     WORD m_wSLEnd;      // last visible pixel of a scan line (some tiles may be partially off the right hand side)
 
     WORD m_wSIORTS;     // return value of the SIO routine, used in monitor
+    BOOL m_fDrivesNeedMounting; // we delay this so app startup is fast, since it doesn't alloc additional memory and won't fail
 
     // ANTIC stuff (xvideo.c)
     PMG m_pmg;          // PMG structure (only 1 needed, updated each scan line)
@@ -518,6 +519,7 @@ typedef struct
 #define rgSIO         CANDY_STATE(rgSIO)
 #define cSEROUT       CANDY_STATE(cSEROUT)
 #define fSERIN        CANDY_STATE(fSERIN)
+#define fDrivesNeedMounting CANDY_STATE(fDrivesNeedMounting)
 #define isectorPos    CANDY_STATE(isectorPos)
 #define checksum      CANDY_STATE(checksum)
 #define fWant8        CANDY_STATE(fWant8)
