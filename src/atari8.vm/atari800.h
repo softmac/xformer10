@@ -171,7 +171,6 @@ typedef struct
 // delay is < 13, and Flight Simulator II hangs if it's < 20
 #define SIO_DELAY 13
 
-
 // poly counters used for disortion and randomization (we only ever look at the low bit or byte at most)
 // globals are OK as only 1 thread does sound at a time
 // RANDOM will hopefully be helped by not being thread safe, as it will become even more random. :-)

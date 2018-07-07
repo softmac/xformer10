@@ -101,7 +101,9 @@ void InitBanks(void *candy)
 // Parameters passed refer to the bits in the XE's PORTB register.
 //
 BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
-{
+{   
+    BYTE tmp[XE_SIZE];  // !!! large stack, but global isn't thread safe (total must be kept < 64K thread stack space)
+
     if (mdXLXE == md800)
         return TRUE;
 
@@ -199,7 +201,6 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
             // we have swapped it out, so put it back. Otherwise, don't overwrite it with garbage
             if (iXESwap >= 0)
             {
-                char tmp[XE_SIZE];
                 _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
                 _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                 _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
@@ -219,7 +220,6 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 // we are called such that code won't execute, this case is caught be the next if
                 if (iXESwap != -1)
                 {
-                    char tmp[XE_SIZE];
                     _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
                     _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                     _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
@@ -227,7 +227,6 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 }
 
                 // now do the swap we want
-                char tmp[XE_SIZE];
                 _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
                 _fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
                 _fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);
@@ -253,7 +252,6 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 // swap the current one back to where it belongs
                 if (iXESwap != -1)
                 {
-                    char tmp[XE_SIZE];
                     _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
                     _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                     _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
@@ -261,7 +259,6 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 }
 
                 // now do the swap we want
-                char tmp[XE_SIZE];
                 _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
                 _fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
                 _fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);

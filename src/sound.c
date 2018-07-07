@@ -1002,7 +1002,7 @@ void InitSound()
                 vi.rgwhdrP[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
             }
         }
-    } else GetLastError();
+    }
 // #endif
 }
 

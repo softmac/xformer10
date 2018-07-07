@@ -128,10 +128,6 @@ int AddVM(int type, BOOL fAll)
         rgvm[iVM].fSound = TRUE;
         rgvm[iVM].fJoystick = TRUE;
 
-        // if this is our first VM. Create this resource now while lots of memory is or we'll be too fragmented later
-        if (v.cVM == 1)
-            fNeedTiledBitmap = !CreateTiledBitmap(); // it's OK if it fails, we'll try again later
-
         if (fAll)
         {
             FixAllMenus(TRUE);
@@ -435,7 +431,12 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
                     if (l == sizeof(int) && cb == vrgvmi[i].iPrivateSize)
                     {
                         if (cb > cbPersist)
-                            pPersist = realloc(pPersist, cb); // just one load buffer to avoid fragmenting
+                        {
+                            void *p1 = realloc(pPersist, cb); // just one load buffer to avoid fragmenting and for better perf
+                            if (!(p1))
+                                free(pPersist);
+                            pPersist = p1;
+                        }
 
                         l = 0;
                         if (pPersist)
