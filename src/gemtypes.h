@@ -386,7 +386,6 @@ typedef struct
     
     // UNUSED
     int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
-    
     int      fValidVM:1;    // if set, this VM is initialized
 
     int      res83:8;

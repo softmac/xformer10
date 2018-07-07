@@ -1350,6 +1350,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                         DeleteVM(iVM, FALSE);   // !!! we do the quick version! Caller must do the rest
 
                 }    // !!! if error is likely to mean OOM, then give up the loop!
+                else
+                    lpCmdLine = NULL;   // can only mean out of memory so don't waste time continuing to fail
             }
 
             // a cartridge
@@ -1371,6 +1373,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
                         DeleteVM(iVM, FALSE);    // bad cartridge? Don't show an empty VM, just kill it
 
                 }    // !!! if error is likely to mean OOM, then give up the loop!
+                else
+                    lpCmdLine = NULL;   // can only mean out of memory so don't waste time continuing to fail
             }
 
             // found a .gem file. Only notice it if it's the first/only thing being dragged.
@@ -1401,7 +1405,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
     return lpLoad;
 }
 
-void CalcIntegerScale(int iVM)
+void CalcIntegerScale()
 {
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
@@ -4146,7 +4150,7 @@ LRESULT CALLBACK WndProc(
             fNeedTiledBitmap = TRUE;
 
         // figure out the new scaling factor for when we do integer scaled stretching
-        CalcIntegerScale(v.iVM);
+        CalcIntegerScale();
 
         break;
 
