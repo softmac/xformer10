@@ -2601,22 +2601,17 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
 
     // Now fix our non-persistable data
 
-    // 1. rgDrives info about the attached drives
-    BOOL f = MountAtariDisks(candy);
+    // 1. rgDrives info about the attached drives, now delayed for speed savings
+    //BOOL f = MountAtariDisks(candy);
+    fDrivesNeedMounting = TRUE;
 
     // 2. If we were in the middle of reading a sector through SIO, restore that data
     if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x34 && rgSIO[1] == 0x52)
         SIOReadSector(candy, rgSIO[0] - 0x31);
 
-    if (!f)
-        return f;   // !!! Is it really that big a deal? It means the file couldn't be opened, even in R/O
-
     // 3. If our saved state had a cartridge, load it back in, but do not reset to original bank
     ReadCart(candy, FALSE);
     InitCart(candy);
-
-    // 4. Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
-    f = TimeTravelReset(candy); // state is now a valid anchor point
 
 #if 0
     // legacy stuff that doesn't matter for now
@@ -2626,7 +2621,8 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
         rgvm[iVM].iLPT = 0;
 #endif
 
-    return f;
+    // 4. Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
+    return TimeTravelReset(candy); // state is now a valid anchor point
 }
 
 
