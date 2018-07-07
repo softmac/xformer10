@@ -1375,7 +1375,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
             // found a .gem file. Only notice it if it's the first/only thing being dragged.
             // One .gem file in a thousand other files keeping them all from loading would really aggravate a person.
 
-            else if (_stricmp(sFile + len - 3, "gem") == 0 && *piFirstVM == -1)
+            else if (*piFirstVM == -1 && _stricmp(sFile + len - 3, "gem") == 0)
             {
 #if 0
                 fSkipLoad = FALSE;    // changed our mind, loading this .gem file
@@ -1674,7 +1674,7 @@ int CALLBACK WinMain(
     if (!CreateNewBitmaps())
         return FALSE;
 
-    //char test[130] = "\"c:\\danny\\8bit\\AtariOnline.PL\"";
+    //char test[130] = "\"c:\\danny\\8bit\"";
     //lpCmdLine = test;
 
     // load all of the files dragged onto us, including those in all subdirectories of directories!

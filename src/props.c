@@ -93,21 +93,26 @@ PVMINFO DetermineVMType(int type)
 
 int AddVM(int type, BOOL fAll)
 {
-    int iVM;
+    if (v.cVM == MAX_VM)
+        return -1;
+
+    // save time, start looking where the most likely empty spot is
+    int iVM = v.cVM;
 
     // first try to find an empty slot in the rgvm array
-    for (iVM = 0; iVM < MAX_VM; iVM++)
+    if (rgvm[iVM].fValidVM)
     {
-        if (!rgvm[iVM].fValidVM)
-            break;
+        for (iVM = (iVM + 1) % MAX_VM; iVM != v.cVM; iVM = (iVM + 1) % MAX_VM)
+        {
+            if (!rgvm[iVM].fValidVM)
+                break;
+        }
     }
 
     // did not find an empty slot!
-    if (iVM == MAX_VM)
-    {
+    if (rgvm[iVM].fValidVM)
         return -1;
-    }
-
+    
     memset(&rgvm[iVM], 0, sizeof(VM));    // clear it out fresh
     rgvm[iVM].cbSize = sizeof(VM);    // init the size for validity
 
