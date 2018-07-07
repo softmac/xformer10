@@ -68,6 +68,7 @@
 #include <windowsx.h>
 
 #pragma warning(disable:4706) // assignment within conditional expression
+#pragma warning(disable:4152) // function/data pointer conversion
 
 // you remember our main data structures from gemtypes.h, right?
 
@@ -570,18 +571,10 @@ ThreadTry:
                         // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
                         FInitDisksVM(ThreadStuff[cThreads].iThreadVM);
 
-#pragma warning(push)
-#pragma warning(disable:4152) // function/data pointer conversion
                         // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                         if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
-#ifdef NDEBUG
                             !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads,
                                     STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
-#else   // debug needs twice the stack
-                            !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)cThreads,
-                                    STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
-#endif
-#pragma warning(pop)
                         {
                             // don't leave the events existing if the thread doesn't... we might try to wait on it
                             if (ThreadStuff[cThreads].hGoEvent)
@@ -682,7 +675,7 @@ ThreadTry:
                     !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
                             STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #else   // debug needs twice the stack
-                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536 * 2, (void *)VMThread, (LPVOID)x,
+                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
                             STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
 #endif
 #pragma warning(pop)
@@ -1640,11 +1633,8 @@ int CALLBACK WinMain(
     // Otherwise creating the threads will fail and we'll have to kill a bunch of VMs to make space for them, way more than
     // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
     sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
-#ifdef NDEBUG
-    pThreadReserve = malloc(sMaxTiles * 65536 * 3 * 2);  // 64K/Thread + <128K/tile screen RAM, but we need twice that for some reason
-#else
-    pThreadReserve = malloc(sMaxTiles * 65536 * 4 * 2);  // 128K/Thread + <128K/tile screen RAM, but we need twice that
-#endif
+    // 64K/Thread + <128K/tile screen RAM, but we need 4x that for some reason to launch and re-load
+    pThreadReserve = malloc(sMaxTiles * 65536 * 3 * 4);
 
     if (!pThreadReserve)
         return FALSE;
@@ -3504,9 +3494,6 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
 
     iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
     Assert(rgvm[iVM].fValidVM);
-
-//    while (iVM < 0 || !rgvm[iVM].fValidVM)
-//        iVM = ((iVM + 1) % MAX_VM);
 
     int fDone = 0;
 
