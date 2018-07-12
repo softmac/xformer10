@@ -17,6 +17,7 @@
 
 
 // private globals
+// !!! NOT THREAD SAFE
 
 HANDLE vhPrinter;
 
@@ -77,7 +78,7 @@ BOOL InitPrinter(int iLPT)
 
 BOOL FPrinterReady(int iVM)
 {
-    return (rgvm[iVM].iLPT != 0);
+    return (rgpvm[iVM]->iLPT != 0);
 }
 
 
@@ -85,13 +86,13 @@ BOOL FlushToPrinter(int iVM)
 {
     int cch;
 
-    if (rgvm[iVM].iLPT == 0)
+    if (rgpvm[iVM]->iLPT == 0)
         return TRUE;
 
     if (vhPrinter == INVALID_HANDLE_VALUE)
-        InitPrinter(rgvm[iVM].iLPT);
+        InitPrinter(rgpvm[iVM]->iLPT);
 
-    if (vcchBuf && (rgvm[iVM].iLPT != 0))
+    if (vcchBuf && (rgpvm[iVM]->iLPT != 0))
         {
         WriteFile(vhPrinter, vrgbBuffer, vcchBuf, (LPDWORD)&cch, NULL);
         vcchBuf = 0;
@@ -106,9 +107,9 @@ BOOL ByteToPrinter(int iVM, unsigned char ch)
     //DebugStr("FOutputToPrinter:outputting %c\n", ch);
 
     if (vhPrinter == INVALID_HANDLE_VALUE)
-        InitPrinter(rgvm[iVM].iLPT);
+        InitPrinter(rgpvm[iVM]->iLPT);
 
-    if (rgvm[iVM].iLPT != 0)
+    if (rgpvm[iVM]->iLPT != 0)
         {
         vrgbBuffer[vcchBuf++] = ch;
         vi.cPrintTimeout = 200*30;

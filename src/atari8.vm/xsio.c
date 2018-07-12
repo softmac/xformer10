@@ -263,7 +263,7 @@ BOOL OpenDrive(void *candy, int i)
     if ((rgDrives[i].h > 0) && (rgDrives[i].h != -1))
         return TRUE;
 
-    BYTE *pchPath = (BYTE *)rgvm[iVM].rgvd[i].sz;
+    BYTE *pchPath = (BYTE *)pvm->rgvd[i].sz;
     HFILE h = _open((LPCSTR)pchPath, _O_BINARY | _O_RDWR);
 
     // do not alter write protect status of drive when swapping disks
@@ -1004,7 +1004,7 @@ lNAK:
         case 'S':
             while (timeout--)
                 {
-                if (FPrinterReady(iVM))
+                if (FPrinterReady(0)) // !!! not thread safe, needs VM #
                     {
                     wRetStat = SIO_OK;
                     break;
@@ -1038,14 +1038,14 @@ lNAK:
 
                 while (timeout--)
                     {
-                    if (FPrinterReady(iVM))
+                    if (FPrinterReady(0))         // !!! not thread safe, needs VM #
                         {
                         if (ch != 155)
-                            ByteToPrinter(iVM, ch);
+                            ByteToPrinter(0, ch); // !!! not thread safe, needs VM #
                         else
                             {
-                            ByteToPrinter(iVM, 13);
-                            ByteToPrinter(iVM, 10);
+                            ByteToPrinter(0, 13); // !!! not thread safe, needs VM #
+                            ByteToPrinter(0, 10); // !!! not thread safe, needs VM #
                             }
 
                         wRetStat = SIO_OK;

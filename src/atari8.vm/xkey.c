@@ -33,16 +33,16 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
 
 // printf("in CheckKey\n");
 
-    if (vrgvmi[iVM].keyhead != vrgvmi[iVM].keytail)
+    if (pvmin->keyhead != pvmin->keytail)
     {
-        scan = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
-        ch   = vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keytail++];
-        vrgvmi[iVM].keytail &= 1023;
+        scan = pvmin->rgbKeybuf[pvmin->keytail++];
+        ch   = pvmin->rgbKeybuf[pvmin->keytail++];
+        pvmin->keytail &= 1023;
 
         //DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
-        if ((vrgvmi[iVM].keytail & 1) || (vrgvmi[iVM].keyhead & 1))
-            vrgvmi[iVM].keytail = vrgvmi[iVM].keyhead = 0;
+        if ((pvmin->keytail & 1) || (pvmin->keyhead & 1))
+            pvmin->keytail = pvmin->keyhead = 0;
     }
 
     if (scan == 255)
@@ -758,8 +758,8 @@ BOOL FKeyMsg800(void *candy, HWND hwnd, UINT message, WPARAM uParam, LPARAM lPar
         break;
         }
 
-    AddToPacket(iVM, fDown ? scan : 0);
-    AddToPacket(iVM, fDown ? ch   : 0);
+    AddToPacket(candy, fDown ? scan : 0);
+    AddToPacket(candy, fDown ? ch   : 0);
 
     return FALSE;    // by default, let windows see the key - eg. to operate menus
 }

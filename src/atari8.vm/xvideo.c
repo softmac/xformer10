@@ -125,20 +125,14 @@ void ShowCountDownLine(void *candy)
         int cch;
         BYTE *qch;
 
-        RECT rectC = { 0 };
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
             qch = vvmhw.pTiledBits;
-            RECT rect;
-            GetPosFromTile(iVM, &rect);
-            GetClientRect(vi.hWnd, &rectC);
-            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += rect.top * stride + rect.left;
+            qch += pvmin->sRectTile.top * sStride + pvmin->sRectTile.left;
         }
         else
             // User screen buffer # = to which visible tile we are!
-            qch = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
+            qch = vvmhw.pbmTile[pvmin->iVisibleTile].pvBits;
         
         BYTE colfg;
 
@@ -155,10 +149,8 @@ void ShowCountDownLine(void *candy)
 
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
-            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
+            qch += ((wScan - STARTSCAN) * sStride);
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + sStride * sRectC.bottom)
                 return;
         }
         else
@@ -1331,7 +1323,7 @@ void UpdateColourRegisters(void *candy)
     //pmg.colpm0 = pmg.colpm1 = pmg.colpm2 = pmg.colpm3 = 245;
 
     // in greyscale mode, just use luminences
-    if (FGreyFromBf(rgvm[iVM].bfMon))
+    if (FGreyFromBf(pvm->bfMon))
     {
         sl.colpfX &= 0x0f0f0f0f;
         pmg.colpmX &= 0x0f0f0f0f;
@@ -1598,18 +1590,14 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
     int j;
     BYTE *qch0;
-    RECT rectC = { 0 };
-
+    
     if (v.fTiling && !v.fMyVideoCardSucks)
     {
         qch0 = vvmhw.pTiledBits;
-        GetClientRect(vi.hWnd, &rectC);
-        // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-        int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-        qch0 += prectTile->top * stride + prectTile->left;
+        qch0 += prectTile->top * sStride + prectTile->left;
     }
     else
-        qch0 = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
+        qch0 = vvmhw.pbmTile[pvmin->iVisibleTile].pvBits;
 
     BYTE * __restrict qch = qch0;
 
@@ -1664,10 +1652,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
         // not doing a bitfield, just write into this scan line
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
-            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
+            qch += ((wScan - STARTSCAN) * sStride);
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + sStride * sRectC.bottom)
                 return;
         }
         else
@@ -1736,8 +1722,8 @@ if (sl.modelo < 2 || iTop > i)
         Col.col2 = sl.colpf2;
 
         // just for fun, don't interlace in B&W.
-        const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg;
-        const BOOL fPMGA = (rgvm[iVM].bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
+        const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg;
+        const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
 
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
         const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
@@ -2437,8 +2423,8 @@ if (sl.modelo < 2 || iTop > i)
         Col.col2 = sl.colpf2;
 
         // just for fun, don't artifact in B&W
-        const BOOL fArtifacting = (rgvm[iVM].bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg; // artifact the normal screen memory
-        const BOOL fPMGA = (rgvm[iVM].bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
+        const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg; // artifact the normal screen memory
+        const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
 
         // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
         const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
@@ -2741,10 +2727,10 @@ if (sl.modelo < 2 || iTop > i)
             // We are being told what piece of the big bitmap we are writing into (sRectTile) and the size of the entire bitmap (sRectC)
             // as well as its stride (sStride).
             // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            qch += sRectTile[iVM].top * sStride + sRectTile[iVM].left;
+            qch += pvmin->sRectTile.top * sStride + pvmin->sRectTile.left;
         }
         else
-            qch = vvmhw.pbmTile[vrgvmi[iVM].iVisibleTile].pvBits;
+            qch = vvmhw.pbmTile[pvmin->iVisibleTile].pvBits;
 
         // now set the bits in rgpix corresponding to players and missiles. Must be in this order for correct collision detection
         // tell them what range they are to fill in data for (start to stop)
@@ -2766,10 +2752,8 @@ if (sl.modelo < 2 || iTop > i)
         // now map the rgpix array to the screen
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
-            // The rect was made 32 bytes too wide so add those, and round that number up to the nearest 4 bytes (stride)
-            int stride = ((((rectC.right + 32 - 1) >> 2) + 1) << 2);
-            qch += ((wScan - STARTSCAN) * stride);
-            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + stride * rectC.bottom)
+            qch += ((wScan - STARTSCAN) * sStride);
+            if (qch < (BYTE *)(vvmhw.pTiledBits) || qch >= (BYTE *)(vvmhw.pTiledBits) + sStride * sRectC.bottom)
                 return;
         }
         else
@@ -3054,13 +3038,12 @@ BOOL ProcessScanLine(void *candy)
     {
         // these variables tell us what piece of the big bitmap we're drawing (sRectTile) and how big the entire bitmap is (sRectC)
         // this is how many pixels are visible, and our stop point for this scan line instead of X8 (352)
-        if (sRectTile[iVM].right > sRectC.right)
-            wSLEnd = (WORD)(sRectC.right - sRectTile[iVM].left);
-
-        if (sRectTile[iVM].right > sRectC.right)
+        if (pvmin->sRectTile.right > sRectC.right)
         {
-            if ((short)(sRectC.right - sRectTile[iVM].left) < cclock)
-                cclock = (short)(sRectC.right - sRectTile[iVM].left);
+            wSLEnd = (WORD)(sRectC.right - pvmin->sRectTile.left);
+
+            if ((short)wSLEnd < cclock)
+                cclock = (short)wSLEnd;
         }
     }
 
@@ -3164,19 +3147,19 @@ BOOL ProcessScanLine(void *candy)
         //ODS("          %d-%d (%d-%d)\n", pmg.hposPixLatest, cclock, iLate, iTop);
 
         sl.fpmg = FALSE;
-        PSLInternal(candy, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, cclockPrev, pmg.hposPixEarliest, i, iEarly, bbars, &pvmin->sRectTile);
   
         sl.fpmg = TRUE;
         PSLInternal(candy, max(cclockPrev, pmg.hposPixEarliest), min(cclock, pmg.hposPixLatest),
-                                max(i, iEarly), min(iTop, iLate), bbars, &sRectTile[iVM]);
+                                max(i, iEarly), min(iTop, iLate), bbars, &pvmin->sRectTile);
 
         sl.fpmg = FALSE;
-        PSLInternal(candy, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, pmg.hposPixLatest, cclock, iLate, iTop, bbars, &pvmin->sRectTile);
     }
     else
     {
         //ODS("%d %d-%d (%d-%d)\n", wScan, cclockPrev, cclock, i, iTop);
-        PSLInternal(candy, cclockPrev, cclock, i, iTop, bbars, &sRectTile[iVM]);
+        PSLInternal(candy, cclockPrev, cclock, i, iTop, bbars, &pvmin->sRectTile);
     }
 
     PSLPostpare(candy);    // see if we're done this scan line and be ready to do the next one
