@@ -72,10 +72,10 @@
 
 // you remember our main data structures from gemtypes.h, right?
 
-PROPS v;                // global persistable stuff
-INST vi;                // global non-persistable stuff
-VMINST vrgvmi[MAX_VM];    // per instance not persistable stuff
-VM rgvm[MAX_VM];        // per instance persistable stuff
+PROPS v;                  // global persistable stuff
+INST vi;                  // global non-persistable stuff
+PVM *rgpvm;               // per-instance stuff persistable data
+int   cpvm;               // how many we've allocated space for
 
 const ULONGLONG JIFN = NTSC_CLK / NTSC_FPS;
 const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
@@ -192,15 +192,15 @@ void CreateInstanceName(int i, LPSTR lpInstName)
     int z;
 
     // if this VM type suports cartridge and we have a loaded cartridge, find that name
-    if (rgvm[i].pvmi->fUsesCart && rgvm[i].rgcart.fCartIn)
+    if (rgpvm[i]->pvmi->fUsesCart && rgpvm[i]->rgcart.fCartIn)
     {
-        lp = rgvm[i].rgcart.szName;
+        lp = rgpvm[i]->rgcart.szName;
     }
 
     // otherwise, use a disk name
-    if (lp[0] == 0 && rgvm[i].rgvd[0].sz)
+    if (lp[0] == 0 && rgpvm[i]->rgvd[0].sz)
     {
-        lp = rgvm[i].rgvd[0].sz;
+        lp = rgpvm[i]->rgvd[0].sz;
     }
 
     // only take the filename, none of the path
@@ -209,7 +209,7 @@ void CreateInstanceName(int i, LPSTR lpInstName)
         if (lp[z] == '\\') break;
     }
 
-    sprintf(lpInstName, "%s - %s", rgvm[i].szModel, lp + z + 1);
+    sprintf(lpInstName, "%s - %s", rgpvm[i]->szModel, lp + z + 1);
 }
 
 /****************************************************************************
@@ -266,8 +266,8 @@ void DisplayStatus(int iVM)
 
     if (v.iVM == -1)
         sprintf(rgch0, "%s (%d VM%s) ", vi.szAppName, v.cVM, v.cVM == 1 ? "" : "s");
-    else
-        sprintf(rgch0, "%s (%d/%d VM%s) ", vi.szAppName, v.iVM, v.cVM, v.cVM == 1 ? "" : "s");
+    else    // 1-based VM number for the citizens
+        sprintf(rgch0, "%s (%d/%d VM%s) ", vi.szAppName, v.iVM + 1, v.cVM, v.cVM == 1 ? "" : "s");
 
 #endif
 
@@ -315,8 +315,8 @@ void DisplayStatus(int iVM)
 #endif  
                 fBrakes ? "1.8 MHz" : "Turbo",
                 uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0,
-                iVM >= 0 ? (rgvm[iVM].fEmuPAL ? "PAL" : "NTSC") : "",
-                iVM >= 0 ? ((!v.fTiling && rgvm[iVM].fEmuPAL) ? "50Hz" : "60Hz") : "", pInst
+                iVM >= 0 ? (rgpvm[iVM]->fEmuPAL ? "PAL" : "NTSC") : "",
+                iVM >= 0 ? ((!v.fTiling && rgpvm[iVM]->fEmuPAL) ? "50Hz" : "60Hz") : "", pInst
 #ifndef NDEBUG
                 , v.vRefresh, renders, lastRenderCost
 #endif
@@ -339,7 +339,7 @@ void DisplayStatus(int iVM)
 // return NTSC or PAL, depending. Remember we only do 
 ULONGLONG GetCycles()
 {
-    if (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL)
+    if (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL)
         return GetCyclesP();
     else
         return GetCyclesN();
@@ -388,7 +388,7 @@ ULONGLONG GetCyclesP()
 // return NTSC or PAL, depending. Remember we only do 
 ULONGLONG GetJiffies()
 {
-    if (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL)
+    if (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL)
         return GetJiffiesP();
     else
         return GetJiffiesN();
@@ -442,29 +442,28 @@ DWORD WINAPI VMThread(LPVOID l)
             SetEvent(hDoneEvent[iV]);
             return 0;
         }
-        vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger = !FExecVM(ThreadStuff[iV].iThreadVM, FALSE, TRUE);
+        rgpvmi(ThreadStuff[iV].iThreadVM)->fWantDebugger = !FExecVM(ThreadStuff[iV].iThreadVM, FALSE, TRUE);
 
-        if (vrgvmi[ThreadStuff[iV].iThreadVM].fWantDebugger)
+        if (rgpvmi(ThreadStuff[iV].iThreadVM)->fWantDebugger)
             vi.fExecuting = FALSE;    // we only reset, never set it
 
         SetEvent(hDoneEvent[iV]);
     }
 }
 
-// something failed, rather than exit the app, let's sacrifice a random VM for the greater good and see if we can keep things running
+// something failed, rather than exit the app, let's sacrifice a VM for the greater good and see if we can keep things running
 // Does not fix menus or threads, just quickly deletes. Caller is responsible for calling FixAllMenus and InitThreads
 void SacrificeVM()
 {
-    for (int ix = 0; ix < MAX_VM; ix++)
-    {
-        // DO NOT sacrifice the visible roulette tiles or you will blow up!
-        // !!! We'll hang if we're so low on memory we can't keep 1 VM
-        if (rgvm[ix].fValidVM && ix != v.iVM && ix != sVMNext && ix != sVMPrev)
-        {
-            DeleteVM(ix, FALSE);    // sorry, you are the sacrifice
-            break;
-        }
-    }
+    int ix = v.cVM - 1;
+
+    // DO NOT sacrifice the visible roulette tiles or you will blow up!
+    // !!! We'll hang if we're so low on memory we can't keep at least a couiple of VMs, by not deleting anything
+    while ((ix == v.iVM || ix == sVMNext || ix == sVMPrev) && ix >= 0)
+        ix--;
+    
+    if (ix >= 0)
+        DeleteVM(ix, FALSE);    // sorry, you are the sacrifice (FALSE for quick mode)
 }
 
 void UninitThreads()
@@ -475,7 +474,9 @@ void UninitThreads()
         {
             // let the VM close its file handles for a while and save resources
             // it may have been deleted since we last used it
-            if (rgvm[ThreadStuff[ii].iThreadVM].fValidVM)
+            // !!! This may be the wrong VM# and we're closing somebody we shouldn't, but it's worse to not
+            // close the ones we should and consume mass resources.
+            if (ThreadStuff[ii].iThreadVM < v.cVM)
                 FUnInitDisksVM(ThreadStuff[ii].iThreadVM);
 
             // kill the thread executing this event before deleting any of its objects
@@ -529,40 +530,33 @@ ThreadTry:
     {
         if (v.fTiling)
         {
-            ThreadStuff = malloc(v.cVM * sizeof(ThreadStuffS));
+            ThreadStuff = malloc(sMaxTiles * sizeof(ThreadStuffS)); // not sure how many are visible yet, but that's an upper bound
             if (ThreadStuff)
                 memset(ThreadStuff, 0, sizeof(ThreadStuffS));
 
-            hDoneEvent = malloc(v.cVM * sizeof(HANDLE));
+            hDoneEvent = malloc(sMaxTiles * sizeof(HANDLE));
             if (!ThreadStuff || !hDoneEvent)
                 goto ThreadFail;
 
             RECT rect;
             GetClientRect(vi.hWnd, &rect);
 
-            // find the VM at the top of the page
-            int iVM = 0;
-            while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-                iVM++;
-
-            int x, y, iDone = iVM;
-            BOOL fFirst = TRUE;
-
+            // figure out the first visible tile to save everybody time who needs to know that     
             int nx = sTilesPerRow;
+            int y = v.sWheelOffset;
+            int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
+            y += row * sTileSize.y;           // top of nFirstTileVisible
 
-            for (y = v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
+            nFirstVisibleTile = row * nx;
+            int iVM = nFirstVisibleTile;
+
+            for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
-                for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
+                for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
                     // Don't consider tiles completely off screen
                     if (y + sTileSize.y > 0 && y < rect.bottom)
                     {
-                        if (fFirst)
-                        {
-                            nFirstVisibleTile = iVM;    // hint to quickly find tile positions later
-                            fFirst = FALSE;
-                        }
-
                         ThreadStuff[cThreads].fKillThread = FALSE;
                         ThreadStuff[cThreads].iThreadVM = iVM;
                         ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -570,6 +564,9 @@ ThreadTry:
 
                         // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
                         FInitDisksVM(ThreadStuff[cThreads].iThreadVM);
+
+                        // if the video card sucks, we'll need to know this to know which small buffer to use
+                        rgpvmi(ThreadStuff[cThreads].iThreadVM)->iVisibleTile = cThreads;
 
                         // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                         if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
@@ -595,21 +592,18 @@ ThreadTry:
                         cThreads++;
                     }
 
-                    // advance to the next valid bitmap
-                    do
-                    {
-                        iVM = (iVM + 1) % MAX_VM;
-                    } while (!rgvm[iVM].fValidVM);
+                    // next tile
+                    iVM++;
 
                     // we've considered them all
-                    if (iDone == iVM)
+                    if (v.cVM == iVM)
                         break;
                 }
-                if (iDone == iVM)
+                if (v.cVM == iVM)
                     break;
             }
 
-            if (cThreads < v.cVM)
+            if (cThreads < sMaxTiles)
             {
                 if (cThreads)
                 {
@@ -665,20 +659,12 @@ ThreadTry:
                 FInitDisksVM(ThreadStuff[x].iThreadVM);
 
                 // give this thread a buffer to use for the screen
-                vrgvmi[ThreadStuff[x].iThreadVM].iVisibleTile = x;
+                rgpvmi(ThreadStuff[x].iThreadVM)->iVisibleTile = x;
 
-#pragma warning(push)
-#pragma warning(disable:4152) // function/data pointer conversion
                 // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                 if (!ThreadStuff[x].hGoEvent || !hDoneEvent[x] ||
-#ifdef NDEBUG
                     !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
                             STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
-#else   // debug needs twice the stack
-                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
-                            STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
-#endif
-#pragma warning(pop)
                 {
                     // don't leave the events existing if the thread doesn't... we might try to wait on it
                     if (ThreadStuff[x].hGoEvent)
@@ -768,95 +754,88 @@ void CreateVMMenu()
     int zLast = -1;
     BOOL fOK = TRUE;
 
-    int iFound = 0, iWhich = v.cVM - 1;
-    for (z = MAX_VM - 1; z >= 0; z--)
+    int iFound = 0;
+    for (z = v.cVM - 1; z >= 0; z--)
     {
-        // every valid VM goes in the list
-        if (rgvm[z].fValidVM)
-        {
-            // don't show more than 64 of them in the menu, that will run out of memory and be ridiculous, besides
-            if (iWhich >= MAX_VM_MENUS)
-            {
-                iWhich--;
-                continue;
-            }
+        // don't show more than 64 of them in the menu, that will run out of memory and be ridiculous, besides
+        if (z >= MAX_VM_MENUS)
+            continue;
             
-            // we're counting backwards, so the first one found goes in as IDM_VM1, the highest identifier.
-            if (iFound == 0)
+        // we're counting backwards, so the first one found goes in as IDM_VM1, the highest identifier.
+        if (iFound == 0)
+        {
+            mii.fMask = MIIM_STRING;
+            mii.dwTypeData = mNew;
+            if (z == MAX_VM_MENUS - 1)
+                strcpy(mNew, "ETC.");  // no need to keep going
+            else
+                CreateInstanceName(z, mNew);    // get a name for it
+            SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
+            CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
+            EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
+
+            // current inst is bottom of the list, make a note to put the NEXT INST hot key label on the top one
+            // and the PREV INST hot key label one above us
+            if (z == (int)v.iVM)
+            {
+                fNeedNextKey = TRUE;
+                fNeedPrevKey = TRUE;
+            }
+
+            iFound++;
+        }
+
+        // subsequent (lower) VMs go before IDM_V1 in the menu
+        else
+        {
+            mii.fMask = MIIM_STRING | MIIM_ID;
+            mii.wID = IDM_VM1 - iFound;
+            mii.dwTypeData = mNew;
+            CreateInstanceName(z, mNew);    // get a name for it
+
+            // this is the previous inst to the current one
+            if (fNeedPrevKey) {
+                strcat(mNew, "\tShift+F5");
+                fNeedPrevKey = FALSE;
+            }
+
+            DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);    // erase the old one
+            // insert before the one we last did - failure means potentially thousands of subsequent inserts based on this one will go
+            // in the main menu bar instead! so better stop
+            if (fOK)
+                fOK = InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+            CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
+            EnableMenuItem(vi.hMenu, IDM_VM1 - iFound, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
+            zLast = z;
+
+            if (fNeedPrevKey)
             {
                 mii.fMask = MIIM_STRING;
                 mii.dwTypeData = mNew;
-                if (iWhich == MAX_VM_MENUS - 1)
-                    strcpy(mNew, "ETC.");  // no need to keep going
-                else
-                    CreateInstanceName(z, mNew);    // get a name for it
-                SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
-                CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
-                EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
+                mii.cch = sizeof(mNew);
+                GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+                strcat(mNew, "\tAlt+F5");
+                SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 
-                // current inst is bottom of the list, make a note to put the NEXT INST hot key label on the top one
-                // and the PREV INST hot key label one above us
-                if (z == (int)v.iVM)
-                {
-                    fNeedNextKey = TRUE;
-                    fNeedPrevKey = TRUE;
-                }
-
-                iFound++;
+                fNeedPrevKey = TRUE;
             }
 
-            // subsequent (lower) VMs go before IDM_V1 in the menu
-            else
+            // we-re the current one... add the hotkey "Ctrl+F11" to the menu item after us
+            // and note that the next one we find is the prev one
+            if (z == (int)v.iVM)
             {
-                mii.fMask = MIIM_STRING | MIIM_ID;
-                mii.wID = IDM_VM1 - iFound;
+                mii.fMask = MIIM_STRING;
                 mii.dwTypeData = mNew;
-                CreateInstanceName(z, mNew);    // get a name for it
+                mii.cch = sizeof(mNew);
+                GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
+                strcat(mNew, "\tAlt+F5");
+                SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
 
-                // this is the previous inst to the current one
-                if (fNeedPrevKey) {
-                    strcat(mNew, "\tShift+F5");
-                    fNeedPrevKey = FALSE;
-                }
-
-                DeleteMenu(vi.hMenu, IDM_VM1 - iFound, 0);    // erase the old one
-                // insert before the one we last did - failure means potentially thousands of subsequent inserts based on this one will go
-                // in the main menu bar instead! so better stop
-                if (fOK)
-                    fOK = InsertMenuItem(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-                CheckMenuItem(vi.hMenu, IDM_VM1 - iFound, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
-                EnableMenuItem(vi.hMenu, IDM_VM1 - iFound, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
-                zLast = z;
-
-                if (fNeedPrevKey)
-                {
-                    mii.fMask = MIIM_STRING;
-                    mii.dwTypeData = mNew;
-                    mii.cch = sizeof(mNew);
-                    GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-                    strcat(mNew, "\tAlt+F5");
-                    SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
-
+                // don't put PREV KEY hotkey over top of NEXT KEY hotkey, NEXT should get priority
+                if (v.cVM > 2)
                     fNeedPrevKey = TRUE;
-                }
-
-                // we-re the current one... add the hotkey "Ctrl+F11" to the menu item after us
-                // and note that the next one we find is the prev one
-                if (z == (int)v.iVM)
-                {
-                    mii.fMask = MIIM_STRING;
-                    mii.dwTypeData = mNew;
-                    mii.cch = sizeof(mNew);
-                    GetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, 0, &mii);
-                    strcat(mNew, "\tAlt+F5");
-                    SetMenuItemInfo(vi.hMenu, IDM_VM1 - iFound + 1, FALSE, &mii);
-
-                    // don't put PREV KEY hotkey over top of NEXT KEY hotkey, NEXT should get priority
-                    if (v.cVM > 2)
-                        fNeedPrevKey = TRUE;
-                }
-                iFound++;
             }
+            iFound++;    
         }
     }
 
@@ -907,7 +886,7 @@ void FixAllMenus(BOOL fVM)
     // toggle basic is never a thing outside of XFORMER. If mixed VMs, it's only relevant for an 8bit VM
 #ifdef XFORMER
     // toggle BASIC also has to be relevant, only valid for VM type that supports a cartridge
-    EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, (inst >= 0 && rgvm[inst].pvmi->fUsesCart)    ? MF_ENABLED : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_TOGGLEBASIC, (inst >= 0 && rgpvm[inst]->pvmi->fUsesCart)    ? MF_ENABLED : MF_GRAYED);
 #else
     DeleteMenu(vi.hMenu, IDM_TOGGLEBASIC, 0);
 #endif
@@ -927,14 +906,14 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, inst >= 0 && rgvm[inst].fTimeTravelEnabled ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, inst >= 0 && rgvm[inst].fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0 && rgvm[inst].fEmuPAL) ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, inst >= 0 && rgpvm[inst]->fTimeTravelEnabled ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, inst >= 0 && rgpvm[inst]->fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0 && rgpvm[inst]->fEmuPAL) ? MF_CHECKED : MF_UNCHECKED);
 
     EnableMenuItem(vi.hMenu, IDM_STRETCH, !v.fTiling ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0 && rgvm[inst].fTimeTravelEnabled) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0 && rgpvm[inst]->fTimeTravelEnabled) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);  // auto-enables
-    EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0 && rgvm[inst].fTimeTravelEnabled) ? 0 : MF_GRAYED);
+    EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0 && rgpvm[inst]->fTimeTravelEnabled) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLORMONO, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLDSTART, (inst >= 0) ? 0 : MF_GRAYED);
@@ -956,34 +935,34 @@ void FixAllMenus(BOOL fVM)
     if (inst != -1)
     {
         // call them D1: <filespec> - grey an unload choice if nothing is loaded there, and grey them all in tiled mode
-        sprintf(mNew, "&D1: %s ...", rgvm[inst].rgvd[0].sz);
+        sprintf(mNew, "&D1: %s ...", rgpvm[inst]->rgvd[0].sz);
         SetMenuItemInfo(vi.hMenu, IDM_D1, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D1, 0);    // might be grey from before
         EnableMenuItem(vi.hMenu, IDM_D1BLANKSD, 0);
         //EnableMenuItem(vi.hMenu, IDM_D1BLANKDD, 0);
-        EnableMenuItem(vi.hMenu, IDM_D1U, (rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_WP1, rgvm[inst].rgvd[0].sz[0] ? 0 : MF_GRAYED);
-        if (rgvm[inst].rgvd[0].sz[0])
+        EnableMenuItem(vi.hMenu, IDM_D1U, (rgpvm[inst]->rgvd[0].sz[0]) ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_IMPORTDOS1, rgpvm[inst]->rgvd[0].sz[0] ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP1, rgpvm[inst]->rgvd[0].sz[0] ? 0 : MF_GRAYED);
+        if (rgpvm[inst]->rgvd[0].sz[0])
             CheckMenuItem(vi.hMenu, IDM_WP1, FWriteProtectDiskVM(inst, 0, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
 
-        sprintf(mNew, "&D2: %s ...", rgvm[inst].rgvd[1].sz);
+        sprintf(mNew, "&D2: %s ...", rgpvm[inst]->rgvd[1].sz);
         SetMenuItemInfo(vi.hMenu, IDM_D2, FALSE, &mii);
         EnableMenuItem(vi.hMenu, IDM_D2, 0);
         EnableMenuItem(vi.hMenu, IDM_D2BLANKSD, 0);
-        //EnableMenuItem(vi.hMenu, IDM_D2COPYD1, (rgvm[inst].rgvd[0].sz[0]) ? 0 : MF_GRAYED); // if there's a D1 to copy
+        //EnableMenuItem(vi.hMenu, IDM_D2COPYD1, (rgpvm[inst]->rgvd[0].sz[0]) ? 0 : MF_GRAYED); // if there's a D1 to copy
         //EnableMenuItem(vi.hMenu, IDM_D2BLANKDD, 0);
-        EnableMenuItem(vi.hMenu, IDM_D2U, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (rgvm[inst].rgvd[1].sz[0]) ? 0 : MF_GRAYED);
-        EnableMenuItem(vi.hMenu, IDM_WP2, rgvm[inst].rgvd[1].sz[0] ? 0 : MF_GRAYED);
-        if (rgvm[inst].rgvd[1].sz[0])
+        EnableMenuItem(vi.hMenu, IDM_D2U, (rgpvm[inst]->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_IMPORTDOS2, (rgpvm[inst]->rgvd[1].sz[0]) ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_WP2, rgpvm[inst]->rgvd[1].sz[0] ? 0 : MF_GRAYED);
+        if (rgpvm[inst]->rgvd[1].sz[0])
             CheckMenuItem(vi.hMenu, IDM_WP2, FWriteProtectDiskVM(inst, 1, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
 
         EnableMenuItem(vi.hMenu, IDM_PASTEASCII, 0);
         EnableMenuItem(vi.hMenu, IDM_PASTEATASCII, 0);
 
         // the hot key only applies if it's off, the hot key won't turn it off
-        if (rgvm[inst].fTimeTravelEnabled)
+        if (rgpvm[inst]->fTimeTravelEnabled)
             sprintf(mNew, "&Enable Time Travel");
         else
             sprintf(mNew, "&Enable Time Travel\tPg Up");
@@ -1020,12 +999,12 @@ void FixAllMenus(BOOL fVM)
     }
 
     // if this VM type supports cartridges, and there is a valid active instance
-    if (inst >= 0 && rgvm[inst].pvmi->fUsesCart)
+    if (inst >= 0 && rgpvm[inst]->pvmi->fUsesCart)
     {
         // show the name of the current cartridge, if there is one
-        if (rgvm[inst].rgcart.fCartIn)
+        if (rgpvm[inst]->rgcart.fCartIn)
         {
-            sprintf(mNew, "&Cartridge %s ...", rgvm[inst].rgcart.szName);
+            sprintf(mNew, "&Cartridge %s ...", rgpvm[inst]->rgcart.szName);
             SetMenuItemInfo(vi.hMenu, IDM_CART, FALSE, &mii);
         }
         else
@@ -1036,7 +1015,7 @@ void FixAllMenus(BOOL fVM)
 
         // grey "remove cart" if there isn't one
         EnableMenuItem(vi.hMenu, IDM_CART, 0); // might be grey from before
-        EnableMenuItem(vi.hMenu, IDM_NOCART, (rgvm[inst].rgcart.fCartIn) ? 0 : MF_GRAYED);
+        EnableMenuItem(vi.hMenu, IDM_NOCART, (rgpvm[inst]->rgcart.fCartIn) ? 0 : MF_GRAYED);
     }
     else
     {
@@ -1331,8 +1310,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
             {
                 if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
                 {
-                    strcpy(rgvm[iVM].rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
-                    rgvm[iVM].rgvd[0].dt = DISK_IMAGE;
+                    strcpy(rgpvm[iVM]->rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
+                    rgpvm[iVM]->rgvd[0].dt = DISK_IMAGE;
                     f = FALSE;
                     if (FInitVM(iVM))
                         f = ColdStart(iVM);
@@ -1354,8 +1333,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
             {
                 if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
                 {
-                    strcpy(rgvm[iVM].rgcart.szName, sFile); // set the cartridge name to the argument
-                    rgvm[iVM].rgcart.fCartIn = TRUE;
+                    strcpy(rgpvm[iVM]->rgcart.szName, sFile); // set the cartridge name to the argument
+                    rgpvm[iVM]->rgcart.fCartIn = TRUE;
                     f = FALSE;
                     if (FInitVM(iVM))
                         f = ColdStart(iVM);
@@ -1377,17 +1356,6 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
 
             else if (*piFirstVM == -1 && _stricmp(sFile + len - 3, "gem") == 0)
             {
-#if 0
-                fSkipLoad = FALSE;    // changed our mind, loading this .gem file
-
-                                      // delete all of our VMs we accidently made before we found the .gem file
-                for (int z = 0; z < MAX_VM; z++)
-                {
-                    if (rgvm[z].fValidVM)
-                        DeleteVM(z, FALSE); // don't fix menus each time, that's painfully slow
-                }
-#endif
-
                 lpLoad = sFile;    // load this .gem file
                 break;    // stop loading more files
             }
@@ -1457,11 +1425,6 @@ int CALLBACK WinMain(
 
     //MessageBox(NULL, NULL, NULL, MB_OK);
 
-    // init the VM structure sizes so they look valid
-    // create the thread's message queue
-    for (int ii = 0; ii < MAX_VM; ii++)
-        rgvm[ii].cbSize = sizeof(VM);
-
     // initialize our clock
     LARGE_INTEGER qpc;
     LARGE_INTEGER qpf;
@@ -1493,6 +1456,12 @@ int CALLBACK WinMain(
     InitProperties();
     fProps = LoadProperties(NULL, TRUE); // load our basic props only
 
+    // Make room for an initial 128 VMs
+    rgpvm = HeapAlloc(GetProcessHeap(), 0, (128 * (sizeof(VM) + sizeof(VMINST))));
+    if (!rgpvm)
+        return FALSE;
+    cpvm = 128;
+
     // if we didn't restore a saved position, make a default location for our window
     if (!fProps)
     {
@@ -1508,15 +1477,15 @@ int CALLBACK WinMain(
             int thickY = GetSystemMetrics(SM_CYSIZEFRAME) * 2 + GetSystemMetrics(SM_CYCAPTION) + 60;
 
             // if we're < 640 x 480, make it double sized
-            if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+            if (vvmhw.xpix < 640 || vvmhw.ypix < 480)
             {
-                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX * 2 + thickX;
-                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY * 2 + thickY;
+                v.rectWinPos.right += vvmhw.xpix * 2 + thickX;
+                v.rectWinPos.bottom += vvmhw.ypix * 2 + thickY;
             }
             else
             {
-                v.rectWinPos.right += rgvm[v.iVM].pvmi->uScreenX + thickX;
-                v.rectWinPos.bottom += rgvm[v.iVM].pvmi->uScreenY + thickY;
+                v.rectWinPos.right += vvmhw.xpix + thickX;
+                v.rectWinPos.bottom += vvmhw.ypix + thickY;
             }
         }
         else
@@ -1966,16 +1935,16 @@ int CALLBACK WinMain(
                 int iVM = ThreadStuff[ii].iThreadVM;
 
                 // this is the rectangle of the big window it should fill with its bits
-                GetPosFromTile(iVM, &sRectTile[iVM]);
+                GetPosFromTile(iVM, &rgpvmi(iVM)->sRectTile);
 
                 // Figure out the last tile's position so we can put black in empty tiles later
-                if (sRectTile[iVM].top >= ptBlack.y)
+                if (rgpvmi(iVM)->sRectTile.top >= ptBlack.y)
                 {
-                    if (sRectTile[iVM].top > ptBlack.y)
-                        ptBlack.x = sRectTile[iVM].right;
-                    else if (sRectTile[iVM].right > ptBlack.x)
-                        ptBlack.x = sRectTile[iVM].right;
-                    ptBlack.y = sRectTile[iVM].top;
+                    if (rgpvmi(iVM)->sRectTile.top > ptBlack.y)
+                        ptBlack.x = rgpvmi(iVM)->sRectTile.right;
+                    else if (rgpvmi(iVM)->sRectTile.right > ptBlack.x)
+                        ptBlack.x = rgpvmi(iVM)->sRectTile.right;
+                    ptBlack.y = rgpvmi(iVM)->sRectTile.top;
                 }
 
                 // also let each VM see the size of the entire big window they are drawing a piece of
@@ -2045,13 +2014,13 @@ int CALLBACK WinMain(
         {
             BOOL fOK = TRUE;    // assume only 1 reason we stopped executing
 
-            for (int i = 0; i < MAX_VM; i++)
+            for (int i = 0; i < v.cVM; i++)
             {
                 // change VM type for exactly == TRUE
-                if (vrgvmi[i].fKillMePlease && vrgvmi[i].fKillMePlease != 2)
+                if (rgpvmi(i)->fKillMePlease && rgpvmi(i)->fKillMePlease != 2)
                 {
                     // what type are we now?
-                    int type = rgvm[i].bfHW;
+                    int type = rgpvm[i]->bfHW;
                     int otype = 0;
                     while (type >>= 1)
                         otype++; // convert bitfield to index
@@ -2060,9 +2029,9 @@ int CALLBACK WinMain(
                     BOOL fXOK = FALSE;
                     FUnInitVM(i);
                     FUnInstallVM(i);
-                    vrgvmi[i].pPrivate = NULL;
-                    vrgvmi[i].iPrivateSize = 0;
-                    if (FInstallVM(&vrgvmi[i].pPrivate, &vrgvmi[i].iPrivateSize, i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
+                    rgpvmi(i)->pPrivate = NULL;
+                    rgpvmi(i)->iPrivateSize = 0;
+                    if (FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
                         if (FInitVM(i))
                             if (ColdStart(i))
                                 fXOK = TRUE;
@@ -2071,13 +2040,13 @@ int CALLBACK WinMain(
                     FixAllMenus(!v.fTiling); // don't do unnecessary slow stuff when tiled
 
                     // don't reset this until after the VM can see the reason code in FInstallVM
-                    vrgvmi[i].fKillMePlease = FALSE;
+                    rgpvmi(i)->fKillMePlease = FALSE;
                 }
                 
                 // coldboot only - to switch binary loaders and try a different one
-                else if (vrgvmi[i].fKillMePlease == 2)
+                else if (rgpvmi(i)->fKillMePlease == 2)
                 {
-                    vrgvmi[i].fKillMePlease = FALSE;
+                    rgpvmi(i)->fKillMePlease = FALSE;
 
                     if (!ColdStart(i))
                         DeleteVM(v.iVM, TRUE);
@@ -2085,7 +2054,7 @@ int CALLBACK WinMain(
                     FixAllMenus(FALSE);
                 }
                
-                else if (vrgvmi[i].fWantDebugger)    // we also stopped because a different VM wants the debugger, so don't lose that
+                else if (rgpvmi(i)->fWantDebugger)    // we also stopped because a different VM wants the debugger, so don't lose that
                     fOK = FALSE;
             }
             if (fOK)
@@ -2141,8 +2110,8 @@ int CALLBACK WinMain(
         // When emulating original speed (fBrakes != 0) slow down to let real time catch up (1/60th or 1/50th sec)
         // Don't allow guest time drift to propagate by more than one extra guest second.
         // The Macros will ONLY use PAL timing when we're not tiling, tiled PAL gets 60Hz like NTSC
-        ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? PAL_CLK : NTSC_CLK;
-        ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgvm[v.iVM].fEmuPAL) ? JIFP : JIFN;
+        ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? PAL_CLK : NTSC_CLK;
+        ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? JIFP : JIFN;
         
         // Don't spin in a tight loop doing nothing while minimized
         if ((fBrakes || !cThreads) && (cCur < ullsec))
@@ -2191,11 +2160,11 @@ int CALLBACK WinMain(
             SetFocus(GetConsoleWindow());    // !!! doesn't work
 
             // go into the debugger for every VM that needs it
-            for (int iVM = 0; iVM < MAX_VM; iVM++)
+            for (int iVM = 0; iVM < v.cVM; iVM++)
             {
                 // user wants the "current" inst broken into, or a VM wants itself broken into
                 // !!! Can you quickly change "current" VM before this code executes?
-                if ((vi.fDebugBreak && iVM == v.iVM) || (rgvm[iVM].fValidVM && vrgvmi[iVM].fWantDebugger))
+                if ((vi.fDebugBreak && iVM == v.iVM) || rgpvmi(iVM)->fWantDebugger)
                     if (!FMonVM(iVM)) // somebody wants to quit
                         break;
             }
@@ -2339,24 +2308,25 @@ BOOL SetBitmapColors()
 
             if (v.fNoMono)
             {
-                vvmhw.rgrgb[0].rgbRed =
-                    vvmhw.rgrgb[0].rgbGreen =
-                    vvmhw.rgrgb[0].rgbBlue = 0;
-                vvmhw.rgrgb[0].rgbReserved = 0;
-
-                for (i = 1; i < 256; i++)
+                if (nT == 0)    // first time only, set up the array
                 {
-                    vvmhw.rgrgb[i].rgbRed =
-                        vvmhw.rgrgb[i].rgbGreen =
-                        vvmhw.rgrgb[i].rgbBlue = 0xFF;
-                    vvmhw.rgrgb[i].rgbReserved = 0;
+                    vvmhw.rgrgb[0].rgbRed =
+                        vvmhw.rgrgb[0].rgbGreen =
+                        vvmhw.rgrgb[0].rgbBlue = 0;
+                    vvmhw.rgrgb[0].rgbReserved = 0;
+
+                    for (i = 1; i < 256; i++)
+                    {
+                        vvmhw.rgrgb[i].rgbRed =
+                            vvmhw.rgrgb[i].rgbGreen =
+                            vvmhw.rgrgb[i].rgbBlue = 0xFF;
+                        vvmhw.rgrgb[i].rgbReserved = 0;
+                    }
                 }
                 SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 256, vvmhw.rgrgb);
             }
             else
                 SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 2, vvmhw.rgrgb);
-
-            return TRUE;
         }
 
         // we are 8 bit colour
@@ -2365,64 +2335,66 @@ BOOL SetBitmapColors()
 
 #if 0
             // but are on a B&W monitor that does shades of grey
-            if (rgvm[iVM].bfMon == monGreyTV)
+            if (rgpvm[iVM]->bfMon == monGreyTV)
 
                 for (i = 0; i < 256; i++)
                 {
                     vvmhw[iVM].rgrgb[i].rgbRed =
                         vvmhw[iVM].rgrgb[i].rgbGreen =
                         vvmhw[iVM].rgrgb[i].rgbBlue =
-                        (rgvm[iVM].pvmi->rgbRainbow[i * 3] + (rgvm[iVM].pvmi->rgbRainbow[i * 3] >> 2)) +
-                        (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 1] + (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 1] >> 2)) +
-                        (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 2] + (rgvm[iVM].pvmi->rgbRainbow[i * 3 + 2] >> 2));
+                        (rgpvm[iVM]->pvmi->rgbRainbow[i * 3] + (rgpvm[iVM]->pvmi->rgbRainbow[i * 3] >> 2)) +
+                        (rgpvm[iVM]->pvmi->rgbRainbow[i * 3 + 1] + (rgpvm[iVM]->pvmi->rgbRainbow[i * 3 + 1] >> 2)) +
+                        (rgpvm[iVM]->pvmi->rgbRainbow[i * 3 + 2] + (rgpvm[iVM]->pvmi->rgbRainbow[i * 3 + 2] >> 2));
                     vvmhw[iVM].rgrgb[i].rgbReserved = 0;
                 }
             else
 #endif
-                // !!! uses ATARI rainbow
-                for (i = 0; i < 256; i++)
+                if (nT == 0)    // first time only, set up the array
                 {
-                    vvmhw.rgrgb[i].rgbRed = (vmi800.rgbRainbow[i * 3] << 2) | (vmi800.rgbRainbow[i * 3] >> 5);
-                    vvmhw.rgrgb[i].rgbGreen = (vmi800.rgbRainbow[i * 3 + 1] << 2) | (vmi800.rgbRainbow[i * 3 + 1] >> 5);
-                    vvmhw.rgrgb[i].rgbBlue = (vmi800.rgbRainbow[i * 3 + 2] << 2) | (vmi800.rgbRainbow[i * 3 + 2] >> 5);
-                    vvmhw.rgrgb[i].rgbReserved = 0;
+                    // !!! uses ATARI rainbow
+                    for (i = 0; i < 256; i++)
+                    {
+                        vvmhw.rgrgb[i].rgbRed = (vmi800.rgbRainbow[i * 3] << 2) | (vmi800.rgbRainbow[i * 3] >> 5);
+                        vvmhw.rgrgb[i].rgbGreen = (vmi800.rgbRainbow[i * 3 + 1] << 2) | (vmi800.rgbRainbow[i * 3 + 1] >> 5);
+                        vvmhw.rgrgb[i].rgbBlue = (vmi800.rgbRainbow[i * 3 + 2] << 2) | (vmi800.rgbRainbow[i * 3 + 2] >> 5);
+                        vvmhw.rgrgb[i].rgbReserved = 0;
 
 #if 0
-                    //
-                    // test code to dump the 256-colour palette as YUV values
-                    //
+                        //
+                        // test code to dump the 256-colour palette as YUV values
+                        //
 
-                    {
-                        int Y, U, V;
-                        int R = vvmhw[iVM].rgrgb[i].rgbRed;
-                        int G = vvmhw[iVM].rgrgb[i].rgbGreen;
-                        int B = vvmhw[iVM].rgrgb[i].rgbBlue;
+                        {
+                            int Y, U, V;
+                            int R = vvmhw[iVM].rgrgb[i].rgbRed;
+                            int G = vvmhw[iVM].rgrgb[i].rgbGreen;
+                            int B = vvmhw[iVM].rgrgb[i].rgbBlue;
 
-                        // from http://en.wikipedia.org/wiki/YUV/RGB_conversion_formulas
+                            // from http://en.wikipedia.org/wiki/YUV/RGB_conversion_formulas
 
-                        Y = 66 * R + 129 * G + 25 * B;
-                        U = 112 * B - 74 * G - 38 * R;
-                        V = 112 * R - 94 * G - 18 * B;
+                            Y = 66 * R + 129 * G + 25 * B;
+                            U = 112 * B - 74 * G - 38 * R;
+                            V = 112 * R - 94 * G - 18 * B;
 
-                        Y >>= 8;
-                        U >>= 8;
-                        V >>= 8;
+                            Y >>= 8;
+                            U >>= 8;
+                            V >>= 8;
 
-                        Y += 16;
-                        U += 128;
-                        V += 128;
+                            Y += 16;
+                            U += 128;
+                            V += 128;
 
-                        printf("i = %3d, RGB=%3d,%3d,%3d, YUV = %3d,%3d,%3d\n",
-                            i, R, G, B, Y, U, V);
-                    }
+                            printf("i = %3d, RGB=%3d,%3d,%3d, YUV = %3d,%3d,%3d\n",
+                                i, R, G, B, Y, U, V);
+                        }
 #endif
+                    }
                 }
 
             if (vi.fInDirectXMode)
                 ;//FChangePaletteEntries(0, 256, vvmhw[iVM].rgrgb);
             else
                 SetDIBColorTable(vvmhw.pbmTile[nT].hdcMem, 0, 256, vvmhw.rgrgb);
-            return TRUE;
         }
 
         // 16 colours
@@ -2499,7 +2471,7 @@ BOOL CreateTiledBitmap()
 
 #if 0   // TODO, this code assumes 800 VMs only and breaks otherwise
     // we may have moved the window, so we need to move the mouse capture rectangle too
-    if (rgvm[iVM].pvmi->fUsesMouse && vi.fGEMMouse)
+    if (rgpvm[iVM]->pvmi->fUsesMouse && vi.fGEMMouse)
     {
         ShowWindowsMouse();
         ShowGEMMouse();
@@ -2616,8 +2588,10 @@ BOOL CreateNewBitmaps()
 
         vvmhw.pbmTile[nT].hbmOld = SelectObject(vvmhw.pbmTile[nT].hdcMem, vvmhw.pbmTile[nT].hbm);
 
-        SetBitmapColors();
     }
+
+    SetBitmapColors();
+
     return TRUE;
 
 #if defined(ATARIST) || defined(SOFTMAC)
@@ -2896,7 +2870,7 @@ BOOL CreateNewBitmaps()
 
         // we may have moved the window, so we need to move the mouse capture rectangle too
 
-        if (rgvm[iVM].pvmi->fUsesMouse && vi.fGEMMouse)
+        if (rgpvm[iVM]->pvmi->fUsesMouse && vi.fGEMMouse)
         {
             ShowWindowsMouse();
             ShowGEMMouse();
@@ -2921,24 +2895,24 @@ BOOL CreateNewBitmaps()
 //
 BOOL FToggleMonitor(int iVM)
 {
-    ULONG bfSav = rgvm[iVM].bfMon;
+    ULONG bfSav = rgpvm[iVM]->bfMon;
 
     // loop through all the bits in wfMon trying to find a different bit
 
     for(;;)
     {
-        rgvm[iVM].bfMon <<= 1;
+        rgpvm[iVM]->bfMon <<= 1;
 
-        if (rgvm[iVM].bfMon == 0)
-            rgvm[iVM].bfMon = 1;
+        if (rgpvm[iVM]->bfMon == 0)
+            rgpvm[iVM]->bfMon = 1;
 
-        if (rgvm[iVM].bfMon & rgvm[iVM].pvmi->wfMon)
+        if (rgpvm[iVM]->bfMon & rgpvm[iVM]->pvmi->wfMon)
             break;
     }
 
     // if it's the same bit, no other monitors
 
-    if (bfSav == rgvm[iVM].bfMon)
+    if (bfSav == rgpvm[iVM]->bfMon)
         return FALSE;
 
     return TRUE;
@@ -2963,8 +2937,8 @@ BOOL FToggleMonitor(int iVM)
         vvmhw[iVM].rgrgb[i].rgbReserved = 0;
     }
 
-    vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
-    vvmhw[iVM].fGrey = FGreyFromBf(rgvm[iVM].bfMon);
+    vvmhw[iVM].fMono = FMonoFromBf(rgpvm[iVM]->bfMon);
+    vvmhw[iVM].fGrey = FGreyFromBf(rgpvm[iVM]->bfMon);
     SetBitmapColors(v.iVM);
 //    FCreateOurPalette();
 
@@ -2985,8 +2959,6 @@ BOOL FToggleMonitor(int iVM)
 void RenderBitmap()
 {
     RECT rect;
-    int iVM = v.iVM;
-
     GetClientRect(vi.hWnd, &rect);
 
     if (v.cVM == 0)
@@ -3005,66 +2977,60 @@ void RenderBitmap()
     // TILING MODE
     if (v.fTiling)
     {
+        // need to do separate blits from separate offscreen buffers
         if (v.fMyVideoCardSucks)
         {
+            int nT = 0;
 
-            // find a valid VM we can use
-            iVM = 0; // start tiling at VM 0
-            while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-                iVM++;
+            BOOL fBlack = FALSE;    // when we run out of tiles, just draw black
 
-            int x, y, fDone = iVM, nT = 0;
-            BOOL fBlack = FALSE;
-
-            // !!! tile sizes are arbitrarily based off the first VM, what about when sizes are mixed?
             int nx1 = rect.right / sTileSize.x; // how many fit across entirely?
             int nx = sTilesPerRow;   // how many fit across (if 1/2 showing counts)?
 
-            // black out the area we'll never draw to
+            // black out the right hand side we'll never draw to
             if (nx == nx1)
                 BitBlt(vi.hdc, nx * sTileSize.x, 0, rect.right - (sTileSize.x * nx), rect.bottom, NULL, 0, 0, BLACKNESS);
 
-            for (y = rect.top + v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
+            // figure out the y position of the start of the first visible tile
+            int y = v.sWheelOffset;
+            int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
+            y += row * sTileSize.y;           // top of nFirstTileVisible
+
+            for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
-                for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
+                for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
-                    // Tiled mode does not stretch, it needs to be FAST. Don't draw tiles off the top of the screen
-                    if (y + sTileSize.y > 0 && !fBlack)
+                    if (!fBlack)
                     {
-                        if (sVM == (int)iVM)
+                        if (sVM == nT + nFirstVisibleTile)
                         { 
                             // border around the one we're hovering over
                             int xw = sTileSize.x, yw = sTileSize.y;
-                            BitBlt(vi.hdc, x, y, xw, 5, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
-                            BitBlt(vi.hdc, x, y + 5, 5, yw - 10, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
+                            PatBlt(vi.hdc, x, y, xw, 5, WHITENESS);
+                            PatBlt(vi.hdc, x, y + 5, 5, yw - 10, WHITENESS);
                             BitBlt(vi.hdc, x + 5, y + 5, xw - 10, yw - 10, vvmhw.pbmTile[nT].hdcMem, 5, 5, SRCCOPY);
-                            BitBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
-                            BitBlt(vi.hdc, x, y + yw - 5, xw, 5, vvmhw.pbmTile[nT].hdcMem, 0, 0, WHITENESS);
+                            PatBlt(vi.hdc, x + xw - 5, y + 5, 5, yw - 10, WHITENESS);
+                            PatBlt(vi.hdc, x, y + yw - 5, xw, 5, WHITENESS);
                         }
                         else
+                        {
                             BitBlt(vi.hdc, x, y, vvmhw.xpix, vvmhw.ypix, vvmhw.pbmTile[nT].hdcMem, 0, 0, SRCCOPY);
+                        }
                     }
-                    else if (fBlack)
-                        BitBlt(vi.hdc, x, y, vvmhw.xpix, vvmhw.ypix, vvmhw.pbmTile[nT].hdcMem, 0, 0, BLACKNESS);
+                    else
+                        PatBlt(vi.hdc, x, y, vvmhw.xpix, vvmhw.ypix, BLACKNESS);
 
-                    //StretchBlt(vi.hdc, x, y,
-                    //    (vvmhw[iVM].xpix * vi.fXscale), (vvmhw[iVM].ypix * vi.fYscale),
-                    //    vvmhw.pbmTile[nT].hdcMem, 0, 0, vvmhw[iVM].xpix, vvmhw[iVM].ypix, SRCCOPY);
-
-                    // advance to the next valid bitmap
-                    do
-                    {
-                        iVM = (iVM + 1) % MAX_VM;
-                    } while (!rgvm[iVM].fValidVM);
-
-                    nT++;   // keep track of visible tile #
+                    // advance to the next VM
+                    nT++;
 
                     // we've painted them all, now just black for the rest
-                    if (fDone == (int)iVM)
+                    if (nT + nFirstVisibleTile == v.cVM)
                         fBlack = TRUE;
                 }
             }
         }
+        
+        // just do one blit from a big buffer that has all the tiles in it
         else
         {
             // border around the one we're hovering over - write to source to avoid flicker and get best perf
@@ -3074,7 +3040,7 @@ void RenderBitmap()
                 // get the rect of the current tile
                 RECT rectB;
                 int ycur = 0;
-                GetPosFromTile(sVM, &rectB);
+                GetPosFromTile(sVM, &rectB);                 // !!! can't we use sRectTile?
                 int xw = sTileSize.x, yw = sTileSize.y;
                 int xmax = xw;
                 int ymax = yw;
@@ -3087,7 +3053,7 @@ void RenderBitmap()
 
                 // get a pointer to the top left of the current tile
                 BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
-                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2); // !!! can't we use sStride?
                 ptb += rectB.top * stride + rectB.left;
 
                 // blit white (ATARI colour $f)
@@ -3123,13 +3089,12 @@ void RenderBitmap()
 
                 // get a pointer to the top right of the last tile
                 BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
-                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2);
+                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2); // !!! can't we use sStride?
                 ptb += ptBlack.y * stride + ptBlack.x;
 
                 // black out the rest of this row
                 int ycur = ptBlack.y;
-                // !!! 240 constant assumed
-                while (ycur < ptBlack.y + 240 && ycur < rect.bottom && ptBlack.x < rect.right)
+                while (ycur < ptBlack.y + vvmhw.ypix && ycur < rect.bottom && ptBlack.x < rect.right)
                 {
                     memset(ptb, 0, rect.right - ptBlack.x);
                     ycur += 1;
@@ -3137,9 +3102,9 @@ void RenderBitmap()
                 }
 
                 // black out any bottom blank rows (if VMs are deleted, that could make some)
-                ycur = ptBlack.y + 240;
+                ycur = ptBlack.y + vvmhw.ypix;
                 ptb = (BYTE *)(vvmhw.pTiledBits);
-                ptb += (ptBlack.y + 240) * stride;
+                ptb += (ptBlack.y + vvmhw.ypix) * stride;
                 while (ycur < rect.bottom)
                 {
                     memset(ptb, 0, rect.right);
@@ -3273,60 +3238,22 @@ void SelectInstance(int iVM)
         return;
     }
 
-    // which way are we looking?
-    int dir = 1;
+    // -1 means back up one
     if (iVM == -1)
-    {
-        dir = -1;
-        // start looking here when going backwards
-        iVM = v.iVM - 1;
-        if (iVM < 0)
-            iVM = MAX_VM - 1;
-    }
-
-    // when told to advance to the next VM, we're given one more than the current one to start looking at, which may be too big
-    if (iVM >= MAX_VM)
-        iVM = 0;
-
-    int old = iVM;
-
-    while (!rgvm[iVM].fValidVM)
-    {
-        iVM = (iVM + dir);
-        if (iVM < 0)
-            iVM = MAX_VM - 1;
-        if (iVM >= MAX_VM)
-            iVM = 0;
-        if (iVM == old) break;
-    }
-
-    assert(rgvm[iVM].fValidVM);
-
+        v.iVM = (v.iVM > 0) ? v.iVM - 1 : v.cVM - 1;    // % v.cVM does not work!
+    else
+        v.iVM = (iVM >= v.cVM) ? 0 : iVM;
+    
     // This is what you need to do to switch to an instance
     // only the main GEM UI cares about the concept of a current instance now! Everything else is thread safe
     // with no concept of "current", but taking an instance as an argument
 
-    v.iVM = iVM;                    // current VM #
-
     FixAllMenus(TRUE);
 
     // before making threads, figure out the next and previous instance (one of these might be active too, in roulette mode)
-    sVMPrev = v.iVM - 1;
-    while (sVMPrev < 0 || !rgvm[sVMPrev].fValidVM)
-    {
-        sVMPrev--;
-        if (sVMPrev < 0)
-            sVMPrev = MAX_VM - 1;
-    }
-
-    sVMNext = v.iVM + 1;
-    while (sVMNext >= MAX_VM || !rgvm[sVMNext].fValidVM)
-    {
-        sVMNext++;
-        if (sVMNext >= MAX_VM)
-            sVMNext = 0;
-    }
-
+    sVMPrev = (v.iVM > 0) ? v.iVM - 1 : v.cVM - 1;    // % v.cVM does not work!
+    sVMNext = (v.iVM + 1) % v.cVM;
+    
     // The active thread needs to change
     if (!v.fTiling)
         InitThreads();
@@ -3337,7 +3264,7 @@ void SelectInstance(int iVM)
                 v.rectWinPos.bottom - v.rectWinPos.top, 0);
 
     // show the new VM # immediately in the title bar, don't wait 1sec
-    DisplayStatus(iVM);
+    DisplayStatus(v.iVM);
 
     return;
 }
@@ -3350,7 +3277,7 @@ BOOL ColdStart(int iVM)
 {
     printf("COLDBOOT (%d)\n", iVM);
 
-    if (rgvm[iVM].pvmi->fUsesMouse)
+    if (rgpvm[iVM]->pvmi->fUsesMouse)
     {
         ShowWindowsMouse();
         SetWindowsMouse(0);
@@ -3359,24 +3286,24 @@ BOOL ColdStart(int iVM)
 #if defined (ATARIST) || defined (SOFTMAC)
     // User may have just mucked with Properties
 
-    vvmhw[iVM].fMono = FMonoFromBf(rgvm[iVM].bfMon);
+    vvmhw[iVM].fMono = FMonoFromBf(rgpvm[iVM]->bfMon);
 
     // make sure RAM setting not corrupted!
     // if it is, select the smaller RAM setting of the VM
 
-    if ((rgvm[iVM].bfRAM & rgvm[iVM].pvmi->wfRAM) == 0)
-        rgvm[iVM].bfRAM = BfFromWfI(rgvm[iVM].pvmi->wfRAM, 0);
+    if ((rgpvm[iVM]->bfRAM & rgpvm[iVM]->pvmi->wfRAM) == 0)
+        rgpvm[iVM]->bfRAM = BfFromWfI(rgpvm[iVM]->pvmi->wfRAM, 0);
 
-    vi.cbRAM[0] = CbRamFromBf(rgvm[iVM].bfRAM);
-    vi.eaROM[0] = v.rgosinfo[rgvm[iVM].iOS].eaOS;
-    vi.cbROM[0] = v.rgosinfo[rgvm[iVM].iOS].cbOS;
+    vi.cbRAM[0] = CbRamFromBf(rgpvm[iVM]->bfRAM);
+    vi.eaROM[0] = v.rgosinfo[rgpvm[iVM]->iOS].eaOS;
+    vi.cbROM[0] = v.rgosinfo[rgpvm[iVM]->iOS].cbOS;
 
-    vrgvmi[iVM].keyhead = vrgvmi[iVM].keytail = 0;
+    rgpvmi(iVM)->keyhead = rgpvmi(iVM)->keytail = 0;
     vi.fVMCapture = FALSE;
 
     // we no longer require cold start to happen after CreateNewBitmap, so we might not have hdc's now.
     //PatBlt(vi.hdc, 0, 0, 4096, 2048, BLACKNESS);
-    //PatBlt(vrgvmi[iVM].hdcMem, 0, 0, 4096, 2048, BLACKNESS);
+    //PatBlt(rgpvmi(iVM]->hdcMem, 0, 0, 4096, 2048, BLACKNESS);
 #endif
 
 #if 0   // this makes the title bar go crazy as any of a 1,000 VMs might self-reboot when crashing
@@ -3463,8 +3390,8 @@ BOOL ColdStart(int iVM)
     printf("ROM ver  = $%04X\n", vmPeekW(iVM, vi.eaROM[0]+8));
     printf("ROM subv = $%04X\n", vmPeekW(iVM, vi.eaROM[0]+18));
 
-    printf("CPU type = %s\n", PchFromBfRgSz(vi.fFake040 ? cpu68040 : rgvm[iVM].bfCPU, rgszCPU));
-//    printf("CPU real = %s\n", (long)PchFromBfRgSz(rgvm[iVM].bfCPU, rgszCPU));
+    printf("CPU type = %s\n", PchFromBfRgSz(vi.fFake040 ? cpu68040 : rgpvm[iVM]->bfCPU, rgszCPU));
+//    printf("CPU real = %s\n", (long)PchFromBfRgSz(rgpvm[iVM]->bfCPU, rgszCPU));
     fDebug--;
 
     if (v.fDebugMode)
@@ -3476,7 +3403,6 @@ BOOL ColdStart(int iVM)
     
     return f;
 }
-
 
 // what are the tiled coordinates of this VM?
 //
@@ -3490,24 +3416,18 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
-    int x, y, iVM;
-
-    iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
-    Assert(rgvm[iVM].fValidVM);
-
-    int fDone = 0;
-
-    int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
+    int iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
+   
+    int nx = sTilesPerRow;
     
-    // first tile position, may be a huge negative number
-    y = rect.top + v.sWheelOffset;
-
+    // figure out the y position of the start of the first visible tile
+    int y = v.sWheelOffset;
     int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
     y += row * sTileSize.y;           // top of nFirstTileVisible
 
     for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
-        for (x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
+        for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
         {
             if (iVM == iVMTarget)
             {
@@ -3518,14 +3438,10 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
                 return;
             }
 
-            // advance to the next valid bitmap ie valid VM
-            do
-            {
-                iVM = (iVM + 1) % MAX_VM;
-            } while (!rgvm[iVM].fValidVM);
+            iVM++;
 
             // we've reached the end of the tiles
-            if (iVM == fDone)
+            if (iVM == v.cVM)
             {
                 y = rect.bottom;    // double break
                 break;
@@ -3549,18 +3465,18 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
 
     GetClientRect(vi.hWnd, &rect);
 
-    int x, y;
+    int iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
 
-    int iVM = 0;
-    while (iVM < 0 || !rgvm[iVM].fValidVM)
-        iVM = ((iVM + 1) % MAX_VM);
-    int fDone = iVM;
+    int nx = sTilesPerRow;
 
-    int nx = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (1/2 showing counts)
+    // figure out the y position of the start of the first visible tile
+    int y = v.sWheelOffset;
+    int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
+    y += row * sTileSize.y;           // top of nFirstTileVisible
 
-    for (y = rect.top + v.sWheelOffset; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
+    for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale */)
     {
-        for (x = 0; x < nx * vvmhw.xpix; x += sTileSize.x /* * vi.fXscale*/)
+        for (int x = 0; x < nx * vvmhw.xpix; x += sTileSize.x /* * vi.fXscale*/)
         {
             if ((xPos >= x) && (xPos < x + sTileSize.x /* * vi.fXscale */) &&
                 (yPos >= y) && (yPos < y + sTileSize.y /* * vi.fYscale */))
@@ -3573,14 +3489,10 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
                 return iVM;
             }
 
-            // advance to the next valid bitmap
-            do
-            {
-                iVM = (iVM + 1) % MAX_VM;
-            } while (!rgvm[iVM].fValidVM);
+            iVM++;
 
             // we've reached the end of the tiles
-            if (iVM == fDone)
+            if (iVM == v.cVM)
             {
                 y = rect.bottom;    // double break
                 break;
@@ -3596,10 +3508,6 @@ void ScrollTiles()
 {
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
-
-    int iVM = v.iVM;
-    while (iVM < 0 || rgvm[iVM].fValidVM == FALSE)
-        iVM++;
 
     int nx = sTilesPerRow; // how many fit across (1/2 showing counts)
     int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
@@ -3642,7 +3550,7 @@ BOOL SaveATARIDOS(int inst, int drive)
 
     char szDir[MAX_PATH];
     szDir[0] = 0;
-    DISKINFO *pdi = PdiOpenDisk(rgvm[inst].rgvd[drive].dt, (LONG_PTR)rgvm[inst].rgvd[drive].sz, DI_READONLY);
+    DISKINFO *pdi = PdiOpenDisk(rgpvm[inst]->rgvd[drive].dt, (LONG_PTR)rgpvm[inst]->rgvd[drive].sz, DI_READONLY);
 
     // oops, something wrong with the disk image file
     if (!pdi)
@@ -3658,7 +3566,7 @@ BOOL SaveATARIDOS(int inst, int drive)
     {
 
         szDir[0] = 0;
-        strcat(szDir, rgvm[inst].rgvd[drive].sz);
+        strcat(szDir, rgpvm[inst]->rgvd[drive].sz);
         strcat(szDir, "_Files");
 
         // Create a directory named after the disk image for all of its files
@@ -3869,6 +3777,7 @@ void PasteChar(WORD w, int i)
 }
 
 // Paste this string into the keyboard buffer. It is either ASCII or ATASCII
+// !!! ATARI800 VM specific function
 //
 void PasteAsciiAtascii(LPSTR lpClip, BOOL fAtascii)
 {
@@ -3876,6 +3785,13 @@ void PasteAsciiAtascii(LPSTR lpClip, BOOL fAtascii)
     BYTE b;
     WORD w, wLast = 0;
     BOOL fLastInverse = FALSE;
+
+    if (!rgPasteBuffer)
+        rgPasteBuffer = malloc(65536 * 16);
+    
+    // sorry, out of memory, you don't get an explanation
+    if (!rgPasteBuffer)
+        return;
 
     PasteChar(0x3a, 0);     // start with CAPS key to go into lower case mode so we can get both upper and lower case
     i = 12;
@@ -4090,8 +4006,7 @@ LRESULT CALLBACK WndProc(
         RECT rect;
         GetClientRect(vi.hWnd, &rect);
         Assert(sTileSize.x);
-        sTilesPerRow = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
-
+        
         // This code hasn't been enabled in years
         if (vi.fInDirectXMode)
           {
@@ -4116,7 +4031,15 @@ LRESULT CALLBACK WndProc(
             int noff = -v.sWheelOffset - nFT / sTilesPerRow * sTileSize.y; // amount of partial scrolling            
             int nx = (LOWORD(lParam) * 10 / sTileSize.x + 5) / 10;         // how many fit across using the new size
             v.sWheelOffset = -(nFT / nx * sTileSize.y + noff);             // keep the old top left tile in the first row, offset the same amount
+            // we may be scrolled further than is possible given we have fewer of them now. You can only scroll the extent to which
+            // the bottom of the tiles is beyond the bottom of the window
+            int last = (v.cVM == 0 || nx == 0) ? 0 : -((v.cVM + nx - 1) / nx * sTileSize.y - rect.bottom);
+            if (v.sWheelOffset < last && last <= 0)
+                v.sWheelOffset = last;
         }
+
+        // now that we've used the old value, recalculate the new value
+        sTilesPerRow = (rect.right * 10 / sTileSize.x + 5) / 10; // how many fit across (if 1/2 showing counts)?
 
         // remember if we're maximized, minimized or normal
         v.swWindowState = wp.showCmd;
@@ -4258,15 +4181,15 @@ break;
 
             // Show a double sized screen of anything < 640x480 // !!! For now, these always match as our GEM tile size
             // (vvmhw) is always set to ATARI's size.
-            if (rgvm[v.iVM].pvmi->uScreenX < 640 || rgvm[v.iVM].pvmi->uScreenY < 480)
+            if (vvmhw.xpix < 640 || vvmhw.ypix < 480)
             {
-                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX * 2) + thickX;
-                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY * 2) + thickY;
+                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, vvmhw.xpix * 2) + thickX;
+                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, vvmhw.ypix * 2) + thickY;
             }
             else
             {
-                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, (int)rgvm[v.iVM].pvmi->uScreenX) + thickX;
-                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, (int)rgvm[v.iVM].pvmi->uScreenY) + thickY;
+                lpmm->ptMinTrackSize.x = max(vvmhw.xpix * scaleX, vvmhw.xpix) + thickX;
+                lpmm->ptMinTrackSize.y = max(vvmhw.ypix * scaleY, vvmhw.ypix) + thickY;
             }
         }
         // default to 640x480 minimum if state-less
@@ -4364,7 +4287,7 @@ break;
 
         if (vi.fHaveFocus && (LOWORD(lParam) == HTCLIENT))
         {
-            if (v.iVM < 0 || !rgvm[v.iVM].pvmi->fUsesMouse)
+            if (v.iVM < 0 || !rgpvm[v.iVM]->pvmi->fUsesMouse)
             {
                 // always set cursor to crosshairs if VM doesn't use the mouse
                 SetCursor(LoadCursor(NULL, IDC_CROSS));
@@ -4401,7 +4324,7 @@ break;
         //DebugStr("WM_SETFOCUS\n");
 
         vi.fHaveFocus = TRUE;
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse)
             ShowGEMMouse();
 
         // If we ALT-TABBED away from the VM, eg., it still thinks ALT is down, send a bunch of UPs
@@ -4436,7 +4359,7 @@ break;
         vi.fInDirectXMode = FALSE;
 #endif
 
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse)
         {
             ShowWindowsMouse();
             ReleaseCapture();
@@ -4445,6 +4368,33 @@ break;
         vi.fHaveFocus = FALSE;
 
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        break;
+
+    case WM_SYSCOMMAND:
+        switch (uParam & 0xFFF0)
+        {
+        default:
+            break;
+
+        case SC_SCREENSAVE:
+        case SC_MONITORPOWER:
+            // return 0;     !!! try to avoid screen savers, etc?
+            break;
+
+        case SC_KEYMENU:
+            // It's important we send the ALT key up message, because windows sends us this instead
+            // Otherwise, after choosing ALT+F to activate a menu, then pressing ESC leaves the VM thinking ALT is down
+            // and no further key presses get through
+            
+            if (v.iVM >= 0)
+            {
+                //ODS("SYSCOMMAND: ALTs go up\n");
+                // L ALT
+                FWinMsgVM(v.iVM, vi.hWnd, WM_SYSKEYUP, 0x12, 0xc0380001);
+                // R ALT
+                FWinMsgVM(v.iVM, vi.hWnd, WM_SYSKEYUP, 0x12, 0xc1380001);
+            }
+        }
         break;
 
 #if 0
@@ -4471,25 +4421,6 @@ break;
         return 0;
         break;
 
-    case WM_SYSCOMMAND:
-        switch(uParam&0xFFF0)
-            {
-        default:
-            break;
-
-        case SC_SCREENSAVE:
-        case SC_MONITORPOWER:
-            return 0;
-
-        case SC_MAXIMIZE:
-            // for now just toggle zoom state
-
-        //  v.fZoomColor = !v.fZoomColor;
-        //  CreateNewBitmap();
-        //  return 0;
-;
-            }
-        break;
 #endif
 
     case WM_COMMAND:  // message: command from application menu
@@ -4537,19 +4468,19 @@ break;
         case IDM_D2BLANKSD:
             int disk = wmId - IDM_D1BLANKSD;
             
-            if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[disk].sz, TRUE, 0))
+            if (OpenTheFile(v.iVM, vi.hWnd, rgpvm[v.iVM]->rgvd[disk].sz, TRUE, 0))
             {
-                int h = _open(rgvm[v.iVM].rgvd[disk].sz, _O_BINARY | _O_RDONLY);
+                int h = _open(rgpvm[v.iVM]->rgvd[disk].sz, _O_BINARY | _O_RDONLY);
                 if (h != -1)
                 {
                     _close(h);
                     char ods[MAX_PATH];
-                    sprintf(ods, "\"%s\" exists. Overwrite?", rgvm[v.iVM].rgvd[disk].sz);
+                    sprintf(ods, "\"%s\" exists. Overwrite?", rgpvm[v.iVM]->rgvd[disk].sz);
                     int h2 = MessageBox(vi.hWnd, ods, "File Exists", MB_YESNO);
                     if (h2 == IDNO)
                         break;
                 }
-                h = _open(rgvm[v.iVM].rgvd[disk].sz, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+                h = _open(rgpvm[v.iVM]->rgvd[disk].sz, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
                 if (h != -1)
                 {
                     // !!! This is ATARI 800 specific, get size of blank disk from VM
@@ -4562,7 +4493,7 @@ break;
                         fB = _write(h, &b[5], 1);   // put a zero at the very end
                         if (fB == 1)
                         {
-                            rgvm[v.iVM].rgvd[disk].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC?
+                            rgpvm[v.iVM]->rgvd[disk].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC?
 
                             // something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
                             if (!FMountDiskVM(v.iVM, disk))
@@ -4656,41 +4587,35 @@ break;
             // things we need set up for tiled mode
             if (v.fTiling)
             {
-                // Set a logical current scroll position, but not if we're not initialized and would / 0
-                if (v.sWheelOffset && sTileSize.y)
-                {
-                    RECT rc;
-                    GetClientRect(vi.hWnd, &rc);
+                // Set a logical current scroll position
+                RECT rc;
+                GetClientRect(vi.hWnd, &rc);
                     
-                    // Make sure the current VM is visible as one of the tiles that come up. Perhaps we changed VMs.
-                    // Perhaps we changed window size. Either way, the current tile might not be one of the visible ones.
-                    // If it's at all visible, don't touch a thing, that will make going in/out of tiled mode disconcerting.
+                // Make sure the current VM is visible as one of the tiles that come up. Perhaps we changed VMs.
+                // Perhaps we changed window size. Either way, the current tile might not be one of the visible ones.
+                // If it's at all visible, don't touch a thing, that will make going in/out of tiled mode disconcerting.
 
-                    int nx = (rc.right * 10 / sTileSize.x + 5) / 10;         // how many fit across
-                    int nFT = -(v.sWheelOffset / sTileSize.y * nx);          // top left tile
-                    int nLT = nFT + sTilesPerRow * ((rc.bottom - 1) / sTileSize.y + 1); // last tile even partially visible
+                int nx = (rc.right * 10 / sTileSize.x + 5) / 10;         // how many fit across
+                int nFT = -(v.sWheelOffset / sTileSize.y * nx);          // top left tile
+                int nLT = nFT + sTilesPerRow * ((rc.bottom - 1) / sTileSize.y + 1); // last tile even partially visible
 
-                    // which tile number is this VM? It's a sparse array.
-                    Assert(v.iVM >= 0);
-                    int nT = -1, nV = 0;
-                    while (nV < MAX_VM)
-                    {
-                        if (rgvm[nV].fValidVM)
-                            nT++;
-                        if (nV == v.iVM)
-                            break;
-                        nV++;
-                    }
+                Assert(v.iVM >= 0);
+                int nT = v.iVM;
 
-                    // Our tile is too high up to be visible - put it in the top row
-                    if (nT < nFT)
-                        v.sWheelOffset = -(nT / nx * sTileSize.y);
+                // Our tile is too high up to be visible - put it in the top row
+                if (nT < nFT)
+                    v.sWheelOffset = -(nT / nx * sTileSize.y);
 
-                    // Our tile is too far down to be visible - put it in the bottom row
-                    else if (nT >= nLT)
-                        v.sWheelOffset = min(0, -(nT / nx * sTileSize.y - rc.bottom + sTileSize.y));
-                }
-            
+                // Our tile is too far down to be visible - put it in the bottom row
+                else if (nT >= nLT)
+                    v.sWheelOffset = min(0, -(nT / nx * sTileSize.y - rc.bottom + sTileSize.y));
+
+                // we may be scrolled further than is possible given we have fewer of them now. You can only scroll the extent to which
+                // the bottom of the tiles is beyond the bottom of the window
+                int last = (v.cVM == 0 || sTilesPerRow == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
+                if (v.sWheelOffset < last && last <= 0)
+                    v.sWheelOffset = last;
+                
                 InitThreads();  // now that we know our offset, make the proper threads
             }
             
@@ -4779,7 +4704,7 @@ break;
         // for 25,000 VMs
         case IDM_ENABLETIMETRAVEL:
             Assert(v.iVM >= 0);
-            rgvm[v.iVM].fTimeTravelEnabled = !rgvm[v.iVM].fTimeTravelEnabled;
+            rgpvm[v.iVM]->fTimeTravelEnabled = !rgpvm[v.iVM]->fTimeTravelEnabled;
             FixAllMenus(FALSE);
             break;
 
@@ -4788,7 +4713,7 @@ break;
         // automatically save
         case IDM_USETIMETRAVELFIXPOINT:
             Assert(v.iVM >= 0);
-            rgvm[v.iVM].fTimeTravelFixed = !rgvm[v.iVM].fTimeTravelFixed;
+            rgpvm[v.iVM]->fTimeTravelFixed = !rgpvm[v.iVM]->fTimeTravelFixed;
             FixAllMenus(FALSE);
             break;
 
@@ -4802,7 +4727,7 @@ break;
         case IDM_NTSCPAL:
             if (v.iVM >= 0)
             {
-                rgvm[v.iVM].fEmuPAL = !rgvm[v.iVM].fEmuPAL;
+                rgpvm[v.iVM]->fEmuPAL = !rgpvm[v.iVM]->fEmuPAL;
                 FixAllMenus(FALSE);
                 DisplayStatus(v.iVM);
             }
@@ -4891,11 +4816,9 @@ break;
         case IDM_NEW:
 
             // delete all of our VMs
-            for (int z = 0; z < MAX_VM; z++)
-            {
-                if (rgvm[z].fValidVM)
-                    DeleteVM(z, FALSE); // the quick version
-            }
+            int prevcount = v.cVM;
+            for (int z = 0; z < prevcount; z++)
+                DeleteVM(v.cVM - 1, FALSE); // the quick version, and backwards to avoid O(n^2)
             DeleteVM(-1, TRUE); // now do the stuff we missed
 
             // now try to make the default ones
@@ -4973,9 +4896,9 @@ break;
 
             assert(v.iVM != -1);
 
-            if (v.iVM != -1 && OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgcart.szName, FALSE, 1))
+            if (v.iVM != -1 && OpenTheFile(v.iVM, vi.hWnd, rgpvm[v.iVM]->rgcart.szName, FALSE, 1))
             {
-                rgvm[v.iVM].rgcart.fCartIn = TRUE;
+                rgpvm[v.iVM]->rgcart.fCartIn = TRUE;
 
                 // notice the change of cartridge state
                 FUnInitVM(v.iVM);
@@ -4984,8 +4907,8 @@ break;
                 BOOL f = FInitVM(v.iVM);
                 if (!f)
                 {
-                    rgvm[v.iVM].rgcart.fCartIn = FALSE;
-                    rgvm[v.iVM].rgcart.szName[0] = 0;
+                    rgpvm[v.iVM]->rgcart.fCartIn = FALSE;
+                    rgpvm[v.iVM]->rgcart.szName[0] = 0;
                     f = FInitVM(v.iVM);
                 }
 
@@ -5003,8 +4926,8 @@ break;
 
             if (v.iVM != -1)
             {
-                rgvm[v.iVM].rgcart.fCartIn = FALSE;    // unload the cartridge
-                rgvm[v.iVM].rgcart.szName[0] = 0; // erase the name
+                rgpvm[v.iVM]->rgcart.fCartIn = FALSE;    // unload the cartridge
+                rgpvm[v.iVM]->rgcart.szName[0] = 0; // erase the name
 
                 // this will require a reboot, I assume for all types of VMs?
                 FUnInitVM(v.iVM);
@@ -5025,9 +4948,9 @@ break;
         case IDM_D1:
             assert(v.iVM != -1);
 
-            if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[0].sz, FALSE, 0))
+            if (OpenTheFile(v.iVM, vi.hWnd, rgpvm[v.iVM]->rgvd[0].sz, FALSE, 0))
             {
-                rgvm[v.iVM].rgvd[0].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
+                rgpvm[v.iVM]->rgvd[0].dt = DISK_IMAGE; // !!! support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
 
                 // something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
                 if (!FMountDiskVM(v.iVM, 0))
@@ -5040,9 +4963,9 @@ break;
         case IDM_D2:
             assert(v.iVM != -1);
 
-            if (OpenTheFile(v.iVM, vi.hWnd, rgvm[v.iVM].rgvd[1].sz, FALSE, 0))
+            if (OpenTheFile(v.iVM, vi.hWnd, rgpvm[v.iVM]->rgvd[1].sz, FALSE, 0))
             {
-                rgvm[v.iVM].rgvd[1].dt = DISK_IMAGE; // support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
+                rgpvm[v.iVM]->rgvd[1].dt = DISK_IMAGE; // support DISK_WIN32, DISK_FLOPPY or DISK_SCSI for ST/MAC
 
                 // something might be wrong with the disk, take it back out, don't kill the VM or anything drastic
                 if (!FMountDiskVM(v.iVM, 1))
@@ -5061,8 +4984,8 @@ break;
             if (v.iVM != -1)
             {
                 FUnmountDiskVM(v.iVM, 0);    // do this before tampering
-                strcpy(rgvm[v.iVM].rgvd[0].sz, "");
-                rgvm[v.iVM].rgvd[0].dt = DISK_NONE;
+                strcpy(rgpvm[v.iVM]->rgvd[0].sz, "");
+                rgpvm[v.iVM]->rgvd[0].dt = DISK_NONE;
                 FixAllMenus(FALSE);
             }
             break;
@@ -5073,8 +4996,8 @@ break;
             if (v.iVM != -1)
             {
                 FUnmountDiskVM(v.iVM, 1);    // do this before tampering
-                strcpy(rgvm[v.iVM].rgvd[1].sz, "");
-                rgvm[v.iVM].rgvd[1].dt = DISK_NONE;
+                strcpy(rgpvm[v.iVM]->rgvd[1].sz, "");
+                rgpvm[v.iVM]->rgvd[1].dt = DISK_NONE;
                 FixAllMenus(FALSE);
             }
             break;
@@ -5085,7 +5008,7 @@ break;
 
             if (v.iVM >= 0)
             {
-                int type = rgvm[v.iVM].bfHW;
+                int type = rgpvm[v.iVM]->bfHW;
                 int otype = 0;
                 while (type >>= 1)
                     otype++;                        // convert bitfield to index
@@ -5106,9 +5029,9 @@ break;
                         BOOL fOK = FALSE;
                         FUnInitVM(v.iVM);
                         FUnInstallVM(v.iVM);
-                        vrgvmi[v.iVM].pPrivate = NULL;
-                        vrgvmi[v.iVM].iPrivateSize = 0;
-                        if (FInstallVM(&vrgvmi[v.iVM].pPrivate, &vrgvmi[v.iVM].iPrivateSize, v.iVM, pvmi, type))
+                        rgpvmi(v.iVM)->pPrivate = NULL;
+                        rgpvmi(v.iVM)->iPrivateSize = 0;
+                        if (FInstallVM(&rgpvmi(v.iVM)->pPrivate, &rgpvmi(v.iVM)->iPrivateSize, v.iVM, pvmi, type))
                             if (FInitVM(v.iVM))
                                 if (ColdStart(v.iVM))
                                     fOK = TRUE;
@@ -5140,7 +5063,7 @@ break;
                 if (FSaveStateVM(v.iVM)) // NOP
                 {
                     // !!! I put ramtop at the top of the candy structure
-                    WORD *ramtop = (WORD *)vrgvmi[v.iVM].pPrivate;
+                    WORD *ramtop = (WORD *)rgpvmi(v.iVM)->pPrivate;
                     if (*ramtop == 0xC000)
                         *ramtop = 0xA000;
                     else
@@ -5224,7 +5147,7 @@ break;
         case IDM_DEBUGGER:
 
             // PAUSE key enters the debugger in DEBUG
-            if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
+            if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse)
                 ShowWindowsMouse();
 
             vi.fDebugBreak = TRUE;
@@ -5383,25 +5306,13 @@ break;
 
         default:
 
-            // We have asked to switch to a certain VM? Not allowed when tiling
+            // We have asked to switch to a certain VM? Not allowed when tiling. Remember, there are only 64 at most
+            // in the list, so choosing the last menu item chooses at most #63, not the last VM in the machine
 
-            if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM)
+            if (wmId <= IDM_VM1 && wmId > IDM_VM1 - MAX_VM_MENUS)
             {
-                int iVM = IDM_VM1 - wmId;    // we want the VM this far from the end
-                int zl;
-
-                // find the VM that far from the end
-                for (zl = MAX_VM - 1; zl >= 0; zl--)
-                {
-                    if (rgvm[zl].fValidVM) {
-                        if (iVM == 0)
-                            break;
-                        iVM--;
-                    }
-                }
-
-                assert(zl >= 0);
-                SelectInstance(zl);
+                int iVM = min(63, v.cVM - 1) - (IDM_VM1 - wmId);    // we want the VM this far from the end
+                SelectInstance(iVM);
 
                 // stop tiling, tiling mode was to help us choose one
                 if (v.fTiling)
@@ -5443,7 +5354,7 @@ break;
     case WM_KEYDOWN:
     case WM_KEYUP:
 
-        //printf("WM_KEY*: u = %08X l = %08X\n", uParam, lParam);
+        //ODS("WM_KEY*: u = %08X l = %08X\n", uParam, lParam);
 
         // Do something with the MENU key?
         if (uParam == VK_APPS)
@@ -5736,8 +5647,8 @@ break;
     case WM_RBUTTONDOWN:
         vi.fHaveFocus = TRUE;  // HACK again
 
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
-                    (!FIsAtari68K(rgvm[v.iVM].bfHW) || (uParam & MK_LBUTTON) ) )    // !!! hack don't use FIs... macros
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fGEMMouse && !vi.fInDirectXMode && !v.fNoTwoBut &&
+                    (!FIsAtari68K(rgpvm[v.iVM]->bfHW) || (uParam & MK_LBUTTON) ) )    // !!! hack don't use FIs... macros
         {
             // both buttons are being pressed, left first and now right
             // so bring back the Windows mouse cursor after sending
@@ -5746,7 +5657,7 @@ break;
             // see also old code for F11
 
 //            FMouseMsgVM(hWnd, 0, 0, 0, 0);
-            if (rgvm[v.iVM].pvmi->fUsesMouse)
+            if (rgpvm[v.iVM]->pvmi->fUsesMouse)
                 ShowWindowsMouse();
             return 0;
             break;
@@ -5778,7 +5689,7 @@ break;
 #endif
 
         // if this VM type supports joystick
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesJoystick)
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesJoystick)
         {
             //printf("LBUTTONDOWN\n");
 
@@ -5787,13 +5698,13 @@ break;
 
             // continue to do Tiling code
         }
-        else if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
+        else if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse)
         {
             if (!vi.fVMCapture)
                 if (v.iVM >= 0)
                     return FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);
 
-            if (rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fVMCapture && !vi.fGEMMouse)
+            if (rgpvm[v.iVM]->pvmi->fUsesMouse /* && vi.fExecuting */ && vi.fVMCapture && !vi.fGEMMouse)
             {
                 // either mouse button was pressed
                 // so give special message to activate mouse
@@ -5819,13 +5730,13 @@ break;
         break;
 
     case WM_LBUTTONUP:
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesJoystick)
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesJoystick)
         {
             // MOUSE button up is JOYSTICK BUTTON UP
             if (v.iVM >= 0)
                 return FWinMsgVM(v.iVM, hWnd, MM_JOY1BUTTONUP, 0, 0);
         }
-        else if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse)
+        else if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse)
         {
             if (!vi.fVMCapture)
                 if (v.iVM >= 0)
@@ -5835,7 +5746,7 @@ break;
     case WM_RBUTTONUP:
         vi.fHaveFocus = TRUE;  // HACK
 
-        if (v.iVM >= 0 && rgvm[v.iVM].pvmi->fUsesMouse /* && vi.fExecuting */ && (vi.fGEMMouse || !vi.fVMCapture))
+        if (v.iVM >= 0 && rgpvm[v.iVM]->pvmi->fUsesMouse /* && vi.fExecuting */ && (vi.fGEMMouse || !vi.fVMCapture))
         {
             vi.fGEMMouse = FALSE;
             if (v.iVM >= 0)
@@ -5883,13 +5794,13 @@ break;
             }
 
             // set which pixel we are hovering over
-            LightPenVM = s;
+            LightPenVM = (s >= 0) ? rgpvmi(s)->pPrivate : NULL;
         }
 
         // not tiled mode
         else
         {
-            LightPenVM = v.iVM;
+            LightPenVM = (v.iVM >= 0) ? rgpvmi(v.iVM)->pPrivate : NULL;
             
             if (v.iVM > -1)
             {
@@ -5969,11 +5880,9 @@ break;
         SaveProperties(NULL);
 
         // delete all of our VMs and kill their threads
-        for (int z = 0; z < MAX_VM; z++)
-        {
-            if (rgvm[z].fValidVM)
-                DeleteVM(z, FALSE);
-        }
+        int prevcount = v.cVM;
+        for (int z = 0; z < prevcount; z++)
+            DeleteVM(v.cVM - 1, FALSE);
         
         //  FixAllMenus(TRUE); SelectInstance(v.iVM); we're dying anyway
         
@@ -5993,6 +5902,9 @@ break;
 
         PostQuitMessage(0);
         CoUninitialize();
+        
+        HeapFree(GetProcessHeap(), 0, rgpvm);
+
         return 0;
         break;
 
@@ -6084,9 +5996,9 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
 
     // we want to save/load our whole session
     if (nType == 0 && iVM >= 0)
-        OpenFileName.lpstrFilter = rgvm[iVM].pvmi->szFilter;
+        OpenFileName.lpstrFilter = rgpvm[iVM]->pvmi->szFilter;
     else if (nType == 1 && iVM >= 0)
-        OpenFileName.lpstrFilter = rgvm[iVM].pvmi->szCartFilter;
+        OpenFileName.lpstrFilter = rgpvm[iVM]->pvmi->szCartFilter;
     else if (nType == 2)
         OpenFileName.lpstrFilter = "Xformer Session\0*.gem\0All Files\0*.*\0\0";
     else
@@ -6131,6 +6043,8 @@ BOOL OpenTheFile(int iVM, HWND hWnd, char *psz, BOOL fCreate, int nType)
             c--;
         if (c >= 2)
             strncpy(v.lpCurrentDir, psz, c + 1);
+        v.lpCurrentDir[c + 1] = 0;
+
         return TRUE;
     }
 
@@ -6418,21 +6332,6 @@ ULONG BfFromWfI(ULONG wf, int i)
         }
 
     return bf;
-}
-
-//
-// Add a byte to the IKBD input buffer
-//
-
-void AddToPacket(int iVM, ULONG b)
-{
-    //ODS("%02x ", b);
-    vrgvmi[iVM].rgbKeybuf[vrgvmi[iVM].keyhead++] = (BYTE)b;
-    vrgvmi[iVM].keyhead &= 1023;
-
-#if defined(ATARIST) || defined(SOFTMAC)
-    vsthw[v.iVM].gpip &= 0xEF; // to indicate characters available
-#endif // ATARIST
 }
 
 
@@ -7782,10 +7681,10 @@ void UpdateMode(HWND hDlg)
 
     for (i = 0; i < MAX_VM; i++)
     {
-        if (rgvm[i].fValidVM)
+        if (rgpvm[i]->fValidVM)
         {
             SendDlgItemMessage(hDlg, IDC_VMSELECT,
-                XB_ADDSTRING, 0, (long)rgvm[i].szModel);
+                XB_ADDSTRING, 0, (long)rgpvm[i]->szModel);
 
             if (i == v.iVM)
                 j = k;
@@ -7880,13 +7779,13 @@ LRESULT CALLBACK About(
 
             for (i = 0; i < v.cVM; i++)
             {
-                if (rgvm[i].fValidVM)
+                if (rgpvm[i]->fValidVM)
                 {
-                    if (rgvm[i].szModel[0] == 0)
-                        strcpy(rgvm[i].szModel, rgvm[i].pvmi->pchModel);
+                    if (rgpvm[i]->szModel[0] == 0)
+                        strcpy(rgpvm[i]->szModel, rgpvm[i]->pvmi->pchModel);
 
                     SendDlgItemMessage(hDlg, IDC_VMSELECT,
-                        XB_ADDSTRING, 0, (long)rgvm[i].szModel);
+                        XB_ADDSTRING, 0, (long)rgpvm[i]->szModel);
 
                     if (i == v.iVM)
                         j = k;
@@ -7979,7 +7878,7 @@ LRESULT CALLBACK About(
 
             for (iVM = 0; iVM < v.cVM; iVM++)
             {
-                if (rgvm[iVM].fValidVM && (i-- == 0))
+                if (rgpvm[iVM]->fValidVM && (i-- == 0))
                     break;
             }
 
@@ -8019,7 +7918,7 @@ LRESULT CALLBACK About(
 
                     for (iVM = 0; iVM < v.cVM; iVM++)
                     {
-                        if (rgvm[iVM].fValidVM && (i-- == 0))
+                        if (rgpvm[iVM]->fValidVM && (i-- == 0))
                             break;
                     }
 
@@ -8039,16 +7938,16 @@ LRESULT CALLBACK About(
                     if (AddVM(vmCur.pvmi, &i))
                     {
                         rgvm[i] = rgvm[iVM];
-                        rgvm[i].szModel[0] = '+';
-                        memcpy(&rgvm[i].szModel[1],
-                            &rgvm[iVM].szModel[0],
-                            sizeof(rgvm[iVM].szModel) - 1);
+                        rgpvm[i]->szModel[0] = '+';
+                        memcpy(&rgpvm[i]->szModel[1],
+                            &rgpvm[iVM]->szModel[0],
+                            sizeof(rgpvm[iVM]->szModel) - 1);
 
-                        rgvm[i].szModel[sizeof(rgvm[iVM].szModel) - 1]
+                        rgpvm[i]->szModel[sizeof(rgpvm[iVM]->szModel) - 1]
                             = 0;
 
                         SendDlgItemMessage(hDlg, IDC_VMSELECT,
-                            XB_ADDSTRING, 0, (long)rgvm[i].szModel);
+                            XB_ADDSTRING, 0, (long)rgpvm[i]->szModel);
 
                         SendDlgItemMessage(hDlg, IDC_VMSELECT,
                             XB_SETCURSEL, c, 0);

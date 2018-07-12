@@ -85,7 +85,7 @@ PVMINFO DetermineVMType(int type)
 
 
 //
-// Add a new virtual machine to rgvm - return which instance it found
+// Add a new virtual machine to rgvm - return which instance it made
 // It will Install only... the caller needs to set a disk or cartridge image after this
 // before calling Init, ColdStart and CreateNewBitmap
 //
@@ -96,42 +96,40 @@ int AddVM(int type, BOOL fAll)
     if (v.cVM == MAX_VM)
         return -1;
 
-    // save time, start looking where the most likely empty spot is
     int iVM = v.cVM;
 
-    // first try to find an empty slot in the rgvm array
-    if (rgvm[iVM].fValidVM)
+    // time to make space for more VM pointers
+    if (v.cVM == cpvm)
     {
-        for (iVM = (iVM + 1) % MAX_VM; iVM != v.cVM; iVM = (iVM + 1) % MAX_VM)
-        {
-            if (!rgvm[iVM].fValidVM)
-                break;
-        }
+        void * pp = HeapReAlloc(GetProcessHeap(), 0, rgpvm, cpvm * 2 * (sizeof(VM) + sizeof(VMINST)));
+        if (!pp)
+            return -1;
+        rgpvm = pp;
+        cpvm *= 2;
     }
 
-    // did not find an empty slot!
-    if (rgvm[iVM].fValidVM)
+    // New persistable and unpersistable data
+
+    rgpvm[iVM] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(VM) + sizeof(VMINST));
+    if (!rgpvm[iVM])
         return -1;
-    
-    memset(&rgvm[iVM], 0, sizeof(VM));    // clear it out fresh
-    rgvm[iVM].cbSize = sizeof(VM);    // init the size for validity
+
+    rgpvm[iVM]->cbSize = sizeof(VM);    // init the size for validity
 
     // get the VMINFO all about this type of VM, incl. our jump table needed to call InstallVM
-    rgvm[iVM].pvmi = DetermineVMType(type);
+    rgpvm[iVM]->pvmi = DetermineVMType(type);
 
     BOOL f = FALSE;
-    if (rgvm[iVM].pvmi)
-        f = FInstallVM(&vrgvmi[iVM].pPrivate, &vrgvmi[iVM].iPrivateSize, iVM, rgvm[iVM].pvmi, type);
+    if (rgpvm[iVM]->pvmi)
+        f = FInstallVM(&rgpvmi(iVM)->pPrivate, &rgpvmi(iVM)->iPrivateSize, iVM, rgpvm[iVM]->pvmi, type);
 
     if (f)
     {
         v.cVM++;
 
-        rgvm[iVM].fValidVM = f;
-
         // always enable these, why not?
-        rgvm[iVM].fSound = TRUE;
-        rgvm[iVM].fJoystick = TRUE;
+        rgpvm[iVM]->fSound = TRUE;
+        rgpvm[iVM]->fJoystick = TRUE;
 
         if (fAll)
         {
@@ -140,11 +138,8 @@ int AddVM(int type, BOOL fAll)
         }
     }    
     else
-    {
-        Assert(rgvm[iVM].fValidVM == FALSE);
         iVM = -1;   // return error
-    }
-
+ 
     return iVM;
 }
 
@@ -157,16 +152,17 @@ void DeleteVM(int iVM, BOOL fFixMenus)
 {
     if (iVM >= 0)
     {
-        if (!rgvm[iVM].fValidVM)
-            return;
-
         //ODS("Delete %d\n", iVM);
 
+        // free the pointers inside of our structure first
         FUnInitVM(iVM);
         FUnInstallVM(iVM);
-        vrgvmi[iVM].pPrivate = NULL;
-        vrgvmi[iVM].iPrivateSize = 0;
-        rgvm[iVM].fValidVM = FALSE;
+     
+        HeapFree(GetProcessHeap(), 0, rgpvm[iVM]);
+
+        // compact the pointer array
+        for (int i = iVM; i < v.cVM - 1; i++)
+            rgpvm[i] = rgpvm[i + 1];
 
         v.cVM--;    // one fewer valid instance now
 
@@ -180,9 +176,11 @@ void DeleteVM(int iVM, BOOL fFixMenus)
             InitThreads();
         }
 
+#if 0 // actually, it's fixing the menus that will crash
         // We're deleting ourself and NOT going to make new threads! We'll crash.
         if (iVM == v.iVM && !fFixMenus)
             fFixMenus = TRUE;
+#endif
 
         sVM = -1;              // the one in focus may be gone
 
@@ -196,37 +194,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
     // OK, we're not doing a bunch of deletes in a row, take the possibly slow steps
     if (fFixMenus)
     {
-
-        // !!! this will never work until we compact hundreds of individual variables that are [MAX_VM]
-        // including the private VM data we know nothing about
-#if 0   
-
-        // now compact our array - overlapping regions
-
-        // just one thing to compact
-        if (iVM >= 0 && iVM < v.cVM)
-        {
-            memmove(&rgvm[iVM], &rgvm[iVM + 1], sizeof(VM) * (v.cVM - iVM));
-            rgvm[v.cVM].fValidVM = FALSE;
-        }
-
-        // who knows how much compaction we have to do
-        else if (iVM == -1)
-        {
-            int sparse = 0;
-            for (int i = 0; i < v.cVM; i++)
-            {
-                while (!rgvm[sparse].fValidVM)
-                    sparse++;
-                if (i != sparse)
-                    memmove(&rgvm[i], &rgvm[sparse], sizeof(VM));
-                sparse++;
-            }
-            Assert(sparse <= MAX_VM);
-        }
-#endif
-
-        SelectInstance(v.iVM);   // best guess at the next VM to get focus
+        SelectInstance(v.iVM);   // best guess at the next VM to get focus, may change v.iVM
         DisplayStatus(v.iVM);    // or name of last VM erased would stay on title bar
         FixAllMenus(TRUE);
       
@@ -235,7 +203,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         RECT rc;
         GetClientRect(vi.hWnd, &rc);
         int last = (v.cVM == 0 || sTilesPerRow == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
-        if (v.sWheelOffset < last)
+        if (v.sWheelOffset < last && last <= 0)
             v.sWheelOffset = last;
 
         // this will use the new wheel offset
@@ -362,13 +330,10 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
     if ((vTmp.cb == sizeof(vTmp) ) && (vTmp.wMagic == v.wMagic)) // check for version difference
     {
 
-        // looks like something valid can be read, now it's safe to delete the old stuff
-        // BEFORE we set v
-        for (int z = 0; z < MAX_VM; z++)
-        {
-            if (rgvm[z].fValidVM)
-                DeleteVM(z, FALSE); // the quick version when we call it successively
-        }
+        // looks like something valid can be read, now it's safe to delete the old stuff BEFORE we set v
+        int prevcount = v.cVM;
+        for (int z = 0; z < prevcount; z++)
+                DeleteVM(v.cVM - 1, FALSE); // avoids the compacting loop for faster execution
         DeleteVM(-1, TRUE); // now do the things we skipped 
 
         assert(v.cVM == 0);
@@ -380,8 +345,11 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         if (!szIn)
             v = vTmp;
 
+        // don't use the loaded values, reset to no valid VMs or we'll crash
+        v.cVM = 0;
+        v.iVM = -1;
+
         f = TRUE;
-        v.cVM = 0;    // no matter what they say, assume they're bad until we see they're good
 
         // we're loading our .ini file and they didn't want the last session restored, so don't
         if (!szIn && !v.fSaveOnExit)
@@ -399,17 +367,30 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             if (fPropsOnly)
                 break;
 
-            // read the per-instance VM persistable structure
-            l = _read(h, &rgvm[i], sizeof(VM));
-            if (l != sizeof(VM) || rgvm[i].cbSize != sizeof(VM))
+            // time to make space for more VM pointers
+            if (v.cVM == cpvm)
             {
-                memset(&rgvm[i], 0, sizeof(VM));    // clean it
-                rgvm[i].cbSize = sizeof(VM);    // init the size for validity
+                void * pp = HeapReAlloc(GetProcessHeap(), 0, rgpvm, cpvm * 2 * (sizeof(VM) + sizeof(VMINST)));
+                if (!pp)
+                    break;
+                rgpvm = pp;
+                cpvm *= 2;
+            }
+
+            rgpvm[i] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(VM) + sizeof(VMINST));
+            if (!rgpvm[i])
+                break;
+
+            // read the per-instance VM persistable structures until we run out of them
+            l = _read(h, rgpvm[i], sizeof(VM));
+            if (l != sizeof(VM) || rgpvm[i]->cbSize != sizeof(VM))
+            {
+                HeapFree(GetProcessHeap(), 0, rgpvm[i]);
                 break;
             }
 
             // what index, 0 based, is this bit?
-            int c = -1, t = rgvm[i].bfHW;
+            int c = -1, t = rgpvm[i]->bfHW;
             assert(t);
             while (t)
             {
@@ -418,61 +399,57 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             }
 
             // Get the VMINFO that tells us all about this type of VM being loaded
-            rgvm[i].pvmi = DetermineVMType(c);
+            rgpvm[i]->pvmi = DetermineVMType(c);
 
-            // we just loaded a valid instance off disk. Install and Init it
-            if (f && rgvm[i].fValidVM)
+            // Install and Init the instance
+            f = FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, i, rgpvm[i]->pvmi, c);
+
+            if (f)
             {
-                f = FInstallVM(&vrgvmi[i].pPrivate, &vrgvmi[i].iPrivateSize, i, rgvm[i].pvmi, c);
+                // get the size of the persisted data
+                int cb;
+                l = _read(h, &cb, sizeof(int));
 
-                if (f)
+                // either restore from the persisted data, or just Init a blank VM if something goes wrong
+                f = FALSE;
+                if (l == sizeof(int) && cb == rgpvmi(i)->iPrivateSize)
                 {
-                    // get the size of the persisted data
-                    int cb;
-                    l = _read(h, &cb, sizeof(int));
-
-                    // either restore from the persisted data, or just Init a blank VM if something goes wrong
-                    f = FALSE;
-                    if (l == sizeof(int) && cb == vrgvmi[i].iPrivateSize)
+                    if (cb > cbPersist)
                     {
-                        if (cb > cbPersist)
-                        {
-                            void *p1 = realloc(pPersist, cb); // just one load buffer to avoid fragmenting and for better perf
-                            if (!(p1))
-                                free(pPersist);
-                            pPersist = p1;
-                        }
-
-                        l = 0;
-                        if (pPersist)
-                        {
-                            cbPersist = cb;
-                            l = _read(h, pPersist, cb);
-                        }
-                        if (l == cb) {
-                            if (FLoadStateVM(i, pPersist))
-                                f = TRUE;
-                        }
+                        void *p1 = realloc(pPersist, cb); // just one load buffer to avoid fragmenting and for better perf
+                        if (!(p1))
+                            free(pPersist);
+                        pPersist = p1;
                     }
 
-                    if (!f)
+                    l = 0;
+                    if (pPersist)
                     {
-                        FUnInitVM(i);
-                        FUnInstallVM(i);
-                        vrgvmi[i].pPrivate = NULL;
-                        vrgvmi[i].iPrivateSize = 0;
+                        cbPersist = cb;
+                        l = _read(h, pPersist, cb);
+                    }
+                    if (l == cb) {
+                        if (FLoadStateVM(i, pPersist))
+                            f = TRUE;
                     }
                 }
 
-                // make the screen buffer. If it's too soon (initial start up instead of Load through menu)
-                // it will happen when our window is created
-                if (f)
-                    v.cVM++;
+                if (!f)
+                {
+                    FUnInitVM(i);
+                    FUnInstallVM(i);
+                }
             }
+
+            // make the screen buffer. If it's too soon (initial start up instead of Load through menu)
+            // it will happen when our window is created
+            if (f)
+                v.cVM++;
+
             if (!f)
             {
-                memset(&rgvm[i], 0, sizeof(VM));    // clean it
-                rgvm[i].cbSize = sizeof(VM);    // init the size for validity
+                HeapFree(GetProcessHeap(), 0, rgpvm[i]);
+                i--;    // we did not put a valid VM in this spot
             }
         }
 
@@ -510,7 +487,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             // All other settings default to 0 or fFalse
             // but this flag needs to be set by default
 
-            rgvm[i].fCPUAuto = fTrue;
+            rgpvm[i]->fCPUAuto = fTrue;
             }
 
         v.fPrivate = fTrue;
@@ -577,29 +554,27 @@ BOOL SaveProperties(char *szIn)
         {
             f = TRUE;
 
-            for (int i = 0; i < MAX_VM && f; i++)
+            for (int i = 0; i < v.cVM && f; i++)
             {
-                if (rgvm[i].fValidVM)
-                {
-                    f = FALSE;
+                f = FALSE;
 
-                    // save the VM pesistable struct for this instance
-                    l = _write(h, &rgvm[i], sizeof(VM));
-                    if (l == sizeof(VM))
+                // save the VM pesistable struct for this instance
+                l = _write(h, rgpvm[i], sizeof(VM));
+                if (l == sizeof(VM))
+                {
+                    if (FSaveStateVM(i)) // give the VM a chance for any last minute jiggering, currently a NOP
                     {
-                        if (FSaveStateVM(i)) // give the VM a chance for any last minute jiggering, currently a NOP
+                        // save the state of this VM - size first to prevent reading garbage and thinking its valid
+                        l = _write(h, &rgpvmi(i)->iPrivateSize, sizeof(int));
+                        if (l == sizeof(int))
                         {
-                            // save the state of this VM - size first to prevent reading garbage and thinking its valid
-                            l = _write(h, &vrgvmi[i].iPrivateSize, sizeof(int));
-                            if (l == sizeof(int))
-                            {
-                                l = _write(h, vrgvmi[i].pPrivate, vrgvmi[i].iPrivateSize);
-                                if (l == vrgvmi[i].iPrivateSize)
-                                    f = TRUE;    // it all worked! Something was saved
-                            }
+                            l = _write(h, rgpvmi(i)->pPrivate, rgpvmi(i)->iPrivateSize);
+                            if (l == rgpvmi(i)->iPrivateSize)
+                                f = TRUE;    // it all worked! Something was saved
                         }
                     }
                 }
+                
             }
         }
         _close(h);
@@ -1588,15 +1563,15 @@ int AutoConfigure(BOOL fShowDlg)
                     {
                     // 24-bit Macs only get one CD-ROM drive because ROMs suck
 
-                    if (!FIsMac32(rgvm[i].bfHW) && (cDrives > 0))
+                    if (!FIsMac32(rgpvm[i]->bfHW) && (cDrives > 0))
                         continue;
 
-                    if (FIsMac(rgvm[i].bfHW))
+                    if (FIsMac(rgpvm[i]->bfHW))
                         {
-                        rgvm[i].rgvd[8-cDrives].mdWP = 2;
-                        rgvm[i].rgvd[8-cDrives].dt = DISK_SCSI;
-                        rgvm[i].rgvd[8-cDrives].ctl = ctl;
-                        rgvm[i].rgvd[8-cDrives].id = id;
+                        rgpvm[i]->rgvd[8-cDrives].mdWP = 2;
+                        rgpvm[i]->rgvd[8-cDrives].dt = DISK_SCSI;
+                        rgpvm[i]->rgvd[8-cDrives].ctl = ctl;
+                        rgpvm[i]->rgvd[8-cDrives].id = id;
                         }
                     }
 

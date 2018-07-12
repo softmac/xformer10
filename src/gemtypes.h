@@ -114,17 +114,15 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 #define _NEDERLANDS 0
 
 //
-// maximum number of virtual machines !!! make this more dynamic
+// maximum number of virtual machines !!!
 //
-#define MAX_VM 65536
+#define MAX_VM 131072
 #define MAX_VM_MENUS 64 // no need to show thousands of them in the menus
 
 #define HCLOCKS 114         // in both NTSC & PAL
-
 #define NTSC_CLK 1789790ULL // clock speed
 #define NTSC_FPS 60         // frames per second
 #define NTSC_LPF 262        // lines per frame
-
 #define  PAL_CLK 1773447ULL
 #define  PAL_FPS 50
 #define  PAL_LPF 312
@@ -157,7 +155,6 @@ POINT ptBlack;              // the top left of the black area of the tiled windo
 BOOL fRenderThisTime;       //
 BYTE *pThreadReserve;       // allocate storage for threads before it gets fragmented
 
-RECT sRectTile[MAX_VM];     // the piece of the large bitmap the VM is responsible for, in Tiled mode
 RECT sRectC;                // the size of the whole window that it is drawing a piece of
 int  sStride;               // the stride of the big client rect
 
@@ -169,14 +166,14 @@ extern int sVMPrev;         // roulette neighbours
 extern int sVMNext;
 
 // paste into keyboard buffer, can only do this through the menu to one VM at a time, NOT PERSISTABLE
-BYTE rgPasteBuffer[65536 * 16];  // a simple BASIC program listing might take half this because of all the delays after RETURN
+BYTE *rgPasteBuffer;                // a simple BASIC program listing might take 1/2 Meg because of all the delays after RETURN!
 int cPasteBuffer, iPasteBuffer;
 extern WORD rgAsciiToScan[256];     // convert ASCII to ATARI keyboard scan codes
 extern WORD rgAtasciiToScan[256];   // convert ATASCII to ATARI keyboard scan codes
 
 // which VM the mouse is over, and which pixel the mouse is hovering over, in case the VM wants to know, for instance
 // for a light pen. The VM can translate that however it wants.
-int LightPenVM;
+void *LightPenVM;   // pointer to the private data of the VM
 WORD LightPenX;
 WORD LightPenY;
 
@@ -386,7 +383,7 @@ typedef struct
     
     // UNUSED
     int      fColdReset:1;  // UNUSED if set, this VM needs a cold boot
-    int      fValidVM:1;    // if set, this VM is initialized
+    int      fOldValidVM:1;    // if set, this VM is initialized
 
     int      res83:8;
 
@@ -411,17 +408,17 @@ typedef struct
 #endif
 } VM, *PVM;
 
-// each one is marked fValidVM or not. PROPS.cVM says how many of these are valid. PROPS.iVM is the current active one
-extern VM    rgvm[MAX_VM];  // VM descriptors (indexed by iVM)
+extern PVM *rgpvm;
+extern int cpvm;    // how many we've allocated space for
 
 //
 // Per-VM instance data (not persistable)
 // This structure is useful for the VM and GEM to communicate with each other, since GEM does not have access to the VM data structures
 // 
 //
-typedef struct VMINST
+typedef struct
 {
-    int iVM;                // index into rgvm, which instance this is
+    //int iVM;                // index into rgvm, which instance this is
 
     void *pPrivate;         // the private VM data to pass to the VM
     int iPrivateSize;       // size of the private data
@@ -436,9 +433,12 @@ typedef struct VMINST
     int  keyhead;           // keyboard buffer head
     int  keytail;           // keyboard buffer tail
     BYTE rgbKeybuf[1024];   // circular keyboard buffer !!! smaller?
+
+    RECT sRectTile;         // the piece of the large bitmap the VM is responsible for, in Tiled mode
+
 } VMINST, *PVMINST;
 
-extern VMINST vrgvmi[MAX_VM];
+#define rgpvmi(iVM) ((PVMINST)(rgpvm[iVM] + 1))
 
 //
 // PROPS - global persistable data for the whole session
@@ -583,10 +583,6 @@ typedef struct
     ULONG cbRAM[4];     // size of RAM (starts at eaRAM)
     BYTE *pbROM[4];     // host pointer to first guest byte of RAM block
     BYTE *pbRAM[4];     // host pointer to first guest byte of RAM block
-
-    // there is no longer a concept of "current" except to the main window
-    //PVM  pvmCur;        // pointer to rgvm[v.iVM]
-    //PVMINST pvmiCur;    // UNUSED pointer to vrgvmi[v.iVM]
 
 #if defined(ATARIST) || defined(SOFTMAC)
     REGS *pregs;        // pointer to registers and large memory block
@@ -1038,7 +1034,6 @@ extern char const * const rgszVM[];
 
 #define FIsTutor(vm)        !!((vm) & vmMask & vmTutor)
 
-
 // gemul8r.c
 void CreateInstanceName(int, LPSTR);
 //void UpdateMenuCheckmarks();
@@ -1047,7 +1042,6 @@ BOOL CreateNewBitmaps();
 BOOL CreateTiledBitmap();
 void GetPosFromTile(int, RECT *);
 void RenderBitmap();
-void AddToPacket(int, ULONG);
 ULONGLONG GetCycles();
 ULONGLONG GetCyclesN();
 ULONGLONG GetCyclesP();

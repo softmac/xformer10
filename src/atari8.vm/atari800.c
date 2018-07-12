@@ -90,11 +90,9 @@ VMINFO const vmi800 =
 
         if (ret == 3)
         {
-#undef iVM
             // ABORT - break into the debugger! (if we can)
-            if (((CANDYHW *)candy)->m_iVM == v.iVM)
+            if (v.iVM >= 0 && candy == rgpvmi(v.iVM)->pPrivate)
             {
-#define iVM CANDY_STATE(iVM)
                 bp = regPC; // makes Exec fail so the debugger knows which VM to use !!! won't work if we're not in Exec
                 vi.fWantDebugBreak = TRUE; // tell the main thread to break into debugger. We can't do it from a VM thread which we might be.
                 PostMessage(vi.hWnd, WM_COMMAND, IDM_DEBUGGER, 0);  // Send will hang, we're a VM thread and the window thread is blocked on us
@@ -442,7 +440,7 @@ BOOL TimeTravelInit(void *candy)
 {
     // Initialize Time Travel
 
-    if (rgvm[iVM].fTimeTravelEnabled && !Time[0])
+    if (pvm->fTimeTravelEnabled && !Time[0])
     {
         for (unsigned i = 0; i < 3; i++)
         {
@@ -475,8 +473,8 @@ void TimeTravelFree(void *candy)
 BOOL TimeTravelFixPoint(void *candy)
 {
     // Turn on this feature if not on. This is not part of the VM save state, it's a GEM global, so it doesn't matter when we do it
-    rgvm[iVM].fTimeTravelEnabled = TRUE;
-    rgvm[iVM].fTimeTravelFixed = TRUE;
+    pvm->fTimeTravelEnabled = TRUE;
+    pvm->fTimeTravelFixed = TRUE;
 
     FixAllMenus(FALSE); // GEM might not know this happened
 
@@ -494,18 +492,18 @@ BOOL TimeTravelFixPoint(void *candy)
 BOOL TimeTravelPrepare(void *candy, BOOL fForce)
 {
     // we aren't saving periodically for the time being, we have a fixed point
-    if (rgvm[iVM].fTimeTravelFixed && !fForce)
+    if (pvm->fTimeTravelFixed && !fForce)
         return TRUE;
 
     // we apparently have just been turned on. So init and set an anchor point to now.
-    if (rgvm[iVM].fTimeTravelEnabled && !Time[0])
+    if (pvm->fTimeTravelEnabled && !Time[0])
     {
         if (!TimeTravelInit(candy) || !TimeTravelReset(candy))
             return FALSE;
     }
 
     // nothing to do
-    if (!rgvm[iVM].fTimeTravelEnabled)
+    if (!pvm->fTimeTravelEnabled)
         return TRUE;
 
     BOOL f = TRUE;
@@ -541,7 +539,7 @@ BOOL TimeTravelPrepare(void *candy, BOOL fForce)
 //
 BOOL TimeTravel(void *candy)
 {
-    rgvm[iVM].fTimeTravelEnabled = TRUE;
+    pvm->fTimeTravelEnabled = TRUE;
 
     FixAllMenus(FALSE); // GEM might not know this happened
 
@@ -557,7 +555,7 @@ BOOL TimeTravel(void *candy)
 
     // Two 5-second snapshots ago will be from 10-15 seconds back in time
 
-    f = LoadStateAtari(Time[cTimeTravelPos], candy, dwCandySize, iVM);    // restore our snapshot, and create a new anchor point here
+    f = LoadStateAtari(Time[cTimeTravelPos], candy, dwCandySize);    // restore our snapshot, and create a new anchor point here
 
     // lift up the control and ALT keys, do NOT remember their state from before (or we start continuous firing, etc.)
     ControlKeyUp8(candy);
@@ -581,7 +579,7 @@ BOOL TimeTravel(void *candy)
 //
 BOOL TimeTravelReset(void *candy)
 {
-    if (!rgvm[iVM].fTimeTravelEnabled)
+    if (!pvm->fTimeTravelEnabled)
         return TRUE;    // don't fail, we'll quit the VM thinking something's wrong!
 
     // reset our clock to "have not saved any states yet"
@@ -649,7 +647,7 @@ void SwitchToPAL(void *candy)
     if (v.fAutoKill && !fPAL && !fSwitchingToPAL)    // only if the option to auto-detect VM type is on
     {
         fSwitchingToPAL = TRUE;     // don't try again and accidentally switch back
-        rgvm[iVM].fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
+        pvm->fEmuPAL = TRUE;   // GEM's flag that we want to be in PAL, to trigger the real switch when it's safe
         PostMessage(vi.hWnd, WM_COMMAND, IDM_FIXALLMENUS, 0); // Send will hang.
     }
 }
@@ -661,7 +659,7 @@ void DoVBI(void *candy)
 {
     // process joysticks before the vertical blank, just because.
     // When tiling, only the tile in focus gets input
-    if ((!v.fTiling || sVM == (int)iVM) && rgvm[iVM].fJoystick)
+    if ((!v.fTiling || (sVM != -1 && candy == rgpvmi(sVM)->pPrivate)) && pvm->fJoystick)
     {
         // we can handle 4 joysticks on 800, 2 on XL/XE
         for (int joy = 0; joy < ((mdXLXE == md800) ? 4 : 2); joy++)
@@ -839,7 +837,7 @@ void DoVBI(void *candy)
     }
 
     // Process LightPen - we are told which pixel we are on, translate that to colour clock and VCOUNT
-    if (iVM == LightPenVM)
+    if (candy == LightPenVM)
     {
         // For some reason, although the left side of the screen is colour clock 27, you need to report it as 67 + (27/2)
         // !!! X could use calibrating - different lights pens and apps behaved differently
@@ -859,13 +857,9 @@ void DoVBI(void *candy)
         PENV = 0;
     }
 
-#undef iVM // need to be able to see v.iVM
-
     // are we pasting into the keyboard buffer?
-    if (cPasteBuffer && ((CANDYHW *)candy)->m_iVM == v.iVM)
+    if (cPasteBuffer && v.iVM >= 0 && candy == rgpvmi(v.iVM)->pPrivate)
     {
-#define iVM CANDY_STATE(iVM)
-
         fBrakes = FALSE;    // this is SLOW so we definitely need turbo mode for this
         
         if (!(iPasteBuffer & 1))    // send both bytes on the EVEN count
@@ -890,8 +884,8 @@ void DoVBI(void *candy)
             extern BYTE rgbMapScans[1024];
 
             //ODS("%02x (%04x)\n", rgPasteBuffer[iPasteBuffer], wFrame);
-            AddToPacket(iVM, rgPasteBuffer[iPasteBuffer]);
-            AddToPacket(iVM, rgPasteBuffer[iPasteBuffer + 1]);
+            AddToPacket(candy, rgPasteBuffer[iPasteBuffer]);
+            AddToPacket(candy, rgPasteBuffer[iPasteBuffer + 1]);
             iPasteBuffer++;
         }
         else
@@ -900,28 +894,35 @@ void DoVBI(void *candy)
         }
     }
     else if (cPasteBuffer == 0)
+    {
         fBrakesSave = fBrakes;  // remember last state of fBrakes
+        if (fBrakes == FALSE)
+            fBrakes = fBrakes;
+    }
 
     if (cPasteBuffer && iPasteBuffer >= cPasteBuffer)
     {
         Assert(iPasteBuffer == cPasteBuffer);
         cPasteBuffer = 0;   // all done!
+        if (rgPasteBuffer)
+            free(rgPasteBuffer);
+        rgPasteBuffer = NULL;
         fBrakes = fBrakesSave;  // go back to old turbo mode
     }
 
     // decrement printer timer
 
-    if (vi.cPrintTimeout && rgvm[iVM].fShare)
+    if (vi.cPrintTimeout && pvm->fShare)
     {
         vi.cPrintTimeout--;
         if (vi.cPrintTimeout == 0)
         {
-            FlushToPrinter(iVM);
+            FlushToPrinter(0);  // !!! not thread safe, can't pass VM#
             UnInitPrinter();
         }
     }
     else
-        FlushToPrinter(iVM);
+        FlushToPrinter(0);  // !!! not thread safe, can't pass VM#
 }
 
 void UpdatePorts(void *candy)
@@ -957,19 +958,19 @@ void AlterRamtop(void *candy, WORD addr)
     for (i = 0x80; i < (ramtop >> 8); i++)
     {
 #if USE_POKE_TABLE
-        write_tab[iVM][i] = cpuPokeB;
+        write_tab[i] = cpuPokeB;
 #endif
 #if USE_PEEK_TABLE
-        read_tab[iVM][i] = cpuPeekB;
+        read_tab[i] = cpuPeekB;
 #endif
     }
     for (; i < 0xc0; i++)
     {
 #if USE_POKE_TABLE
-        write_tab[iVM][i] = PokeBAtariNULL;
+        write_tab[i] = PokeBAtariNULL;
 #endif
 #if USE_PEEK_TABLE
-        read_tab[iVM][i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
+        read_tab[i] = cpuPeekB;    // unless BountyBob changes this to do bank selecting, plus this changes it back
 #endif
     }
 #endif
@@ -979,13 +980,13 @@ void AlterRamtop(void *candy, WORD addr)
 //
 BOOL ReadCart(void *candy, BOOL fDefaultBank)
 {
-    unsigned char *pch = (unsigned char *)rgvm[iVM].rgcart.szName;
+    unsigned char *pch = (unsigned char *)pvm->rgcart.szName;
 
     int h;
     int cb = 0, cb2;
     BYTE type = 0, *pb;
 
-    if (!pch || !rgvm[iVM].rgcart.fCartIn)
+    if (!pch || !pvm->rgcart.fCartIn)
     {
         bCartType = 0;
         return TRUE;    // nothing to do, all OK
@@ -1034,8 +1035,8 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
         {
             cb = _read(h, pb, cb);
 
-            rgvm[iVM].rgcart.cbData = cb;
-            rgvm[iVM].rgcart.fCartIn = TRUE;
+            pvm->rgcart.cbData = cb;
+            pvm->rgcart.fCartIn = TRUE;
         }
         else
         {
@@ -1312,8 +1313,8 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
     // unknown cartridge, do not attempt to run it
     else
     {
-        rgvm[iVM].rgcart.cbData = 0;
-        rgvm[iVM].rgcart.fCartIn = FALSE;
+        pvm->rgcart.cbData = 0;
+        pvm->rgcart.fCartIn = FALSE;
     }
 #endif
 
@@ -1321,8 +1322,8 @@ exitCart:
 
     if (!bCartType)
     {
-        rgvm[iVM].rgcart.fCartIn = FALSE;    // unload the cartridge
-        rgvm[iVM].rgcart.szName[0] = 0; // erase the name
+        pvm->rgcart.fCartIn = FALSE;    // unload the cartridge
+        pvm->rgcart.szName[0] = 0; // erase the name
     }
 
     return bCartType;    // say if cart looks good or not
@@ -1394,10 +1395,10 @@ void InitCart(void *candy)
     // (possibly un-doing the BountyBob bank select)
 
     // no cartridge
-    if (!(rgvm[iVM].rgcart.fCartIn) || !bCartType)
+    if (!(pvm->rgcart.fCartIn) || !bCartType)
     {
         // convenience for Atari 800, we can ask for BASIC to be put in
-        if (rgvm[iVM].bfHW == vmAtari48 && ramtop <= 0xA000)
+        if (pvm->bfHW == vmAtari48 && ramtop <= 0xA000)
         {
             _fmemcpy(&rgbMem[0xA000], rgbXLXEBAS, 8192);
             AlterRamtop(candy, 0xa000);
@@ -1407,7 +1408,7 @@ void InitCart(void *candy)
         return;
     }
 
-    PCART pcart = &(rgvm[iVM].rgcart);
+    PCART pcart = &(pvm->rgcart);
     unsigned int cb = pcart->cbData;
     BYTE *pb = rgbSwapCart;
 
@@ -1453,13 +1454,13 @@ void InitCart(void *candy)
 
 #if USE_POKE_TABLE
         // default ramtop jump table setting is not right... set up jump table to handle bank selecting
-        write_tab[iVM][0x8f] = PokeBAtariBB;
-        write_tab[iVM][0x9f] = PokeBAtariBB;
+        write_tab[0x8f] = PokeBAtariBB;
+        write_tab[0x9f] = PokeBAtariBB;
 #endif
 #if USE_PEEK_TABLE
         // and the read jump table too
-        read_tab[iVM][0x8f] = PeekBAtariBB;
-        read_tab[iVM][0x9f] = PeekBAtariBB;
+        read_tab[0x8f] = PeekBAtariBB;
+        read_tab[0x9f] = PeekBAtariBB;
 #endif
     }
 
@@ -1594,13 +1595,13 @@ void InitCart(void *candy)
 //
 void BankCart(CANDYHW *candy, BYTE iBank, BYTE value)
 {
-    PCART pcart = &(rgvm[iVM].rgcart);
+    PCART pcart = &(pvm->rgcart);
     unsigned int cb = pcart->cbData;
     int i;
     BYTE *pb = rgbSwapCart;
 
     // we are not a banking cartridge
-    if (!(rgvm[iVM].rgcart.fCartIn) || bCartType <= CART_16K)
+    if (!(pvm->rgcart.fCartIn) || bCartType <= CART_16K)
         return;
 
     // we aren't sure yet, figure it out based on type of banking attempted
@@ -1863,6 +1864,18 @@ void ResetPokeyTimer(void *candy, int irq)
 
 }
 
+// Add a byte to the IKBD input buffer
+void AddToPacket(void *candy, ULONG b)
+{
+    //ODS("%02x ", b);
+    pvmin->rgbKeybuf[pvmin->keyhead++] = (BYTE)b;
+    pvmin->keyhead &= 1023;
+
+#if defined(ATARIST) || defined(SOFTMAC)
+    vsthw[v.iVM].gpip &= 0xEF; // to indicate characters available
+#endif // ATARIST
+}
+
 #ifndef NDEBUG
 void DumpROM(char *filename, char *label, char *rgb, int start, int len)
 {
@@ -1908,8 +1921,10 @@ void DumpROMS()
 
 // call me when first creating the instance. Provide our machine types VMINFO and the type of machine you want (800 vs. XL vs. XE)
 //
-BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMINFO pvmi, int type)
+BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO pvmi, int type)
 {
+    if (!ppPrivate || !pPrivateSize || !pGem || !pvmi)
+        return FALSE;
 
 #if USE_PEEK_TABLE
 
@@ -1919,11 +1934,11 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
         // This is the initial setup. BountyBob cart will modify this to bank select
 
         if (i == 0xd0 || i == 0xd2 || i == 0xd3 || i == 0xd4)
-            read_tab[iVMNum][i] = PeekBAtariHW;    // hw registers
+            read_tab[i] = PeekBAtariHW;    // hw registers
         else if (i == 0xd5)
-            read_tab[iVMNum][i] = PeekBAtariBS;    // cartridge bank select
+            read_tab[i] = PeekBAtariBS;    // cartridge bank select
         else
-            read_tab[iVMNum][i] = cpuPeekB;
+            read_tab[i] = cpuPeekB;
     }
 #endif
 
@@ -1936,17 +1951,17 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
         // So will ANTIC to look for modifying the current screen RAM
 
         if (i >= 0xc0 && i < 0xd0)
-            write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
+            write_tab[i] = PokeBAtariOS;   // OS ROM may be banked out
         else if (i >= 0xd0 && i < 0xd5)
-            write_tab[iVM][i] = PokeBAtariHW;   // HW registers
+            write_tab[i] = PokeBAtariHW;   // HW registers
         else if (i == 0xd5)
-            write_tab[iVM][i] = PokeBAtariBS;   // cartridge line for bank select
+            write_tab[i] = PokeBAtariBS;   // cartridge line for bank select
         else if (i >= 0xd6 && i < 0xd8)
-            write_tab[iVM][i] = PokeBAtariHW; // PokeBAtariNULL; // !!! $d600 binary loader hack
+            write_tab[i] = PokeBAtariHW; // PokeBAtariNULL; // !!! $d600 binary loader hack
         else if (i >= 0xd8)
-            write_tab[iVM][i] = PokeBAtariOS;   // OS ROM may be banked out
+            write_tab[i] = PokeBAtariOS;   // OS ROM may be banked out
         else if (i < 0x80)
-            write_tab[iVM][i] = cpuPokeB;       // always RAM
+            write_tab[i] = cpuPokeB;       // always RAM
     }
 #endif
 
@@ -2036,12 +2051,12 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
         // Some apps (BountyBob v3) don't run on XE, only XL, and usually an XE only app prompts you that you need 128K
         // and doesn't crash. Plus an XE is twice the memory footprint, you can fit twice almsot as many XL VMs
 
-        if (vrgvmi[iVMNum].fKillMePlease == 3) // our special kill code for "need XE w/o BASIC"
+        if (((PVMINST)(pGem + 1))->fKillMePlease == 3) // our special kill code for "need XE w/o BASIC"
         {
             type = mdXE;
             initramtop = 0xc000;
         }
-        else if (vrgvmi[iVMNum].fKillMePlease == 4) // our special kill code for "need BASIC"
+        else if (((PVMINST)(pGem + 1))->fKillMePlease == 4) // our special kill code for "need BASIC"
         {
             // keep the same type
             initramtop = 0xa000;
@@ -2069,24 +2084,24 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
     switch (1 << type)
     {
     case vmAtari48:
-        rgvm[iVMNum].bfHW = vmAtari48;
-        rgvm[iVMNum].iOS = 0;
-        rgvm[iVMNum].bfRAM = ram48K;
-        strcpy(rgvm[iVMNum].szModel, rgszVM[1]);
+        pGem->bfHW = vmAtari48;
+        pGem->iOS = 0;
+        pGem->bfRAM = ram48K;
+        strcpy(pGem->szModel, rgszVM[1]);
         break;
 
     case vmAtariXL:
-        rgvm[iVMNum].bfHW = vmAtariXL;
-        rgvm[iVMNum].iOS = 1;
-        rgvm[iVMNum].bfRAM = ram64K;
-        strcpy(rgvm[iVMNum].szModel, rgszVM[2]);
+        pGem->bfHW = vmAtariXL;
+        pGem->iOS = 1;
+        pGem->bfRAM = ram64K;
+        strcpy(pGem->szModel, rgszVM[2]);
         break;
 
     case vmAtariXE:
-        rgvm[iVMNum].bfHW = vmAtariXE;
-        rgvm[iVMNum].iOS = 2;
-        rgvm[iVMNum].bfRAM = ram128K;
-        strcpy(rgvm[iVMNum].szModel, rgszVM[3]);
+        pGem->bfHW = vmAtariXE;
+        pGem->iOS = 2;
+        pGem->bfRAM = ram128K;
+        strcpy(pGem->szModel, rgszVM[3]);
         break;
 
     default:
@@ -2111,35 +2126,32 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, int iVMNum, PVMIN
     // how big is our persistable structure?
 
     int candysize = sizeof(CANDYHW);
-    if (rgvm[iVMNum].bfHW != vmAtari48)
+    if (pGem->bfHW != vmAtari48)
         candysize += (SELF_SIZE + C000_SIZE + BASIC_SIZE + D800_SIZE);    // extended XL/XE RAM
-    if (rgvm[iVMNum].bfHW == vmAtariXE)
+    if (pGem->bfHW == vmAtariXE)
         candysize += (16384 * 4);            // extended XE RAM
 
-    if (!ppPrivate)
-        return FALSE;
-
-    // quicker than malloc and this is in a loop in slow load-up code, the fewer calls the better
+    // Quicker than malloc and this is in a loop in slow load-up code, the fewer calls the better
+    // Return our private data to GEM
     *ppPrivate = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, candysize + sizeof(CANDY_UNPERSISTED));
 
     if (*ppPrivate)
-    {
         ((CANDYHW *)(*ppPrivate))->m_dwCandySize = candysize;
-        ((CANDYHW *)(*ppPrivate))->m_iVM = iVMNum;
-
-        ((CANDYHW *)(*ppPrivate))->m_candyx = (void*)((BYTE *)*ppPrivate + candysize);
-    }
-
     else
         return FALSE;
 
-    if (pPrivateSize)
-        *pPrivateSize = candysize;
+    CANDYHW *candy = *ppPrivate;
+
+    // return our persistable size to GEM
+    *pPrivateSize = candysize;
+    
+    // Remember GEM's persisted and unpersisted data about us, we'll need it
+    pvm = pGem;
+    pvmin = (PVMINST)(pGem + 1);
 
     AlterRamtop(*ppPrivate, initramtop);    // if we needed to set this to something in particular
 
     // init breakpoint. JMP $0 happens, so the only safe address that won't ever execute is $FFFF
-    CANDYHW *candy = *ppPrivate;
     bp = 0xffff;
 
     // candy must be set up first (above)
@@ -2166,7 +2178,7 @@ BOOL __cdecl UnmountAtariDisks(void *candy)
 {
     int i;
 
-    for (i = 0; i < rgvm[iVM].ivdMac; i++)
+    for (i = 0; i < pvm->ivdMac; i++)
         UnmountAtariDisk(candy, i);
 
     return TRUE;
@@ -2179,18 +2191,18 @@ BOOL __cdecl InitAtari(void *candy)
 {
     // These things are the same for each machine type
 
-    rgvm[iVM].fCPUAuto = TRUE;
-    rgvm[iVM].bfCPU = cpu6502;
-    rgvm[iVM].ivdMac = MAX_DRIVES; // sizeof(rgvm[0].rgvd) / sizeof(VD);    // although we have room for 8, and others have 9
+    pvm->fCPUAuto = TRUE;
+    pvm->bfCPU = cpu6502;
+    pvm->ivdMac = MAX_DRIVES; // sizeof(rgvm[0].rgvd) / sizeof(VD);    // although we have room for 8, and others have 9
 
-    rgvm[iVM].bfMon = monColrTV;
+    pvm->bfMon = monColrTV;
 
     // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
     // Install may have a preference and set this already, in which case, don't change it
     if (!ramtop)
-        AlterRamtop(candy, (rgvm[iVM].bfHW > vmAtari48) ? 0xA000 : 0xC000);
+        AlterRamtop(candy, (pvm->bfHW > vmAtari48) ? 0xA000 : 0xC000);
     
-    switch (rgvm[iVM].bfHW)
+    switch (pvm->bfHW)
     {
     default:
         mdXLXE = md800;
@@ -2207,12 +2219,12 @@ BOOL __cdecl InitAtari(void *candy)
         break;
     }
 
-    rgvm[iVM].bfRAM = BfFromWfI(rgvm[iVM].pvmi->wfRAM, mdXLXE);
+    pvm->bfRAM = BfFromWfI(pvm->pvmi->wfRAM, mdXLXE);
 
-    if (!FInitSerialPort(rgvm[iVM].iCOM))
-        rgvm[iVM].iCOM = 0;
-    if (!InitPrinter(rgvm[iVM].iLPT))
-        rgvm[iVM].iLPT = 0;
+    if (!FInitSerialPort(pvm->iCOM))
+        pvm->iCOM = 0;
+    if (!InitPrinter(pvm->iLPT))
+        pvm->iLPT = 0;
 
     // We have per instance and overall sound on/off, right now everything is always on.
     fSoundOn = TRUE;
@@ -2248,6 +2260,10 @@ BOOL __cdecl UninitAtari(void *candy)
         UnmountAtariDisks(candy);
     }
 
+    if (rgPasteBuffer)
+        free(rgPasteBuffer);
+    rgPasteBuffer = NULL;
+
     return TRUE;
 }
 
@@ -2257,23 +2273,23 @@ BOOL __cdecl WriteProtectAtariDisk(void *candy, int i, BOOL fSet, BOOL fWP)
 {
 
     if (!fSet)
-        rgvm[iVM].rgvd[i].mdWP = (BYTE)GetWriteProtectDrive(candy, i);
+        pvm->rgvd[i].mdWP = (BYTE)GetWriteProtectDrive(candy, i);
     else
-        rgvm[iVM].rgvd[i].mdWP = (BYTE)SetWriteProtectDrive(candy, i, fWP); // may or may not actually change
+        pvm->rgvd[i].mdWP = (BYTE)SetWriteProtectDrive(candy, i, fWP); // may or may not actually change
 
-    return rgvm[iVM].rgvd[i].mdWP;
+    return pvm->rgvd[i].mdWP;
 }
 
 BOOL __cdecl MountAtariDisk(void *candy, int i)
 {
     UnmountAtariDisk(candy, i);    // make sure all emulator types know to do this first
 
-    PVD pvd = &rgvm[iVM].rgvd[i];
+    PVD pvd = &pvm->rgvd[i];
     BOOL f;
     if (pvd->dt == DISK_IMAGE)
     {
         f = AddDrive(candy, i, (BYTE *)pvd->sz);
-        SetWriteProtectDrive(candy, i, rgvm[iVM].rgvd[i].mdWP);   // VM remembers state of write protect
+        SetWriteProtectDrive(candy, i, pvm->rgvd[i].mdWP);   // VM remembers state of write protect
     }
     else if (pvd->dt == DISK_NONE)
         f = TRUE;
@@ -2295,7 +2311,7 @@ BOOL __cdecl InitAtariDisks(void *candy)
 // spin the motors back down, our VM won't be needed for a bit
 BOOL __cdecl UninitAtariDisks(void *candy)
 {
-    for (int i = 0; i < rgvm[iVM].ivdMac; i++)
+    for (int i = 0; i < pvm->ivdMac; i++)
         CloseDrive(candy, i);
         
     return TRUE;
@@ -2306,7 +2322,7 @@ BOOL __cdecl MountAtariDisks(void *candy)
     int i;
     BOOL f;
 
-    for (i = 0; i < rgvm[iVM].ivdMac; i++)
+    for (i = 0; i < pvm->ivdMac; i++)
     {
         f = MountAtariDisk(candy, i);
         if (!f)
@@ -2317,7 +2333,7 @@ BOOL __cdecl MountAtariDisks(void *candy)
 
 BOOL __cdecl UnmountAtariDisk(void *candy, int i)
 {
-    PVD pvd = &rgvm[iVM].rgvd[i];
+    PVD pvd = &pvm->rgvd[i];
 
     if (pvd->dt == DISK_IMAGE)
         DeleteDrive(candy, i);
@@ -2339,10 +2355,10 @@ void ResetPIA(void *candy)
 
     // but it also might be a coldstart, and ramtop might have changed, so 
     rPADATA = 255;    // the data PORTA will provide if it is in READ mode - defaults to no joysticks moved
-    rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !rgvm[iVM].rgcart.fCartIn) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
+    rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !pvm->rgcart.fCartIn) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
     
     wPADATA = 0;    // the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
-    wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !rgvm[iVM].rgcart.fCartIn) ? 253 : 255) : 0; // XL defaults to OS IN and HELP OUT
+    wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !pvm->rgcart.fCartIn) ? 253 : 255) : 0; // XL defaults to OS IN and HELP OUT
 
     wPADDIR = 0;    // direction - default to read
     wPBDDIR = 0;
@@ -2360,10 +2376,18 @@ BOOL __cdecl WarmbootAtari(void *candy)
 {
     //ODS("\n\nWARM START\n\n");
 
-    cPasteBuffer = 0;   // stop pasting
+    // warm/cold start is the only way to stop a long pasting operation
+    if (cPasteBuffer)
+    {
+        cPasteBuffer = 0;
+        if (rgPasteBuffer)
+            free(rgPasteBuffer);
+        rgPasteBuffer = NULL;
+        fBrakes = fBrakesSave;  // go back to old turbo mode
+    }
 
     // notice NTSC/PAL switch
-    fPAL = rgvm[iVM].fEmuPAL;
+    fPAL = pvm->fEmuPAL;
     PAL = fPAL ? 1 : 15;    // set GTIA register
     fInVBI = 0;
     fInDLI = 0;
@@ -2385,7 +2409,7 @@ BOOL __cdecl WarmbootAtari(void *candy)
     wCycle = 0;
     PSL = 0;
     wSIORTS = 0;    // stop avoiding printing in the monitor
-    rgvm[iVM].fTimeTravelFixed = FALSE;   // start periodically saving again
+    pvm->fTimeTravelFixed = FALSE;   // start periodically saving again
     fCartNeedsSwap = FALSE; // or else we'll fault trying to swap a bogus bank in
 
     // SIO init
@@ -2402,12 +2426,8 @@ BOOL __cdecl WarmbootAtari(void *candy)
     // A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
     // or we'll think it's a paddle. 
 
-#undef iVM  // need to be able to see v.iVM
-
-    if (((CANDYHW *)candy)->m_iVM == v.iVM)
+    if (v.iVM >= 0 && candy == rgpvmi(v.iVM)->pPrivate)
         InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm boot!
-
-#define iVM CANDY_STATE(iVM)
 
     return TRUE;
 }
@@ -2443,11 +2463,11 @@ BOOL __cdecl ColdbootAtari(void *candy)
 
 #if 0 // doesn't change
     if (mdXLXE == md800)
-        rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
+        pvm->bfHW = /* (ramtop == 0xA000) ? vmAtari48C :*/ vmAtari48;
     else if (mdXLXE == mdXL)
-        rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
+        pvm->bfHW = /* (ramtop == 0xA000) ? vmAtariXLC :*/ vmAtariXL;
     else
-        rgvm[iVM].bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
+        pvm->bfHW = /* (ramtop == 0xA000) ? vmAtariXEC :*/ vmAtariXE;
 #endif
 
     //DisplayStatus(); this might not be the active instance
@@ -2491,7 +2511,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
     TRIG1 = 1;
     TRIG2 = 1;
     // XL cartridge sense line, without this warm starts can try to run an non-existent cartridge
-    TRIG3 = (mdXLXE != md800 && !(rgvm[iVM].rgcart.fCartIn)) ? 0 : 1;
+    TRIG3 = (mdXLXE != md800 && !(pvm->rgcart.fCartIn)) ? 0 : 1;
     *(ULONG *)MXPF  = 0;
     *(ULONG *)MXPL  = 0;
     *(ULONG *)PXPF  = 0;
@@ -2565,7 +2585,7 @@ BOOL __cdecl SaveStateAtari(void *candy)
     // Before saving, we need to put the RAM that's swapped into cartridge memory back into RAM so it will be persisted
     // keep iSwapCart to tell us which bank should be swapped back in, so don't do this twice in a row!
     // if BASIC is swapped in to a RAM cart, then ramtop is low, but that still means that no swapping is needed
-    if (rgvm[iVM].rgcart.fCartIn && fRAMCart && iSwapCart < iNumBanks && !fCartNeedsSwap)
+    if (pvm->rgcart.fCartIn && fRAMCart && iSwapCart < iNumBanks && !fCartNeedsSwap)
     {
         BYTE swap[8192];
         _fmemcpy(swap, &rgbMem[0xa000], 8192);
@@ -2582,24 +2602,15 @@ BOOL __cdecl SaveStateAtari(void *candy)
 // Either INIT is called followed by ColdBoot, or this, not both, so do what we need to do to restore our state
 // without resetting anything
 //
-BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMNum)
+BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
 {
     if (cbPersist != dwCandySize || candy == NULL || pPersist == NULL)
         return FALSE;
 
-    // save our pointer to our un-persistable stuff
-    void *uncandy = ((CANDYHW *)candy)->m_candyx;
-
-    // copy the new state over.
+    // copy the new persistable state over, leaving the unpersisted stuff after it untouched
     _fmemcpy(candy, pPersist, cbPersist);
 
-    // and give it a new VM number
-    ((CANDYHW *)candy)->m_iVM = iVMNum;
-
-    // restore the pointer
-    ((CANDYHW *)candy)->m_candyx = uncandy;
-
-    // Now fix our non-persistable data
+    // Now fix our non-persistable data based on new persistable data
 
     // 1. rgDrives info about the attached drives, now delayed for speed savings
     //BOOL f = MountAtariDisks(candy);
@@ -2615,10 +2626,10 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
 
 #if 0
     // legacy stuff that doesn't matter for now
-    if (!FInitSerialPort(rgvm[iVM].iCOM))
-        rgvm[iVM].iCOM = 0;
-    if (!InitPrinter(rgvm[iVM].iLPT))
-        rgvm[iVM].iLPT = 0;
+    if (!FInitSerialPort(pvm->iCOM))
+        pvm->iCOM = 0;
+    if (!InitPrinter(pvm->iLPT))
+        pvm->iLPT = 0;
 #endif
 
     // 4. Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
@@ -2628,7 +2639,7 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist, int iVMN
 
 BOOL __cdecl DumpHWAtari(void *candy)
 {
-    iVM;
+    candy;
 #ifndef NDEBUG
 //    RestoreVideo();
 
@@ -2738,7 +2749,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     CchDisAsm(candy, &PCt);
                     printf("\n");
                 }
-                FDumpHWVM(iVM);
+                FDumpHWVM(0);   // !!! Don't have VM# we need
             }
 #endif // DEBUG
 
@@ -2973,7 +2984,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 isectorPos = 0;
 
                 // !!! 2-drive support only, the drive in question must be mounted, or we ignore the request and let it time out
-                if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x32 && rgvm[iVM].rgvd[rgSIO[0] - 0x31].sz[0])
+                if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x32 && pvm->rgvd[rgSIO[0] - 0x31].sz[0])
                 {
                     if (rgSIO[1] == 0x52)
                     {
@@ -3173,7 +3184,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             SoundDoneCallback(candy, (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC);    // finish this buffer and send it
 
             // notice NTSC/PAL switch on a frame boundary only
-            fPAL = rgvm[iVM].fEmuPAL;
+            fPAL = pvm->fEmuPAL;
             PAL = fPAL ? 1 : 15;    // set GTIA register
             if (fPAL)
                 fSwitchingToPAL = FALSE;
@@ -3197,7 +3208,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 
 BOOL __cdecl DumpRegsAtari(void *candy)
 {
-    iVM;
+    candy;
 
     // later
 
@@ -3207,7 +3218,7 @@ BOOL __cdecl DumpRegsAtari(void *candy)
 
 BOOL __cdecl DisasmAtari(void *candy, char *pch, ADDR *pPC)
 {
-    pPC; pch; iVM;
+    candy;  pPC; pch;
 
     // later
 
@@ -3221,7 +3232,7 @@ void KillMePlease(void *candy)
     {
         vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
 
-        vrgvmi[iVM].fKillMePlease = TRUE;   // say which thread died
+        pvmin->fKillMePlease = TRUE;   // say which thread died
 
         // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
@@ -3239,7 +3250,7 @@ void KillMeSoftlyPlease(void *candy)
     wLeft = 0;  // exit the Go6502 loop
     bp = regPC; // don't do additional scan lines
 
-    vrgvmi[iVM].fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
+    pvmin->fKillMePlease = 2;   // say which thread died, with special code meaning "kill me softly" (coldboot only)
 }
 
 // we specifically notice we need to be an XE, probably without BASIC (not normally in our cycle (800 w/o --> XL w/o --> XE w/BASIC)
@@ -3249,7 +3260,7 @@ void KillMePleaseXE(void *candy)
     {
         vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
 
-        vrgvmi[iVM].fKillMePlease = 3;   // say which thread died, special code for XE w/o BASIC
+        pvmin->fKillMePlease = 3;   // say which thread died, special code for XE w/o BASIC
 
         // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
@@ -3264,7 +3275,7 @@ void KillMePleaseBASIC(void *candy)
     {
         vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
 
-        vrgvmi[iVM].fKillMePlease = 4;   // say which thread died, special code for BASIC
+        pvmin->fKillMePlease = 4;   // say which thread died, special code for BASIC
 
         // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
@@ -3443,21 +3454,21 @@ BYTE PeekBAtariMON(void *candy, ADDR addr)
 //
 WORD __cdecl PeekWAtari(void *candy, ADDR addr)
 {
-    iVM; addr;
+    candy; addr;
     return 0;
 }
 
 // not used
 ULONG __cdecl PeekLAtari(void *candy, ADDR addr)
 {
-    iVM; addr;
+    candy; addr;
     return 0;
 }
 
 // not used
 BOOL __cdecl PokeLAtari(void *candy, ADDR addr, ULONG w)
 {
-    iVM; addr; w;
+    candy; addr; w;
     return TRUE;
 }
 
@@ -3465,7 +3476,7 @@ BOOL __cdecl PokeLAtari(void *candy, ADDR addr, ULONG w)
 //
 BOOL __cdecl PokeWAtari(void *candy, ADDR addr, WORD w)
 {
-    iVM; addr; w;
+    candy; addr; w;
     return TRUE;
 }
 
@@ -3518,7 +3529,7 @@ BOOL __fastcall PokeBAtariOS(void *candy, ADDR addr, BYTE b)
 // dead cartridge space before $c000
 BOOL __fastcall PokeBAtariNULL(void *candy, ADDR addr, BYTE b)
 {
-    iVM; addr; b;
+    candy; addr; b;
     return TRUE;
 }
 

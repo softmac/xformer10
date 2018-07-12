@@ -102,9 +102,7 @@ void CALLBACK MyWaveOutProc(
 
 #ifndef NDEBUG
     // this might not have been the case when the buffer was written, so we might report bogus data when switching. but who cares
-#undef iVM
-    BOOL fPal50 = v.iVM >= -1 && rgvm[v.iVM].fEmuPAL && !v.fTiling;
-#define iVM CANDY_STATE(iVM)
+    BOOL fPal50 = v.iVM > -1 && rgpvm[v.iVM]->fEmuPAL && !v.fTiling;
 
     if (uMsg == WOM_DONE) {
         int cx = 0;
@@ -133,14 +131,10 @@ void SoundDoneCallback(void *candy, int iCurSample)
     LPWAVEHDR pwhdr = fPal50 ? vi.rgwhdrP : vi.rgwhdrN;
     int SAMPLES_PER_VOICE = fPal50 ? SAMPLES_PAL : SAMPLES_NTSC;
 
-#undef iVM
-
     // Only do sound for the VM in focus, this code is not thread safe
     // We only switch VMs when all threads are asleep
-    if ((v.fTiling && sVM != ((CANDYHW *)candy)->m_iVM) || (!v.fTiling && v.iVM != ((CANDYHW *)candy)->m_iVM))
+    if ((v.fTiling && (sVM == -1 || rgpvmi(sVM)->pPrivate != candy)) || (!v.fTiling && (v.iVM == -1 || rgpvmi(v.iVM)->pPrivate != candy)))
         return;
-
-#define iVM CANDY_STATE(iVM)
 
     // if we have reset since last we were called, init this variable again
     if (wFrame < sOldFrame)
@@ -148,7 +142,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
     sOldFrame = wFrame;
 
     // 8 bit code
-    if (!FIsAtari68K(rgvm[iVM].bfHW)) {
+    if (!FIsAtari68K(pvm->bfHW)) {
 #ifdef XFORMER
         // write from wherever we left off(sOldSample) to now(iCurSample). If it becomes full, play it.
         assert(iCurSample <= SAMPLES_PER_VOICE);
@@ -214,8 +208,8 @@ void SoundDoneCallback(void *candy, int iCurSample)
             rgvoice[3].volume = 0;    // app hack for MULE, the single bad sample is at the end of the buffer
         }
 
-        if (rgvm[iVM].fSound) {
-
+        if (pvm->fSound)
+        {
             int pCLK = fPAL ? PAL_CLK : NTSC_CLK;
             int pCLK100 = pCLK * 100;
             int pCLK28100 = pCLK100 / 28;
@@ -223,33 +217,37 @@ void SoundDoneCallback(void *candy, int iCurSample)
             
             // figure out the freq and pulse width of each voice
             int freq[4];
-            for (int i = 0; i < 4; i++) {
-
+            for (int i = 0; i < 4; i++)
+            {
                 // frequency isn't relevant for volume only sound or if sound will be silent
                 // otherwise, figure out how wide to make the pulses for this voice's frequency
 
                 // I proceed whenever freq = 0 because you can do fake volume only sound without setting the bit (see bin1\WOOFER.obj)
 
-                if ((rgvoice[i].distortion & 0x01) == 0 && /* rgvoice[i].frequency != 0 && */ rgvoice[i].volume != 0) {
-
+                if ((rgvoice[i].distortion & 0x01) == 0 && /* rgvoice[i].frequency != 0 && */ rgvoice[i].volume != 0)
+                {
                     // actual frequency is the current clock divided by (n+1) (x 100 for the precision necessary to count poly clocks)
                     // An additional /2 will happen because this frequency is how often the square wave toggles
 
                     // Channels 1 and 3 can be clocked with 1.78979 MHz, otherwise the clock is either 15700 or 63921Hz (NTSC)
-                    if ((i == 0 && (sAUDCTL & 0x40)) || (i == 2 && (sAUDCTL & 0x20))) {
+                    if ((i == 0 && (sAUDCTL & 0x40)) || (i == 2 && (sAUDCTL & 0x20)))
+                    {
                         freq[i] = pCLK * 100 / (rgvoice[i].frequency + 1);
 
                         // Channels 2 and 4 can be combined with channels 1 and 3 for 16 bit precision, clocked by any possible clock
                         // Divide by (n+4) for 64K or (n+7) for 1.79M
                     }
+                    
                     else if (i == 1 && (sAUDCTL & 0x10)) {
                         freq[i] = ((sAUDCTL & 0x40) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
+                    
                     else if (i == 3 && (sAUDCTL & 0x08)) {
                         freq[i] = ((sAUDCTL & 0x20) ? pCLK100 : ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100)) /
                             ((rgvoice[i].frequency << 8) + rgvoice[i - 1].frequency + ((sAUDCTL & 0x40) ? 7 : 4));
                     }
+                    
                     else {
                         freq[i] = ((sAUDCTL & 0x01) ? pCLK114100 : pCLK28100) / (rgvoice[i].frequency + 1);
                     }
@@ -266,22 +264,22 @@ void SoundDoneCallback(void *candy, int iCurSample)
             }
 
             // determine the amplitude for each sample in the buffer we need to fill now
-            for (int i = sOldSample; i < iCurSample; i++) {
-
+            for (int i = sOldSample; i < iCurSample; i++)
+            {
                 int bLeft = 0;    //left channel amplitude
                 //int bRight = 0;
 
                 // figure out each voice for this sample
-                for (int voice = 0; voice < 4; voice++) {
-
+                for (int voice = 0; voice < 4; voice++)
+                {
                     // Not in focus, or this voice is silent and won't contribute
                     if (!vi.fHaveFocus ||
                         ((rgvoice[voice].distortion & 0x01) == 0 && (/* rgvoice[voice].frequency == 0 || */ rgvoice[voice].volume == 0)))
                         continue;
 
                     // apply distortion on the edge transition (only relevant for non-volume only)
-                    if ((rgvoice[voice].distortion & 0x01) == 0 && pulse[voice].pos == 0) {
-
+                    if ((rgvoice[voice].distortion & 0x01) == 0 && pulse[voice].pos == 0)
+                    {
                         // How many times would the poly counters have clocked since the last pulse width? We need the accuracy of
                         // using the freq of the note * 10, not the pulse width, which is only rounded to the nearest 1/2 integer
                         int r = pCLK100 / freq[voice];
@@ -300,11 +298,11 @@ void SoundDoneCallback(void *candy, int iCurSample)
                         // !!! poly 5 combined with 4 sounds wrong! (Distortion 4) Why?
 
                         //bit 5 chooses whether to use another counter (the 17/9 or 4-bit counter)
-                        if ((rgvoice[voice].distortion & 2) == 0) {
-
+                        if ((rgvoice[voice].distortion & 2) == 0)
+                        {
                             //bit 6 chooses between 17/9-bit and 4-bit counter
-                            if ((rgvoice[voice].distortion & 4) == 0) {
-
+                            if ((rgvoice[voice].distortion & 4) == 0)
+                            {
                                 // AUDCTL bit 7 chooses 9 or 17
                                 if ((sAUDCTL & 0x80) && fAllow)
                                 {
@@ -342,7 +340,8 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
                     // output the correct sample given what part of the pulse we're in, or if we're skipping the positive section
                     }
-                    else {
+                    else
+                    {
                         bLeft += ((pulse[voice].phase ? 32768 : -32768) * (int)rgvoice[voice].volume >> 4);
                         pulse[voice].pos++;
 
@@ -983,18 +982,14 @@ void InitSound()
             waveOutPrepareHeader(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
             waveOutPrepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
 
-#undef iVM
-
             if (iHdr < 2)
             {
                 // we only go into 50fps for a solo PAL VM
-                if (!v.fTiling && rgvm[v.iVM].fEmuPAL)
+                if (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL)
                     waveOutWrite(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
                 else
                     waveOutWrite(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
             }
-
-#define iVM CANDY_STATE(iVM)
 
             else
             {
@@ -1013,7 +1008,7 @@ void InitMIDI(void *candy)
     MIDIOUTCAPS moc;
     int i, iMac = 0;
 
-    if (!rgvm[iVM].fMIDI)
+    if (!pvm->fMIDI)
         return;
 
 // #if !defined(_M_ARM)
@@ -1022,7 +1017,7 @@ void InitMIDI(void *candy)
     //DebugStr("number of MIDI output devices = %d\n", iMac);
 
     if (iMac == 0)
-        rgvm[iVM].fMIDI = FALSE;
+        pvm->fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {
@@ -1039,7 +1034,7 @@ void InitMIDI(void *candy)
     //DebugStr("number of MIDI input devices = %d\n", iMac);
 
     if (iMac == 0)
-        rgvm[iVM].fMIDI = FALSE;
+        pvm->fMIDI = FALSE;
 
     for (i = 0; i < iMac; i++)
         {

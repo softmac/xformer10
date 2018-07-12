@@ -150,7 +150,7 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
     // OK to swap in BASIC if ramtop is high. OK to swap out BASIC if there's no other cartridge, or that cartridge's
     // current bank is maxed out, meaning RAM.
     // !!! What happens if a somebody tries to bank a cartridge in when BASIC is already in? I won't allow that.
-    if ((mask & BASIC_MASK) && (ramtop == 0xc000 || !rgvm[iVM].rgcart.fCartIn || (iSwapCart == iNumBanks && iSwapCart > 0)))
+    if ((mask & BASIC_MASK) && (ramtop == 0xc000 || !pvm->rgcart.fCartIn || (iSwapCart == iNumBanks && iSwapCart > 0)))
     {
         int cb = BASIC_SIZE;
 

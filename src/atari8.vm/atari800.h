@@ -18,15 +18,19 @@
 
 #include "common.h"
 
-#if defined(_M_ARM) || defined(_M_ARM64)
-// Use the switch table based interpreter for ARM/ARM64 builds as that utilizes the extra registers better
-#define USE_JUMP_TABLE (0)
-#else
-// Sorry, never use the jump table dispatch interpreter. X86 refuses to tail call. X64 is slower than no jump tables
-#define USE_JUMP_TABLE (0)
-#endif
-#define USE_PEEK_TABLE (0)
-#define USE_POKE_TABLE (0)
+// !!! DO NOT DEFINE THESE! THE JUMP TABLES ARE BROKEN SINCE THE VM NO LONGER IS PASSED AN INDEX TO A SPARSE ARRAY
+//
+//#if defined(_M_ARM) || defined(_M_ARM64)
+//// Use the switch table based interpreter for ARM/ARM64 builds as that utilizes the extra registers better
+//#define USE_JUMP_TABLE (0)
+//#else
+//// Sorry, never use the jump table dispatch interpreter. X86 refuses to tail call. X64 is slower than no jump tables
+//#define USE_JUMP_TABLE (0)
+//#endif
+//#define USE_PEEK_TABLE (0)
+//#define USE_POKE_TABLE (0)
+//
+// !!! DO NOT DEFINE THESE! THE JUMP TABLES ARE BROKEN SINCE THE VM NO LONGER IS PASSED AN INDEX TO A SPARSE ARRAY
 
 #define STARTSCAN 8    // scan line ANTIC starts drawing at
 
@@ -344,14 +348,19 @@ typedef struct
     BYTE m_sectorSIO[128];    // disk sector, not persisted but reloaded
 
     BYTE *m_rgbSwapCart;      // Contents of the cartridges, not persisted but reloaded
+
+    PVM m_pvm;                // pointer to GEM's persisted info about our VM that we may need to access
+    PVMINST m_pvmi;           // pointer to GEM's non-persisted info about our VM that we may need to access
 } CANDY_UNPERSISTED;
 
-#define ullTimeTravelTime        ((CANDYHW *)candy)->m_candyx->m_ullTimeTravelTime
-#define cTimeTravelPos           ((CANDYHW *)candy)->m_candyx->m_cTimeTravelPos
-#define Time                     ((CANDYHW *)candy)->m_candyx->m_Time
-#define rgDrives                 ((CANDYHW *)candy)->m_candyx->m_rgDrives
-#define sectorSIO                ((CANDYHW *)candy)->m_candyx->m_sectorSIO
-#define rgbSwapCart              ((CANDYHW *)candy)->m_candyx->m_rgbSwapCart
+#define ullTimeTravelTime        ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_ullTimeTravelTime
+#define cTimeTravelPos           ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_cTimeTravelPos
+#define Time                     ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_Time
+#define rgDrives                 ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_rgDrives
+#define sectorSIO                ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_sectorSIO
+#define rgbSwapCart              ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_rgbSwapCart
+#define pvm                      ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_pvm
+#define pvmin                    ((CANDY_UNPERSISTED *)((BYTE *)candy + ((CANDYHW *)candy)->m_dwCandySize))->m_pvmi
 
 // CANDY - our persistable state, including SL (scan line) and PMG (player-missile graphics)
 
@@ -360,16 +369,8 @@ typedef struct
     // !!! THIS MUST STAY AT THE TIPPY TOP until I support GEM knowing about BASIC in a non-hacky way
     WORD m_ramtop;
 
-    int m_iVM;  // which VM we are (to Gem) to access the GEM data about us
-
     // most ofen accessed variables go first!
     int m_dwCandySize;
-
-    union
-    {
-        CANDY_UNPERSISTED *m_candyx;    // same size for 32 and 64 bit versions
-        LONGLONG ll1;
-    };
 
     // 6502 register context - BELONGS IN CPU NOT HERE !!!
     WORD m_regPC, m_regSP;
@@ -507,7 +508,6 @@ typedef struct
 #define srI           CANDY_STATE(srI)
 #define srZ           CANDY_STATE(srZ)
 #define srC           CANDY_STATE(srC)
-#define iVM           CANDY_STATE(iVM)
 #define WSYNC_Seen    CANDY_STATE(WSYNC_Seen)
 #define WSYNC_Waiting CANDY_STATE(WSYNC_Waiting)
 #define PSL           CANDY_STATE(PSL)
@@ -884,6 +884,7 @@ void InitBanks(void *);
 void CchDisAsm(void *, WORD *puMem);
 void CchShowRegs(void *);
 void ControlKeyUp8(void *);
+void AddToPacket(void *, ULONG);
 
 //extern int fXFCable;    // appears to be unused
 //int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
@@ -920,7 +921,7 @@ extern char FAR rgbXLXEC000[], FAR rgbXLXE5000[]; // self test ROMs
 // Function prototypes of the Atari 800 VM API
 //
 
-BOOL __cdecl InstallAtari(void **, int *, int, PVMINFO, int);
+BOOL __cdecl InstallAtari(void **, int *, PVM, PVMINFO, int);
 BOOL __cdecl UnInstallAtari(void *);
 BOOL __cdecl InitAtari(void *);
 BOOL __cdecl UninitAtari(void *);
@@ -932,7 +933,7 @@ BOOL __cdecl WriteProtectAtariDisk(void *, int, BOOL, BOOL);
 BOOL __cdecl WarmbootAtari(void *);
 BOOL __cdecl ColdbootAtari(void *);
 BOOL __cdecl SaveStateAtari(void *);
-BOOL __cdecl LoadStateAtari(void *, void *, int, int);
+BOOL __cdecl LoadStateAtari(void *, void *, int);
 BOOL __cdecl DumpHWAtari(void *);
 BOOL __cdecl TraceAtari(void *, BOOL, BOOL);
 BOOL __cdecl ExecuteAtari(void *, BOOL, BOOL);

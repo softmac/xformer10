@@ -276,6 +276,33 @@ void BtoPch(char *pch, unsigned b)
     *pch++ = rgchHex[b&0xF];
     }
 
+// Come up with a name for our instance - gem has the same function, but we can't call it as it takes a VM # we don't know
+void CreateInstanceNameMon(void *candy, LPSTR lpInstName)
+{
+    LPSTR lp = "";
+    int z;
+
+    // if this VM type suports cartridge and we have a loaded cartridge, find that name
+    if (pvm->pvmi->fUsesCart && pvm->rgcart.fCartIn)
+    {
+        lp = pvm->rgcart.szName;
+    }
+
+    // otherwise, use a disk name
+    if (lp[0] == 0 && pvm->rgvd[0].sz)
+    {
+        lp = pvm->rgvd[0].sz;
+    }
+
+    // only take the filename, none of the path
+    for (z = (int)strlen(lp) - 1; z >= 0; z--)
+    {
+        if (lp[z] == '\\') break;
+    }
+
+    sprintf(lpInstName, "%s - %s", pvm->szModel, lp + z + 1);
+}
+
 // return FALSE when somebody quits
 //
 BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
@@ -291,13 +318,14 @@ BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
 
     char pInst[MAX_PATH];
     pInst[0] = 0;
-    CreateInstanceName(iVM /*((CANDYHW *)candy)->m_iVM*/, pInst);
+    CreateInstanceNameMon(candy, pInst);
 
     while (1)
     {
         // !!! Why does this printf hang waiting for a RETURN key press if I press BREAK w/o focus then again with focus?
         // or I get two BREAK keys in a row and a mysterious break.
-        printf("\nPC Xformer debugger - VM #%d - %s \n", iVM, pInst);
+        // !!! It would be nice to print the VM# here, but we no longer know it
+        printf("\nPC Xformer debugger - %s \n", pInst);
         Cconws("Commands:\n\n");
         Cconws(" A [addr]          - trAce until addr (END to brk)\n");
         Cconws(" B [addr]          - Breakpoint at addr\n");
@@ -346,9 +374,9 @@ BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
             if (chCom == 'X')
             {
                 // clear all the breakpoints, or all VMs will stutter along even w/o the debugger window
-                for (int i = 0; i < MAX_VM; i++)
-                    if (rgvm[i].pvmi == &vmi800)    // this VM is one of us
-                        ((CANDYHW *)(vrgvmi[i].pPrivate))->m_bp = 0xffff; // OK to start poking around in its private data
+                for (int i = 0; i < v.cVM; i++)
+                    if (rgpvm[i]->pvmi == &vmi800)    // this VM is one of us
+                        ((CANDYHW *)(rgpvmi(i)->pPrivate))->m_bp = 0xffff; // OK to start poking around in its private data
 
                 fTrace = FALSE;
                 vi.fInDebugger = FALSE;
@@ -451,7 +479,7 @@ BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
 
             else if (chCom == 'C')
             {
-                ColdStart(iVM);
+                ColdbootAtari(candy);   // !!! was ColdStart(vm#)
                 w = regPC;
                 CchDisAsm(candy, &w);
                 CchShowRegs(candy);
@@ -492,7 +520,8 @@ BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
                 do { // do at least 1 thing, don't get stuck at the breakpoint
                     
                     do {
-                        FExecVM(iVM, TRUE, FALSE);// execute it and show the resulting register values
+                        // !!! was FExecVM(VM#)
+                        ExecuteAtari(candy, TRUE, FALSE);// execute it and show the resulting register values
                     } while (wSIORTS && !fTrace); // we don't want to exit this, but we will at the end of frame, so go back in
 
                     RenderBitmap();
