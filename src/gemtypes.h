@@ -635,11 +635,12 @@ typedef struct
 
 #define NUM_JOYDEVS 16
 
+// !!! joystick types are VM specific enough that they shouldn't be part of GEM
 #define JT_JOYSTICK 1
 #define JT_PADDLE   2
 #define JT_DRIVING  4   // multiple bits set means we don't know yet, it's one of those choices
-
 #define JT_XBOXPADDLE 8 // If it's a joystick, and we detect a non-zero U axis, treat the right joystick as a paddle
+#define JT_KEYPAD   16  // 2600 star raiders key pad and clones
 
     JOYINFOEX rgji[NUM_JOYDEVS];  // joystick state
     JOYCAPS   rgjc[NUM_JOYDEVS];  // joystick info
