@@ -689,6 +689,13 @@ void DoVBI(void *candy)
                     vi.rgjt[joy] |= JT_XBOXPADDLE;
                 }
 
+                // only the keypad has this many buttons, not even an XBOX joystick.
+                // !!! Keypad isn't recognized until one of the last two buttons are pushed (0, #)
+                if (ji.dwButtons & 0xc00)
+                {
+                    vi.rgjt[joy] = JT_KEYPAD;
+                }
+
                 if (vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING))
                 {
                     int dir = (ji.dwXpos - (jc.wXmax - jc.wXmin) / 2);
@@ -767,10 +774,11 @@ void DoVBI(void *candy)
                     }
                 }
 
-                // an XBOX right joystick will serve as a paddle! That is the U axis. Only if we've ever seen the U axis go non-zero
-                // should we do this. Moving the left joystick left will be the paddle trigger.
+                // an XBOX right joystick will also serve as a paddle! That is the U axis. Only if we've ever seen the U axis
+                // go non-zero should we do this. Moving the left joystick left will be the paddle trigger.
+                // Also, a keypad returns some of its data in the paddles
 
-                if (vi.rgjt[joy] == JT_PADDLE || (vi.rgjt[joy] & JT_XBOXPADDLE))
+                if (vi.rgjt[joy] == JT_PADDLE || (vi.rgjt[joy] & JT_XBOXPADDLE) || vi.rgjt[joy] == JT_KEYPAD)
                 {
                     int x, y;
 
@@ -780,6 +788,36 @@ void DoVBI(void *candy)
                         x = (ji.dwXpos - jc.wXmin) * 229 / (jc.wXmax - jc.wXmin);
                         y = (ji.dwYpos - jc.wYmin) * 229 / (jc.wYmax - jc.wYmin);
                     }
+                    
+                    else if (vi.rgjt[joy] == JT_KEYPAD)
+                    {
+                        // They write to a port to say which row they are interested in retrieving data for.
+                        // The keypad/USB converter simply sets a button bit from 1 to $800.
+                        int row = rgbMem[wPADATAea + (joy >> 1)] >> ((joy & 1) << 2);   // will be 1, 2, 4 or 8 for rows 0-3
+                        int r = 0;
+                        // convert to 0-3
+                        while ((row & 1) && r < 4)
+                        {
+                            r++;
+                            row >>= 1;
+                        }
+                        if (r < 4)
+                        {
+                            ji.dwButtons >>= (r * 3);   // bottom 3 bits are now the button states we want to return
+
+                            y = (ji.dwButtons & 0x1) ? 228 : 0; // left button in the row is right paddle
+                            x = (ji.dwButtons & 0x2) ? 228 : 0; // middle button is left paddle
+                            *(&TRIG0 + joy) &= 0xfe;
+                            *(&TRIG0 + joy) |= (ji.dwButtons & 0x4) ? 0 : 1;    // right button is stick trigger
+                        }
+                        else
+                        {
+                            x = y = 228;            // they don't want any keypad buttons read, return neutral
+                            *(&TRIG0 + joy) |= 1;
+                        }
+                    }
+
+                    // XBOX as left paddle using U axis
                     else
                     {
                         x = (ji.dwUpos - jc.wXmin) * 229 / (jc.wUmax - jc.wXmin);   // assume the same max and min
@@ -896,8 +934,6 @@ void DoVBI(void *candy)
     else if (cPasteBuffer == 0)
     {
         fBrakesSave = fBrakes;  // remember last state of fBrakes
-        if (fBrakes == FALSE)
-            fBrakes = fBrakes;
     }
 
     if (cPasteBuffer && iPasteBuffer >= cPasteBuffer)

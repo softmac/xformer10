@@ -2118,8 +2118,9 @@ int CALLBACK WinMain(
         {
             while (cCur < ulljif)
             {
-                // If the deadline is still over half a jiffy away, use Sleep, otherwise poll
-                Sleep((cCur < (ulljif/2)) ? 8 : 0);
+                // was - If the deadline is still over half a jiffy away, use Sleep, otherwise poll
+                // now - never poll, that wastes an entire core and the user doesn't notice anything smoother
+                Sleep(1);// Sleep((cCur < (ulljif / 2)) ? 8 : 0);
                 cCur = GetCycles() - cLastJif;  // macro uses same conditions as ullsec and ulljif
             };
 
