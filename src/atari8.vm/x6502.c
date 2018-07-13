@@ -1864,7 +1864,7 @@ HANDLER(op6C)
     {
         // !!! if a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
         // load address of the last segment in $47/48 in the $2e2 hack below. We can try that.
-        // I can't find the program that did this, it must be rare.
+        // I don't remember what app did this, it must be rare.
         if (!rgbMem[0x2e0] && !rgbMem[0x2e1])
         {
             rgbMem[0x2e0] = rgbMem[0x47];
@@ -2138,11 +2138,11 @@ HANDLER(op80)
     // we just ran some INIT code, and our loader assumes $300-$30b weren't touched, but they were (Click).
     // It also assumes that they don't use $700-$880 for data and corrupt that memory space (Deflektor 128)
     // !!! Such a disk image won't run on real hardware if we make an ATR image out of it - loader lives in ROM, but what can you do?
-    // !!! Hopefully they didn't trash 0x723, that's all we need left alive to notice. I could put this in the RTS but that slows things
-    // down a bit and might falsely trigger, whereas NOP # will never falsely trigger @0x723
-    else if (regPC == 0x724 || regPC == 0xd624)   // our two versions of the loader
+    // !!! Hopefully they didn't trash 0x724, that's all we need left alive to notice. I could put this in the RTS but that slows things
+    // down a bit and might falsely trigger, whereas NOP # will never falsely trigger @0x724
+    else if (regPC == 0x725 || regPC == 0xd625)   // our two versions of the loader
     {
-        if (regPC == 0x724) // first version of loader susceptible to corruption
+        if (regPC == 0x725) // first version of loader susceptible to corruption
         {
             // Did init code of the binary trash $700 thinking it owned the place, corrupting our binary? (Deflektor 128)
             BYTE chk = 0, chkA = 0;
@@ -2173,12 +2173,12 @@ HANDLER(op80)
         rgbMem[0x302] = 0x52;
         rgbMem[0x303] = 0x01;
         rgbMem[0x304] = 0x00;
-        rgbMem[0x305] = (regPC == 0x724) ? 0x0a : 0x04; // the buffer this loader uses
+        rgbMem[0x305] = (regPC == 0x725) ? 0x0a : 0x04; // the buffer this loader uses
         rgbMem[0x306] = 0x06;
         rgbMem[0x308] = 0x80;
         rgbMem[0x309] = 0x00;
-        rgbMem[0x30a] = (regPC == 0x724) ? rgbMem[0xa7e] : rgbMem[0x47e];   // the buffer this loader uses
-        rgbMem[0x30b] = (regPC == 0x724) ? rgbMem[0xa7d] : rgbMem[0x47d];
+        rgbMem[0x30a] = (regPC == 0x725) ? rgbMem[0xa7e] : rgbMem[0x47e];   // the buffer this loader uses
+        rgbMem[0x30b] = (regPC == 0x725) ? rgbMem[0xa7d] : rgbMem[0x47d];
     }
 
     regPC++;    // it's a 2 byte instruction
