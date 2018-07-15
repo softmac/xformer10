@@ -3551,8 +3551,10 @@ BOOL __fastcall PokeBAtariBB(void *candy, ADDR addr, BYTE b)
 
 BOOL __fastcall PokeBAtariOS(void *candy, ADDR addr, BYTE b)
 {
-    // the OS is swapped out so allow writes to those locations
-    if (mdXLXE != md800 && !(wPBDATA & 1))
+    // the OS is swapped out so allow writes to those locations (the OS is swapped out when the OS bit is in write direction mode and
+    // the last thing written to it was 0 to swap it out)
+    // !!! make this one test for perf
+    if (mdXLXE != md800 && !(wPBDATA & 1) && (wPBDDIR & 1))
     {
         // write to XL/XE RAM under ROM
         Assert((addr >= 0xc000 && addr < 0xD000) || addr >= 0xD800);
@@ -3844,13 +3846,18 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 // it is a data register. Update only bits that are marked as write.
 
                 BYTE bMask = cpuPeekB(candy, wPADDIRea + addr);   // which bits are in write mode
-                bOld  = cpuPeekB(candy, wPADATAea + addr);        // what was last written there
+        
+                // what is the banking state right now? read bits have the default bank, and write bits have the last data written
+                bOld = (rPBDATA & ~wPBDDIR) | (wPBDATA & wPBDDIR);
+
                 BYTE bNew  = (b & bMask) | (bOld & ~bMask);     // use new data for those in write mode, keep old data for those that aren't
+
+                // We do want to remember what was poked here, even in read mode, so that when we switch to write mode, it will
+                // automatically put this data in. (Acid test PIA Basic)
+                cpuPokeB(candy, wPADATAea + addr, b);
 
                 if (bOld != bNew)
                 {
-                    cpuPokeB(candy, wPADATAea + addr, bNew);
-
                     if (addr == 1)
                     {
                         if (mdXLXE != md800)
@@ -3919,7 +3926,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                     // what is the banking state right now? read bits have the default bank, and write bits have the last data written
                     bOld = (rPBDATA & ~wPBDDIR) | (wPBDATA & wPBDDIR);
 
-                    BYTE bNew = (rPBDATA & ~b) | (bOld & b);  // use default for those in read mode, keep old data for those in write mode.
+                    // default for bits in read mode, last write value for those in write mode.
+                    BYTE bNew = (rPBDATA & ~b) | (wPBDATA & b); // (MPT24SPL.XEX)
                     if (bNew != bOld)
                         SwapMem(candy, bOld ^ bNew, bNew);      // this crashes if we tell it to swap in something already there
                 }
