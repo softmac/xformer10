@@ -1862,9 +1862,9 @@ HANDLER(op6C)
     
     else if (regEA == 0x2e0)
     {
-        // !!! if a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
+        // If a binary forgot to give us a run address, we jump to zero! Hopefully my binary loader has stored the
         // load address of the last segment in $47/48 in the $2e2 hack below. We can try that.
-        // I don't remember what app did this, it must be rare.
+        // (Artif.xex, mpv1.xex)
         if (!rgbMem[0x2e0] && !rgbMem[0x2e1])
         {
             rgbMem[0x2e0] = rgbMem[0x47];
@@ -2129,9 +2129,13 @@ HANDLER(op80)
             KillMeSoftlyPlease(candy);
         }
 
-        // also, remember the start address of the most recent segment loaded for the $2e0 hack in JMP (ind)
-        rgbMem[0x47] = rgbMem[0x43];
-        rgbMem[0x48] = rgbMem[0x44];
+        // also, remember the start address of the first segment loaded for the $2e0 hack in JMP (ind)
+        // our binary loader code leaves these values here before it starts calling us with segments
+        if (rgbMem[0x47] == 1 && rgbMem[0x48] == 0x14)
+        {
+            rgbMem[0x47] = rgbMem[0x43];
+            rgbMem[0x48] = rgbMem[0x44];
+        }
     }
 
     // BINARY LOADER HACK #2
