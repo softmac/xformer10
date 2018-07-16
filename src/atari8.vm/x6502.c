@@ -643,7 +643,7 @@ __inline void SIOCheck(void *candy)
     // But it's much slower doing the beeps in real time so let's leave the hack in for now
     
     //BOOL sd;
-    //SIOGetInfo(candy, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL);
+    //SIOGetInfo(candy, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL, NULL);
     //if (rgbMem[0x302] != 0x53 && !(rgbMem[0x302] == 0x52 && sd))
     
     {
@@ -1714,6 +1714,20 @@ HANDLER(op60)
     }
 #endif
 
+    // We need to detect a piece of code running that trashes our binary loader. The only condition not checked for by other
+    // functions (NOP # and JMP ind.) is if location $724 got trashed. No false positives, make sure we are using our primary
+    // binary loader. (namecopy.xex in XL)
+    if (regPC == 0x724)
+    {
+        BOOL fb;
+        SIOGetInfo(candy, 0, NULL, NULL, NULL, NULL, &fb);
+        if (fb && !fAltBinLoader && rgbMem[0x724] != 0x80)
+        {
+            fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
+            KillMeSoftlyPlease(candy);
+        }
+    }
+
     SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
@@ -1872,6 +1886,7 @@ HANDLER(op6C)
         }
 
         regPC = READ_WORD(candy, regEA);
+
     }
 
     else if (regEA == 0x2e2)
@@ -2142,8 +2157,7 @@ HANDLER(op80)
     // we just ran some INIT code, and our loader assumes $300-$30b weren't touched, but they were (Click).
     // It also assumes that they don't use $700-$880 for data and corrupt that memory space (Deflektor 128)
     // !!! Such a disk image won't run on real hardware if we make an ATR image out of it - loader lives in ROM, but what can you do?
-    // !!! Hopefully they didn't trash 0x724, that's all we need left alive to notice. I could put this in the RTS but that slows things
-    // down a bit and might falsely trigger, whereas NOP # will never falsely trigger @0x724
+    // If they trashed 0x724, this hack won't work, but our RTS hack will pick that up.
     else if (regPC == 0x725 || regPC == 0xd625)   // our two versions of the loader
     {
         if (regPC == 0x725) // first version of loader susceptible to corruption

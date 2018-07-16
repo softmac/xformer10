@@ -447,18 +447,20 @@ BOOL AddDrive(void *candy, int i, BYTE *pchPath)
 
 // SIO Bare bones, get some information that's private to this file
 //
-void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *pfwp)
+void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *pfwp, BOOL *pfb)
 {
     WORD md = rgDrives[drive].mode;
 
     if (psd)
-        *psd = (rgDrives[drive].mode == MD_SD);
+        *psd = (md == MD_SD);
     if (ped)
-        *ped = (rgDrives[drive].mode == MD_ED);
+        *ped = (md == MD_ED);
     if (pdd)
         *pdd = (md == MD_QD) || (md == MD_DD) || (md == MD_DD_OLD_ATR1) || (md == MD_DD_OLD_ATR2) || (md == MD_HD) || (md == MD_RD);
     if (pfwp)
         *pfwp = rgDrives[drive].fWP;
+    if (pfb)
+        *pfb = (md == MD_FILEBIN);
 }
 
 

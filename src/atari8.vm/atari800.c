@@ -3139,7 +3139,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     {
                         WORD dv = rgSIO[0] - 0x31;
                         BOOL sd, ed, dd, wp;
-                        SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp);
+                        SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
                         
                         /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
                         sectorSIO[0] = ((ed ? 128 : 0) + (dd ? 32 : 0) + (wp ? 8 : 0));;
