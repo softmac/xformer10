@@ -869,7 +869,7 @@ void CheckKey(void *, BOOL, WORD);
 void UpdatePorts(void *);
 void SIOV(void *);
 BYTE SIOReadSector(void *, int);
-void SIOGetInfo(void *, int, BOOL *, BOOL *, BOOL *, BOOL *);
+void SIOGetInfo(void *, int, BOOL *, BOOL *, BOOL *, BOOL *, BOOL *);
 BOOL GetWriteProtectDrive(void *, int);
 BOOL SetWriteProtectDrive(void *, int, BOOL);
 void DeleteDrive(void *, int);
