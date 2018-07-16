@@ -1895,28 +1895,29 @@ HANDLER(op6C)
         regPC = READ_WORD(candy, regEA);
 
         // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
-        // What else would alter the HATABS table in that particular spot to force feed characters into the buffer?
-        // There are many versions out there (I stopped counting at 6 and made a generalized solution),
-        // and access a page 3 address and then the next page 3 address 5 bytes later LDA #nn STA $3xx LDA #mm STA $3(xx+1).
-        // where nn is between $1a and $3f.
-        // Some variations are different, though. Aargh.
+        // What else would alter the HATABS E table entry at $0321/22 to force feed characters into the buffer?
+        // Typically it accesses $321 then $322 5 bytes later (LDA #nn STA $321 LDA #mm STA $322).
+        // Some versions index from the beginning of the tables at $31a, so you won't see a $31b
         // Also, some custom boot loaders have this code nearby in case they need it, but it won't execute. Finding it
         // will ruin the non-BASIC games on their menu. Careful not to false positive (check for immediate RTS)
-        // (SAG mag #114 Earth). If launched in XL mode, it's stupid enough to swap BASIC in on a warm start, but that's its fault.
+        // (SAG mag #114 Earth - if launched in XL mode, it's stupid enough to swap BASIC in on a warm start, but that's its fault).
         if (ramtop == 0xc000)
         {
             for (int i = regPC; i < regPC + 0xfa; i++) // always less than 2 pages long to fit in 2 sector autorun.sys
             {
                 BYTE b = rgbMem[i];
-                if (rgbMem[regPC] != 0x60 && b >= 0x1a && b <= 0x3e && rgbMem[i + 1] == 3 && (b == 0x1a || (rgbMem[i + 6] == 3 && rgbMem[i + 5] == b + 1)))
+                if (rgbMem[regPC] != 0x60 && (b == 0x1a || b == 0x21) && rgbMem[i + 1] == 3 &&
+                                        (b == 0x1a || (rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22)))
                 {
                     KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
+                    break;
                 }
                 // demo_1b.atr writes to the screen and presses return continuously by poking $34a,$d @ i=$62e
                 // I wonder if anybody else does something similar... !!! will this false positive without the test for i == $62e?
                 if (b == 0x4a && rgbMem[i + 1] == 3 && rgbMem[i - 2] == 0xd)
                 {
                     KillMePleaseBASIC(candy);
+                    break;
                 }
             }
         }
@@ -2159,6 +2160,7 @@ HANDLER(op80)
     // It also assumes that they don't use $700-$880 for data and corrupt that memory space (Deflektor 128)
     // !!! Such a disk image won't run on real hardware if we make an ATR image out of it - loader lives in ROM, but what can you do?
     // If they trashed 0x724, this hack won't work, but our RTS hack will pick that up.
+    // !!! If they have put information at $a00 we'll trash it with our next sector read
     else if (regPC == 0x725 || regPC == 0xd625)   // our two versions of the loader
     {
         if (regPC == 0x725) // first version of loader susceptible to corruption
