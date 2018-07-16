@@ -1714,14 +1714,15 @@ HANDLER(op60)
     }
 #endif
 
-    // We need to detect a piece of code running that trashes our binary loader. The only condition not checked for by other
+    // We need to detect a piece of init code that trashes our binary loader. The only condition not checked for by other
     // functions (NOP # and JMP ind.) is if location $724 got trashed. No false positives, make sure we are using our primary
     // binary loader. (namecopy.xex in XL)
-    if (regPC == 0x724)
+    // We also need to detect when the run code that isn't supposed to return, does, and has trashed us at $866 (Cannibal.xex)
+    if (regPC == 0x724 || regPC == 0x866)
     {
         BOOL fb;
         SIOGetInfo(candy, 0, NULL, NULL, NULL, NULL, &fb);
-        if (fb && !fAltBinLoader && rgbMem[0x724] != 0x80)
+        if (fb && !fAltBinLoader && (rgbMem[0x724] != 0x80 || rgbMem[0x866] != 0x6c))
         {
             fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
             KillMeSoftlyPlease(candy);
