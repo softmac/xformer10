@@ -5757,10 +5757,23 @@ break;
         }
         return 0;
 
+    // when the mouse moves off the client area, no longer select a specific tile
+    case WM_NCMOUSEMOVE:
+        if (v.fTiling)
+        {
+            sVM = -1;
+            v.iVM = sVM;    // "current" VM is now this
+
+            FixAllMenus(FALSE); // VM list is greyed out when tiling
+
+            // don't wait 1sec for the new instance data to show up
+            DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
+        }
+        break;
+
     case WM_MOUSEMOVE:
         
         // !!! if the VM type supports a mouse, how do we figure out when to capture the mouse inside a tile?
-
         if (v.iVM >= 0)
             FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);    // give mouse move to the VM !!! not listening to whether to eat it
 
