@@ -1993,7 +1993,7 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
         else if (i == 0xd5)
             write_tab[i] = PokeBAtariBS;   // cartridge line for bank select
         else if (i >= 0xd6 && i < 0xd8)
-            write_tab[i] = PokeBAtariHW; // PokeBAtariNULL; // !!! $d600 binary loader hack
+            write_tab[i] = PokeBAtariHW; // PokeBAtariNULL; // !!! $d680 binary loader hack
         else if (i >= 0xd8)
             write_tab[i] = PokeBAtariOS;   // OS ROM may be banked out
         else if (i < 0x80)
@@ -3361,6 +3361,13 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
         Assert(FALSE);  // help the compiler
         break;
 
+        // floating data bus... on the 800, you're supposed to get the last effective address put on the bus in the $cxxx range,
+        // which I at least fake up by returning a random number for apps that hang if it's always the same # (Highway Duel)
+    case 0xc0:
+        if (mdXLXE == md800)
+            return PeekBAtari(candy, 0xd20a);
+        break;
+
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
         
@@ -3463,6 +3470,7 @@ BYTE __forceinline __fastcall PeekBAtari(void *candy, ADDR addr)
     default:
         return cpuPeekB(candy, addr);
 
+    case 0xc0:
     case 0xd0:
     case 0xd2:
     case 0xd3:
@@ -4085,9 +4093,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
 
         case 0xd6:
         case 0xd7:
-            // !!! self modifying binary loader hack at $d600
+            // !!! self modifying binary loader hack at $d680
             // self modifying instruction, 800 OS loader, XL OS loader
-            if (fAltBinLoader && ((addr == 0xd6fd && regPC == 0xd746) || regPC == 0xf334 || regPC == 0xc5ef))
+            if (fAltBinLoader && ((addr == 0xd77d && regPC == 0xd7c6) || regPC == 0xf334 || regPC == 0xc5ef))
                 rgbMem[addr] = b;
             break;
     }
@@ -4144,7 +4152,7 @@ BOOL __forceinline __fastcall PokeBAtari(void *candy, ADDR addr, BYTE b)
 
     case 0xd6:
     case 0xd7:
-        return PokeBAtariHW(candy, addr, b);  // was TRUE; $d600 binary loader hack
+        return PokeBAtariHW(candy, addr, b);  // was TRUE; $d680 binary loader hack
 
     case 0xd8:
     case 0xd9:

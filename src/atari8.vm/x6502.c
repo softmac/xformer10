@@ -694,7 +694,7 @@ __inline void SIOCheck(void *candy)
             regPC = 0xd180;
         }
 
-#if 0   // !!! BUS hook interferes with binary loader patch at $d600
+#if 0   // !!! BUS hook interferes with binary loader patch at $d680
         else if ((mdXLXE != md800) && (regPC >= 0xD700) && (regPC <= 0xD7FF))
         {
             // this is our XE BUS hook!
@@ -703,7 +703,7 @@ __inline void SIOCheck(void *candy)
             UnpackP(candy);
         }
         else if (regPC >= 0xD700 && regPC <= 0xD7FF)
-            Assert(FALSE);  // Wrong VM? !!! $d600 binary loader hack will hit this
+            Assert(FALSE);  // Wrong VM? !!! $d680 binary loader hack will hit this
 #endif
     }
 }
