@@ -2143,7 +2143,9 @@ HANDLER(op80)
         if (!fAltBinLoader && ws < 0xa80 && we >= 0x700)
         {
             fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
+            regPC++;    // regPC must be its final value after this instruction before calling
             KillMeSoftlyPlease(candy);
+            regPC--;    // put it back
         }
 
         // also, remember the start address of the first segment loaded for the $2e0 hack in JMP (ind)
@@ -2185,7 +2187,9 @@ HANDLER(op80)
             if (chk != chkA)
             {
                 fAltBinLoader = TRUE;   // try the other loader relocated in ROM
+                regPC++;    // regPC must be its final value after this instruction before calling
                 KillMeSoftlyPlease(candy);
+                regPC--;    // put it back
             }
         }
 
@@ -2204,6 +2208,7 @@ HANDLER(op80)
 
     regPC++;    // it's a 2 byte instruction
     wLeft -= 2;
+
     HANDLER_END();
 }
 
