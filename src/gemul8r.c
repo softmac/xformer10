@@ -2016,7 +2016,7 @@ int CALLBACK WinMain(
 
             for (int i = 0; i < v.cVM; i++)
             {
-                // change VM type for exactly == TRUE
+                // change VM type
                 if (rgpvmi(i)->fKillMePlease && rgpvmi(i)->fKillMePlease != 2)
                 {
                     // what type are we now?
