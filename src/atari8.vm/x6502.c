@@ -724,7 +724,7 @@ HANDLER(KIL)
 
 HANDLER(op00)
 {
-    // !!! Is BRK maskable like I am assuming?
+    // BRK is NOT maskable (Najemni2)
 
     // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
     // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there
@@ -732,12 +732,11 @@ HANDLER(op00)
         KIL(candy);
 
     PackP(candy);    // we'll be pushing it
-    if (!(regP & IBIT))
-    {
-        Interrupt(candy, TRUE);
-        regPC = cpuPeekW(candy, 0xFFFE);
-        //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
-    }
+        
+    Interrupt(candy, TRUE);
+    regPC = cpuPeekW(candy, 0xFFFE);
+    //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+
     UnpackP(candy);
 
     wLeft -= 7;
@@ -2143,7 +2142,7 @@ HANDLER(op80)
         if (!fAltBinLoader && ws < 0xa80 && we >= 0x700)
         {
             fAltBinLoader = TRUE;   // try the other loaded relocated in ROM
-            regPC++;    // regPC must be its final value after this instruction before calling
+            regPC++;    // regPC must be its final value after this instruction before calling (Mikrosoft Meta-Basic)
             KillMeSoftlyPlease(candy);
             regPC--;    // put it back
         }
