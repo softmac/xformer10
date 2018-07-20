@@ -2488,6 +2488,11 @@ BOOL __cdecl ColdbootAtari(void *candy)
     if (!WarmbootAtari(candy))
         return FALSE;
 
+    // we are cold booting because we switched binary loaders. That set a breakpoint to aid in the switching, which we have
+    // to reset, or it sticks around mysteriously stopping, or if not, slowing execution down 1000x
+    if (pvmin->fKillMePlease == 2)
+        bp = 0xffff;
+
     // 800 resets PIA on cold start only
     if (mdXLXE == md800)
         ResetPIA(candy);
