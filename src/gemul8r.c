@@ -2046,10 +2046,10 @@ int CALLBACK WinMain(
                 // coldboot only - to switch binary loaders and try a different one
                 else if (rgpvmi(i)->fKillMePlease == 2)
                 {
-                    rgpvmi(i)->fKillMePlease = FALSE;
-
                     if (!ColdStart(i))
                         DeleteVM(v.iVM, TRUE);
+
+                    rgpvmi(i)->fKillMePlease = FALSE;   // do this AFTER cold boot so cold boot knows why it happened
 
                     FixAllMenus(FALSE);
                 }
