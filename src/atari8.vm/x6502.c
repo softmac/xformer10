@@ -729,17 +729,25 @@ HANDLER(op00)
     // BRK is NOT maskable (Najemni2)
 
     // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
-    // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there
-    if (regPC >= 0xc000 /* && regPC < 0xd000 */ && mdXLXE == md800)
-        KIL(candy);
+    // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there.
+    // ... or ...
+    // we are in an infinite loop of a BRK jumping to 0 which soon does a BRK (Protector 800). This means that the next
+    // two return addresses (with a P reg between them) are the same, 1 greater than our PC (page 0)
 
-    PackP(candy);    // we'll be pushing it
-        
-    Interrupt(candy, TRUE);
-    regPC = cpuPeekW(candy, 0xFFFE);
-    //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+    if ((regPC >= 0xc000 /* && regPC < 0xd000 */ && mdXLXE == md800) ||
+        (rgbMem[regSP + 2] == regPC + 1 && rgbMem[regSP + 3] == 0x00 && rgbMem[regSP + 5] == regPC + 1 && rgbMem[regSP + 6] == 0x00))
+        KIL(candy);     // you shouldn't touch the PC after calling this
 
-    UnpackP(candy);
+    else
+    {
+        PackP(candy);    // we'll be pushing it
+
+        Interrupt(candy, TRUE);
+        regPC = cpuPeekW(candy, 0xFFFE);
+        //ODS("IRQ %02x TIME! %04x %03x\n", (BYTE)~IRQST, wFrame, wScan);
+
+        UnpackP(candy);
+    }
 
     wLeft -= 7;
     HANDLER_END_FLOW();

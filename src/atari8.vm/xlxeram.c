@@ -116,6 +116,7 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
     // We are only called if something changes. We will not, for instance, be told to swap in HELP twice in a row.
     // If we were, for instance, we would erase the saved RAM contents there and overwrite it with the HELP ROM contents
 
+#if 0   // old and broken, we now handle this before calling us
     // SELF-TEST gets swapped out if the OS is being swapped out
     if ((mask & OS_MASK) && (flags & OS_MASK) == OS_OUT)
     {
@@ -125,7 +126,10 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
             mask |= SELF_MASK;
             flags |= SELF_OUT;
         }
+
+        // broken, must also avoid swapping HELP in
     }
+#endif
 
     if (mask & OS_MASK)
     {

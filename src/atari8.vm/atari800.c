@@ -3365,7 +3365,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
         // which I at least fake up by returning a random number for apps that hang if it's always the same # (Highway Duel)
     case 0xc0:
         if (mdXLXE == md800)
-            return PeekBAtari(candy, 0xd20a);
+            return PeekBAtariHW(candy, 0xd20a);
         break;
 
     case 0xd0:
@@ -3860,6 +3860,17 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
 
                 BYTE bNew  = (b & bMask) | (bOld & ~bMask);     // use new data for those in write mode, keep old data for those that aren't
 
+                // if the OS is going to be OUT (already out or just going out now) HELP must be out too! (Storm.xex hangs)
+                // Otherwise, lie and pretend they asked for HELP out.
+                // !!! This is wrong, technically. The write register should reflect what they asked for, not what they got,
+                // however we need to know what they got to avoid swapping (in/out) a HELP that is already (there/not there)
+                // or we'll lose the contents of the RAM under it and corrupt things.
+                if (addr == 1 && mdXLXE != md800 && !(bNew & 1) && !(bNew & 0x80))
+                {
+                    b |= 0x80;      // for poking into wPBDATA
+                    bNew |= 0x80;   // for swapping
+                }
+
                 // We do want to remember what was poked here, even in read mode, so that when we switch to write mode, it will
                 // automatically put this data in. (Acid test PIA Basic)
                 cpuPokeB(candy, wPADATAea + addr, b);
@@ -3879,11 +3890,11 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                                 // !!! Not ideal, we'll switch to 130XE w/BASIC, hopefully the app is smart enough to swap that out
                                 // (Fortress Underground is smart enough)
                                 // 8f/8e swaps out bit 6, which is undefined, so doesn't sound like a real XE bank request
-                                // Some Bounty Bob hang in XE so we can't go into XE mode by mistake if they don't mean it
+                                // Some Bounty Bobs hang in XE so we can't go into XE mode by mistake if they don't mean it
                                 if ((bNew & 0x30) != 0x30 && bNew != 0x8f && bNew != 0x8e)
                                     KillMePleaseXE(candy);
 
-                                // in 800XL mode, mask bank select bits
+                                // in 800XL mode, mask XE bank select bits
                                 bNew |= 0x7C;
                                 wPBDATA |= 0x7C;
                             }
@@ -3914,6 +3925,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                         KillMePlease(candy);      // need XL w/o BASIC
                 }
             }
+            
             else
             {
                 // it is a data direction register.
