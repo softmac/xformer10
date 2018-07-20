@@ -1088,7 +1088,10 @@ lExit:
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
 
-    rgbMem[0x42] = 0;   // SIO turns CRITIC off so entire VBI can run next time (Shamus loaded from Preppie II disk needs this)
+    // SIO turns CRITIC on while executing (ship.xex needs to avoid copying the DMACTL shadow and turning off the screen),
+    // and then in SIOCheck() we turn critic off again when the SIO delay is done or much of the VBI will never run again,
+    // (Shamus loaded from Preppie II disk needs that to turn the screen on again)
+    rgbMem[0x42] = 1;
     
     // Cosmic balance hangs without this as the timer 4 interrupt swallows it whole
     PokeBAtari(candy, 0xd20f, 0x13); // SKCTL - SIO also leaves POKEY in async receive mode stopping timers 3 and 4

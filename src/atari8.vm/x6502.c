@@ -676,13 +676,15 @@ __inline void SIOCheck(void *candy)
             rgbMem[0xd18d] = 0x88;
             rgbMem[0xd18e] = 0xd0;
             rgbMem[0xd18f] = 0xfa;
-            rgbMem[0xd190] = 0x68;  // pla
-            rgbMem[0xd191] = 0xa8;  // tay
+            rgbMem[0xd190] = 0x84;  // sty CRITIC (0) - see SIOV() comment
+            rgbMem[0xd191] = 0x42;
             rgbMem[0xd192] = 0x68;  // pla
-            rgbMem[0xd193] = 0xaa;  // tax
+            rgbMem[0xd193] = 0xa8;  // tay
             rgbMem[0xd194] = 0x68;  // pla
-            rgbMem[0xd195] = 0x28;  // plp
-            rgbMem[0xd196] = 0x60;
+            rgbMem[0xd195] = 0xaa;  // tax
+            rgbMem[0xd196] = 0x68;  // pla
+            rgbMem[0xd197] = 0x28;  // plp
+            rgbMem[0xd198] = 0x60;
             PushWord(candy, regPC - 1);
 
             if (vi.fInDebugger && !vi.fExecuting && fTrace)
