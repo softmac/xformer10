@@ -3934,7 +3934,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                     // what is the banking state right now? read bits have the default bank, and write bits have the last data written
                     bOld = (rPBDATA & ~wPBDDIR) | (wPBDATA & wPBDDIR);
 
-                    // default for bits in read mode, last write value for those in write mode.
+                    // use the default for bits in read mode; the last write value for those in write mode.
                     BYTE bNew = (rPBDATA & ~b) | (wPBDATA & b); // (MPT24SPL.XEX)
                     if (bNew != bOld)
                         SwapMem(candy, bOld ^ bNew, bNew);      // this crashes if we tell it to swap in something already there
