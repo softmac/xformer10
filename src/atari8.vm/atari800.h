@@ -468,6 +468,8 @@ typedef struct
 
 	BOOL m_fJoyCONSOL;	// joystick is the reason for the CONSOL key being pressed
 
+    BYTE m_chka00;      // checksum of page $a
+
     // !!! Not really used anymore, candidates for removal
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
     ULONG m_clockMult;
@@ -572,6 +574,7 @@ typedef struct
 #define irqPokey      CANDY_STATE(irqPokey)
 #define iXESwap       CANDY_STATE(iXESwap)
 #define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
+#define chka00        CANDY_STATE(chka00)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 
 #define SELF_SIZE 2048
