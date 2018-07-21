@@ -1921,13 +1921,14 @@ HANDLER(op6C)
         // Also, some custom boot loaders have this code nearby in case they need it, but it won't execute. Finding it
         // will ruin the non-BASIC games on their menu. Careful not to false positive (check for immediate RTS)
         // (SAG mag #114 Earth - if launched in XL mode, it's stupid enough to swap BASIC in on a warm start, but that's its fault).
+        // Also, make sure that $31a is not just random data in memory, but is preceded by something like LDA ,X (XDemo.xex)
         if (ramtop == 0xc000)
         {
             for (int i = regPC; i < regPC + 0xfa; i++) // always less than 2 pages long to fit in 2 sector autorun.sys
             {
                 BYTE b = rgbMem[i];
-                if (rgbMem[regPC] != 0x60 && (b == 0x1a || b == 0x21) && rgbMem[i + 1] == 3 &&
-                                        (b == 0x1a || (rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22)))
+                if (rgbMem[i + 1] == 3 && rgbMem[regPC] != 0x60 && ((b == 0x21 && rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22) ||
+                            (b == 0x1a && (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
                 {
                     KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
                     break;
