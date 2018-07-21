@@ -1896,11 +1896,22 @@ HANDLER(op6C)
         }
 
         regPC = READ_WORD(candy, regEA);
-
+        ODS("RUN AT %04x\n", regPC);
     }
 
     else if (regEA == 0x2e2)
     {
+        // for our first binary loader, susceptible to corruption, take a checksum of the sector at $a00 to compare to
+        // before allowing their init code to run
+        BOOL fb;
+        SIOGetInfo(candy, 0, NULL, NULL, NULL, NULL, &fb);
+        if (fb && !fAltBinLoader && regPC == 0x07fc)
+        {
+            chka00 = 0;
+            for (int i = 0; i < 0x80; i++)
+                chka00 += rgbMem[i + 0xa00];
+        }
+
         regPC = READ_WORD(candy, regEA);
 
         // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
@@ -2143,7 +2154,7 @@ HANDLER(op80)
         WORD ws = READ_WORD(candy, 0x43);
         WORD we = READ_WORD(candy, 0x45);
 
-        //ODS("Loading segment %04x-%04x\n", ws, we);
+        ODS("Loading segment %04x-%04x\n", ws, we);
 
         // we are loading code over top of our loader, that will kill us. Try the alternate loader
         // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
@@ -2171,7 +2182,8 @@ HANDLER(op80)
     // It also assumes that they don't use $700-$880 for data and corrupt that memory space (Deflektor 128)
     // !!! Such a disk image won't run on real hardware if we make an ATR image out of it - loader lives in ROM, but what can you do?
     // If they trashed 0x724, this hack won't work, but our RTS hack will pick that up.
-    // !!! If they have put information at $a00 we'll trash it with our next sector read
+    //
+    // If they have corrupted $a00, we'd also die, so compare that checksum to what it was before running their code (Tron.xex)
     else if (regPC == 0x725 || regPC == 0xd625)   // our two versions of the loader
     {
         if (regPC == 0x725) // first version of loader susceptible to corruption
@@ -2194,6 +2206,19 @@ HANDLER(op80)
             }
 
             if (chk != chkA)
+            {
+                fAltBinLoader = TRUE;   // try the other loader relocated in ROM
+                regPC++;    // regPC must be its final value after this instruction before calling
+                KillMeSoftlyPlease(candy);
+                regPC--;    // put it back
+            }
+
+            // What about $a00, did they corrupt that?
+            chk = 0;
+            for (int i = 0; i < 0x80; i++)
+                chk += rgbMem[i + 0xa00];
+
+            if (chk != chka00)
             {
                 fAltBinLoader = TRUE;   // try the other loader relocated in ROM
                 regPC++;    // regPC must be its final value after this instruction before calling
