@@ -1955,7 +1955,12 @@ int CALLBACK WinMain(
             }
 
             // wait for them to complete one frame
-            WaitForMultipleObjects(cThreads, hDoneEvent, TRUE, INFINITE);
+			int cT = cThreads;
+			while (cT > 0)
+			{
+				WaitForMultipleObjects(min(cT, MAXIMUM_WAIT_OBJECTS), &hDoneEvent[cThreads - cT], TRUE, INFINITE);
+				cT -= MAXIMUM_WAIT_OBJECTS;
+			}
         }
 
         // not tiled. There's only one or two threads
