@@ -434,6 +434,7 @@ typedef struct
     BOOL m_fInDLI;          // are we inside the DLI?
     WORD m_fDLIinVBI;       // what scan line did we last see a DLI start inside a VBI?
     WORD m_wScanVBIEnd;     // what scan line did the VBI end on?
+    WORD m_wPALFrame;       // what frame did somthing suspicously PAL-like last happen on?
 
     BYTE m_POT;         // current paddle potentiometer reading, counts from 0 to 228
 
@@ -549,6 +550,7 @@ typedef struct
 #define fInVBI        CANDY_STATE(fInVBI)
 #define fDLIinVBI     CANDY_STATE(fDLIinVBI)
 #define wScanVBIEnd   CANDY_STATE(wScanVBIEnd)
+#define wPALFrame     CANDY_STATE(wPALFrame)
 #define fJoy          CANDY_STATE(fJoy)
 #define fSoundOn      CANDY_STATE(fSoundOn)
 #define fAutoStart    CANDY_STATE(fAutoStart)

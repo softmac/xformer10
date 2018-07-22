@@ -4901,10 +4901,15 @@ void __cdecl Go6502(void *candy)
                     UnpackP(candy);   // unpack the I bit being set
                     
                     // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
-                    if (fInVBI)
-                        SwitchToPAL(candy);
-                    fInVBI++;;
-
+                    if (fInVBI && (wFrame - wPALFrame) < 600)   // MULE is a false positive, once every complete theme song
+                        SwitchToPAL(candy);                     // switch if it happens twice in 10s
+                    else
+                    {
+                        if (fInVBI)
+                            wPALFrame = wFrame; // this is suspicious!
+                        fInVBI = 1;             // but don't ++, give MULE a chance to show it won't happen again
+                    }
+                    
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;   // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }

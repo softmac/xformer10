@@ -2425,8 +2425,12 @@ BOOL __cdecl WarmbootAtari(void *candy)
     // notice NTSC/PAL switch
     fPAL = pvm->fEmuPAL;
     PAL = fPAL ? 1 : 15;    // set GTIA register
-    fInVBI = 0;
+    
+    fInVBI = 0;             // reset PAL variables
     fInDLI = 0;
+    fDLIinVBI = 0;
+    wScanVBIEnd = 0;
+    wPALFrame = 0;
 
     // on XL/XE, PIA is reset on warm start too (eg, to swap the OS back in)
     if (mdXLXE != md800)
@@ -4004,8 +4008,15 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // and they don't get around to letting the OS copy the DLIST shadows until it's too late, past scan 8 of the next line
             // which resets back to the top of the DLIST and jitters.
             // Sometimes, the first thing they do after a VBI is set this, so we might not be in the VBI, but we just left it.
-            if ((fInVBI || wScan == wScanVBIEnd || wScan == wScanVBIEnd + 1) && wScan >= STARTSCAN && wScan < STARTSCAN + Y8)
-                SwitchToPAL(candy);
+            // This is usually called twice in a row for 2 and 3, so pick one at random
+            if (addr == 2 && (fInVBI || wScan == wScanVBIEnd || wScan == wScanVBIEnd + 1) && wScan >= STARTSCAN &&
+                        wScan < STARTSCAN + Y8)
+            {
+                // MULE is a false positive, but only happens once going into attract mode
+                if (wFrame - wPALFrame < 600)   // trigger if twice in 10s
+                    SwitchToPAL(candy);
+                wPALFrame = wFrame;
+            }
 
             //ODS("DLPC = %04x @ %d\n", DLPC, wScan);
         }
