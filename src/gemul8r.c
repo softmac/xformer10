@@ -3526,7 +3526,17 @@ void ScrollTiles()
     if (v.sWheelOffset < bottom * -1)
         v.sWheelOffset = bottom * -1;
 
-    InitThreads();  // now that sWheelOffset is stable
+    // Did we scroll enough to change which tiles are visible? (Do we need different threads?)
+    int y = v.sWheelOffset;
+    int row = abs(y) / sTileSize.y;             // row with the first visible tile
+    y += row * sTileSize.y;                     // top of the first visible tile (<= 0)
+    int ny = (rect.bottom - y - 1) / sTileSize.y + 1;   // how many rows are visible?
+
+    if (nFirstVisibleTile != row * nx || cThreads != nx * ny)
+    {
+        InitThreads();
+        DisplayStatus(v.iVM);
+    }
 
     // now where would our mouse be after this scroll?
     POINT pt;
@@ -3539,6 +3549,7 @@ void ScrollTiles()
                 sVM = s;
 				v.iVM = s;	// !!! They are always in sync, so get rid of sVM!
                 FixAllMenus(FALSE); // VM list is greyed when tiled
+                DisplayStatus(v.iVM);
             }
         }
 }
