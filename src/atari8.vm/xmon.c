@@ -349,7 +349,8 @@ BOOL __cdecl MonAtari(void *candy)            /* the 6502 monitor */
         CchShowRegs(candy);
         uMemDasm = regPC;    // 'd' and 'm' dumps will start here
         uMemDump = regPC;
-        chLast = 0;            // forget whatever the last cmd was
+        // comment out to allow 'g' to be one of the commands repeatable
+        //chLast = 0;            // forget whatever the last cmd was
 
         while (1)
         {
