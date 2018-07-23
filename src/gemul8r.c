@@ -5515,16 +5515,18 @@ break;
         SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
         break;    // MUST break
         }
+
     case WM_GESTURE:
         {
         GESTUREINFO gi;
         ZeroMemory(&gi, sizeof(GESTUREINFO));
         gi.cbSize = sizeof(GESTUREINFO);
 
-        static POINTS iPanBegin; // where we first touched the screen
+        static POINTS iPanBegin;        // where we first touched the screen
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
         
-        static ULONGLONG ullGestJif;    // don't allow more than one zoom level at a time
+        static ULONGLONG ullZoomJif;    // don't allow more than one zoom level at a time
+        static ULONGLONG ullPanJif;     // don't allow >1 per jiffy, with many tiles that slows things down
         ullJif = GetJiffiesN();         // always use the same one so timing doesn't get wonky when we switch NTSC/PAL
 
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
@@ -5575,6 +5577,8 @@ break;
                     v.sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
                     ScrollTiles();
                     iPanBegin.y = gi.ptsLocation.y;
+                    ODS("Pan @ %08x\n", ullJif);
+                    ullPanJif = ullJif;
                 }
                 
                 // Non-Tiled - ATARI roulette - horizontal spin the wheel and watch all the VMs go by and land on a random one
@@ -5603,6 +5607,8 @@ break;
                     }
                     sPan = ns;
                 }
+
+                CloseGestureInfoHandle((HGESTUREINFO)lParam);
                 return 0;    // makes sure we don't get a mouse click on a tile while panning
             }
             else if (gi.dwID == GID_ZOOM)
@@ -5613,7 +5619,7 @@ break;
                 }
                 // don't do more than one zoom level at a time, require 20 jiffy delay
 				// which is different than the trackpad pinch delay that works best
-                else if (ullJif - ullGestJif > 20)  // 
+                else if (ullJif - ullZoomJif > 20)  // 
                 {
                     int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
 
@@ -5636,7 +5642,7 @@ break;
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way to enter fullscreen
                                                                                     // no need to enter fullscreen in tiled mode
                     
-                        ullGestJif = ullJif;
+                        ullZoomJif = ullJif;
                     }
                     else if (iZoom < -100) // zoom out
                     {
@@ -5651,10 +5657,11 @@ break;
                         else  if (v.fFullScreen)    // don't let a tablet get stuck in fullscreen mode
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
                 
-                        ullGestJif = ullJif;
+                        ullZoomJif = ullJif;
                     }
                 }
                 
+                CloseGestureInfoHandle((HGESTUREINFO)lParam);
                 return 0;
             }    // GID_ZOOM
         }
