@@ -4616,11 +4616,14 @@ break;
                 int nFT = -(v.sWheelOffset / sTileSize.y * nx);          // top left tile
                 int nLT = nFT + sTilesPerRow * ((rc.bottom - 1) / sTileSize.y + 1); // last tile even partially visible
 
-                Assert(v.iVM >= 0);
                 int nT = v.iVM;
 
+                // empty VMs
+                if (nT < 0)
+                    v.sWheelOffset = 0;
+
                 // Our tile is too high up to be visible - put it in the top row
-                if (nT < nFT)
+                else if (nT < nFT)
                     v.sWheelOffset = -(nT / nx * sTileSize.y);
 
                 // Our tile is too far down to be visible - put it in the bottom row
@@ -4816,6 +4819,9 @@ break;
             OpenFolders(fold, &iVMx);
             if (iVMx >= 0)
             {
+                if (v.iVM < 0)
+                    SelectInstance(iVMx);   // these might be the first VMs loaded and v.iVM can't be left as -1
+                
                 if (v.cVM > 1 && !v.fTiling)
                     SendMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
                 else if (!v.fTiling)
@@ -5525,8 +5531,8 @@ break;
         static POINTS iPanBegin;        // where we first touched the screen
         static ULONGLONG iZoomBegin;    // how far apart our fingers started out
         
-        static ULONGLONG ullZoomJif;    // don't allow more than one zoom level at a time
-        static ULONGLONG ullPanJif;     // don't allow >1 per jiffy, with many tiles that slows things down
+        static ULONGLONG ullGestJif;    // don't allow more than one zoom level at a time
+        //static ULONGLONG ullPanJif;     // don't allow >1 per jiffy, with many tiles that slows things down
         ullJif = GetJiffiesN();         // always use the same one so timing doesn't get wonky when we switch NTSC/PAL
 
         BOOL bResult = GetGestureInfo((HGESTUREINFO)lParam, &gi);
@@ -5577,8 +5583,8 @@ break;
                     v.sWheelOffset += (gi.ptsLocation.y - iPanBegin.y);
                     ScrollTiles();
                     iPanBegin.y = gi.ptsLocation.y;
-                    ODS("Pan @ %08x\n", ullJif);
-                    ullPanJif = ullJif;
+                    //ODS("Pan @ %08x\n", ullJif);
+                    //ullPanJif = ullJif;
                 }
                 
                 // Non-Tiled - ATARI roulette - horizontal spin the wheel and watch all the VMs go by and land on a random one
@@ -5619,7 +5625,7 @@ break;
                 }
                 // don't do more than one zoom level at a time, require 20 jiffy delay
 				// which is different than the trackpad pinch delay that works best
-                else if (ullJif - ullZoomJif > 20)  // 
+                else if (ullJif - ullGestJif > 20)  // 
                 {
                     int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
 
@@ -5642,7 +5648,7 @@ break;
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way to enter fullscreen
                                                                                     // no need to enter fullscreen in tiled mode
                     
-                        ullZoomJif = ullJif;
+                        ullGestJif = ullJif;
                     }
                     else if (iZoom < -100) // zoom out
                     {
@@ -5657,7 +5663,7 @@ break;
                         else  if (v.fFullScreen)    // don't let a tablet get stuck in fullscreen mode
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
                 
-                        ullZoomJif = ullJif;
+                        ullGestJif = ullJif;
                     }
                 }
                 
