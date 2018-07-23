@@ -2820,6 +2820,11 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     regPC = cpuPeekW(candy, 0xFFFE);
                     
                     //ODS("IRQ %02x TIME! @%03x\n", (BYTE)~(IRQST), wScan);
+                    
+                    // report the key going down at the very moment the IRQ is fired or some apps (Eryus) think the previous key
+                    // is the current key. Even Altirra gets this wrong!
+                    if (!(IRQST & 0x40))
+                        SKSTAT &= ~0x04;
 
                     // check if the interrupt vector is our breakpoint, otherwise we would never notice and not hit it
                     if (regPC == bp)
@@ -2853,7 +2858,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             // Scan line 0-7 are not visible
             // Scan lines 8-247 are 240 visible lines, ANTIC DMA is possible, depending on a lot of things
             // Scan line 248 is the VBLANK
-            // Scan lines 249-261 are the rest of the overscan lines
+            // Scan lines 249-261 are the rest of the overscan lines (NTSC) or 249-311 (PAL)
 
             if (wScan == STARTSCAN)
             {
