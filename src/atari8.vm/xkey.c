@@ -87,7 +87,7 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
 
         SKSTAT |= 0x04;
         fKeyPressed = 0;
-        //DebugStr("upstroke!\n");
+        //ODS("Upstroke @ %03x:%02x\n", wScan, wCycle);
         return;
     }
 
@@ -356,12 +356,11 @@ lookitup:
     }
 
 lookit2:
-    SKSTAT &= ~0x04;
-
+    //  SKSTAT &= ~0x04; SAVE THIS FOR THE ACTUAL MOMENT THE IRQ IS FIRED
+    
+    //ODS("Downstroke %02x @ %03x:%02x\n", KBCODE, wScan, wCycle);
     if (IRQEN & 0x40)
         IRQST &= ~0x40;
-
-    //DebugStr("KBCODE = %02X %d\n", KBCODE, KBCODE);
 }
 
 
