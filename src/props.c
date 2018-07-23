@@ -347,6 +347,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 
         // don't use the loaded values, reset to no valid VMs or we'll crash
         v.cVM = 0;
+        int iInitialVM = v.iVM; // remember which one was current last time
         v.iVM = -1;
 
         f = TRUE;
@@ -444,7 +445,11 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             // make the screen buffer. If it's too soon (initial start up instead of Load through menu)
             // it will happen when our window is created
             if (f)
+            {
+                if (iInitialVM == v.cVM)
+                    v.iVM = iInitialVM;     // this is probably the one that was current last time (barring load errors)
                 v.cVM++;
+            }
 
             if (!f)
             {
