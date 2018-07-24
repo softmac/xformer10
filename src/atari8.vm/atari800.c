@@ -2807,9 +2807,10 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             // !!! Only scan line granularity.
             // We clear bits in IRQST when we want the interrupt to happen and the interrupt is enabled. If I is set,
             // they won't happen, but some apps poll IRQST with an IRQ enabled in IRQEN but with SEI disabled to see
-            // when the events happen. When I is cleared, if they haven't reset the IRQ by POKE IRQEN, the interrupt will happen, delayed.
-            // !!! I need to reset IRQST $8 for apps to see (DEATHCHASE XE hangs) even if the IRQ is not enabled, so that
-            // one needs to have a check for being enabled
+            // when the events happen.
+            // When I is cleared, if they haven't reset the IRQ by POKE IRQEN, the interrupt should happen, delayed.
+            // Unlike the others, we need to reset IRQST $8 for apps to see even if that IRQ is not enabled (DEATHCHASE XE hangs),
+            // so that one needs to have a check for being enabled before allowing that IRQ to trigger
             if (!(regP & IBIT)) // registers are packed right now since we are not inside a call to Go6502
             {
                 // a low bit in IRQST means an interrupt wants to trigger and we already checked that it was enabled in IRQEN,

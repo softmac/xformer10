@@ -771,7 +771,7 @@ HANDLER(op03)
     ASL_mem(candy);                   // because this needs to alter the EA (which isn't zero page any longer, so don't use the _zp macro)
     regEA = READ_BYTE(candy, regEA);  // then this part does the indirection that the R version of the macro would have done
     ORA_com(candy);                   // so this can act on the new contents
-    wLeft -= 6;
+    wLeft -= 6; // !!! actually 8?
     HANDLER_END();
 }
 
@@ -927,7 +927,7 @@ HANDLER(op13)
     ASL_mem(candy);
     regEA = READ_BYTE(candy, regEA);
     ORA_com(candy);
-    wLeft -= 5;     // best guess
+    wLeft -= 5;     // best guess !!! actually 8?
     HANDLER_END();
 }
 
