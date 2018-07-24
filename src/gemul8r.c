@@ -346,7 +346,10 @@ void DisplayStatus(int iVM)
     // lastly comes the search string for the tiles
     if (v.fTiling && strlen(cGemKeys))
     {
-        sprintf(rgch, " SEARCH FOR: %s_", cGemKeys);
+        if (sVM < 0)
+            sprintf(rgch, " SEARCH FOR: %s_", cGemKeys);    // you can actively type
+        else
+            sprintf(rgch, " (SEARCHED FOR %s)", cGemKeys);  // you can't actively type
         strcat(rgch0, rgch);
     }
 
