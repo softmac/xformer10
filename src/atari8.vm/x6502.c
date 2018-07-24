@@ -1897,6 +1897,21 @@ HANDLER(op6C)
 
         regPC = READ_WORD(candy, regEA);
         //ODS("RUN AT %04x\n", regPC);
+
+        // See 0x2e2 case below for details
+        if (ramtop == 0xc000)
+        {
+            for (int i = regPC; i < regPC + 0xfa; i++) // always less than 2 pages long to fit in 2 sector autorun.sys
+            {
+                BYTE b = rgbMem[i];
+                if (rgbMem[i + 1] == 3 && rgbMem[regPC] != 0x60 && ((b == 0x21 && rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22) ||
+                    (b == 0x1a && (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
+                {
+                    KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
+                    break;
+                }
+            }
+        }
     }
 
     else if (regEA == 0x2e2)
