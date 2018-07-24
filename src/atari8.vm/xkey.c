@@ -85,14 +85,17 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
         if (!fKeyPressed)
             return;
 
-        SKSTAT |= 0x04;
+        SKSTAT |= 0x04; // notify that the key is up
+        IRQST |= 0x40;  // no longer assert the key down interrupt
+        IRQST |= 0x80;  // no longer assert the BREAK key down interrupt
+
         fKeyPressed = 0;
         //ODS("Upstroke @ %03x:%02x\n", wScan, wCycle);
         return;
     }
 
     if (shift & 3)
-        SKSTAT &= ~0x08;  // shift key pressed
+        SKSTAT &= ~0x08;  // shift key pressed  // !!! not in sync with bit 2, but that seems to be OK
     else
         SKSTAT |= 0x08;      // shift key not pressed
     
@@ -356,11 +359,16 @@ lookitup:
     }
 
 lookit2:
-    //  SKSTAT &= ~0x04; SAVE THIS FOR THE ACTUAL MOMENT THE IRQ IS FIRED
     
     //ODS("Downstroke %02x @ %03x:%02x\n", KBCODE, wScan, wCycle);
+    
     if (IRQEN & 0x40)
         IRQST &= ~0x40;
+
+    // this must be in sync with the moment the IRQ actually fires (Eryus), but if it won't fire, we need to do it now
+    // !!! unlikely but possible timing issue
+    if ((regP & IBIT) || !(IRQEN & 0x40))
+        SKSTAT &= ~0x04;
 }
 
 
