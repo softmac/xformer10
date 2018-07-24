@@ -3104,8 +3104,11 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 
                 // remember, the data in the sector can be the same as the ack, complete or checksum
 
-                // status responses are 4 bytes long, sector reads are 128
-                BYTE iLastSector = (rgSIO[1] == 0x52) ? 128 : 4;
+                // status responses are 4 bytes long, sector reads are 128/256
+                BOOL dv = rgSIO[0] - 0x31;
+                BOOL sd, ed, dd, wp;
+                SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
+                WORD iLastSector = (rgSIO[1] == 0x52) ? (dd ? 256 : 128) : 4;
 
                 if (isectorPos > 0 && isectorPos < iLastSector)
                 {
@@ -3151,8 +3154,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     // this is how I think you properly respond to a status request, I hope
                     else if (rgSIO[1] == 0x53)
                     {
-                        WORD dv = rgSIO[0] - 0x31;
-                        BOOL sd, ed, dd, wp;
+                        dv = rgSIO[0] - 0x31;
                         SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
                         
                         /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
@@ -3171,25 +3173,6 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     isectorPos = 1;    // next byte will be this one
                     //ODS("SERIN: DATA 0x%02x = 0x%02x\n", 0, SERIN);
                 }
-
-#if 0   // this doesn't help any known app, and kind of breaks hardb
-                // now pretend 7 jiffies elapsed for apps that time disk sector reads
-                BYTE jif = 7;
-                // reading the same sector as last time takes twice as long
-                short wSector = rgSIO[2] | (short)rgSIO[3] << 8;
-                if (wSector == wLastSIOSector)
-                    jif = 14;
-                BYTE oldjif = rgbMem[20];
-                rgbMem[20] = oldjif + jif;
-                if (oldjif >= (256 - jif))
-                {
-                    oldjif = rgbMem[19];
-                    rgbMem[19]++;
-                    if (oldjif == 255)
-                        rgbMem[18]++;
-                }
-                wLastSIOSector = wSector;
-#endif
             }
 
             // POKEY timers
@@ -3424,11 +3407,13 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
             rgbMem[addr] = poly17[random17pos];
         }
 
-        //else if (addr == 0xd20d)
-            //ODS("SERIN READ @%03x\n", wScan);
+#if 0
+        else if (addr == 0xd20d)
+            ODS("SERIN READ @%03x\n", wScan);
 
-        //else if (addr == 0xd20e && regPC < 0xa000)
-        //    ODS("IRQST READ @%03x\n", wScan);
+        else if (addr == 0xd20e && regPC < 0xa000)
+            ODS("IRQST READ @%03x\n", wScan);
+#endif
 
         break;
 

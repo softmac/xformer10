@@ -1896,7 +1896,7 @@ HANDLER(op6C)
         }
 
         regPC = READ_WORD(candy, regEA);
-        ODS("RUN AT %04x\n", regPC);
+        //ODS("RUN AT %04x\n", regPC);
     }
 
     else if (regEA == 0x2e2)
@@ -2155,7 +2155,7 @@ HANDLER(op80)
         WORD ws = READ_WORD(candy, 0x43);
         WORD we = READ_WORD(candy, 0x45);
 
-        ODS("Loading segment %04x-%04x\n", ws, we);
+        //ODS("Loading segment %04x-%04x\n", ws, we);
 
         // we are loading code over top of our loader, that will kill us. Try the alternate loader
         // that lives in a different place. You can't do this manually, so you can't turn this behaviour off
