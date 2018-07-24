@@ -465,6 +465,7 @@ void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *p
 
 
 // SIO Bare bones read a sector, return checksum for those rolling their own and not using SIOV
+// !!! Not capable of returning an error frame
 //
 BYTE SIOReadSector(void *candy, int wDrive)
 {
@@ -479,7 +480,6 @@ BYTE SIOReadSector(void *candy, int wDrive)
     wCom = 0x52;
     wStat = 0x40;
     wTimeout = 0x1f;
-    wBytes = 128;
     wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
 
     // don't blow up looking for the string
@@ -493,38 +493,62 @@ BYTE SIOReadSector(void *candy, int wDrive)
     pdrive = &rgDrives[wDrive];
 
     md = pdrive->mode;
-
-    // At least for Eidolon V1, just treating DD disks as SD seems to work!
-    // !!! How does non-SD work?
-    if (md != MD_SD)
-    {
-//        ODS("Bare bones SIO not supported on DD Drive?\n");
-//        return 0;
-    }
-
-    if (pdrive->h == -1)
+    
+    if (pdrive->h <= 0)
         return 0;
 
     int cbSIO2PCFudge = pdrive->ofs;
 
-    if (wSector < 1)            /* invalid sector # */
+    if (wSector < 1)
+    {
+        ODS("SIO bare read invalid sector < 1\n");
         return 0;
-
-    if (wSector > pdrive->wSectorMac)   /* invalid sector # */
+    }
+    else if (wSector > pdrive->wSectorMac)
+    {
+        ODS("SIO bare read invalid sector > %d\n", pdrive->wSectorMac);
         return 0;
+    }
 
-    lcbSector = 128L;
+    // The first 3 sectors of DD are SD
+    if (wSector < 4 || md == MD_SD || md == MD_ED)
+        wBytes = 128;
+    else
+        wBytes = 256;
+
+    if (md == MD_SD || md == MD_ED)
+        lcbSector = 128L;
+    else if ((wSector < 4) && pdrive->ofs)  // SIO2PC disk image
+    {
+        lcbSector = 128L;
+        // the data is in the first half of a 256 byte sector
+        if (md == MD_DD_OLD_ATR1)
+            lcbSector = 256;
+    }
+    else if (pdrive->ofs)
+    {
+        lcbSector = 256L;
+        if (pdrive->cb == 184720)    // !!! 400 byte header instead of 16, what is this?
+            cbSIO2PCFudge += 384;
+
+        // the first 3 sectors were compacted
+        else if (md == MD_DD_OLD_ATR2)
+        {
+            wSector -= 1;
+            cbSIO2PCFudge -= 128;
+        }
+    }
+    else
+        lcbSector = 256L;
 
     _lseek(pdrive->h, (ULONG)((wSector - 1) * lcbSector) + cbSIO2PCFudge, SEEK_SET);
 
     if (_read(pdrive->h, sectorSIO, wBytes) < wBytes)
         return 0;
 
-    /* the disk # is valid, the sector # is valid, # bytes is valid */
-
     // now do the checksum
     WORD ck = 0;
-    for (int i = 0; i < 128; i++)
+    for (int i = 0; i < wBytes; i++)
     {
         ck += sectorSIO[i];
         if (ck > 0xff)

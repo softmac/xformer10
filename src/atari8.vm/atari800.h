@@ -345,7 +345,7 @@ typedef struct
     DRIVE m_rgDrives[MAX_DRIVES];
 
     // Like disk and cartridge images, this is not persisted because of its size. We simply re-fill it when we are loaded back in.
-    BYTE m_sectorSIO[128];    // disk sector, not persisted but reloaded
+    BYTE m_sectorSIO[256];    // disk sector, not persisted but reloaded
 
     BYTE *m_rgbSwapCart;      // Contents of the cartridges, not persisted but reloaded
 
@@ -420,7 +420,7 @@ typedef struct
     BYTE m_rgSIO[5];    // holds the SIO command frame
     BYTE m_cSEROUT;     // how many bytes we've gotten so far of the 5
     WORD m_fSERIN;      // we're executing a disk read command
-    BYTE m_isectorPos;  // where in the buffer are we?
+    WORD m_isectorPos;  // where in the buffer are we?
     BYTE m_checksum;    // buffer checksum
     BYTE m_fWant8;      // we'd like the SEROUT DONE IRQ8
     BYTE m_fWant10;     // we'd like the SEROUT NEEDED IRQ10
