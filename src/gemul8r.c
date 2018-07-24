@@ -82,6 +82,9 @@ const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 
 // and our other globals
 
+char cGemKeys[MAX_PATH]; // our search string for finding a tile
+int sTileBottom;         // the bottom of the set of tiles matching our search
+
 BOOL fDebug;
 int sVM = -1;       // the tile with focus
 
@@ -186,7 +189,7 @@ void ODS(char *fmt, ...)
 // Use the name of the machine we're emulating followed by the cartridge name if it has one,
 // or if not, the filename being used by the first disk drive.
 // String must have enough space for MAX_PATH.
-void CreateInstanceName(int i, LPSTR lpInstName)
+void CreateInstanceName(int i, LPSTR lpInstName, BOOL fIncludeType)
 {
     LPSTR lp = "";
     int z;
@@ -209,7 +212,11 @@ void CreateInstanceName(int i, LPSTR lpInstName)
         if (lp[z] == '\\') break;
     }
 
-    sprintf(lpInstName, "%s - %s", rgpvm[i]->szModel, lp + z + 1);
+    if (fIncludeType)
+        sprintf(lpInstName, "%s - %s", rgpvm[i]->szModel, lp + z + 1);
+    else
+        sprintf(lpInstName, "%s", lp + z + 1);
+
 }
 
 /****************************************************************************
@@ -262,12 +269,13 @@ void DisplayStatus(int iVM)
 
     // no tile in focus? No name for the title bar
     if (iVM >= 0)
-        CreateInstanceName(iVM, pInst);
+        CreateInstanceName(iVM, pInst, TRUE);
 
     if (v.iVM == -1)
         sprintf(rgch0, "%s (%d VM%s) ", vi.szAppName, v.cVM, v.cVM == 1 ? "" : "s");
     else    // 1-based VM number for the citizens
         sprintf(rgch0, "%s (%d/%d VM%s) ", vi.szAppName, v.iVM + 1, v.cVM, v.cVM == 1 ? "" : "s");
+    strcat(rgch0, rgch);
 
 #endif
 
@@ -303,31 +311,43 @@ void DisplayStatus(int iVM)
         }
 #endif
 
-    strcat(rgch0, rgch);
-
 #define CPUAVG 60ull   // how many jiffies to average the % speed over, 60=~1sec (NTSC, anyway)
 
-    // are we running at normal speed or turbo speed !!! PAL runs at 60fps
-#ifndef NDEBUG
-    sprintf(rgch, "(%s-%lli%%) %s %s %s (%uHz %u/%ums renders)",    // monitor info is for debug only
-#else
-    sprintf(rgch, "(%s-%lli%%) %s %s %s",
-#endif  
-                fBrakes ? "1.8 MHz" : "Turbo",
-                uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0,
-                iVM >= 0 ? (rgpvm[iVM]->fEmuPAL ? "PAL" : "NTSC") : "",
-                iVM >= 0 ? ((!v.fTiling && rgpvm[iVM]->fEmuPAL) ? "50Hz" : "60Hz") : "", pInst
-#ifndef NDEBUG
-                , v.vRefresh, renders, lastRenderCost
-#endif
-                );
-
+    // are we running at normal speed or turbo speed. !!! PAL has to run at 60fps when tiled, but 50fps when not
+    sprintf(rgch, "(%s-%lli%%)", fBrakes ? "1.8 MHz" : "Turbo", uExecSpeed ? (JIFN * CPUAVG * 100ull / uExecSpeed) : 0);
     strcat(rgch0, rgch);
+
+    // If we are highlighting a particular VM, tell us it's type (NTSC/PAL) and loaded media name
+    if (iVM >= 0)
+    {
+        sprintf(rgch, " %s %s %s", (rgpvm[iVM]->fEmuPAL ? "PAL" : "NTSC"), ((!v.fTiling && rgpvm[iVM]->fEmuPAL) ? "50Hz" : "60Hz"), pInst);
+        strcat(rgch0, rgch);
+    }
+
+    // otherwise let them know that when no tile is in focus, they can type to search the tiles
+    else if (v.fTiling && !strlen(cGemKeys))
+    {
+        sprintf(rgch, " (TYPE TO SEARCH)");
+        strcat(rgch0, rgch);
+    }
+
+#if 0
+    // former debug output will give some monitor refresh information, but it interferes with the search string and shouldn't be needed
+    sprintf(rgch, " (%uHz %u/%ums renders)", v.vRefresh, renders, lastRenderCost);
+    strcat(rgch0, rgch);
+#endif
 
     if (v.fZoomColor && !v.fTiling)
     {
         // Is the display stretched to fill the window?
         strcat(rgch0, " - Stretched");
+    }
+
+    // lastly comes the search string for the tiles
+    if (v.fTiling && strlen(cGemKeys))
+    {
+        sprintf(rgch, " SEARCH FOR: %s_", cGemKeys);
+        strcat(rgch0, rgch);
     }
 
     SetWindowText(vi.hWnd, rgch0);
@@ -530,6 +550,8 @@ ThreadTry:
     {
         if (v.fTiling)
         {
+            char cT[MAX_PATH];
+
             ThreadStuff = malloc(sMaxTiles * sizeof(ThreadStuffS)); // not sure how many are visible yet, but that's an upper bound
             if (ThreadStuff)
                 memset(ThreadStuff, 0, sizeof(ThreadStuffS));
@@ -544,58 +566,113 @@ ThreadTry:
             // figure out the first visible tile to save everybody time who needs to know that     
             int nx = sTilesPerRow;
             int y = v.sWheelOffset;
-            int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
-            y += row * sTileSize.y;           // top of nFirstTileVisible
+            int l = (int)strlen(cGemKeys);
+            int iVM;
 
-            nFirstVisibleTile = row * nx;
-            int iVM = nFirstVisibleTile;
+            // We have a search criteria, who knows which tiles will be included, we have to start at the beginning w/o optimizing
+            // !!! Therefore the tiling runs slower when searching as we search from the top for the first visible VM
+            // plus we do it every time we scroll a pixel, not just when the scrolling is sufficient to change what's visible
+            if (l)
+            {
+                sTileBottom = 0;        // we have not yet hit bottom
+                nFirstVisibleTile = -1;
+                iVM = 0;
+            }
+
+            else  // all tiles will show
+            {
+                int row = abs(y) / sTileSize.y;   // how many rows down until the bottom of the rect will be > 0?
+                y += row * sTileSize.y;           // top of nFirstTileVisible
+                nFirstVisibleTile = row * nx;
+                iVM = row * nx;
+            }
 
             for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
                 for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
                 {
-                    // Don't consider tiles completely off screen
-                    if (y + sTileSize.y > 0 && y < rect.bottom)
+                    Assert(l || y + sTileSize.y > 0); // we should be optimized when not searching
+            
+                    BOOL fOK = FALSE;
+
+                    // keep looking for a tile in this spot that satisifes the criteria
+                    while (!fOK)
                     {
-                        ThreadStuff[cThreads].fKillThread = FALSE;
-                        ThreadStuff[cThreads].iThreadVM = iVM;
-                        ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-                        hDoneEvent[cThreads] = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-                        // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
-                        FInitDisksVM(ThreadStuff[cThreads].iThreadVM);
-
-                        // if the video card sucks, we'll need to know this to know which small buffer to use
-                        rgpvmi(ThreadStuff[cThreads].iThreadVM)->iVisibleTile = cThreads;
-
-                        // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
-                        if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
-                            !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads,
-                                    STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
+                        // if we have a search criteria, get the cart/disk name of this VM and see if it's a match
+                        if (l)
                         {
-                            // don't leave the events existing if the thread doesn't... we might try to wait on it
-                            if (ThreadStuff[cThreads].hGoEvent)
-                            {
-                                CloseHandle(ThreadStuff[cThreads].hGoEvent);
-                                ThreadStuff[cThreads].hGoEvent = NULL;
-                            }
-                            if (hDoneEvent[cThreads])
-                            {
-                                CloseHandle(hDoneEvent[cThreads]);
-                                hDoneEvent[cThreads] = NULL;
-                            }
-
-                            FUnInitDisksVM(ThreadStuff[cThreads].iThreadVM);
-
-                            goto ThreadFail;
+                            CreateInstanceName(iVM, cT, FALSE);
+                            cT[l] = 0;
                         }
-                        cThreads++;
+
+                        // when searching, skip tiles until they are visible and they match
+                        fOK = (!l || !_stricmp(cGemKeys, cT));
+
+                        // If it's a match, take up a spot, even if it's offscreen, and proceed to the next spot.
+                        // But only give it a thread if it's visible
+                        if (fOK && y + sTileSize.y > 0)
+                        {
+                            // We found the actual first visible tile
+                            if (nFirstVisibleTile == -1)
+                                nFirstVisibleTile = iVM;
+
+                            ThreadStuff[cThreads].fKillThread = FALSE;
+                            ThreadStuff[cThreads].iThreadVM = iVM;
+                            ThreadStuff[cThreads].hGoEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+                            hDoneEvent[cThreads] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+                            // tell the VM it's waking up and can open it's files again (it will probably delay that until necessary)
+                            FInitDisksVM(ThreadStuff[cThreads].iThreadVM);
+
+                            // if the video card sucks, we'll need to know this to know which small buffer to use
+                            rgpvmi(ThreadStuff[cThreads].iThreadVM)->iVisibleTile = cThreads;
+
+                            // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
+                            if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
+                                !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads,
+                                    STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
+                            {
+                                // don't leave the events existing if the thread doesn't... we might try to wait on it
+                                if (ThreadStuff[cThreads].hGoEvent)
+                                {
+                                    CloseHandle(ThreadStuff[cThreads].hGoEvent);
+                                    ThreadStuff[cThreads].hGoEvent = NULL;
+                                }
+                                if (hDoneEvent[cThreads])
+                                {
+                                    CloseHandle(hDoneEvent[cThreads]);
+                                    hDoneEvent[cThreads] = NULL;
+                                }
+
+                                FUnInitDisksVM(ThreadStuff[cThreads].iThreadVM);
+
+                                goto ThreadFail;
+                            }
+                            cThreads++;
+                        }
+
+                        // next tile
+                        iVM++;
+
+                        // we've considered them all
+                        if (v.cVM == iVM)
+                        {
+                            // if we're on the left side and didn't put anything there, don't go down an extra row
+                            int bot = y + ((x || fOK) ? sTileSize.y : 0) - rect.bottom;  // we found the bottom!
+                            
+                            // Uh oh, we've already scrolled too far (it happens, it's very complicated to predict)
+                            if (bot < 0 && v.sWheelOffset < 0)
+                            {
+                                v.sWheelOffset = min(0, v.sWheelOffset - bot);  // don't go +ve
+                                sTileBottom = -v.sWheelOffset;
+                                InitThreads();  // do it again, but right this time (first visible tile may change due to this)
+                                return TRUE;
+                            }
+                            else if (v.sWheelOffset < 0)
+                                sTileBottom = -v.sWheelOffset + bot;
+                            break;
+                        }
                     }
-
-                    // next tile
-                    iVM++;
-
-                    // we've considered them all
                     if (v.cVM == iVM)
                         break;
                 }
@@ -769,7 +846,7 @@ void CreateVMMenu()
             if (z == MAX_VM_MENUS - 1)
                 strcpy(mNew, "ETC.");  // no need to keep going
             else
-                CreateInstanceName(z, mNew);    // get a name for it
+                CreateInstanceName(z, mNew, TRUE);    // get a name for it
             SetMenuItemInfo(vi.hMenu, IDM_VM1, FALSE, &mii);
             CheckMenuItem(vi.hMenu, IDM_VM1, (z == (int)v.iVM) ? MF_CHECKED : MF_UNCHECKED);    // check if the current one
             EnableMenuItem(vi.hMenu, IDM_VM1, !v.fTiling ? 0 : MF_GRAYED);    // grey if tiling
@@ -791,7 +868,7 @@ void CreateVMMenu()
             mii.fMask = MIIM_STRING | MIIM_ID;
             mii.wID = IDM_VM1 - iFound;
             mii.dwTypeData = mNew;
-            CreateInstanceName(z, mNew);    // get a name for it
+            CreateInstanceName(z, mNew, TRUE);    // get a name for it
 
             // this is the previous inst to the current one
             if (fNeedPrevKey) {
@@ -2967,7 +3044,7 @@ void RenderBitmap()
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
-    if (v.cVM == 0)
+    if (!cThreads)
     {
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
         return;
@@ -3416,13 +3493,13 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
 {
     prect->top = prect->bottom = prect->left = prect->right = 0;
    
-    if (v.cVM == 0)
+    if (cThreads == 0)
         return;
 
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
-    int iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
+    int iVM = 0;    // start at the first visible tile
    
     int nx = sTilesPerRow;
     
@@ -3435,7 +3512,8 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
     {
         for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
         {
-            if (iVM == iVMTarget)
+            // the iVM'th visible tile is the one we want
+            if (ThreadStuff[iVM].iThreadVM == iVMTarget)
             {
                 prect->left = x;
                 prect->top = y;
@@ -3447,7 +3525,7 @@ void GetPosFromTile(int iVMTarget, RECT *prect)
             iVM++;
 
             // we've reached the end of the tiles
-            if (iVM == v.cVM)
+            if (iVM == cThreads)
             {
                 y = rect.bottom;    // double break
                 break;
@@ -3466,12 +3544,12 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
     RECT rect;
 
     // don't /0
-    if (v.cVM == 0 || !sTileSize.x)
+    if (cThreads == 0 || !sTileSize.x)
         return -1;
 
     GetClientRect(vi.hWnd, &rect);
 
-    int iVM = nFirstVisibleTile;    // hint - don't waste time trying thousands of invisible tiles before finding a visible one
+    int iVM = 0;    // start at first visible tile
 
     int nx = sTilesPerRow;
 
@@ -3492,13 +3570,13 @@ int GetTileFromPos(int xPos, int yPos, POINT *ppt)
                     ppt->x = x;
                     ppt->y = y;
                 }
-                return iVM;
+                return ThreadStuff[iVM].iThreadVM;
             }
 
             iVM++;
 
             // we've reached the end of the tiles
-            if (iVM == v.cVM)
+            if (iVM == cThreads)
             {
                 y = rect.bottom;    // double break
                 break;
@@ -3519,6 +3597,10 @@ void ScrollTiles()
     int bottom = (v.cVM * 100 / nx - 1) / 100 + 1; // how many rows will it take to show them all?
     bottom = bottom * sTileSize.y - rect.bottom;    // how many pixels past the bottom of the screen is that?
 
+    // If we're only showing tiles that match a search criteria, and we found the bottom, this is the bottom
+    if (sTileBottom && strlen(cGemKeys))
+        bottom = sTileBottom;
+
     if (bottom < 0)
         bottom = 0;
     if (v.sWheelOffset > 0)
@@ -3532,6 +3614,7 @@ void ScrollTiles()
     y += row * sTileSize.y;                     // top of the first visible tile (<= 0)
     int ny = (rect.bottom - y - 1) / sTileSize.y + 1;   // how many rows are visible?
 
+    // !!! when searching, we can't optimize and we'll always re-init threads every single scroll!
     if (nFirstVisibleTile != row * nx || cThreads != nx * ny)
     {
         InitThreads();
@@ -4041,6 +4124,9 @@ LRESULT CALLBACK WndProc(
         // same tiles in this new configuration.
         // If we're going into or coming out of minimize, nothing's really changing
         // If we would divide by zero, we're just starting up and we can trust sWheelOffset to be correct already
+        //
+        // !!! When using a search criteria, you'll end up randomly scrolled. I don't know what I should do, if you're on a VM
+        // that isn't part of your tiled search criteria, and you switch to tiled, what do you want to happen?
         if (v.fTiling && v.sWheelOffset && sTileSize.y && sTilesPerRow &&
                     v.swWindowState != SW_SHOWMINIMIZED && wp.showCmd != SW_SHOWMINIMIZED)
         {
@@ -4611,6 +4697,9 @@ break;
                 // Make sure the current VM is visible as one of the tiles that come up. Perhaps we changed VMs.
                 // Perhaps we changed window size. Either way, the current tile might not be one of the visible ones.
                 // If it's at all visible, don't touch a thing, that will make going in/out of tiled mode disconcerting.
+                //
+                // !!! When using a search criteria, you'll end up randomly scrolled. I don't know what I should do, if you're on a VM
+                // that isn't part of your tiled search criteria, and you switch to tiled, what do you want to happen?
 
                 int nx = (rc.right * 10 / sTileSize.x + 5) / 10;         // how many fit across
                 int nFT = -(v.sWheelOffset / sTileSize.y * nx);          // top left tile
@@ -5393,11 +5482,14 @@ break;
 
         //if (vi.fExecuting)
         {
-            if (!v.fTiling && v.iVM >= 0)
+            if (!v.fTiling)
             {
-                // tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
-                if (FWinMsgVM(v.iVM, hWnd, message, uParam, lParam))
-                    return TRUE;
+                if (v.iVM >= 0)
+                {
+                    // tells us if we need to eat the key, or send it to windows (ALT needs to be sent on for menu activation)
+                    if (FWinMsgVM(v.iVM, hWnd, message, uParam, lParam))
+                        return TRUE;
+                }
             }
 
             // send all keys to the tile that is in focus
@@ -5408,6 +5500,40 @@ break;
                     BOOL bb = FWinMsgVM(sVM, hWnd, message, uParam, lParam);
                     if (bb)
                         return TRUE;
+                }
+                
+                // When tiled, but nothing is in focus, process keys to help search for a tile
+                else if (message == WM_KEYDOWN)
+                {
+                    BYTE cc[2];
+                    BYTE ks[256];
+
+                    GetKeyboardState(ks);
+                    int nc = ToAscii((UINT)uParam, (lParam >> 16) & 0xff, ks, (LPWORD)cc, 0);
+                    //ODS("%02x = %c (returned %02x)\n", cc[0], cc[0], nc);
+                    if (nc == 1)
+                    {
+                        BYTE b = cc[0];
+                        int l = (int)strlen(cGemKeys);
+
+                        if (l < MAX_PATH && b != 8 && b != 0x1b)
+                        {
+                            cGemKeys[l] = b;
+                            cGemKeys[l + 1] = 0;
+                        }
+                        
+                        // BACKSPACE
+                        else if (l && b == 8)
+                            cGemKeys[l - 1] = 0;
+                        
+                        // ESC kills the whole string
+                        else if (l && b == 0x1b)
+                            cGemKeys[0] = 0;
+
+                        v.sWheelOffset = 0; // !!! for now, or InitThreads is scrolled to a random place
+                        InitThreads();      // this changes the visible tiles
+                        DisplayStatus(-1);
+                    }
                 }
             }
         }
@@ -5788,7 +5914,7 @@ break;
 
     // when the mouse moves off the client area, no longer select a specific tile
     case WM_NCMOUSEMOVE:
-        if (v.fTiling)
+        if (v.fTiling && sVM >= 0)
         {
             sVM = -1;
             v.iVM = sVM;    // "current" VM is now this
@@ -5796,7 +5922,7 @@ break;
             FixAllMenus(FALSE); // VM list is greyed out when tiling
 
             // don't wait 1sec for the new instance data to show up
-            DisplayStatus((v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM));
+            DisplayStatus(-1);
         }
         break;
 
