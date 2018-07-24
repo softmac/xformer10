@@ -203,6 +203,7 @@ void DeleteVM(int iVM, BOOL fFixMenus)
         RECT rc;
         GetClientRect(vi.hWnd, &rc);
         int last = (v.cVM == 0 || sTilesPerRow == 0) ? 0 : -((v.cVM + sTilesPerRow - 1) / sTilesPerRow * sTileSize.y - rc.bottom);
+        
         if (v.sWheelOffset < last && last <= 0)
             v.sWheelOffset = last;
 

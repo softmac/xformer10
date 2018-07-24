@@ -1036,7 +1036,7 @@ extern char const * const rgszVM[];
 #define FIsTutor(vm)        !!((vm) & vmMask & vmTutor)
 
 // gemul8r.c
-void CreateInstanceName(int, LPSTR);
+void CreateInstanceName(int, LPSTR, BOOL);
 //void UpdateMenuCheckmarks();
 //BOOL FVerifyMenuOption();
 BOOL CreateNewBitmaps();
