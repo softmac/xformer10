@@ -1124,6 +1124,18 @@ lExit:
     // or the keyboard IRQ is left turned off and the keyboard stops working (Floyd of the Jungle)
     PokeBAtari(candy, 0xd20e, rgbMem[0x10]);
    
+    // SIO also uses TIMER0 and leaves the following values in it, (which 081_A.atr jumps to)
+    if (mdXLXE == md800)
+    {
+        rgbMem[0x226] = 0xec;
+        rgbMem[0x227] = 0xeb;
+    }
+    else
+    {
+        rgbMem[0x226] = 0x11;
+        rgbMem[0x227] = 0xec;
+    }
+
     //regPC = cpuPeekW(candy, regSP + 1) + 1;        // do an RTS
     //regSP = (regSP + 2) & 255 | 256;
 
