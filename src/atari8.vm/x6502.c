@@ -728,13 +728,14 @@ HANDLER(op00)
 {
     // BRK is NOT maskable (Najemni2)
 
-    // we are trying to execute in memory non-existent in an 800, we're probably the wrong VM type
-    // hitting a BRK anywhere in OS code probably means we expected a different version of the OS to be there.
+    // We are trying to execute in memory non-existent in an 800, we're probably the wrong VM type.
+    // Hitting a BRK in OS code is by design for Mag SCAT #008 etc., and hangs if we switch to XL
+    // !!! Did anybody rely on a BRK in the OS switching to XL?
     // ... or ...
     // we are in an infinite loop of a BRK jumping to 0 which soon does a BRK (Protector 800). This means that the next
     // two return addresses (with a P reg between them) are the same, 1 greater than our PC (page 0)
 
-    if ((regPC >= 0xc000 /* && regPC < 0xd000 */ && mdXLXE == md800) ||
+    if ((regPC >= 0xc000 && regPC < 0xd800 && mdXLXE == md800) ||
         (rgbMem[regSP + 2] == regPC + 1 && rgbMem[regSP + 3] == 0x00 && rgbMem[regSP + 5] == regPC + 1 && rgbMem[regSP + 6] == 0x00))
         KIL(candy);     // you shouldn't touch the PC after calling this
 
@@ -1738,6 +1739,13 @@ HANDLER(op60)
         }
     }
 
+    // one weird BASIC autorun.sys executes its code by placing a return value on the stack. Ugh (Mag SCAT #008 etc.)
+    else if (rgbMem[regPC + 3] == 0x21)
+    {
+        if (ramtop == 0xc000 && rgbMem[regPC + 4] == 0x3 && rgbMem[regPC + 8] == 0x22 && rgbMem[regPC + 9] == 0x3)
+            KillMePleaseBASIC(candy);
+    }
+
     SIOCheck(candy);  // SIO hack
 
     HANDLER_END_FLOW();
@@ -1905,7 +1913,8 @@ HANDLER(op6C)
             {
                 BYTE b = rgbMem[i];
                 if (rgbMem[i + 1] == 3 && rgbMem[regPC] != 0x60 && ((b == 0x21 && rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22) ||
-                    (b == 0x1a && (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
+                    (b == 0x1a && rgbMem[i + 2] == 0xc9 && rgbMem[i + 3] == 0x45 &&
+                    (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
                 {
                     KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
                     break;
@@ -1932,18 +1941,24 @@ HANDLER(op6C)
         // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
         // What else would alter the HATABS E table entry at $0321/22 to force feed characters into the buffer?
         // Typically it accesses $321 then $322 5 bytes later (LDA #nn STA $321 LDA #mm STA $322).
-        // Some versions index from the beginning of the tables at $31a, so you won't see a $31b
+        //
         // Also, some custom boot loaders have this code nearby in case they need it, but it won't execute. Finding it
         // will ruin the non-BASIC games on their menu. Careful not to false positive (check for immediate RTS)
         // (SAG mag #114 Earth - if launched in XL mode, it's stupid enough to swap BASIC in on a warm start, but that's its fault).
-        // Also, make sure that $31a is not just random data in memory, but is preceded by something like LDA ,X (XDemo.xex)
+        //
+        // Some versions index from the beginning of the tables at $31a, so you won't see a $31b
+        // Don't false positive, that's not a lot to go on. Make sure that $31a is not just random data in memory, but is
+        // preceded by something like LDA ,X (XDemo.xex doesn't want BASIC).
+        // Watch out for code that just installs a new handler... there must be a CMP #'e (C9 45) after the $31a
+        // (Quest for Power uses $31a,x)
         if (ramtop == 0xc000)
         {
             for (int i = regPC; i < regPC + 0xfa; i++) // always less than 2 pages long to fit in 2 sector autorun.sys
             {
                 BYTE b = rgbMem[i];
                 if (rgbMem[i + 1] == 3 && rgbMem[regPC] != 0x60 && ((b == 0x21 && rgbMem[i + 6] == 3 && rgbMem[i + 5] == 0x22) ||
-                            (b == 0x1a && (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
+                         (b == 0x1a && rgbMem[i + 2] == 0xc9 && rgbMem[i + 3] == 0x45 &&
+                            (rgbMem[i - 1] == 0xbd || rgbMem[i - 1] == 0xb9 || rgbMem[i - 1] == 0xbc || rgbMem[i - 1] == 0xbe))))
                 {
                     KillMePleaseBASIC(candy); // do NOT post ToggleBasic msg, that only works on current active VM!
                     break;

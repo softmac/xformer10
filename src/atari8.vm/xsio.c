@@ -915,7 +915,7 @@ lNAK:
                                 // !!! DOS only allows 2 high bits for sector number, and large XEX files fill >1024 sectors
                                 // Squeeze the full sector # in there anyway, and our loader will handle it but it won't be
                                 // a completely valid DOS image, but who cares
-                                rgbMem[wBuff + 125] = (BYTE)(wSector >> 8) | (md == MD_FILEBAS ? 8 : 0);    // FILE # 0 or 2 in bits 7-2
+                                rgbMem[wBuff + 125] = (BYTE)(wSector >> 8);    // FILE # 0 in bits 7-2, hi 2 bits of sector # in bits 1-0
                                 rgbMem[wBuff + 126] = (BYTE)wSector;
                             }
                         }
