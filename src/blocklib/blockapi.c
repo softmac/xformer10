@@ -87,13 +87,11 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             return FS_MFS;
             }
 
-        // !!! ATR images exist with non-zero first byte (Bird Eggs). Hopefully just checking for 3 won't give false positives.
-        // Boot disks can have anything besides 3, but I believe a DOS disk will always have 3.
-        // !!! Unfortunately many, many magazine disks with custom boot records don't have 3, so these files can't be extracted.
-        // If we ignore the three, we'll extract garbage from every non-DOS disk, but that's their own fault for trying to
-        // extract files from it?
-        // Also, it's not safe to assume every disk is an ATARI disk once other VM types are allowed.
-        if (rgch[0] != 0x4D && rgch[1] == 0x03)
+        // The usual ATARI 8 bit disk image starts with "0 3" if it is a DOS disk with DOS files that are extractable.
+        // However, to enable extracting DOS files on non-standard disks, we have to be more lenient. (Bird Eggs, MAG SAG #187)
+        // !!! You'll get garbage filenames and files if you do this on a non-DOS disk since we will gladly try. Caveat emptor.
+        // !!! Once other non-ATARI 8bit VMs are allowed in Gemulator, we can't be this lenient, we'll false positive!
+        if (rgch[1] == 0x03 || rgch[0] == 0)
             {
 #if TRACEDISK
             printf("Atari DOS file system\n");
@@ -101,6 +99,7 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             return FS_ATARIDOS;
             }
 
+        // subsumed by ATARIDOS for now
         if (rgch[0] == 0x4D && rgch[1] == 0x03)
             {
 #if TRACEDISK
@@ -188,7 +187,7 @@ enum fstype __stdcall FstIdentifyFileSystem(DISKINFO *pdi)
             }
 
         // keep going (it'll run out eventually)
-
+        // !!! Do not keep going for ATARI 8 bit, you may find false positives, only check the first sector on the disk
         pdi->offsec++;
 
         if (pdi->offsec >= 100)
