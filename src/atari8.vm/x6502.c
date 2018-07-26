@@ -1974,6 +1974,11 @@ HANDLER(op6C)
         }
     }
     
+    // jumping to our cold start vector is certain death on an 800 - we must want to be an XL where that might just be a warm start
+    // (Biene maja)
+    else if (regEA == 0xfffc && mdXLXE == md800)
+        KillMePlease(candy);
+    
     else
     {
         if ((regEA & 0xff) == 0xff)   // famous 6502 bug
@@ -4969,7 +4974,11 @@ void __cdecl Go6502(void *candy)
                         fDLIinVBI = wFrame;
                     }
                     fInDLI++;
-
+        
+                    // GunHead switches into PAL too late, and infinitely recurses into DLIs. A fresh cold boot fixes it.
+                    if (fInDLI > 512 && fPAL)
+                        KillMeSoftlyPlease(candy);
+        
                     wLeft -= 7; // 7 CPU cycles are wasted internally setting up the interrupt, so it will start @~17, not 10
                     wCycle = wLeft > 0 ? DMAMAP[wLeft - 1] : 0xff;  // wLeft could be 0 if the NMI was delayed due to WSYNC
                 }
