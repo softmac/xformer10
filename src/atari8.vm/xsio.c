@@ -334,6 +334,7 @@ BOOL AddDrive(void *candy, int i, BYTE *pchPath)
 
                 // Normally, the first three sectors are packed into the first 384 bytes. Then there is 384 blank bytes.
                 // Then starts sector 4 at offset $300
+                // !!! I don't support noticing that it's really MD_QD, but nobody seems to care
                 rgDrives[i].mode = MD_DD;
 
                 // Some old broken .ATR files have the 1st 3 sectors as the first half of the first 3 256 byte sectors
@@ -357,6 +358,13 @@ BOOL AddDrive(void *candy, int i, BYTE *pchPath)
                             rgDrives[i].mode = MD_DD_OLD_ATR2;
                             rgDrives[i].wSectorMac = 720;  // it looked like 718 before because it's shorter
                         }
+            }
+
+            // 128 byte sectors is either SD or ED. Some ATR files are truncated, some padded with tons of extra 0's
+            else
+            {
+                if (rgDrives[i].wSectorMac > 720)
+                    rgDrives[i].mode = MD_ED;
             }
         }
         else

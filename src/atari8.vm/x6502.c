@@ -730,14 +730,16 @@ HANDLER(op00)
 
     // We are trying to execute in memory non-existent in an 800, we're probably the wrong VM type.
     // Hitting a BRK in OS code is by design for Mag SCAT #008 etc., and hangs if we switch to XL
-    // !!! Did anybody rely on a BRK in the OS switching to XL?
-    // ... or ...
-    // we are in an infinite loop of a BRK jumping to 0 which soon does a BRK (Protector 800). This means that the next
-    // two return addresses (with a P reg between them) are the same, 1 greater than our PC (page 0)
-
-    if ((regPC >= 0xc000 && regPC < 0xd800 && mdXLXE == md800) ||
-        (rgbMem[regSP + 2] == regPC + 1 && rgbMem[regSP + 3] == 0x00 && rgbMem[regSP + 5] == regPC + 1 && rgbMem[regSP + 6] == 0x00))
+    // !!! Did anybody rely on a BRK in the OS code switching to XL?
+    if (regPC >= 0xc000 && regPC < 0xd800 && mdXLXE == md800)
         KIL(candy);     // you shouldn't touch the PC after calling this
+
+    // We are in an infinite loop of a BRK jumping to 0 which soon does a BRK. This means that the next
+    // two return addresses (with a P reg between them) are the same, 1 greater than our PC (page 0)
+    // What to do? Protector wants to be an XL.
+    else if (mdXLXE == md800 && rgbMem[regSP + 2] == regPC + 1 && rgbMem[regSP + 3] == 0x00 && rgbMem[regSP + 5] == regPC + 1 &&
+                                                                                                    rgbMem[regSP + 6] == 0x00)
+        KIL(candy);
 
     else
     {
