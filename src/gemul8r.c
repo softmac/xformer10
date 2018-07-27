@@ -1957,6 +1957,13 @@ int CALLBACK WinMain(
         // THIS IS OUR MAIN LOOP
         // =====================
 
+        // the VM notices when a disk is write protected while executing, and can't notify us of a change. So to even get this
+        // menu item correct at startup, we need to constantly query. It's too slow to FixAllMenus.
+        if (v.iVM >= 0 && rgpvm[v.iVM]->rgvd[0].sz[0])
+            CheckMenuItem(vi.hMenu, IDM_WP1, FWriteProtectDiskVM(v.iVM, 0, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
+        if (v.iVM >= 0 && rgpvm[v.iVM]->rgvd[1].sz[0])
+            CheckMenuItem(vi.hMenu, IDM_WP2, FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
+
         // We delayed this until now because sizing would fill black in our pretty window.
         // Since we now do 1 BitBlt instead of as many as 99 or more, widening the window will not pop more VMs into the space you
         // open up, everything you grow will be black, but that's not a big deal like making the whole window go black was.
