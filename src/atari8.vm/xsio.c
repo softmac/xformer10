@@ -66,9 +66,10 @@ int fXFCable;
 // I borrow the bottom two bits of the file #. These files can't be easily copied to an ATR image either for this emulator
 // or for real hardware (the image is too big plus this hack breaks DOS 2.0)
 
-// A couple more things I should note are that at $720 there is a SEC because an app (barahir) refuses to run
-// if the carry isn't set after JMP ($2e2). Also, some apps expect the jump vector $c to be initialized to
-// $e4c0 but loading our fake loader changes it to our run address, so we have to put it back (@ $858) (AT_ARTIS)
+// Some apps expect the jump vector $c to be initialized to $e4c0 but loading our fake loader changes it to our run address,
+// so we have to put it back (@ $858) (AT_ARTIS)
+// Also, @$720 we do a SEC because even though we have hacked our SIO hook to set the carry after it finished, my loader might
+// clear it again before jumping through ($2e0) which isn't supposed to happen (Barahir.xex)
 
 const BYTE Bin1[128] = {
     0x00, 0x03, 0x00, 0x07, 0x58, 0x08, 0x18, 0x60, 0xA9, 0x00, 0x8D, 0x44, 0x02, 0xA8, 0x99, 0x80,
@@ -716,7 +717,8 @@ lNAK:
           /*  printf("SIO command 'S'\n"); */
 
             /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
-            cpuPokeB (candy, wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (pdrive->fWP ? 8 : 0));
+            BOOL fMotorOn = (wLastSectorFrame && wFrame - wLastSectorFrame < 180);  // ~3 seconds until the motor spins down
+            cpuPokeB (candy, wBuff++, ((md == MD_ED) ? 128 : 0) + (fDD ? 32 : 0) + (fMotorOn ? 16 : 0) + (pdrive->fWP ? 8 : 0));
 
             cpuPokeB (candy, wBuff++, 0xFF);         /* controller */
             cpuPokeB (candy, wBuff++, 0xE0);         /* format timeout */
@@ -991,11 +993,15 @@ lNAK:
 
                     else
                     {
-                        // now pretend 7 jiffies elapsed for apps that time disk sector reads (Repton)
-                        BYTE jif = 7;
+                        // now pretend some jiffies elapsed for apps that time disk sector reads
+                        // (Repton is not that fussy, but mag OVERMIND.atr needs same sector then different sector combo
+                        // in same track to take < 13 jiffies
+                        // !!! Do all this for _FILEBIN and _FILEBAS and for writing too?
+                
+                        BYTE jif = 4;
                         // reading the same sector as last time takes twice as long
                         if (wSector == wLastSIOSector)
-                            jif = 14;
+                            jif = 8;
                         BYTE oldjif = rgbMem[20];
                         rgbMem[20] = oldjif + jif;
                         if (oldjif >= (256 - jif))
@@ -1009,6 +1015,7 @@ lNAK:
                         wRetStat = SIO_OK;
                         if (wLastSIOSector >= 0)
                             wLastSIOSector = wSector;
+                        wLastSectorFrame = wFrame;  // note what time it is
                     }
                 }
             }
@@ -1131,6 +1138,10 @@ lExit:
     regY = (BYTE)wRetStat;
     regP = (regP & ~ZBIT) | ((wRetStat == 0) ? ZBIT : 0);
     regP = (regP & ~NBIT) | ((wRetStat & 0x80) ? NBIT : 0);
+
+    // !!! At least when a sector read is completed, C is set, and some apps looks for this! (Barahir, Mag Overmind.atr)
+    if (wRetStat == SIO_OK)
+        regP |= CBIT;
 
     // SIO turns CRITIC on while executing (ship.xex needs to avoid copying the DMACTL shadow and turning off the screen),
     // and then in SIOCheck() we turn critic off again when the SIO delay is done or much of the VBI will never run again,

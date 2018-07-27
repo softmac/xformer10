@@ -2465,6 +2465,8 @@ BOOL __cdecl WarmbootAtari(void *candy)
     isectorPos = 0;
     fWant8 = 0;
     fWant10 = 0;
+    wLastSIOSector = 0;
+    wLastSectorFrame = 0;
 
     // unused new starting positions of PMGs must be huge, since 0 and some negative numbers are valid locations
     for (BYTE i = 0; i < 4; i++)

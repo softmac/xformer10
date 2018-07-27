@@ -412,6 +412,7 @@ typedef struct
 
     WORD m_wFrame, m_wScan;
     short m_wLastSIOSector; // which sector we read last time
+    WORD m_wLastSectorFrame;// when we last read a sector, to know when the spin down the motor
     BYTE m_WSYNC_Waiting;   // do we need to limit the next scan line to the part after WSYNC is released?
     BYTE m_fAltBinLoader;   // use the alternate binary loader
 
@@ -534,6 +535,7 @@ typedef struct
 #define fCartNeedsSwap CANDY_STATE(fCartNeedsSwap)
 #define fRedoPoke     CANDY_STATE(fRedoPoke)
 #define wLastSIOSector CANDY_STATE(wLastSIOSector)
+#define wLastSectorFrame CANDY_STATE(wLastSectorFrame)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define wLastScanCh   CANDY_STATE(wLastScanCh)
 #define bp            CANDY_STATE(bp)
