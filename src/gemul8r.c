@@ -2109,7 +2109,7 @@ int CALLBACK WinMain(
             for (int i = 0; i < v.cVM; i++)
             {
                 // change VM type
-                if (rgpvmi(i)->fKillMePlease && rgpvmi(i)->fKillMePlease != 2)
+                if (rgpvmi(i)->fKillMePlease && rgpvmi(i)->fKillMePlease != 2 && rgpvmi(i)->fKillMePlease != 4)
                 {
                     // what type are we now?
                     int type = rgpvm[i]->bfHW;
@@ -2135,8 +2135,8 @@ int CALLBACK WinMain(
                     rgpvmi(i)->fKillMePlease = FALSE;
                 }
                 
-                // coldboot only - to switch binary loaders and try a different one
-                else if (rgpvmi(i)->fKillMePlease == 2)
+                // coldboot only - to switch binary loaders and try a different one, or to put BASIC in
+                else if (rgpvmi(i)->fKillMePlease == 2 || rgpvmi(i)->fKillMePlease == 4)
                 {
                     if (!ColdStart(i))
                         DeleteVM(v.iVM, TRUE);
@@ -5178,26 +5178,18 @@ break;
         case IDM_TOGGLEBASIC:
             assert(v.iVM != -1);
 
-            // It's a keystroke combo, so it's not as simple as sending the right key to the VM. The VM needs to see
-            // SHIFT actively pressed for that to work
-            if (v.iVM != -1)
-            {
-                if (FSaveStateVM(v.iVM)) // NOP
-                {
-                    // !!! I put ramtop at the top of the candy structure
-                    WORD *ramtop = (WORD *)rgpvmi(v.iVM)->pPrivate;
-                    if (*ramtop == 0xC000)
-                        *ramtop = 0xA000;
-                    else
-                        *ramtop = 0xC000;
-                }
-            }
+            // secret code to ask to toggle BASIC
+            rgpvmi(v.iVM)->fKillMePlease = 5;
 
             if (!ColdStart(v.iVM))
             {
+                rgpvmi(v.iVM)->fKillMePlease = 0;
                 DeleteVM(v.iVM, TRUE);
                 FixAllMenus(FALSE);
             }
+
+            rgpvmi(v.iVM)->fKillMePlease = 0;
+
             // does not otherwise affect menus
             break;
 #endif

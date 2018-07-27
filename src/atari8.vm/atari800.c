@@ -2506,6 +2506,17 @@ BOOL __cdecl ColdbootAtari(void *candy)
     if (pvmin->fKillMePlease == 2)
         bp = 0xffff;
 
+    // we are cold booting because we want BASIC
+    else if (pvmin->fKillMePlease == 4)
+        ramtop = 0xa000;
+
+    // we are cold booting because we want to TOGGLE BASIC
+    else if (pvmin->fKillMePlease == 5)
+        if (ramtop == 0xc000)
+            ramtop = 0xa000;
+        else
+            ramtop = 0xc000;
+    
     // 800 resets PIA on cold start only
     if (mdXLXE == md800)
         ResetPIA(candy);
@@ -3314,11 +3325,15 @@ void KillMePleaseXE(void *candy)
 // we specifically want BASIC swapped into the same VM type we are now
 void KillMePleaseBASIC(void *candy)
 {
-    if (v.fAutoKill)
+    // We can get into an infinite loop with a false positive of BASIC on XL/XE, that then swaps out BASIC which hits the false
+    // positive again and puts it back in. (OHJFM00B.ATR, CyberXE, Movie Make Late)
+    if (v.fAutoKill && !fAlreadyTriedBASIC)
     {
         vi.fExecuting = FALSE;  // WRONG VM! alert the main thread something is up
 
         pvmin->fKillMePlease = 4;   // say which thread died, special code for BASIC
+
+        fAlreadyTriedBASIC = TRUE;
 
         // quit the thread as early as possible
         wLeft = 0;  // exit the Go6502 loop
