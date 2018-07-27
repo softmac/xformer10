@@ -2426,6 +2426,9 @@ BOOL __cdecl WarmbootAtari(void *candy)
         fBrakes = fBrakesSave;  // go back to old turbo mode
     }
 
+    fKeyPressed = 0;
+    bshftByte = 0;
+
     // notice NTSC/PAL switch
     fPAL = pvm->fEmuPAL;
     PAL = fPAL ? 1 : 15;    // set GTIA register

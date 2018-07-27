@@ -16,49 +16,75 @@
 
 #ifdef XFORMER
 
-// CheckKey() is called during the vertical blank to process the keyboard buffer which is filled
-// by KeyAtari() in response to windows messages for keys, mouse, joystick
+// CheckKey() is called after the vertical blank (calling before the VBI breaks unpausing MULE) to process the keyboard buffer
+// which is filled by KeyAtari() in response to windows messages for keys, mouse, joystick
 //
-// fDoShift means look at the shift key, otherwise use the value in myShift
+// fDoShift means look at the shift key, otherwise use the value in myShift (for text pasting)
 //
 void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
 {
     BYTE scan = 0;
     BYTE ch = 0;
     WORD shift = 0;
-    int sh;
     //BOOL fForceCtrl = FALSE;
 
     extern BYTE rgbMapScans[1024];
 
-// printf("in CheckKey\n");
+    //printf("in CheckKey\n");
 
+    // a key has gone up or down
     if (pvmin->keyhead != pvmin->keytail)
     {
         scan = pvmin->rgbKeybuf[pvmin->keytail++];
-        ch   = pvmin->rgbKeybuf[pvmin->keytail++];
+        ch = pvmin->rgbKeybuf[pvmin->keytail++];
         pvmin->keytail &= 1023;
-
-        //DebugStr("CheckKey: scan = %02X, ch = %02X\n", scan, ch);
 
         if ((pvmin->keytail & 1) || (pvmin->keyhead & 1))
             pvmin->keytail = pvmin->keyhead = 0;
+
+        // We get repeating scan/ch codes while the key is held down, and sometimes multiple ups. Ignore those.
+
+        if ((scan || ch) && (wLastScanCh == ((scan << 8) | ch)))
+            return;
+
+        wLastScanCh = ((scan << 8) | ch);
+
+        fKeyPressed = (scan || ch);
     }
 
+    // nothing has happened
+    else
+        return;
+
+#if 0 // never happens, and shouldn't ever set kbcode to 255 anyway
     if (scan == 255)
     {
         KBCODE = 255;
         fKeyPressed = 0;
         return;
     }
+#endif
 
     if (fDoShift)
         shift = bshftByte & (wScrlLock | wCapsLock | wCtrl | wAnyShift);
     else
         shift = myShift;
     
-    //fBrakes = (shift & wScrlLock);    // using PGUP since modern keyboards don't have scroll lock anymore
     shift &= ~wScrlLock;
+
+    //ODS("CheckKey: scan = %02X, ch = %02X, shift = %02x\n", scan, ch, shift);
+
+    if (shift & 3)
+    {
+        //ODS("SHIFT DOWN\n");
+        SKSTAT &= ~0x08;  // shift key pressed  // !!! not in sync with bit 2, but that seems to be OK
+    }
+
+    else
+    {
+        //ODS("SHIFT UP\n");
+        SKSTAT |= 0x08;      // shift key not pressed
+    }
 
     if (shift & wCapsLock)
     {
@@ -74,31 +100,17 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
         shift &= ~wCapsLock;
     }
 
-    if (scan || ch)
+    if (!(scan || ch))
     {
-        fKeyPressed = (scan << 8) | ch;
-
-        //DebugStr("ch=%02X scan=%02X shift=%02X\n", ch, scan, shift);
-    }
-    else
-    {
-        if (!fKeyPressed)
-            return;
-
         SKSTAT |= 0x04; // notify that the key is up
         IRQST |= 0x40;  // no longer assert the key down interrupt
-        IRQST |= 0x80;  // no longer assert the BREAK key down interrupt
+        IRQST |= 0x80;  // !!! supposed to stop asserting it if it's not handled right away, not on key up
+                        // but it has to remain asserted for the duration of the interrupt handler
 
-        fKeyPressed = 0;
         //ODS("Upstroke @ %03x:%02x\n", wScan, wCycle);
         return;
     }
 
-    if (shift & 3)
-        SKSTAT &= ~0x08;  // shift key pressed  // !!! not in sync with bit 2, but that seems to be OK
-    else
-        SKSTAT |= 0x08;      // shift key not pressed
-    
     shift &= 7;    // mask out Alt bit to not mess up table look up
 
     if (ch == 0xE0)
@@ -111,7 +123,7 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
 
             case 0x4F:
                 // End (not on numeric keypad) - break key
-
+                //ODS("BREAK KEY\n");
                 if (IRQEN & 0x80)
                     IRQST &= ~0x80;
                 return;
@@ -346,18 +358,16 @@ void CheckKey(void *candy, BOOL fDoShift, WORD myShift)
 
 lookitup:
 
-    sh = shift;
-
     //if (fForceCtrl) sh = shift | 4;
-
-    KBCODE = rgbMapScans[scan*4 + (sh>>1) | (sh&1)];
-    //ODS("KBCODE % 02x ", KBCODE);
-
-    if (KBCODE == 255)
-    {
+    
+    BYTE kb = rgbMapScans[(scan*4 + (shift >> 1)) | (shift & 1)];    // bit 1 for CTRL, bit 0 for any SHIFT
+    
+    // if only shift or control is pressed, but no real key, do not report it
+    if (kb == 0xff)
         return;
-    }
 
+    KBCODE = kb;
+    
 lookit2:
     
     //ODS("Downstroke %02x @ %03x:%02x\n", KBCODE, wScan, wCycle);
