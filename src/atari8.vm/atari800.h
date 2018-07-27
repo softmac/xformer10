@@ -399,6 +399,7 @@ typedef struct
     // !!! For efficiency, the above variables used in the tight 6502 loop need to be at the front of this structure
 
     WORD m_fKeyPressed;     // xkey.c
+    WORD m_wLastScanCh;     // xkey.c, last scan codes seen
     BOOL m_wShiftChanged;   // xkey.c
 
     BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
@@ -534,6 +535,7 @@ typedef struct
 #define fRedoPoke     CANDY_STATE(fRedoPoke)
 #define wLastSIOSector CANDY_STATE(wLastSIOSector)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
+#define wLastScanCh   CANDY_STATE(wLastScanCh)
 #define bp            CANDY_STATE(bp)
 #define wShiftChanged CANDY_STATE(wShiftChanged)
 #define wLiveShift    CANDY_STATE(wLiveShift)
