@@ -402,6 +402,7 @@ typedef struct
     WORD m_wLastScanCh;     // xkey.c, last scan codes seen
     BOOL m_wShiftChanged;   // xkey.c
 
+    BOOL m_fAlreadyTriedBASIC;  // have we auto-swapped in BASIC
     BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
 
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
@@ -536,6 +537,7 @@ typedef struct
 #define fRedoPoke     CANDY_STATE(fRedoPoke)
 #define wLastSIOSector CANDY_STATE(wLastSIOSector)
 #define wLastSectorFrame CANDY_STATE(wLastSectorFrame)
+#define fAlreadyTriedBASIC CANDY_STATE(fAlreadyTriedBASIC)
 #define fKeyPressed   CANDY_STATE(fKeyPressed)
 #define wLastScanCh   CANDY_STATE(wLastScanCh)
 #define bp            CANDY_STATE(bp)
