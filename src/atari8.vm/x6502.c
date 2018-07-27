@@ -2731,7 +2731,7 @@ HANDLER(opAA)
 HANDLER(opAB)
 {
     EA_imm(candy);
-    regEA = regA | 0xee & (BYTE)regEA;
+    regEA = (regA | 0xee) & (BYTE)regEA;
     LDX_com(candy);
     LDA_com(candy);
     wLeft -= 2;
