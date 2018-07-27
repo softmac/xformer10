@@ -2094,7 +2094,11 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
         }
         else if (((PVMINST)(pGem + 1))->fKillMePlease == 4) // our special kill code for "need BASIC"
         {
-            // keep the same type
+            // Many programs need XL Basic to use GR. 12-15, which I can't detect, so I could try XL first, but...
+            // !!! This breaks StarQuest Star Warrior, which hangs in XL BASIC but works on 800.
+            // It's OK, when they get an error 145 at line xxxx, they can see line xxxx is doing, eg., GR.12
+            //if (type == md800)
+            //    type = mdXL;
             initramtop = 0xa000;
         }
         else if (type == md800)

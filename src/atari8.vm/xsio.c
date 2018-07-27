@@ -844,7 +844,14 @@ lNAK:
                 // Since I/O makes sounds, I presume it's OK to alter the sounds on the user like this
                 //AUDF1 = AUDF2 = AUDF3 = AUDF4 = 0;    // doesn't work by itself!
                 AUDC1 = AUDC2 = AUDC3 = AUDC4 = 0;
-                
+
+                // POKEY Mag 95_May needs to not read the sector if the direction isn't read, or it will trash page 3.
+                if ((wStat & 0xc0) != 0x40)
+                {
+                    wStat = SIO_OK; // Altirra returns NO ERROR, though, so that's probably proper
+                    break;
+                }
+
                 // create a virtual whole disk image out of a single ATARI file
                 if ((md == MD_FILE) || (md == MD_FILEBIN) || (md == MD_FILEBAS))
                 {
@@ -1006,9 +1013,14 @@ lNAK:
                 }
             }
             else if ((wCom == 'W') || (wCom == 'P'))
-                {
-                //if (wStat != 0x80)    // only the cassette handler checks this, not disk I/O, this would break apps
-                //    goto lNAK;
+            {
+                // !!! Which apps break? Am I sure? Because the disk handler does check for $40 for read
+                //if ((wStat & 0xc0) != 0x80)    // only the cassette handler checks this, not disk I/O, this would break apps
+                //{
+                //    wStat = SIO_OK; // was goto lNAK, was that the problem?
+                //    break;
+                //}
+
                 if (pdrive->fWP)
                     {
                     wRetStat = SIO_DEVDONE;
@@ -1018,7 +1030,7 @@ lNAK:
                     wRetStat = SIO_DEVDONE;
                 else
                     wRetStat = SIO_OK;
-                }
+            }
             break;
             }
         }
