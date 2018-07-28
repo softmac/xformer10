@@ -1858,10 +1858,16 @@ void ResetPokeyTimer(void *candy, int irq)
 
     Assert(irq == 0 || irq == 1 || irq == 3);
 
+    // this function actually gets called quite a lot, precompute everything to avoid * and /
+    const int NTSC_CLK28 = NTSC_CLK / 28;
+    const int PAL_CLK28 = PAL_CLK / 28;
+    const int NTSC_CLK114 = NTSC_CLK / 114;
+    const int PAL_CLK114 = PAL_CLK / 114;
+
     pCLK = fPAL ? PAL_CLK : NTSC_CLK;
-    pCLK28 = pCLK / 28;
-    pCLK114 = pCLK / 114;
-    
+    pCLK28 = fPAL ? PAL_CLK28 : NTSC_CLK28;
+    pCLK114 = fPAL ? PAL_CLK114 : NTSC_CLK114;
+
     // f = how many cycles do we have to count down from? (Might be joined to another channel)
     // c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
     // Then set now how many cycles have to execute before reaching 0
