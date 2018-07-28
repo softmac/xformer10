@@ -1782,7 +1782,7 @@ int CALLBACK WinMain(
 
     vi.fExecuting = TRUE;    // OK, go! This will get reset when a VM hits a breakpoint, or otherwise fails
 
-    // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb
+    // Now maximize, if that's the way we last left it. Don't ever come up minimized, that's dumb (and breaks CreateTiledBitmap)
     // Make sure to come up initially in the same state as we closed, for the sWheelOffset number to make sense
     // I'm not sure how, but even if we come up maximized, we're properly shrinking back to the last restored window size
     ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED : nCmdShow);
@@ -1964,8 +1964,8 @@ int CALLBACK WinMain(
         if (v.iVM >= 0 && rgpvm[v.iVM]->rgvd[1].sz[0])
             CheckMenuItem(vi.hMenu, IDM_WP2, FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE) ? MF_CHECKED : MF_UNCHECKED);
 
-        // We delayed this until now because sizing would fill black in our pretty window.
-        // Since we now do 1 BitBlt instead of as many as 99 or more, widening the window will not pop more VMs into the space you
+        // We delayed this until now because sizing would fill black in our pretty window. In tiled mode with a non-sucky video card,
+        // since we now do 1 BitBlt instead of as many as 99 or more, widening the window will not pop more VMs into the space you
         // open up, everything you grow will be black, but that's not a big deal like making the whole window go black was.
         if (fNeedTiledBitmap)
         {
@@ -2009,10 +2009,9 @@ int CALLBACK WinMain(
 
         ULONGLONG FrameBegin = GetCycles();
 
-        // Tell the thread(s) to go.
-        if (v.cVM && v.fTiling && cThreads)
+        // Tell the thread(s) to go (if not minimized)
+        if (v.cVM && v.fTiling && cThreads && v.swWindowState != SW_SHOWMINIMIZED)
         {
-
             ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
 
             for (int ii = 0; ii < cThreads; ii++)
@@ -2050,8 +2049,8 @@ int CALLBACK WinMain(
 			}
         }
 
-        // not tiled. There's only one or two threads
-        else if (!v.fTiling && v.iVM >= 0)
+        // not tiled. There's only one or two threads (if not minimized)
+        else if (!v.fTiling && v.iVM >= 0 && v.swWindowState != SW_SHOWMINIMIZED)
         {
             assert(v.cVM);
             int nt = sPan ? 2 : 1;
@@ -2161,7 +2160,7 @@ int CALLBACK WinMain(
         // Before checking fBrakes to throttle the speed or not, go ahead and render the current guest video frame
         // if necessary (as opposed to throttling and then rendering which introduces time skew in the guest).
 
-        if (fRenderThisTime)
+        if (fRenderThisTime && v.swWindowState != SW_SHOWMINIMIZED)    // don't waste time if we're minimized
         {
             ULONGLONG start = GetMs();
             RenderBitmap();
@@ -2205,14 +2204,14 @@ int CALLBACK WinMain(
         ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? PAL_CLK : NTSC_CLK;
         ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? JIFP : JIFN;
         
-        // Don't spin in a tight loop doing nothing while minimized
-        if ((fBrakes || !cThreads) && (cCur < ullsec))
+        // Don't spin in a tight loop doing nothing while minimized or if there are no threads
+        if ((fBrakes || !cThreads || v.swWindowState == SW_SHOWMINIMIZED) && (cCur < ullsec))
         {
             while (cCur < ulljif)
             {
                 // was - If the deadline is still over half a jiffy away, use Sleep, otherwise poll
                 // now - never poll, that wastes an entire core and the user doesn't notice anything smoother
-                Sleep(1);// Sleep((cCur < (ulljif / 2)) ? 8 : 0);
+                Sleep((cCur < (ulljif / 2)) ? 8 : 1);   // (was else 0)
                 cCur = GetCycles() - cLastJif;  // macro uses same conditions as ullsec and ulljif
             };
 
@@ -4162,8 +4161,7 @@ LRESULT CALLBACK WndProc(
             GetWindowRect(hWnd, (LPRECT)&v.rectWinPos);
 
         // Don't make a tiled bitmap of the new size yet, that blanks out our window as we resize.
-        // don't try and re-make a zero size window either
-        // !!! This will waste time doing stuff while minimized
+        // Don't try and re-make a zero size window either. But later on, remember not to waste time executing the threads if minimized.
         if (v.fTiling && v.swWindowState != SW_SHOWMINIMIZED)
         {
             uExecSpeed = 0; // get to the new % statistic faster (exec speed will change with more/fewer tiles visible)
@@ -4205,12 +4203,23 @@ LRESULT CALLBACK WndProc(
             fS = TRUE;
         }
         if (fS)
+        {
             DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
+            // we also need to InitThreads again, but we can't (see below)
+        }
 
-        InitThreads();  // if we deleted a visible VM, we'd hang
+        // Windows sends this before a resize, so we may still be a massive sized window after changing to a lower resolution,
+        // a big size that you could never get through ordinary means, and we will crash making more VMs than we thought possible.
+        // Also, if we are minimized, making threads and a zero-sized tiled bitmap will break everything. So don't deal with this
+        // now, simply wait for the inevitable WM_SIZE coming soon and that will Init our Threads and Tiled Bitmap
+#if 0
+        {
+            InitThreads();
 
-        if (!CreateTiledBitmap())
-            fNeedTiledBitmap = TRUE;    // we can try again later
+            if (!CreateTiledBitmap())
+                fNeedTiledBitmap = TRUE;    // we can try again later
+        }
+#endif
 
         //for some reason, in fullscreen, we need this extra push
         if (v.fFullScreen)
