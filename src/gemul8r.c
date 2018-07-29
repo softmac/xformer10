@@ -4019,6 +4019,62 @@ INT CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lp, LPARAM pData)
     return 0;
 }
 
+// handle a WM_DISPLAYCHANGE, or a moment when we should have gotten one
+void ChangeDisplay(int x, int y)
+{
+    //printf("WM_DISPLAY x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
+
+#if 0
+    if (vi.fInDirectXMode)
+    {
+        RECT Rect;
+
+        SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
+        SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right - Rect.left, Rect.bottom - Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+#endif
+
+    // new screen size means a different number of tiles fit on the screen, make some new bitmaps
+    sMaxTiles = (x / 320 + 1) * (y / 240 + 1);
+
+    // don't kill the app if this fails, kill VMs until it succeeds
+    BOOL fS = FALSE;
+    while (!CreateNewBitmaps() && v.cVM)
+    {
+        SacrificeVM();
+        fS = TRUE;
+    }
+    if (fS)
+    {
+        DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
+                            // we also need to InitThreads again, but we can't (see below)
+    }
+
+    // Windows usually sends this before a resize, so we may still be a massive sized window after changing to a lower resolution,
+    // a big size that you could never get through ordinary means, and we will crash making more VMs than we thought possible.
+    // Also, if we are minimized, making threads and a zero-sized tiled bitmap will break everything. So don't deal with this
+    // now, simply wait for the inevitable WM_SIZE coming soon and that will Init our Threads and Tiled Bitmap
+    // It's also possible that Windows sent us the WM_SIZE before the WM_DISPLAYCHANGED, which means we are actually being called
+    // from WM_SIZE, so we are definitely about to handle a resize.
+#if 0
+    {
+        InitThreads();
+
+        if (!CreateTiledBitmap())
+            fNeedTiledBitmap = TRUE;    // we can try again later
+    }
+#endif
+
+    //for some reason, in fullscreen, we need this extra push
+    if (v.fFullScreen)
+    {
+        ShowWindow(vi.hWnd, SW_RESTORE);
+        ShowWindow(vi.hWnd, SW_MAXIMIZE);
+    }
+}
+
+
 /****************************************************************************
 
     FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -4110,12 +4166,15 @@ LRESULT CALLBACK WndProc(
         //printf("WM_SIZE x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
 #endif
 
-        // Each resize, re-calc how many tiles fit per row, it's used in many places. TileSize must already be set
-        // before the first resize
+        // Sometimes we get a WM_SIZE BEFORE the WM_DISPLAYCHANGED instead of after, which kind of defeats the purpose.
+        // We will crash if the window has been resized bigger than possible before making too many threads
         RECT rect;
         GetClientRect(vi.hWnd, &rect);
         Assert(sTileSize.x);
-        
+        int smax = (rect.right / 320 + 1) * (rect.bottom / 240 + 1);
+        if (smax > sMaxTiles)
+            ChangeDisplay(rect.right, rect.bottom); // we better allocate enough space for enough tiles to fill a window this big
+
         // This code hasn't been enabled in years
         if (vi.fInDirectXMode)
           {
@@ -4124,6 +4183,9 @@ LRESULT CALLBACK WndProc(
             AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
             SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
           }
+
+        // Each resize, re-calc how many tiles fit per row, it's used in many places. TileSize must already be set
+        // before the first resize
 
         WINDOWPLACEMENT wp;
         wp.length = sizeof(WINDOWPLACEMENT);
@@ -4178,55 +4240,8 @@ LRESULT CALLBACK WndProc(
         break;
 
     case WM_DISPLAYCHANGE:
-#if !defined(NDEBUG)
-        printf("WM_DISPLAY\n");
-#endif
-        printf("WM_DISPLAY x = %d, y = %d\n", LOWORD(lParam), HIWORD(lParam));
+        ChangeDisplay(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
 
-        if (vi.fInDirectXMode)
-        {
-            RECT Rect;
-
-            SetRect(&Rect, 0, GetSystemMetrics(SM_CYCAPTION), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
-            AdjustWindowRectEx(&Rect, WS_POPUP | WS_CAPTION, FALSE, 0);
-            SetWindowPos(vi.hWnd, NULL, Rect.left, Rect.top, Rect.right-Rect.left, Rect.bottom-Rect.top, SWP_NOACTIVATE | SWP_NOZORDER);
-        }
-
-        // new screen size means a different number of tiles fit on the screen, make some new bitmaps
-        sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
-        
-        // don't kill the app if this fails, kill VMs until it succeeds
-        BOOL fS = FALSE;
-        while (!CreateNewBitmaps() && v.cVM)
-        {
-            SacrificeVM();
-            fS = TRUE;
-        }
-        if (fS)
-        {
-            DeleteVM(-1, TRUE); // do the stuff we skipped inside Sacrifice to speed things up
-            // we also need to InitThreads again, but we can't (see below)
-        }
-
-        // Windows sends this before a resize, so we may still be a massive sized window after changing to a lower resolution,
-        // a big size that you could never get through ordinary means, and we will crash making more VMs than we thought possible.
-        // Also, if we are minimized, making threads and a zero-sized tiled bitmap will break everything. So don't deal with this
-        // now, simply wait for the inevitable WM_SIZE coming soon and that will Init our Threads and Tiled Bitmap
-#if 0
-        {
-            InitThreads();
-
-            if (!CreateTiledBitmap())
-                fNeedTiledBitmap = TRUE;    // we can try again later
-        }
-#endif
-
-        //for some reason, in fullscreen, we need this extra push
-        if (v.fFullScreen)
-        {
-            ShowWindow(vi.hWnd, SW_RESTORE);
-            ShowWindow(vi.hWnd, SW_MAXIMIZE);
-        }
         break;
 
 #if !defined(NDEBUG)
