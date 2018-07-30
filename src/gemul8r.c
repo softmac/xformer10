@@ -13,6 +13,8 @@
 
 ****************************************************************************/
 
+#define DDRAW 0
+
 //
 // THEORY OF OPERATION
 //
@@ -334,9 +336,9 @@ void DisplayStatus(int iVM)
         strcat(rgch0, rgch);
     }
 
-#if 0
+#if 1
     // former debug output will give some monitor refresh information, but it interferes with the search string and shouldn't be needed
-    sprintf(rgch, " (%uHz %u/%ums renders)", v.vRefresh, renders, lastRenderCost);
+    sprintf(rgch, " (%ums renders)", /* v.vRefresh, renders, */ lastRenderCost);
     strcat(rgch0, rgch);
 #endif
 
@@ -3153,7 +3155,7 @@ void RenderBitmap()
         {
             BYTE *ptb = vvmhw.pTiledBits;
 #if DDRAW
-            BYTE *ptb = LockSurface(&sStride);
+            ptb = LockSurface(&sStride);
             if (!ptb)
                 return;
 #endif
@@ -3235,10 +3237,6 @@ void RenderBitmap()
                 }
             }
 
-            // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
-            if (vvmhw.hdcTiled)
-                BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vvmhw.hdcTiled, 0, 0, SRCCOPY);
-
 #if DDRAW
             UnlockSurface();
             POINT p;
@@ -3246,7 +3244,11 @@ void RenderBitmap()
             ClientToScreen(vi.hWnd, &p);
             RECT rcDest = rect;                  
             OffsetRect(&rcDest, p.x, p.y);
-            HRESULT err = PrimarySurface->lpVtbl->Blt(PrimarySurface, &rcDest, SecondarySurface, &rect, DDBLT_WAIT, 0);
+            PrimarySurface->lpVtbl->Blt(PrimarySurface, &rcDest, SecondarySurface, &rect, DDBLT_WAIT, 0);
+#else
+            // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
+            if (vvmhw.hdcTiled)
+                BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vvmhw.hdcTiled, 0, 0, SRCCOPY);
 #endif
         }
     }
