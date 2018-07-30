@@ -12,12 +12,7 @@
 
 ****************************************************************************/
 
-#if 1
 #include "gemtypes.h" // main include file
-#else
-#include <windows.h>
-#include <ddraw.h>
-#endif
 
 
 /**************************************************************************
@@ -25,7 +20,8 @@
  **************************************************************************/
 
 IDirectDraw            *dd;     // The entire dd library
-IDirectDrawSurface     *FrontBuffer;
+//IDirectDrawSurface     *PrimarySurface;
+//IDirectDrawSurface     *SecondarySurface;
 IDirectDrawPalette     *Palette;
 DDSURFACEDESC ddsd;             // The DirectDraw surface description
 
@@ -112,7 +108,7 @@ int CheckDDERR(HRESULT hRet)
     case DDERR_OUTOFMEMORY: return hRet;
     case DDERR_WASSTILLDRAWING: return hRet;
     case DDERR_NOTLOCKED:   return hRet;
-    case DD_OK: break;
+    case DD_OK: return hRet;
     default: return hRet;
     }
 }
@@ -125,66 +121,37 @@ HRESULT Restore(IDirectDrawSurface *lpdds)
     return lpdds->lpVtbl->Restore(lpdds);
 }
 
-typedef HRESULT (*DDProc)(GUID FAR *, LPDIRECTDRAW FAR *, IUnknown FAR *);
+//typedef HRESULT (*DDProc)(GUID FAR *, LPDIRECTDRAW FAR *, IUnknown FAR *);
 
-#ifdef WINXP
-#define CreateProc DirectDrawCreate
 // #if !defined(_M_ARM)
 #pragma comment(linker, "/defaultlib:ddraw")
 // #endif
-#else
-DDProc CreateProc;
-#endif
 
-BOOL FInitDirectDraw()
-{
-#ifdef WINXP
-#else
-    HMODULE HDDraw;
 
-    if (CreateProc == NULL)
-        {
-        // Run-Time Load the ddraw library
-        if((HDDraw=LoadLibrary("ddraw.dll"))==NULL ||
-            (CreateProc=(DDProc)GetProcAddress(HDDraw, "DirectDrawCreate"))==NULL)
-            return FALSE;
-        }
-#endif
-
-    return TRUE;
-}
-
-BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
+BOOL InitDrawing(int dx,int dy, int bpp, HANDLE hwndApp,BOOL fReInit)
 {
     fReInit;
-
-//    DDSCAPS caps;
+    bpp;
+   
     HRESULT err;
-    HDC hdc;
-
-#ifdef WINXP
-#else
-    if (CreateProc == NULL)
-        {
-        if (!FInitDirectDraw())
-            return FALSE;
-        }
-#endif
+    //HDC hdc;
 
     if (dd == NULL)
-        {
-// #if !defined(_M_ARM)
-        if (FAILED(CreateProc(NULL, &dd, NULL)) ||      // Inialize Direct Draw
-            FAILED(dd->lpVtbl->SetCooperativeLevel(dd, hwndApp,     // Setup the cooperation with Windows
-            DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_ALLOWMODEX)))
-// #endif
-            return FALSE;
-        }
+    {
+        if (!FAILED(DirectDrawCreate(NULL, &dd, NULL)))
+            if (FAILED(dd->lpVtbl->SetCooperativeLevel(dd, hwndApp, DDSCL_NORMAL /* DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_ALLOWMODEX */)))
+            {
+                dd->lpVtbl->Release(dd);
+                return FALSE;
+            }
+    }
+    else
+        return FALSE;
 
+#if 0
     // Now we can set the resolution
-
-    while (dd->lpVtbl->SetDisplayMode(dd, *pdx, *pdy, *pbpp) != DD_OK)
-        {
+    while (dd->lpVtbl->SetDisplayMode(dd, dx, dy, bpp) != DD_OK)
+    {
         if (*pdy==200)
             {
             *pdy=240;
@@ -206,10 +173,12 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
             }
         else
             return FALSE;
-        }
+    }
+#endif
 
     // get rid of any previous surfaces.
-    if (FrontBuffer) FrontBuffer->lpVtbl->Release(FrontBuffer),    FrontBuffer = NULL;
+    if (PrimarySurface) PrimarySurface->lpVtbl->Release(PrimarySurface), PrimarySurface = NULL;
+    if (SecondarySurface) SecondarySurface->lpVtbl->Release(SecondarySurface), SecondarySurface = NULL;
     if (Palette)     Palette->lpVtbl->Release(Palette),        Palette = NULL;
 
     //
@@ -229,33 +198,29 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
     ZeroMemory(&ddsd, sizeof(ddsd));
     ddsd.dwSize = sizeof(ddsd);
     ddsd.dwFlags = DDSD_CAPS;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE |
-              DDSCAPS_VIDEOMEMORY;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE | DDSCAPS_VIDEOMEMORY;
 
     // try to get a triple buffered video memory surface.
-    err = dd->lpVtbl->CreateSurface(dd, &ddsd, &FrontBuffer, NULL);
+    err = dd->lpVtbl->CreateSurface(dd, &ddsd, &PrimarySurface, NULL);
 
+    if (err != DD_OK)
+        return FALSE;
+     
+    ddsd.dwSize = sizeof(ddsd);
+    ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
+    ddsd.dwWidth = dx;
+    ddsd.dwHeight = dy;
+
+    err = dd->lpVtbl->CreateSurface(dd, &ddsd, &SecondarySurface, NULL);
+    
     if (err != DD_OK)
     {
-    // try to just get video memory surface.
-        ddsd.dwSize = sizeof(ddsd);
-        ddsd.dwFlags = DDSD_CAPS;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_VIDEOMEMORY;
-    err = dd->lpVtbl->CreateSurface(dd, &ddsd, &FrontBuffer, NULL);
+        PrimarySurface->lpVtbl->Release(PrimarySurface);
+        return FALSE;
     }
 
-    if (err != DD_OK)
-    {
-    // try to just get video memory surface.
-        ddsd.dwSize = sizeof(ddsd);
-        ddsd.dwFlags = DDSD_CAPS;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
-    err = dd->lpVtbl->CreateSurface(dd, &ddsd, &FrontBuffer, NULL);
-    }
-
-    if (err != DD_OK)
-    return FALSE;
-
+#if 0
     // create a palette if we are in a paletized display mode.
     //
     // NOTE because we want to be able to show dialog boxs and
@@ -280,8 +245,10 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
         if (!FAILED(dd->lpVtbl->CreatePalette(dd, DDPCAPS_8BIT, ape, &Palette, NULL)))
             FrontBuffer->lpVtbl->SetPalette(FrontBuffer, Palette);
     }
-    SetCursor(NULL);                // Hide the mouse
+    
+    //SetCursor(NULL);                // Hide the mouse
     ReleaseDC(NULL, hdc);
+#endif
 
     fDDEnabled = TRUE;
     ClearSurface();
@@ -291,23 +258,28 @@ BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE hwndApp,BOOL fReInit)
 
 void UninitDrawing(BOOL fFinal)
 {
-    if (FrontBuffer)
-        {
-        FrontBuffer->lpVtbl->Release(FrontBuffer);
-        FrontBuffer = NULL;
-        }
+    if (PrimarySurface)
+    {
+        PrimarySurface->lpVtbl->Release(PrimarySurface);
+        PrimarySurface = NULL;
+    }
+    if (SecondarySurface)
+    {
+        SecondarySurface->lpVtbl->Release(SecondarySurface);
+        SecondarySurface = NULL;
+    }
 
     if (Palette)
-        {
+    {
         Palette->lpVtbl->Release(Palette);
         Palette = NULL;
-        }
+    }
 
     if (fFinal && dd)
-        {
+    {
         dd->lpVtbl->Release(dd);
         dd = NULL;
-        }
+    }
 }
 
 void ClearSurface()
@@ -330,34 +302,40 @@ void ClearSurface()
         }
 }
 
-
 BYTE *LockSurface(int *pi)
 {
-    if(fDDEnabled && dwcLock++==0)
-        if(CheckDDERR(FrontBuffer->lpVtbl->Lock(FrontBuffer, NULL, &ddsd, DDLOCK_WAIT, NULL))
+    if (fDDEnabled && dwcLock++ == 0 && SecondarySurface)
+    {
+        if (CheckDDERR(SecondarySurface->lpVtbl->Lock(SecondarySurface, NULL, &ddsd, DDLOCK_WAIT, NULL))
             == DDERR_SURFACELOST)
         {
-            Restore(FrontBuffer);
-            dwcLock=0;
+            Restore(SecondarySurface);
+            dwcLock = 0;
             return NULL;
-            return LockSurface(pi);
+            //            return LockSurface(pi); // !!!
         }
-    *pi=ddsd.lPitch;
-    return (BYTE*)ddsd.lpSurface;
+        *pi = ddsd.lPitch;
+        return (BYTE*)ddsd.lpSurface;
+    }
+    else
+        return NULL;
 }
 
 void UnlockSurface()
 {
-    if(fDDEnabled && --dwcLock==0)
-        if(CheckDDERR(FrontBuffer->lpVtbl->Unlock(FrontBuffer, NULL))
+    if (fDDEnabled && --dwcLock == 0 && SecondarySurface)
+    {
+        if (CheckDDERR(SecondarySurface->lpVtbl->Unlock(SecondarySurface, NULL))
             == DDERR_SURFACELOST)
         {
-            Restore(FrontBuffer);
-            dwcLock=1;
-            UnlockSurface();
+            Restore(SecondarySurface);
+            dwcLock = 1;
+            UnlockSurface(); // !!!
         }
+    }
 }
 
+#if 0
 BOOL FCyclePalette(BOOL fForward)
 {
     PALETTEENTRY peT;
@@ -402,4 +380,4 @@ BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq)
 
     return TRUE;
 }
-
+#endif

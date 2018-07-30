@@ -158,6 +158,9 @@ BYTE *pThreadReserve;       // allocate storage for threads before it gets fragm
 RECT sRectC;                // the size of the whole window that it is drawing a piece of
 int  sStride;               // the stride of the big client rect
 
+extern IDirectDrawSurface     *PrimarySurface;
+extern IDirectDrawSurface     *SecondarySurface;
+
 extern BOOL fDebug;         // enables DEBUG output
 extern void ODS(char *, ...);  // my printf to send to the output window, since the normal printf just goes to the ether
 
@@ -1116,14 +1119,13 @@ void InitSound();
 void UninitSound();
 
 // ddlib.c
-BOOL FInitDirectDraw();
-BOOL InitDrawing(int *pdx,int *pdy, int *pbpp, HANDLE,BOOL);
+BOOL InitDrawing(int dx,int dy, int bpp, HANDLE,BOOL);
 void UninitDrawing(BOOL fFinal);
 BYTE *LockSurface(int *);
 void UnlockSurface();
 void ClearSurface();
-//BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
-//BOOL FCyclePalette(BOOL fForward);
+BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
+BOOL FCyclePalette(BOOL fForward);
 
 //
 // Debug functions
