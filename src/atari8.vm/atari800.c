@@ -1858,52 +1858,65 @@ void ResetPokeyTimer(void *candy, int irq)
 
     Assert(irq == 0 || irq == 1 || irq == 3);
 
-    // this function actually gets called quite a lot, precompute everything to avoid * and /
-    const int NTSC_CLK28 = NTSC_CLK / 28;
-    const int PAL_CLK28 = PAL_CLK / 28;
-    const int NTSC_CLK114 = NTSC_CLK / 114;
-    const int PAL_CLK114 = PAL_CLK / 114;
-
-    pCLK = fPAL ? PAL_CLK : NTSC_CLK;
-    pCLK28 = fPAL ? PAL_CLK28 : NTSC_CLK28;
-    pCLK114 = fPAL ? PAL_CLK114 : NTSC_CLK114;
-
-    // f = how many cycles do we have to count down from? (Might be joined to another channel)
-    // c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
-    // Then set now how many cycles have to execute before reaching 0
-
-    // STIMER will call us for all 4 voices in order, so the math will work out.
-
-    // 64K and 15K clocks have an extra count (N+1) before firing, just like the audio frequency will actually be divided by N+1
-
-    if (irq == 0)
+    // these computations are expensive, so remember the last values used
+    if (AUDCTLSave == AUDCTL && AUDFxSave[irq] == rgbMem[writePOKEY + (irq << 1)])
     {
-        f[0] = AUDF1 + ((AUDCTL & 0x40) ? 0 : 1);
-        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
-        irqPokey[0] = (LONG)((ULONGLONG)f[0] * pCLK / c[0]);
-    }
-    else if (irq == 1)
-    {
-        f[1] = ((AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2) + ((AUDCTL & 0x40) ? 0 : 1);
-        c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
-        c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
-        irqPokey[1] = (LONG)((ULONGLONG)f[1] * pCLK / c[1]);
-    }
-    else if (irq == 3)
-    {
-        f[3] = ((AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4) + ((AUDCTL & 0x20) ? 0 : 1);
-        c[2] = (AUDCTL & 0x20) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);    // irq 3 needs to know what this is
-        c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
-        irqPokey[3] = (LONG)((ULONGLONG)f[3] * pCLK / c[3]);
+        irqPokey[irq] = irqPokeySave[irq];
     }
 
-    // 0 means not being used, so the minimum value for wanting an interrupt is 1
-    // !!! will anything besides an IRQ ever run if we want >1 per scan line?
-    if (f[irq] > 0 && irqPokey[irq] == 0)
+    else
+    {
+        // this function actually gets called quite a lot, precompute everything to avoid * and /
+        const int NTSC_CLK28 = NTSC_CLK / 28;
+        const int PAL_CLK28 = PAL_CLK / 28;
+        const int NTSC_CLK114 = NTSC_CLK / 114;
+        const int PAL_CLK114 = PAL_CLK / 114;
+
+        pCLK = fPAL ? PAL_CLK : NTSC_CLK;
+        pCLK28 = fPAL ? PAL_CLK28 : NTSC_CLK28;
+        pCLK114 = fPAL ? PAL_CLK114 : NTSC_CLK114;
+
+        // f = how many cycles do we have to count down from? (Might be joined to another channel)
+        // c = What is the clock frequency? If 2 is joined to 1, 2 gets 1's clock (and 4 gets 3's)
+        // Then set now how many cycles have to execute before reaching 0
+
+        // STIMER will call us for all 4 voices in order, so the math will work out.
+
+        // 64K and 15K clocks have an extra count (N+1) before firing, just like the audio frequency will actually be divided by N+1
+
+        if (irq == 0)
+        {
+            f[0] = AUDF1 + ((AUDCTL & 0x40) ? 0 : 1);
+            c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
+            irqPokey[0] = (LONG)((ULONGLONG)f[0] * pCLK / c[0]);
+        }
+        else if (irq == 1)
+        {
+            f[1] = ((AUDCTL & 0x10) ? (AUDF2 << 8) + AUDF1 : AUDF2) + ((AUDCTL & 0x40) ? 0 : 1);
+            c[0] = (AUDCTL & 0x40) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
+            c[1] = (AUDCTL & 0x10) ? c[0] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
+            irqPokey[1] = (LONG)((ULONGLONG)f[1] * pCLK / c[1]);
+        }
+        else if (irq == 3)
+        {
+            f[3] = ((AUDCTL & 0x08) ? (AUDF4 << 8) + AUDF3 : AUDF4) + ((AUDCTL & 0x20) ? 0 : 1);
+            c[2] = (AUDCTL & 0x20) ? pCLK : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);    // irq 3 needs to know what this is
+            c[3] = (AUDCTL & 0x08) ? c[2] : ((AUDCTL & 0x01) ? pCLK114 : pCLK28);
+            irqPokey[3] = (LONG)((ULONGLONG)f[3] * pCLK / c[3]);
+        }
+
+        // 0 means not being used, so the minimum value for wanting an interrupt is 1
+        // !!! will anything besides an IRQ ever run if we want >1 per scan line?
+        if (f[irq] > 0 && irqPokey[irq] == 0)
             irqPokey[irq] = 1;
 
-    //if (irqPokey[irq]) ODS("TIMER %d f=%d c=%d WAIT=%d instr\n", irq + 1, f[irq], c[irq], irqPokey[irq]);
+        // remember the values used to come up with this result, and the result
+        AUDCTLSave = AUDCTL;
+        AUDFxSave[irq] = rgbMem[writePOKEY + (irq << 1)];
+        irqPokeySave[irq] = irqPokey[irq];
+    }
 
+    //if (irqPokey[irq]) ODS("TIMER %d f=%d c=%d WAIT=%d instr\n", irq + 1, f[irq], c[irq], irqPokey[irq]);
 }
 
 // Add a byte to the IKBD input buffer

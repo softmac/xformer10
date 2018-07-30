@@ -467,6 +467,9 @@ typedef struct
     BYTE m_bshftByte;   // current value of shift state
 
     LONG m_irqPokey[4]; // POKEY h/w timers, how many cycles to go
+    BYTE m_AUDCTLSave;
+    BYTE m_AUDFxSave[4];
+    LONG m_irqPokeySave[4];
 
     int m_iXESwap;      // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
@@ -580,6 +583,9 @@ typedef struct
 #define btickByte     CANDY_STATE(btickByte)
 #define bshftByte     CANDY_STATE(bshftByte)
 #define irqPokey      CANDY_STATE(irqPokey)
+#define irqPokeySave  CANDY_STATE(irqPokeySave)
+#define AUDCTLSave    CANDY_STATE(AUDCTLSave)
+#define AUDFxSave     CANDY_STATE(AUDFxSave)
 #define iXESwap       CANDY_STATE(iXESwap)
 #define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
 #define chka00        CANDY_STATE(chka00)
