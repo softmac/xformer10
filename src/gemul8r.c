@@ -652,6 +652,7 @@ ThreadTry:
                                 goto ThreadFail;
                             }
                             cThreads++;
+                            Assert(cThreads <= sMaxTiles);  // uh oh, something bad happened, we're about to corrupt
                         }
 
                         // next tile
@@ -1788,13 +1789,6 @@ int CALLBACK WinMain(
     ShowWindow(vi.hWnd, (v.swWindowState == SW_SHOWMAXIMIZED) ? SW_SHOWMAXIMIZED : nCmdShow);
 
     FixAllMenus(TRUE);
-    
-    // DirectX can fragment address space, so only preload if user wants to
-    if (/* !vi.fWin32s && */ !v.fNoDDraw)
-        {
-        if (!FInitDirectDraw())
-            MessageBox (GetFocus(),    "DirectX failed to initialize. Full screen mode unavailable.", vi.szAppName, MB_OK);
-        }
 
 #if defined(ATARIST) || defined(SOFTMAC)
     if (!memInitAddressSpace())
@@ -2552,10 +2546,15 @@ BOOL CreateTiledBitmap()
     vvmhw.bmiTiled.biClrImportant = 0;
 
     vvmhw.hbmTiled = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vvmhw.bmiTiled, DIB_RGB_COLORS, &(vvmhw.pTiledBits), NULL, 0);
-    vvmhw.hdcTiled = CreateCompatibleDC(vi.hdc);
-
-    if (vvmhw.hbmTiled == NULL || vvmhw.hdcTiled == NULL)
+    if (!vvmhw.hbmTiled)
         return FALSE;
+
+    vvmhw.hdcTiled = CreateCompatibleDC(vi.hdc);
+    if (!vvmhw.hdcTiled)
+    {
+        DeleteObject(vvmhw.hbmTiled);
+        return FALSE;
+    }
 
     vvmhw.hbmTiledOld = SelectObject(vvmhw.hdcTiled, vvmhw.hbmTiled);
     
@@ -2597,7 +2596,9 @@ void DestroyBitmaps()
         vvmhw.pbmTile[nT].pvBits = NULL;
     }
     vvmhw.numTiles = 0;
-    free(vvmhw.pbmTile);
+    if (vvmhw.pbmTile)
+        free(vvmhw.pbmTile);
+    vvmhw.pbmTile = NULL;
 }
 
 // Create the bitmaps for all the possibly visible tiles.
@@ -2673,13 +2674,22 @@ BOOL CreateNewBitmaps()
 
         vvmhw.pbmTile[nT].hbm = CreateDIBSection(vi.hdc, (CONST BITMAPINFO *)&vvmhw.pbmTile[nT].bmi,
             DIB_RGB_COLORS, &(vvmhw.pbmTile[nT].pvBits), NULL, 0);
-        vvmhw.pbmTile[nT].hdcMem = CreateCompatibleDC(vi.hdc);
-
-        if (vvmhw.pbmTile[nT].hbm == NULL || vvmhw.pbmTile[nT].hdcMem == NULL)
+        if (!vvmhw.pbmTile[nT].hbm)
+        {
+            DestroyBitmaps();
             return FALSE;
+        }
+
+        vvmhw.pbmTile[nT].hdcMem = CreateCompatibleDC(vi.hdc);
+        if (!vvmhw.pbmTile[nT].hdcMem)
+        {
+            DeleteObject(vvmhw.pbmTile[nT].hbm);
+            DestroyBitmaps();
+            return FALSE;
+        }
 
         vvmhw.pbmTile[nT].hbmOld = SelectObject(vvmhw.pbmTile[nT].hdcMem, vvmhw.pbmTile[nT].hbm);
-
+        vvmhw.numTiles++;   // this many completely successful that would need to be deleted if something went wrong
     }
 
     SetBitmapColors();
