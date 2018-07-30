@@ -82,6 +82,9 @@ const ULONGLONG JIFP = PAL_CLK / PAL_FPS;
 
 // and our other globals
 
+IDirectDrawSurface     *PrimarySurface;
+IDirectDrawSurface     *SecondarySurface;
+
 char cGemKeys[MAX_PATH]; // our search string for finding a tile
 int sTileBottom;         // the bottom of the set of tiles matching our search
 
@@ -1682,6 +1685,7 @@ int CALLBACK WinMain(
     // = the maximum number of tiles that fit on a screen including all multiple monitors. Thread stack space is 64K retail, 128K debug.
     // Otherwise creating the threads will fail and we'll have to kill a bunch of VMs to make space for them, way more than
     // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
+    // Leave room for an extra row! When partially scrolled that's how many can fit!
     sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 2);
     // 64K/Thread + <128K/tile screen RAM, but we need 4x that for some reason to launch and re-load
     pThreadReserve = malloc(sMaxTiles * 65536 * 3 * 4);
@@ -2003,8 +2007,12 @@ int CALLBACK WinMain(
 
         ULONGLONG FrameBegin = GetCycles();
 
+#if DDRAW
+        vvmhw.pTiledBits = LockSurface(&sStride);
+#endif
+
         // Tell the thread(s) to go (if not minimized)
-        if (v.cVM && v.fTiling && cThreads && v.swWindowState != SW_SHOWMINIMIZED)
+        if (vvmhw.pTiledBits && v.cVM && v.fTiling && cThreads && v.swWindowState != SW_SHOWMINIMIZED)
         {
             ptBlack.x = ptBlack.y = 0;  // reset where the last tile is
 
@@ -2055,6 +2063,10 @@ int CALLBACK WinMain(
 
             WaitForMultipleObjects(nt, hDoneEvent, TRUE, INFINITE);
         }
+
+#if DDRAW
+        UnlockSurface();
+#endif
 
         // some thread asked us to break into the debugger
         if (vi.fWantDebugBreak)
@@ -2530,6 +2542,10 @@ BOOL CreateTiledBitmap()
     // So extend the right side of the screen by 32 bytes (the lowest resolution ANTIC mode writes 32 bytes at a time
     // and needs to finish)
     rect.right += 32;
+
+#if DDRAW
+    InitDrawing(rect.right, rect.bottom, 8, vi.hWnd, 0);
+#endif
 
     // !!! always chooses 256 color bitmap buffer of the right size
 
@@ -3105,7 +3121,7 @@ void RenderBitmap()
                     if (!fBlack)
                     {
                         if (sVM == nT + nFirstVisibleTile)
-                        { 
+                        {
                             // border around the one we're hovering over
                             int xw = sTileSize.x, yw = sTileSize.y;
                             PatBlt(vi.hdc, x, y, xw, 5, WHITENESS);
@@ -3131,10 +3147,19 @@ void RenderBitmap()
                 }
             }
         }
-        
+
         // just do one blit from a big buffer that has all the tiles in it
         else
         {
+            BYTE *ptb = vvmhw.pTiledBits;
+#if DDRAW
+            BYTE *ptb = LockSurface(&sStride);
+            if (!ptb)
+                return;
+#endif
+            BYTE *ptbBegin = ptb;
+            int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2); // !!! can't we use sStride?
+
             // border around the one we're hovering over - write to source to avoid flicker and get best perf
             // don't do this if we're resizing, the bitmap is out of date!
             if (sVM > -1 && !fNeedTiledBitmap)
@@ -3153,9 +3178,6 @@ void RenderBitmap()
                 if (rectB.top < 0)
                     ycur = abs(rectB.top);                   // top of tile off screen
 
-                // get a pointer to the top left of the current tile
-                BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
-                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2); // !!! can't we use sStride?
                 ptb += rectB.top * stride + rectB.left;
 
                 // blit white (ATARI colour $f)
@@ -3188,10 +3210,7 @@ void RenderBitmap()
             if (!fNeedTiledBitmap)
             {
                 // now black out the places where there are no tiles
-
-                // get a pointer to the top right of the last tile
-                BYTE *ptb = (BYTE *)(vvmhw.pTiledBits);
-                int stride = ((((rect.right + 32 - 1) >> 2) + 1) << 2); // !!! can't we use sStride?
+                ptb = ptbBegin;
                 ptb += ptBlack.y * stride + ptBlack.x;
 
                 // black out the rest of this row
@@ -3203,9 +3222,10 @@ void RenderBitmap()
                     ptb += stride;
                 }
 
+                ptb = ptbBegin;
+                
                 // black out any bottom blank rows (if VMs are deleted, that could make some)
                 ycur = ptBlack.y + vvmhw.ypix;
-                ptb = (BYTE *)(vvmhw.pTiledBits);
                 ptb += (ptBlack.y + vvmhw.ypix) * stride;
                 while (ycur < rect.bottom)
                 {
@@ -3218,6 +3238,16 @@ void RenderBitmap()
             // We did it! We accomplished our goal of only wanting to do 1 BitBlt per jiffy! And here it is.
             if (vvmhw.hdcTiled)
                 BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, vvmhw.hdcTiled, 0, 0, SRCCOPY);
+
+#if DDRAW
+            UnlockSurface();
+            POINT p;
+            p.x = 0; p.y = 0;
+            ClientToScreen(vi.hWnd, &p);
+            RECT rcDest = rect;                  
+            OffsetRect(&rcDest, p.x, p.y);
+            HRESULT err = PrimarySurface->lpVtbl->Blt(PrimarySurface, &rcDest, SecondarySurface, &rect, DDBLT_WAIT, 0);
+#endif
         }
     }
 
@@ -4046,6 +4076,7 @@ void ChangeDisplay(int x, int y)
 #endif
 
     // new screen size means a different number of tiles fit on the screen, make some new bitmaps
+    // Leave room for an extra row! When partially scrolled that's how many can fit!
     sMaxTiles = (x / 320 + 1) * (y / 240 + 2);
 
     // don't kill the app if this fails, kill VMs until it succeeds
