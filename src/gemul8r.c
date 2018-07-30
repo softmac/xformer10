@@ -1682,7 +1682,7 @@ int CALLBACK WinMain(
     // = the maximum number of tiles that fit on a screen including all multiple monitors. Thread stack space is 64K retail, 128K debug.
     // Otherwise creating the threads will fail and we'll have to kill a bunch of VMs to make space for them, way more than
     // should be necessary because of memory fragmentation. I've seen it kill all the VMs and CreateThread still fails
-    sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 1);
+    sMaxTiles = (GetSystemMetrics(SM_CXVIRTUALSCREEN) / 320 + 1) * (GetSystemMetrics(SM_CYVIRTUALSCREEN) / 240 + 2);
     // 64K/Thread + <128K/tile screen RAM, but we need 4x that for some reason to launch and re-load
     pThreadReserve = malloc(sMaxTiles * 65536 * 3 * 4);
 
@@ -4046,7 +4046,7 @@ void ChangeDisplay(int x, int y)
 #endif
 
     // new screen size means a different number of tiles fit on the screen, make some new bitmaps
-    sMaxTiles = (x / 320 + 1) * (y / 240 + 1);
+    sMaxTiles = (x / 320 + 1) * (y / 240 + 2);
 
     // don't kill the app if this fails, kill VMs until it succeeds
     BOOL fS = FALSE;
