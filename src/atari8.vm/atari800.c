@@ -1860,8 +1860,9 @@ void ResetPokeyTimer(void *candy, int irq)
 
     Assert(irq == 0 || irq == 1 || irq == 3);
 
-    // these computations are expensive, so remember the last values used
-    if (AUDCTLSave == AUDCTL && AUDFxSave[irq] == rgbMem[writePOKEY + (irq << 1)])
+    // these computations are expensive, so remember the last values used.
+    // If irqPokeySave is 0, we have never run yet, so make sure we do
+    if (irqPokeySave[irq] && AUDCTLSave == AUDCTL && AUDFxSave[irq] == rgbMem[writePOKEY + (irq << 1)])
     {
         irqPokey[irq] = irqPokeySave[irq];
     }
@@ -2699,12 +2700,17 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
     // Now fix our non-persistable data based on new persistable data
 
     // 1. rgDrives info about the attached drives, now delayed for speed savings
-    //BOOL f = MountAtariDisks(candy);
     fDrivesNeedMounting = TRUE;
 
     // 2. If we were in the middle of reading a sector through SIO, restore that data
-    if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x34 && rgSIO[1] == 0x52)
+    if (rgSIO[0] >= 0x31 && rgSIO[0] <= 0x34 && (rgSIO[1] == 0x52 || rgSIO[1] == 0x53))
+    {
+        // I guess we do need to mount the drive right now and can't wait, we need to read from it
+        if (!MountAtariDisks(candy))
+            return FALSE;
+        
         SIOReadSector(candy, rgSIO[0] - 0x31);
+    }
 
     // 3. If our saved state had a cartridge, load it back in, but do not reset to original bank
     ReadCart(candy, FALSE);
