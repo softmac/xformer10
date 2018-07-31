@@ -1365,14 +1365,26 @@ exitCart:
     return bCartType;    // say if cart looks good or not
 }
 
+// uses our temporary storage to swap memory, without having to allocate anything new (might fail) or use stack space
+// (only 64K per thread)
+void SwapHelper(void *candy, BYTE *src, BYTE *dest, int size)
+{
+    int i;
+    for (i = 0; i < size; i += TEMP_SIZE)
+    {
+        _fmemcpy(temp, src + i, TEMP_SIZE);
+        _fmemcpy(src + i, dest + i, TEMP_SIZE);
+        _fmemcpy(dest + i, temp, TEMP_SIZE);
+    }
+    Assert(i == size);  // !!! size must be a multiple of TEMP_SIZE
+}
+
 // helper function to swap either a ROM bank or RAM in (8K or 16K banks)
 // AlterRamtop should always be called, and if it looks like we're swapping in the same bank that's already there,
 // do it anyway because that's what happens when we restore a saved state
 void SwapRAMCart(void *candy, WORD size, BYTE *pb, BYTE iBank)
 {
     Assert(size <= 0x4000);
-
-    BYTE swap[0x4000];  // big enough for 16K !!! large stack, but global isn't thread safe (total must be kept < 64K thread stack space)
 
     // !!! Sorry, if you swapped BASIC in when your cartridge was out, you're stuck that way until you swap BASIC out
     if (iSwapCart == iNumBanks && ramtop < 0xc000)
@@ -1383,11 +1395,7 @@ void SwapRAMCart(void *candy, WORD size, BYTE *pb, BYTE iBank)
     {
         // want RAM - currently ROM - swap out that ROM and put the RAM stored there back in
         if (ramtop == 0xc000 - size)
-        {
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
-            _fmemcpy(pb + iSwapCart * size, swap, size);
-        }
+            SwapHelper(candy, &rgbMem[0xc000 - size], pb + iSwapCart * size, size);
         AlterRamtop(candy, 0xc000);
         iSwapCart = iNumBanks;
 
@@ -1399,19 +1407,13 @@ void SwapRAMCart(void *candy, WORD size, BYTE *pb, BYTE iBank)
     {
         // want ROM, currently different ROM? First swap the old ROM out and put RAM in so it doesn't get lost
         if (ramtop == (0xc000 - size) && iBank != iSwapCart)
-        {
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iSwapCart * size, size);
-            _fmemcpy(pb + iSwapCart * size, swap, size);
-        }
+            SwapHelper(candy, &rgbMem[0xc000 - size], pb + iSwapCart * size, size);
 
         // do NOT swap if that's the bank already in... you'll swap it out and swap RAM in!
         if (ramtop == 0xc000 || iBank != iSwapCart)
         {
             // now swap in the desired bank
-            _fmemcpy(swap, &rgbMem[0xc000 - size], size);
-            _fmemcpy(&rgbMem[0xc000 - size], pb + iBank * size, size);
-            _fmemcpy(pb + iBank * size, swap, size);
+            SwapHelper(candy, &rgbMem[0xc000 - size], pb + iBank * size, size);
 
             iSwapCart = iBank;    // what bank is in there now
             AlterRamtop(candy, 0xc000 - size);
@@ -2565,7 +2567,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
     // if we do it later when memory is full
     ReadCart(candy, TRUE);
     InitCart(candy);
-
+    
     // reset the registers
     cpuReset(candy);
 
@@ -2839,7 +2841,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 
             // if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
 			// (unless the joystick wants it pressed right now)
-            if (wFrame > 20 && !(CONSOL & 4) && GetKeyState(VK_F9) >= 0 && !fJoyCONSOL)
+            if (!(CONSOL & 4) && wFrame > 20 && GetKeyState(VK_F9) >= 0 && !fJoyCONSOL)
                 CONSOL |= 4;
 
             // IRQ's, like key presses, SIO or POKEY timers. VBI and DLIST interrupts are NMI's.
@@ -2907,7 +2909,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 CheckKey(candy, !(cPasteBuffer), wLiveShift);
             }
 
-            if (wScan == STARTSCAN + Y8)
+            else if (wScan == STARTSCAN + Y8)
             {
                 // Joysticks, light pen and pasting are processed just before the VBI, many games process joysticks in a VBI
                 DoVBI(candy);
@@ -3220,8 +3222,11 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             // if the counters reach 0, trigger an IRQ. They auto-repeat and auto-fetch new AUDFx values
             // 0 means timer not being used
 
-            for (int irq = 0; irq < 4; irq = ((irq + 1) << 1) - 1)    // 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported by the 800)
+            for (int irq = 0; irq < 4; irq++)    // 0, 1, 3 (i.e. 1, 2, 4 - timer 3 not supported by the 800)
             {
+                if (irq == 2)
+                    continue;
+
                 if (irqPokey[irq] && irqPokey[irq] <= HCLOCKS)
                 {
                     if (IRQEN & (irq + 1))

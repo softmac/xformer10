@@ -917,6 +917,7 @@ BOOL __fastcall PokeBAtariDL(void *candy, ADDR addr, BYTE b)
     // most display lists are in himem so do the >= check first, the test most likely to fail and not require additional tests
     Assert(addr < ramtop);
 
+    // !!! Does not handle ANTIC bank != CPU bank
     if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
         ProcessScanLine(candy);
 
@@ -976,7 +977,14 @@ void PSLPrepare(void *candy)
                     wScan, DLPC, cpuPeekB(candy, DLPC));
 #endif
 
-            sl.modehi = cpuPeekB(candy, DLPC);
+#if ANTICBANK
+            // if ANTIC is reading from a different XE bank than the CPU, that bank # + 1 is stored for us
+            if (mdXLXE == mdXE && ANTICBankDifferent && DLPC >= 0x4000 && DLPC < 0x8000)
+                sl.modehi = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
+            else
+#endif
+                sl.modehi = cpuPeekB(candy, DLPC);
+
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
             //sl.modehi |= (sl.modelo << 4);   // hide original mode up here (technically correct?)
@@ -1022,9 +1030,23 @@ void PSLPrepare(void *candy)
                 {
                     WORD w;
 
-                    w = cpuPeekB(candy, DLPC);
+#if ANTICBANK
+                    // if ANTIC is reading from a different XE bank than the CPU, that bank # + 1 is stored for us
+                    if (mdXLXE == mdXE && ANTICBankDifferent && DLPC >= 0x4000 && DLPC < 0x8000)
+                        w = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
+                    else
+#endif
+                        w = cpuPeekB(candy, DLPC);
+
                     IncDLPC(candy);
-                    w |= (cpuPeekB(candy, DLPC) << 8);
+      
+#if ANTICBANK
+                    // if ANTIC is reading from a different XE bank than the CPU, that bank # + 1 is stored for us
+                    if (mdXLXE == mdXE && ANTICBankDifferent && DLPC >= 0x4000 && DLPC < 0x8000)
+                        w |= rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
+                    else
+#endif
+                        w |= (cpuPeekB(candy, DLPC) << 8);
 
                     DLPC = w;
                     //ODS("Scan %04x JVB\n", wScan);
@@ -1050,9 +1072,24 @@ void PSLPrepare(void *candy)
                         write_tab[iVM][b2] = cpuPokeB;
 #endif
 
-                    wAddr = cpuPeekB(candy, DLPC);
+#if ANTICBANK
+                    // if ANTIC is reading from a different XE bank than the CPU, that bank # + 1 is stored for us
+                    if (mdXLXE == mdXE && ANTICBankDifferent && DLPC >= 0x4000 && DLPC < 0x8000)
+                        wAddr = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
+                    else
+#endif
+                        wAddr = cpuPeekB(candy, DLPC);
+                    
                     IncDLPC(candy);
-                    wAddr |= (cpuPeekB(candy, DLPC) << 8);
+
+#if ANTICBANK
+                    // if ANTIC is reading from a different XE bank than the CPU, that bank # + 1 is stored for us
+                    if (mdXLXE == mdXE && ANTICBankDifferent && DLPC >= 0x4000 && DLPC < 0x8000)
+                        wAddr |= rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
+                    else
+#endif
+                        wAddr |= (cpuPeekB(candy, DLPC) << 8);
+                    
                     IncDLPC(candy);
                 }
                 break;
@@ -1163,7 +1200,7 @@ void PSLPrepare(void *candy)
         // Other things we only need once per scan line
 
         sl.chactl = CHACTL & 7; // !!! cycle granularity?
-        sl.addr = wAddr;
+        sl.addr = wAddr;        // !!! not used
         sl.dmactl = DMACTL;
 
         if (sl.dmactl & 0x10)
@@ -2386,7 +2423,14 @@ if (sl.modelo < 2 || iTop > i)
 
         for (; i < iTop; i++)
         {
-            b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+            WORD wb2 = (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF);
+#if ANTICBANK
+// !!! This needs to go in every case statement to implement ANTIC bank different than CPU XE bank
+            if (mdXLXE == mdXE && ANTICBankDifferent && wAddr >= 0x4000 && wAddr < 0x8000)
+                b2 = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + wb2 - 0x4000];
+            else
+#endif
+                b2 = cpuPeekB(candy, wb2);
 
             WORD u = b2;
 
