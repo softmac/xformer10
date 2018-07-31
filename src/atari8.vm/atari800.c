@@ -3447,6 +3447,12 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
                 return 0x0;
             }
         }
+
+        // CONSOL - if a button bit has been set, that forces it to read pressed, otherwise read as normal
+        else if (addr == 0xd01f)
+        {
+            return CONSOL & (0xf8 | ~(wCONSOL & 7));
+        }
         break;
     
     case 0xd2:
@@ -3701,16 +3707,16 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
         }
         else if (addr == 31)
         {
-            // !!! Supposed to RESET when 8 bit is set, to ~(bits 4,2,1)
-            // Therefore poking with 8 resets to no buttons pressed
+            // !!! Bit 3 set to 0 pops the speaker out. Bit 3 set to 1 resets it. This is how the buzzing should be implemented.
 
-            // !!! REVIEW: click the speaker
+            // Setting a button bit forces that button to read as pressed until it is reset (then it reads as normal)
+            // This is implemented by the PEEK
 
             // printf("CONSOL %02X %02X\n", bOld, b);
 
                 if ((bOld ^ b) & 8)
                 {
-                // toggle speaker state (mask out lowest bit?)
+                // !!! toggle speaker state here by writing into our audio buffer
                 }
         }
         break;
