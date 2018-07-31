@@ -1939,6 +1939,7 @@ HANDLER(op6C)
         }
 
         regPC = READ_WORD(candy, regEA);
+        //ODS("INIT AT %04x\n", regPC);
 
         // This detects the famous autorun.sys that auto-runs a BASIC program, so if we don't have BASIC in, auto-switch it in
         // What else would alter the HATABS E table entry at $0321/22 to force feed characters into the buffer?
