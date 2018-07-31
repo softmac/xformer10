@@ -481,6 +481,7 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
@@ -541,6 +542,7 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
@@ -601,6 +603,7 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -663,6 +666,7 @@
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <Profile>true</Profile>
     </Link>
     <Bscmake>
       <PreserveSbr>true</PreserveSbr>

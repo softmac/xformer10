@@ -102,8 +102,6 @@ void InitBanks(void *candy)
 //
 BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
 {   
-    BYTE tmp[XE_SIZE];  // !!! large stack, but global isn't thread safe (total must be kept < 64K thread stack space)
-
     if (mdXLXE == md800)
         return TRUE;
 
@@ -153,7 +151,7 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
     // But remember, some fancy cartridges can swap themselves out to RAM and then BASIC *can* be swapped in.
     // OK to swap in BASIC if ramtop is high. OK to swap out BASIC if there's no other cartridge, or that cartridge's
     // current bank is maxed out, meaning RAM.
-    // !!! What happens if a somebody tries to bank a cartridge in when BASIC is already in? I won't allow that.
+    // !!! What happens if somebody tries to bank a cartridge in when BASIC is already in? I won't allow that.
     if ((mask & BASIC_MASK) && (ramtop == 0xc000 || !pvm->rgcart.fCartIn || (iSwapCart == iNumBanks && iSwapCart > 0)))
     {
         int cb = BASIC_SIZE;
@@ -174,26 +172,35 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
             ramtop = 0xC000;
         }
     }
-    
-    if (mask & SELF_MASK)
+
+    // HELP and the XE banks conflict! HELP wins and sits on top no matter what XE bank is there.
+    // But GET IT OUT OF THE WAY before doing any XE flipping or you'll corrupt the XE bank
+    // And if it belongs in, we have to do that LAST.
+
+    // HELP is currently IN if we're swapping HELP and it wants to go out, or if it's staying the same and wants to go in
+    // If so, swap it out.
+    if (((mask & SELF_MASK) && (flags & SELF_OUT)) || (!(mask & SELF_MASK) && !(flags & SELF_OUT)))
     {
-        if ((flags & SELF_MASK) == SELF_IN)
-        {
-            // enable Self Test ROMs
-            // !!! THIS SHOULD BE READ ONLY
-            _fmemcpy(rgbSwapSelf, &rgbMem[0x5000], SELF_SIZE);
-            _fmemcpy(&rgbMem[0x5000], rgbXLXE5000, SELF_SIZE);
-        }
-        else
-        {
-            // disable Self Test ROMs
-            _fmemcpy(&rgbMem[0x5000], rgbSwapSelf, SELF_SIZE);
-        }
+        // disable Self Test ROMs
+        _fmemcpy(&rgbMem[0x5000], rgbSwapSelf, SELF_SIZE);
     }
 
 #if XE
 
-    // !!! ANTIC reading from a different bank than the CPU is not supported yet!
+    // If we're not swapping the CPU and ANTIC together
+    BYTE m = flags & (EXTVID_MASK | EXTCPU_MASK);
+    if (m && m != (EXTVID_MASK | EXTCPU_MASK) && !ANTICBankDifferent)
+    {
+        // ANTIC will need to read from the bank # we are being passed, the CPU will read from rgbMem.
+        // Add one to make it 1-based instead of 0-based, because 0 means ANTIC is looking in the same place as the CPU
+        ANTICBankDifferent = iBankFromPortB(flags) + 1;
+        ODS("ANTIC DIFFERENT THAN CPU!\n");
+    }
+    else if (ANTICBankDifferent)
+    {
+        ANTICBankDifferent = FALSE;
+        ODS("ANTIC now the same as CPU\n");
+    }
 
     if (mask & EXTCPU_MASK)
     {
@@ -205,9 +212,7 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
             // we have swapped it out, so put it back. Otherwise, don't overwrite it with garbage
             if (iXESwap >= 0)
             {
-                _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
-                _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
-                _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
+                SwapHelper(candy, &rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                 iXESwap = -1;
             }
         }
@@ -224,16 +229,12 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 // we are called such that code won't execute, this case is caught be the next if
                 if (iXESwap != -1)
                 {
-                    _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
-                    _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
-                    _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
+                    SwapHelper(candy, &rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                     iXESwap = -1;
                 }
 
                 // now do the swap we want
-                _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
-                _fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
-                _fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);
+                SwapHelper(candy, &rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
                 iXESwap = iBank;
             }
         }
@@ -256,27 +257,28 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
                 // swap the current one back to where it belongs
                 if (iXESwap != -1)
                 {
-                    _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
-                    _fmemcpy(&rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
-                    _fmemcpy(rgbXEMem + iXESwap * XE_SIZE, tmp, XE_SIZE);
+                    SwapHelper(candy, &rgbMem[0x4000], rgbXEMem + iXESwap * XE_SIZE, XE_SIZE);
                     iXESwap = -1;
                 }
 
                 // now do the swap we want
-                _fmemcpy(tmp, &rgbMem[0x4000], XE_SIZE);
-                _fmemcpy(&rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
-                _fmemcpy(rgbXEMem + iBank * XE_SIZE, tmp, XE_SIZE);
+                SwapHelper(candy, &rgbMem[0x4000], rgbXEMem + iBank * XE_SIZE, XE_SIZE);
                 iXESwap = iBank;
             }
         }
     }
 #endif // XE
 
-#if 0
-    //    oldflags = flags;
-    printf("SwapMem exit: ");
-    DumpBlocks();
-#endif
+    // Lastly, HELP might go in, because it wins over top of a conflicting XE bank.
+    // It goes in if it wants to go in now, or if it was already in.
+    if (((mask & SELF_MASK) && !(flags & SELF_OUT)) || (!(mask & SELF_MASK) && !(flags & SELF_OUT)))
+    {
+        // enable Self Test ROMs
+        // !!! THIS SHOULD BE READ ONLY
+        _fmemcpy(rgbSwapSelf, &rgbMem[0x5000], SELF_SIZE);
+        _fmemcpy(&rgbMem[0x5000], rgbXLXE5000, SELF_SIZE);
+    }
+
     return TRUE;
 }
 

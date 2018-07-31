@@ -181,7 +181,7 @@ void ODS(char *fmt, ...)
 {
     fmt;
 #ifndef NDEBUG
-    char dest[1024 * 16];
+    char dest[1024];    // !!! Watch the 1K limit
     va_list argptr;
     va_start(argptr, fmt);
     vsprintf(dest, fmt, argptr);

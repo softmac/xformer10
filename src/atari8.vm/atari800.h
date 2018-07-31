@@ -366,10 +366,9 @@ typedef struct
 
 typedef struct
 {
-    // !!! THIS MUST STAY AT THE TIPPY TOP until I support GEM knowing about BASIC in a non-hacky way
-    WORD m_ramtop;
-
     // most ofen accessed variables go first!
+
+    WORD m_ramtop;
     int m_dwCandySize;
 
     // 6502 register context - BELONGS IN CPU NOT HERE !!!
@@ -404,6 +403,8 @@ typedef struct
 
     BOOL m_fAlreadyTriedBASIC;  // have we auto-swapped in BASIC
     BYTE m_fCartNeedsSwap;  // we just un-banked the cartridge for persisting. The next Execute needs to re-swap it
+
+    BYTE m_ANTICBankDifferent;  // is ANTIC not using the same XE bank as the CPU?
 
     // mdXLXE:  0 = Atari 400/800, 1 = 800XL, 2 = 130XE
     // cntTick: mode display countdown timer (18 Hz ticks)
@@ -477,13 +478,16 @@ typedef struct
 
     BYTE m_chka00;      // checksum of page $a
 
+    #define TEMP_SIZE 1024
+    BYTE m_temp[TEMP_SIZE];  // some temporary storage for swapping banks
+
     // !!! Not really used anymore, candidates for removal
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
     ULONG m_clockMult;
     BYTE m_btickByte;   // current value of 18 Hz timer
     //
 
-    char m_rgbXLExtMem;        // beginning of XL extended memory
+    BYTE m_rgbXLExtMem; // beginning of XL extended memory
 
     // which, if present, will look like this:
     //
@@ -590,6 +594,8 @@ typedef struct
 #define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
 #define chka00        CANDY_STATE(chka00)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
+#define ANTICBankDifferent   CANDY_STATE(ANTICBankDifferent)
+#define temp          CANDY_STATE(temp)
 
 #define SELF_SIZE 2048
 #define C000_SIZE 4096
@@ -902,6 +908,7 @@ void CchDisAsm(void *, WORD *puMem);
 void CchShowRegs(void *);
 void ControlKeyUp8(void *);
 void AddToPacket(void *, ULONG);
+void SwapHelper(void *, BYTE *, BYTE *, int);
 
 //extern int fXFCable;    // appears to be unused
 //int _SIOV(char *qch, int wDev, int wCom, int wStat, int wBytes, int wSector, int wTimeout);
