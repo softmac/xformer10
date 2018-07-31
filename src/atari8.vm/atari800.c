@@ -3707,16 +3707,20 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
         }
         else if (addr == 31)
         {
-            // !!! Bit 3 set to 0 pops the speaker out. Bit 3 set to 1 resets it. This is how the buzzing should be implemented.
-
             // Setting a button bit forces that button to read as pressed until it is reset (then it reads as normal)
-            // This is implemented by the PEEK
+            // This is implemented by the PEEK (Dance Fantasy)
 
             // printf("CONSOL %02X %02X\n", bOld, b);
 
-                if ((bOld ^ b) & 8)
+            // Bit 3 set to 0 pops the speaker out. Bit 3 set to 1 resets it.
+            if ((bOld ^ b) & 8) // the bit has changed, let the sound code know something changed
                 {
-                // !!! toggle speaker state here by writing into our audio buffer
+                //ODS("CONSOL %02x -> %02x\n", bOld, b);
+                int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
+                    int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+                        ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
+                    if (iCurSample < SAMPLES_PER_VOICE)
+                        SoundDoneCallback(candy, iCurSample);
                 }
         }
         break;
@@ -3849,7 +3853,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
             // we can only do 50Hz if we're not tiling, otherwise use NTSC timing
             int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
-            int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+            int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
                         ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
             if (iCurSample < SAMPLES_PER_VOICE)
                 SoundDoneCallback(candy, iCurSample);

@@ -56,11 +56,12 @@ typedef struct {
     int wi;    // width index
     BOOL phase;    // are we doing the top (or bottom) of a square wave? (may be random, doesn't necessarily alternate)
 } PULSE;
-static PULSE pulse[4] = { {0 },{0},{0},{0} };    // only need to init pos
+static PULSE pulse[4]; // = { {0 },{0},{0},{0} };    // only need to init pos
 
 // the old values to use to catch up to the present, when they have just been changed
-static VOICE rgvoice[4] = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
-static ULONG sAUDCTL = 0;
+static VOICE rgvoice[4]; // = { { 0,0,0 },{ 0,0,0 },{ 0,0,0 },{ 0,0,0 } };
+static BYTE sAUDCTL;
+static BYTE  sCONSOL;
 
 #endif
 
@@ -185,7 +186,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
         // where in the buffer to start writing
         signed char *pb = pwhdr[sCurBuf].lpData + sOldSample * 2;    // mono
 
-        if (iCurSample < SAMPLES_PER_VOICE && AUDCTL == sAUDCTL &&
+        if (iCurSample < SAMPLES_PER_VOICE && AUDCTL == sAUDCTL && sCONSOL == wCONSOL &&
             AUDF1 == rgvoice[0].frequency && AUDC1 == (rgvoice[0].volume | (rgvoice[0].distortion << 4)) &&
             AUDF2 == rgvoice[1].frequency && AUDC2 == (rgvoice[1].volume | (rgvoice[1].distortion << 4)) &&
             AUDF3 == rgvoice[2].frequency && AUDC3 == (rgvoice[2].volume | (rgvoice[2].distortion << 4)) &&
@@ -355,7 +356,10 @@ void SoundDoneCallback(void *candy, int iCurSample)
                     }
                 }
 
-                bLeft = (bLeft >> 2);        // we won't let you clip, unlike the real POKEY
+                // If the internal speaker is popped, mix it in at 1/2 of full volume
+                // (!!! That could clip, but it seems OK and is a good balance with the other sounds)
+                bLeft = (bLeft >> 2) | (((sCONSOL & 8) ^ 8) << 10) ;        // we won't let 4 full voices clip, unlike the real POKEY
+                //ODS("bLeft = %02x\n", bLeft);
                 //bRight = bLeft;    // mono for now
                 *((WORD *)pb) = (bLeft & 0xffff);
                 pb += 2;
@@ -366,7 +370,9 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
         SaveAud:
             // next time we write audio, we'll use the new values that just got set (and triggered us being called)
+            // !!! This is dumb, just call us before you change the POKEY register, like GTIA and ProcessScanLine
             sAUDCTL = AUDCTL;
+            sCONSOL = wCONSOL;
             rgvoice[0].frequency = AUDF1;
             rgvoice[1].frequency = AUDF2;
             rgvoice[2].frequency = AUDF3;
