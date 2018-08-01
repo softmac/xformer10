@@ -639,13 +639,10 @@ __inline void SIOCheck(void *candy)
     // hack
 
     // !!! My SIO bare bones code is actually good enough now to work just as well as this SIO hack for STATUS
-    // and drive reads of single density for every program I've tested! Wow!
+    // and drive reads of single density for every program I've tested, and probaly all densities too.
     // But it's much slower doing the beeps in real time so let's leave the hack in for now
-    
-    //BOOL sd;
-    //SIOGetInfo(candy, rgbMem[0x301] - 1, &sd, NULL, NULL, NULL, NULL);
-    //if (rgbMem[0x302] != 0x53 && !(rgbMem[0x302] == 0x52 && sd))
-    
+    // !!! Hotel needs bare bones, our SIO hack does not work for some reason
+    //if (rgbMem[0x302] != 0x53 && rgbMem[0x302] != 0x52)    
     {
         if ((regPC == 0xe459 || regPC == 0xe959) &&
             (mdXLXE == md800 || (wPBDATA & 1) ||
