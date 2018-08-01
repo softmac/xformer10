@@ -983,7 +983,8 @@ void PSLPrepare(void *candy)
                 sl.modehi = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
             else
 #endif
-                sl.modehi = cpuPeekB(candy, DLPC);
+                // yes, the DL might be in ROM or even accidentally in register memory (Ghost Chaser) so don't use cpuPeekB
+                sl.modehi = PeekBAtari(candy, DLPC);
 
             sl.modelo = sl.modehi & 0x0F;
             sl.modehi >>= 4;
@@ -1036,7 +1037,7 @@ void PSLPrepare(void *candy)
                         w = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
                     else
 #endif
-                        w = cpuPeekB(candy, DLPC);
+                        w = PeekBAtari(candy, DLPC);
 
                     IncDLPC(candy);
       
@@ -1046,7 +1047,7 @@ void PSLPrepare(void *candy)
                         w |= rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
                     else
 #endif
-                        w |= (cpuPeekB(candy, DLPC) << 8);
+                        w |= (PeekBAtari(candy, DLPC) << 8);
 
                     DLPC = w;
                     //ODS("Scan %04x JVB\n", wScan);
@@ -1078,7 +1079,7 @@ void PSLPrepare(void *candy)
                         wAddr = rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
                     else
 #endif
-                        wAddr = cpuPeekB(candy, DLPC);
+                        wAddr = PeekBAtari(candy, DLPC);
                     
                     IncDLPC(candy);
 
@@ -1088,7 +1089,7 @@ void PSLPrepare(void *candy)
                         wAddr |= rgbXEMem[(ANTICBankDifferent - 1) * XE_SIZE + DLPC - 0x4000];
                     else
 #endif
-                        wAddr |= (cpuPeekB(candy, DLPC) << 8);
+                        wAddr |= (PeekBAtari(candy, DLPC) << 8);
                     
                     IncDLPC(candy);
                 }
