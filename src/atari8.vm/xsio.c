@@ -489,7 +489,7 @@ BYTE SIOReadSector(void *candy, int wDrive)
     wCom = 0x52;
     wStat = 0x40;
     wTimeout = 0x1f;
-    wSector = rgSIO[2] | (WORD)rgSIO[3] << 8;
+    wSector = rgSIO[2] | ((WORD)rgSIO[3] << 8);
 
     // don't blow up looking for the string
     if (wDrive < 0 || wDrive >= MAX_DRIVES)

@@ -3156,7 +3156,8 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 BOOL dv = rgSIO[0] - 0x31;
                 BOOL sd, ed, dd, wp;
                 SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
-                WORD iLastSector = (rgSIO[1] == 0x52) ? (dd ? 256 : 128) : 4;
+                WORD sn = rgSIO[2] | ((WORD)rgSIO[3] << 8);
+                WORD iLastSector = (rgSIO[1] == 0x52) ? ((dd && sn > 3) ? 256 : 128) : 4;
 
                 if (isectorPos > 0 && isectorPos < iLastSector)
                 {
