@@ -736,7 +736,12 @@ BOOL FKeyMsg800(void *candy, HWND hwnd, UINT message, WPARAM uParam, LPARAM lPar
             if (((lParam >> 16) & 0x1FF) == 0x11D)
                 bshftByte |= wRCtrl;        // it's the RIGHT control
             bshftByte |= wCtrl;
-            TRIG0 &= ~1;
+            
+            // one thing we can't do well automatically is differentiate between FIRE and Left Control and a keypress.
+            // Mag SCAT 078_A Monopoly processes both (Ctrl-U). The L-CTRL specifically is a great fire button, I don't want
+            // to disallow it just because of one app.
+            if (!v.fDisableLCTRLFire)
+                TRIG0 &= ~1;
         }
         else
         {

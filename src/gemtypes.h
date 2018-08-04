@@ -470,6 +470,7 @@ typedef struct
     RECT     rectWinPos;    // saved window pos (want top left corner only)
     int      sWheelOffset;           // for scrolling tiles using the pad or touchscreen
     char     lpCurrentDir[MAX_PATH]; // the current directory the user has browsed to in the dialog boxes
+    BOOL     fDisableLCTRLFire; // don't use LCTRL as fire if you need to differentiate Ctrl+key from Fire
 
     // referenced, but not used
     BOOL     fNoMono : 1;     // 0 = use mono bitmaps, 1 = use 256 color for mono

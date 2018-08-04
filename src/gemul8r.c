@@ -988,8 +988,9 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_STRETCH, v.fZoomColor ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
-    CheckMenuItem(vi.hMenu, IDM_AUTOKILL, v.fAutoKill ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_AUTOKILL, v.fAutoKill ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_LCTRLFIRE, v.fDisableLCTRLFire ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, inst >= 0 && rgpvm[inst]->fTimeTravelEnabled ? MF_CHECKED : MF_UNCHECKED);
@@ -4941,6 +4942,12 @@ break;
         // toggle how sensitive the mouse wheel is
         case IDM_WHEELSENS:
             v.fWheelSensitive = !v.fWheelSensitive;
+            FixAllMenus(FALSE);
+            break;
+
+        // toggle how sensitive the mouse wheel is
+        case IDM_LCTRLFIRE:
+            v.fDisableLCTRLFire = !v.fDisableLCTRLFire;
             FixAllMenus(FALSE);
             break;
 
