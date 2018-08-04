@@ -116,6 +116,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Auto-detect VM Type", IDM_AUTOKILL
         MENUITEM SEPARATOR
+        MENUITEM "Disable &L-CTRL as FIRE", IDM_LCTRLFIRE
+        MENUITEM SEPARATOR
         MENUITEM "Mouse &Wheel Sensitivity High", IDM_WHEELSENS
         MENUITEM SEPARATOR
         MENUITEM "My &Video Cards Sucks", IDM_MYVIDEOCARDSUCKS
