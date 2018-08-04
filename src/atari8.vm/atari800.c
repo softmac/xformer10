@@ -3758,6 +3758,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
     case 0xD2:      // POKEY
         addr &= 15;
 
+        bOld = rgbMem[writePOKEY + addr];
         rgbMem[writePOKEY+addr] = b;
 
         // only non-zero values start the timers, OS init code does not
@@ -3772,12 +3773,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 ResetPokeyTimer(candy, irq);
             }
         }
-        if (addr == 10)
+        
+        else if (addr == 10)
         {
             // SKRES
 
             SKSTAT |=0xE0;
         }
+        
         else if (addr == 11)
         {
             // POTGO - start counting once per scan line from 0 to 228, which will be the paddle values
@@ -3785,9 +3788,10 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             POT = 0;
             ALLPOT = 0xff;
         }
+        
         else if (addr == 13)
         {
-            // most known apps call this with PBCTL == 0x34, Astromeda uses 0x30
+            // SEROUT - most known apps call this with PBCTL == 0x34, Astromeda uses 0x30
             // ACID test calls us with PBCTL == $3c. I need to avoid OS boot code that writes 0 or FF being interpreted as valid.
             // But I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't 
             // fire that show we sent that command. Other apps try to talk to the printer, etc.
@@ -3851,19 +3855,29 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 ODS("HIGH PASS FILTER NYI!\n");
 
             // AUDFx, AUDCx or AUDCTL have changed - write some sound
-            // we're (wScan / 262) of the way through the scan lines and the DMA map tells us our horiz. clock cycle
+            // we're (wScan / 262) of the way through the scan lines and our horizontal cycle # is "wCycle"
             // we can only do 50Hz if we're not tiling, otherwise use NTSC timing
-            int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
-            int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+            // !!! Audio is not like video, when a GTIA change is made we call ProcessScanLine BEFORE we change the register.
+            // Here, we change the register, then call the sound code, which has to remember what the old register was.
+            // This is a little more convoluted but the MULE app hacks have to know both the old and new
+            // values, it would not be straighforward to change.
+            if (b != bOld)  // be efficient, make sure something's actually changed
+            {
+                int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
+                int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
                         ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
-            if (iCurSample < SAMPLES_PER_VOICE)
-                SoundDoneCallback(candy, iCurSample);
+                if (iCurSample < SAMPLES_PER_VOICE)
+                    SoundDoneCallback(candy, iCurSample);
+            }
 
             // reset an active timer (irqPokey will be non-zero) that had its frequency changed
-            for (int irq = 0; irq < 4; irq++)
+            if (b != bOld)
             {
-                if (irqPokey[irq] && addr == 8 || addr == (ADDR)(irq << 1))
-                    ResetPokeyTimer(candy, irq);
+                for (int irq = 0; irq < 4; irq++)
+                {
+                    if (irqPokey[irq] && (addr == 8 || addr == (ADDR)(irq << 1)))
+                        ResetPokeyTimer(candy, irq);
+                }
             }
         }
         break;
