@@ -469,7 +469,7 @@ void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *p
     if (pfwp)
         *pfwp = rgDrives[drive].fWP;
     if (pfb)
-        *pfb = (md == MD_FILEBIN);
+        *pfb = (md == MD_FILEBIN || md == MD_FILEBAS);  // we need to know if we are faking a disk image in some way
 }
 
 

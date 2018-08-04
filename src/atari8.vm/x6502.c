@@ -643,7 +643,11 @@ __inline void SIOCheck(void *candy)
     // But it's much slower doing the beeps in real time so let's leave the hack in for now
     // !!! HOTEL and NIBELUNGEN and SECRET DIARY NP and TRAINS and one HALEY PROJECT (sic) need bare bones,
     // our SIO hack does not work. Why? OXYGENE trashes its own SERIN IRQ handler and therefore NEEDS this hack.
-    //if (rgbMem[0x302] != 0x53 && rgbMem[0x302] != 0x52)    // !!! Un-comment this to do bare bones SIO for reads
+
+    BOOL fb;    // we absolutely need our SIO hack for fake disk images made around a binary or BASIC executable
+    SIOGetInfo(candy, rgbMem[0x301] - 1, NULL, NULL, NULL, NULL, &fb);
+
+    //if (fb || (rgbMem[0x302] != 0x53 && rgbMem[0x302] != 0x52))    // !!! Un-comment this to do bare bones SIO for reads
     
     {
         if ((regPC == 0xe459 || regPC == 0xe959) &&
@@ -745,6 +749,8 @@ HANDLER(KIL)
 HANDLER(op00)
 {
     // BRK is NOT maskable (Najemni2)
+    // !!! Properly not masking BRK actually changes our luck and some 800 apps that are meant for XL don't happen to hit
+    // KIL anymore (Chaos loader - many, many disks)
 
     // We are trying to execute in memory non-existent in an 800, we're probably the wrong VM type.
     // Hitting a BRK in OS code is by design for Mag SCAT #008 etc., and hangs if we switch to XL
