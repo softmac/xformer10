@@ -21,6 +21,7 @@
 
 HWAVEOUT hWave;
 WAVEFORMATEX pcmwf;
+//FILE *fp; // for debug printing of the wave buffer
 
 // These are globals, not per-instance. Only 1 instance is controlling sound at a time, even tiled, and it only switches when all
 // threads are asleep.
@@ -360,7 +361,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
                 // If the internal speaker is popped, mix it in at 1/2 of full volume
                 // (!!! That could clip, but it seems OK and is a good balance with the other sounds)
-                bLeft = (bLeft >> 2) | (((sCONSOL & 8) ^ 8) << 10) ;        // we won't let 4 full voices clip, unlike the real POKEY
+                bLeft = (bLeft >> 2) | (((sCONSOL & 8) ^ 8) << 10);        // we won't let 4 full voices clip, unlike the real POKEY
                 //ODS("bLeft = %02x\n", bLeft);
                 //bRight = bLeft;    // mono for now
                 *((WORD *)pb) = (bLeft & 0xffff);
@@ -423,12 +424,16 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
             //ODS("Write (%d) %08x @ %llu\n", sCurBuf, &pwhdr[sCurBuf], GetJiffies());
 
-            //unsigned char *bb = pwhdr[sCurBuf].lpData;
-            //for (int zz = 0; zz < 800; zz++)
-            //{
-            //    fprintf(fp, "%02x%02x ", bb[zz * 4 + 1], bb[zz * 4]);
-            //}
-            //fprintf(fp, "\n\n");
+#if 0
+            unsigned char *bb = pwhdr[sCurBuf].lpData;
+            for (int zz = 0; zz < 800; zz++)
+            {
+                fprintf(fp, "%02x%02x ", bb[zz * 4 + 1], bb[zz * 4]);
+                if (!((zz + 1) % 20))
+                    fprintf(fp, "\n");
+            }
+            fprintf(fp, "\n");
+#endif
 
             sCurBuf = -1;    // need to find a new buffer to write to next time
         }
@@ -1005,6 +1010,8 @@ void InitSound()
             }
         }
     }
+    
+    //fp = fopen("waveout.txt", "wt");
 // #endif
 }
 

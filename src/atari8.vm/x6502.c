@@ -1985,8 +1985,7 @@ HANDLER(op6C)
                     break;
                 }
                 // demo_1b.atr writes to the screen and presses return continuously by poking $34a,$d @ i=$62e
-                // I wonder if anybody else does something similar... !!! will this false positive without the test for i == $62e?
-                if (b == 0x4a && rgbMem[i + 1] == 3 && rgbMem[i - 2] == 0xd)
+                if (i == 0x62e && b == 0x4a && rgbMem[i + 1] == 3 && rgbMem[i - 2] == 0xd)
                 {
                     KillMePleaseBASIC(candy);
                     break;

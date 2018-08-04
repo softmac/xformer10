@@ -2091,6 +2091,7 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
         fInited = TRUE;
     }
 
+    // !!! Don't do this if you want to test with predictable behaviour
     // seed the random number generator again. The real ATARI is probably seeded by the orientation
     // of sector 1 on the floppy. I wonder how cartridges are unpredictable?
     // don't allow the seed that gets stuck
@@ -3718,10 +3719,11 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 {
                 //ODS("CONSOL %02x -> %02x\n", bOld, b);
                 int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
-                    int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
-                        ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
-                    if (iCurSample < SAMPLES_PER_VOICE)
-                        SoundDoneCallback(candy, iCurSample);
+                // I know wCycle = DMAMAP[wLeft - 1] but that's only in DEBUG so you can't use that variable
+                int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+                    ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
+                if (iCurSample < SAMPLES_PER_VOICE)
+                    SoundDoneCallback(candy, iCurSample);
                 }
         }
         break;
@@ -3864,7 +3866,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             if (b != bOld)  // be efficient, make sure something's actually changed
             {
                 int SAMPLES_PER_VOICE = (fPAL && !v.fTiling) ? SAMPLES_PAL : SAMPLES_NTSC;
-                int iCurSample = (wScan * 100 + wCycle * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
+                // I know wCycle = DMAMAP[wLeft - 1] but that's only in DEBUG so you can't use that variable
+                int iCurSample = (wScan * 100 + DMAMAP[wLeft - 1] * 100 / HCLOCKS) * SAMPLES_PER_VOICE / 100 /
                         ((fPAL && !v.fTiling) ? PAL_LPF : NTSC_LPF);
                 if (iCurSample < SAMPLES_PER_VOICE)
                     SoundDoneCallback(candy, iCurSample);
