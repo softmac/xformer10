@@ -641,8 +641,10 @@ __inline void SIOCheck(void *candy)
     // !!! My SIO bare bones code is actually good enough now to work just as well as this SIO hack for STATUS
     // and drive reads of single density for every program I've tested, and probaly all densities too.
     // But it's much slower doing the beeps in real time so let's leave the hack in for now
-    // !!! Hotel needs bare bones, our SIO hack does not work for some reason
-    //if (rgbMem[0x302] != 0x53 && rgbMem[0x302] != 0x52)    
+    // !!! HOTEL and NIBELUNGEN and SECRET DIARY NP and TRAINS and one HALEY PROJECT (sic) need bare bones,
+    // our SIO hack does not work. Why? OXYGENE trashes its own SERIN IRQ handler and therefore NEEDS this hack.
+    //if (rgbMem[0x302] != 0x53 && rgbMem[0x302] != 0x52)    // !!! Un-comment this to do bare bones SIO for reads
+    
     {
         if ((regPC == 0xe459 || regPC == 0xe959) &&
             (mdXLXE == md800 || (wPBDATA & 1) ||
@@ -663,6 +665,24 @@ __inline void SIOCheck(void *candy)
             rgbMem[0xd183] = 0x48;  // pha
             rgbMem[0xd184] = 0x98;  // tya
             rgbMem[0xd185] = 0x48;  // pha
+
+#if 0   // UP N DOWN [FILE] needs have SIO end near the top of the screen so there are >100 lines before the next VBI because
+        // it takes that long for it to get around to turning VBIs off after clearing the VBI vector to 0
+        // but this could hang if an IRQ runs during the scan line we're waiting for.
+            rgbMem[0xd186] = 0xad;  // wait until first scan line
+            rgbMem[0xd187] = 0x0b;
+            rgbMem[0xd188] = 0xd4;
+            rgbMem[0xd189] = 0xc9;
+            rgbMem[0xd18a] = 0x00;
+            rgbMem[0xd18b] = 0xd0;
+            rgbMem[0xd18c] = 0xf9;
+            rgbMem[0xd18d] = 0x85;  // sta CRITIC (0)
+            rgbMem[0xd18e] = 0x42;
+            rgbMem[0xd18f] = 0xea;
+            rgbMem[0xd190] = 0xea;
+            rgbMem[0xd191] = 0xea;
+#endif
+            
             rgbMem[0xd186] = 0xa0;
             rgbMem[0xd187] = 0x08;  // change this to vary the delay
             rgbMem[0xd188] = 0xa2;
@@ -675,6 +695,7 @@ __inline void SIOCheck(void *candy)
             rgbMem[0xd18f] = 0xfa;
             rgbMem[0xd190] = 0x84;  // sty CRITIC (0) - see SIOV() comment
             rgbMem[0xd191] = 0x42;
+
             rgbMem[0xd192] = 0x68;  // pla
             rgbMem[0xd193] = 0xa8;  // tay
             rgbMem[0xd194] = 0x68;  // pla

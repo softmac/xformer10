@@ -19,20 +19,8 @@
 #include "atari8.vm/atari800.h"
 #endif
 
-#define CNT_ANGLES 64
-
-CHAR const mpxsine[CNT_ANGLES+1] =
-{
-      0,  13,  25,  38,  49,  60,  70,  80,  90, 98, 106, 112, 117, 121, 125, 126, 127, 126, 125, 121, 117, 112, 106, 98,  90,  80, 70, 60, 49, 38, 25, 13,
-      0, -13, -25, -38, -49, -60, -70, -80, -90,-98,-106,-112,-117,-121,-125,-126,-127,-126,-125,-121,-117,-112,-106,-98, -90, -80,-70,-60,-49,-38,-25,-13,
-      0,
-};
-
 HWAVEOUT hWave;
 WAVEFORMATEX pcmwf;
-//static FILE *fp;
-
-
 
 // These are globals, not per-instance. Only 1 instance is controlling sound at a time, even tiled, and it only switches when all
 // threads are asleep.
@@ -65,6 +53,15 @@ static BYTE  sCONSOL;
 
 #endif
 
+#if defined(ATARIST) || defined(SOFTMAC)
+
+#define CNT_ANGLES 64
+CHAR const mpxsine[CNT_ANGLES + 1] =
+{
+    0,  13,  25,  38,  49,  60,  70,  80,  90, 98, 106, 112, 117, 121, 125, 126, 127, 126, 125, 121, 117, 112, 106, 98,  90,  80, 70, 60, 49, 38, 25, 13,
+    0, -13, -25, -38, -49, -60, -70, -80, -90,-98,-106,-112,-117,-121,-125,-126,-127,-126,-125,-121,-117,-112,-106,-98, -90, -80,-70,-60,-49,-38,-25,-13,
+    0,
+};
 
 //
 // convert a phase angle (0..65535) to a sine (-127..+127)
@@ -91,6 +88,8 @@ __inline int SqrOfPhase(ULONG x)
 {
     return ((x >> 22) & 1) ? 127 : -127;
 }
+
+#endif
 
 void CALLBACK MyWaveOutProc(
     HWAVEOUT  hwo,
@@ -186,13 +185,16 @@ void SoundDoneCallback(void *candy, int iCurSample)
         // where in the buffer to start writing
         signed char *pb = pwhdr[sCurBuf].lpData + sOldSample * 2;    // mono
 
+        // I know we already take great pains to only call this when something has changed, but because we can be called
+        // so often we reject some calls that were processing the same sample as before, nothing might have changed.
+        // I'm supposing it's quicker to spend these cycles comparing now to save more cycles of computation later.
         if (iCurSample < SAMPLES_PER_VOICE && AUDCTL == sAUDCTL && sCONSOL == wCONSOL &&
             AUDF1 == rgvoice[0].frequency && AUDC1 == (rgvoice[0].volume | (rgvoice[0].distortion << 4)) &&
             AUDF2 == rgvoice[1].frequency && AUDC2 == (rgvoice[1].volume | (rgvoice[1].distortion << 4)) &&
             AUDF3 == rgvoice[2].frequency && AUDC3 == (rgvoice[2].volume | (rgvoice[2].distortion << 4)) &&
             AUDF4 == rgvoice[3].frequency && AUDC4 == (rgvoice[3].volume | (rgvoice[3].distortion << 4)))
         {
-            return;    // nothing has changed and this doesn't complete a buffer
+            return;     // nothing has changed and this doesn't complete a buffer
         }
 
         if (iCurSample - sOldSample == 1 && iCurSample != SAMPLES_PER_VOICE &&
@@ -370,7 +372,6 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
         SaveAud:
             // next time we write audio, we'll use the new values that just got set (and triggered us being called)
-            // !!! This is dumb, just call us before you change the POKEY register, like GTIA and ProcessScanLine
             sAUDCTL = AUDCTL;
             sCONSOL = wCONSOL;
             rgvoice[0].frequency = AUDF1;

@@ -189,17 +189,17 @@ BOOL SwapMem(void *candy, BYTE xmask, BYTE flags)
 
     // If we're not swapping the CPU and ANTIC together
     BYTE m = flags & (EXTVID_MASK | EXTCPU_MASK);
-    if (m && m != (EXTVID_MASK | EXTCPU_MASK) && !ANTICBankDifferent)
+    if (m && m != (EXTVID_MASK | EXTCPU_MASK))
     {
         // ANTIC will need to read from the bank # we are being passed, the CPU will read from rgbMem.
         // Add one to make it 1-based instead of 0-based, because 0 means ANTIC is looking in the same place as the CPU
         ANTICBankDifferent = iBankFromPortB(flags) + 1;
-        ODS("ANTIC DIFFERENT THAN CPU!\n");
+        //ODS("ANTIC DIFFERENT THAN CPU! %02x\n", flags);
     }
     else if (ANTICBankDifferent)
     {
         ANTICBankDifferent = FALSE;
-        ODS("ANTIC now the same as CPU\n");
+        //ODS("ANTIC now the same as CPU %02x\n", flags);
     }
 
     if (mask & EXTCPU_MASK)
