@@ -698,26 +698,27 @@ void DoVBI(void *candy)
 
                 if (vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING))
                 {
-                    int dir = (ji.dwXpos - (jc.wXmax - jc.wXmin) / 2);
-                    dir /= (int)((jc.wXmax - jc.wXmin) / wJoySens);
+                    int hdir = (ji.dwXpos - (jc.wXmax - jc.wXmin) / 2);
+                    hdir /= (int)((jc.wXmax - jc.wXmin) / wJoySens);
 
-                    BYTE *pB;
-                    if (joy < 2)
-                        pB = &rPADATA;    // joy 1 & 2
-                    else
-                        pB = &rPBDATA;    // joy 3 & 4
-
-                    // joy 1 & 3 are low nibble, 2 & 4 are high nibble
-
-                    (*pB) |= (12 << ((joy & 1) << 2));                  // assume joystick X centered
-
-                    if (dir < 0)
-                        (*pB) &= ~(4 << ((joy & 1) << 2));              // left
-                    else if (dir > 0)
-                        (*pB) &= ~(8 << ((joy & 1) << 2));              // right
+                    int vdir = (ji.dwYpos - (jc.wYmax - jc.wYmin) / 2);
+                    vdir /= (int)((jc.wYmax - jc.wYmin) / wJoySens);
 
                     // driving controller special value reports $bfef or so
                     ULONG uz = abs((jc.wYmax - jc.wYmin) * 3 / 4 - (ji.dwYpos - jc.wYmin));
+
+                    BYTE *pB = (joy < 2) ? &rPADATA : &rPBDATA;     // joy 1 & 3 are low nibble, 2 & 4 are high nibble
+
+                    // don't centre joystick 0 if we didn't move it (the keyboard should still operate it as well)
+                    if (!joy && !hdir && fJoyMove)
+                        (*pB) |= (12 << ((joy & 1) << 2));                  // assume joystick X centered
+                    else if (!joy && hdir)
+                        fJoyMove = TRUE;
+
+                    if (hdir < 0)
+                        (*pB) &= ~(4 << ((joy & 1) << 2));              // left
+                    else if (hdir > 0)
+                        (*pB) &= ~(8 << ((joy & 1) << 2));              // right
 
                     // we don't know which it is yet, figure it out
                     if ((vi.rgjt[joy] & (JT_JOYSTICK | JT_DRIVING)) == (JT_JOYSTICK | JT_DRIVING))
@@ -734,10 +735,11 @@ void DoVBI(void *candy)
                             vi.rgjt[joy] &= ~JT_JOYSTICK;
                     }
 
-                    dir = (ji.dwYpos - (jc.wYmax - jc.wYmin) / 2);
-                    dir /= (int)((jc.wYmax - jc.wYmin) / wJoySens);
-
-                    (*pB) |= (3 << ((joy & 1) << 2));                   // assume joystick centered
+                    // don't centre joystick 0 if we didn't move it (the keyboard should still operate it as well)
+                    if (!joy && !vdir && fJoyMove)
+                        (*pB) |= (3 << ((joy & 1) << 2));                  // assume joystick Y centered
+                    else if (!joy && vdir)
+                        fJoyMove = TRUE;
 
                     if (vi.rgjt[joy] == JT_DRIVING && uz < 0x20)
                     {
@@ -746,30 +748,45 @@ void DoVBI(void *candy)
                     }
                     else
                     {
-                        if (dir < 0)
+                        if (vdir < 0)
                             (*pB) &= ~(1 << ((joy & 1) << 2));          // up
-                        else if (dir > 0)
+                        else if (vdir > 0)
                             (*pB) &= ~(2 << ((joy & 1) << 2));          // down
                     }
 
                     UpdatePorts(candy);
 
+                    // we've completed centered a joystick we were responsible for moving
+                    if (fJoyMove && !joy && !hdir && !vdir)
+                        fJoyMove = FALSE;
+
                     pB = &TRIG0;
 
-                    if (ji.dwButtons == 1)
+                    if (ji.dwButtons & 1)
+                    {
                         (*(pB + joy)) &= ~1;                // JOY fire button down
-                    else
+                        if (!joy)
+                            fJoyFire = TRUE;                // joystick 0, not keyboard, pressed this button
+                    }
+
+                    // For joystick 0, make sure we don't lift up a fire button we didn't
+                    // press down, or you can't use the CTRL keys, etc., for firing when a joystick is plugged in
+                    else if ((joy || fJoyFire) && !(ji.dwButtons & 1))
+                    {
                         (*(pB + joy)) |= 1;                 // JOY fire button up
+                        if (!joy)
+                            fJoyFire = FALSE;
+                    }
 
                     // extra buttons become START SELECT OPTION for tablet mode
                     if (!fJoyCONSOL && ji.dwButtons >= 2 && ji.dwButtons <= 8)
                     {
                         CONSOL &= ~(ji.dwButtons >> 1);	// button goes down
-                        fJoyCONSOL = TRUE;				// we were the cause
+                        fJoyCONSOL = joy + 1;	        // we were the cause (1-based, 0 means none)
                     }
-                    else if (fJoyCONSOL && ji.dwButtons == 0)
+                    else if (fJoyCONSOL == joy + 1 && ji.dwButtons == 0)   // if more than one button went down, wait until all are up
                     {
-                        CONSOL |= 7;						// don't lift up buttons we didn't press
+                        CONSOL |= 7;					// don't lift up buttons this actual controller didn't press
                         fJoyCONSOL = FALSE;
                     }
                 }
@@ -2847,7 +2864,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 #endif // DEBUG
 
             // if we faked the OPTION key being held down so OSXL would remove BASIC, now it's time to lift it up
-			// (unless the joystick wants it pressed right now)
+			// (unless we actually are pressing it)
             if (!(CONSOL & 4) && wFrame > 20 && GetKeyState(VK_F9) >= 0 && !fJoyCONSOL)
                 CONSOL |= 4;
 

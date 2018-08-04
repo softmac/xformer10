@@ -475,6 +475,8 @@ typedef struct
     int m_iXESwap;      // which 16K chunk is saving something swapped out from regular RAM? This saves needing 16K more
 
 	BOOL m_fJoyCONSOL;	// joystick is the reason for the CONSOL key being pressed
+    BOOL m_fJoyFire;	// joystick is the reason for the FIRE button being pressed
+    BOOL m_fJoyMove;    // joystick is the reason for moving (not the keyboard)
 
     BYTE m_chka00;      // checksum of page $a
 
@@ -592,6 +594,8 @@ typedef struct
 #define AUDFxSave     CANDY_STATE(AUDFxSave)
 #define iXESwap       CANDY_STATE(iXESwap)
 #define fJoyCONSOL    CANDY_STATE(fJoyCONSOL)
+#define fJoyFire      CANDY_STATE(fJoyFire)
+#define fJoyMove      CANDY_STATE(fJoyMove)
 #define chka00        CANDY_STATE(chka00)
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 #define ANTICBankDifferent   CANDY_STATE(ANTICBankDifferent)
