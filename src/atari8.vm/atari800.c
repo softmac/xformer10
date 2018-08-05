@@ -2727,7 +2727,7 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
         if (!MountAtariDisks(candy))
             return FALSE;
         
-        SIOReadSector(candy, rgSIO[0] - 0x31);
+        SIOReadSector(candy, rgSIO[0] - 0x31, NULL);
     }
 
     // 3. If our saved state had a cartridge, load it back in, but do not reset to original bank
@@ -3194,14 +3194,25 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 
                 else if (SERIN == 0xff && (rgSIO[1] == 0x52 || rgSIO[1] == 0x53))    // nothing sent yet
                 {
-                    SERIN = 0x41;    // ack
-                    //ODS("SERIN: ACK @%03x\n", wScan);
+                    if (rgSIO[1] != 0x52 || SIOReadSector(candy, rgSIO[0] - 0x31, &checksum))
+                    {
+                        SERIN = 0x41;    // ack
+                        //ODS("SERIN: ACK @%03x\n", wScan);
+                    }
+                    // !!! a sector error is treated like an unknown command and gets a NAK, is that always right?
+                    else
+                    {
+                        SERIN = 0x4e;    // NAK
+                        //ODS("SERIN: NAK @%03x\n", wScan);
+                        fSERIN = FALSE;  // all done
+                    }
                 }
 
                 // we don't support this yet, so send NAK
                 else if (SERIN == 0xff)
                 {
                     SERIN = 0x4e;    // NAK
+                    //ODS("SERIN: NAK @%03x\n", wScan);
                     fSERIN = FALSE;  // all done
                 }
 
@@ -3213,13 +3224,8 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
 
                 else if (SERIN == 0x43)
                 {
-                    if (rgSIO[1] == 0x52)
-                    {
-                        checksum = SIOReadSector(candy, rgSIO[0] - 0x31);
-                    }
-                    
                     // this is how I think you properly respond to a status request, I hope
-                    else if (rgSIO[1] == 0x53)
+                    if (rgSIO[1] == 0x53)
                     {
                         dv = rgSIO[0] - 0x31;
                         SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
@@ -3810,27 +3816,56 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
         
         else if (addr == 13)
         {
-            // SEROUT - most known apps call this with PBCTL == 0x34, Astromeda uses 0x30
-            // ACID test calls us with PBCTL == $3c. I need to avoid OS boot code that writes 0 or FF being interpreted as valid.
-            // But I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't 
+            // SEROUT - if the last 5 bytes have a proper checksum, then they are a valid frame, otherwise keep accepting
+            // data until that happens.
+            // I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't 
             // fire that show we sent that command. Other apps try to talk to the printer, etc.
-            // !!! The right thing to do is probably a timeout of some sort? This can hang apps who write here with PBCTL == $3c
-            if (PBCTL == 0x34 || PBCTL == 0x30)
+            
+            // Uh oh! They starting sending more data before we were ready for it. Overrun and lose the previous frame
+            // !!! What should I really do? No known app does this yet.
+            if (cSEROUT == 5)
             {
-                Assert(cSEROUT < 5);
-                //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
-                rgSIO[cSEROUT] = b;
-                cSEROUT++;
-
-                // we pretend that sending one byte takes more than 1 full scan line. Any faster is a faster baud rate than
-                // some apps can handle and they hang not expected it to finish so quickly
-                fWant10 = 2;    // !!! I wait 2, and my beep rate sounds about right
-
-                // Add three extra scan lines until we are starving. This is the shift register clear interrupt
-                // so if they don't send another byte in time after the $10 interrupt is ready for data, we are "starving"
-                fWant8 = 5;     // !!! I wait 3 additional
-                IRQST |= 0x08;  // we're not starving anymore
+                Assert(0);
+                cSEROUT = 0;
             }
+
+            //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
+            rgSIO[cSEROUT] = b;
+            cSEROUT++;
+
+            // we have 5 bytes, do they checksum correctly?
+            if (cSEROUT == 5)
+            {
+                WORD ck = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    ck += rgSIO[i];
+                    if (ck > 0xff)
+                    {
+                        ck = ck & 0xff;
+                        ck++;    // add carry back in after every addition
+                    }
+                }
+                ck = ck & 0xff;
+
+                // No they do not, we had some spurious clear memory pokes or some such that weren't real at first.
+                // Lop off the first thing in the array and wait for more data. Also ignore a buffer starting with 0's
+                if (ck != rgSIO[4] || (!rgSIO[0] && !rgSIO[1]))
+                {
+                    for (int i = 0; i < 4; i++)
+                        rgSIO[i] = rgSIO[i + 1];
+                    cSEROUT = 4;
+                }
+            }
+
+            // we pretend that sending one byte takes more than 1 full scan line. Any faster is a faster baud rate than
+            // some apps can handle and they hang not expecting it to finish so quickly
+            fWant10 = 2;    // !!! I wait 2 to fire IRQ $10, and my beep rate sounds about right
+
+            // Add three extra scan lines until we are starving. This is the shift register clear interrupt
+            // so if they don't send another byte in time after the $10 interrupt is ready for data, we are "starving"
+            fWant8 = 5;     // !!! I wait 3 additional
+            IRQST |= 0x08;  // we're not starving anymore
         }
 
         else if (addr == 14)

@@ -474,9 +474,9 @@ void SIOGetInfo(void *candy, int drive, BOOL *psd, BOOL *ped, BOOL *pdd, BOOL *p
 
 
 // SIO Bare bones read a sector, return checksum for those rolling their own and not using SIOV
-// !!! Not capable of returning an error frame
+// Returns FALSE if something went wrong
 //
-BYTE SIOReadSector(void *candy, int wDrive)
+BOOL SIOReadSector(void *candy, int wDrive, BYTE *pchk)
 {
     WORD wDev, wCom, wStat, wSector;
     WORD  wBytes;
@@ -493,30 +493,30 @@ BYTE SIOReadSector(void *candy, int wDrive)
 
     // don't blow up looking for the string
     if (wDrive < 0 || wDrive >= MAX_DRIVES)
-        return 0;
+        return FALSE;
 
     // make sure we're open, sometimes we try to be clever and close it when it's not being used for a while
     if (!OpenDrive(candy, wDrive))
-        return 0;
+        return FALSE;
 
     pdrive = &rgDrives[wDrive];
 
     md = pdrive->mode;
     
     if (pdrive->h <= 0)
-        return 0;
+        return FALSE;
 
     int cbSIO2PCFudge = pdrive->ofs;
 
     if (wSector < 1)
     {
         ODS("SIO bare read invalid sector < 1\n");
-        return 0;
+        return FALSE;
     }
     else if (wSector > pdrive->wSectorMac)
     {
         ODS("SIO bare read invalid sector > %d\n", pdrive->wSectorMac);
-        return 0;
+        return FALSE;
     }
 
     // The first 3 sectors of DD are SD
@@ -568,7 +568,9 @@ BYTE SIOReadSector(void *candy, int wDrive)
     }
     ck = ck & 0xff;
 
-    return (BYTE)ck;
+    if (pchk)
+        *pchk = ck;
+    return TRUE;
 }
 
 
