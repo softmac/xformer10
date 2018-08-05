@@ -895,7 +895,7 @@ void Interrupt(void *, BOOL);
 void CheckKey(void *, BOOL, WORD);
 void UpdatePorts(void *);
 void SIOV(void *);
-BYTE SIOReadSector(void *, int);
+BOOL SIOReadSector(void *, int, BYTE *);
 void SIOGetInfo(void *, int, BOOL *, BOOL *, BOOL *, BOOL *, BOOL *);
 BOOL GetWriteProtectDrive(void *, int);
 BOOL SetWriteProtectDrive(void *, int, BOOL);
