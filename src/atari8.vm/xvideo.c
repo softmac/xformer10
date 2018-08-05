@@ -2499,8 +2499,107 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                 // - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
                 // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
                 // - a background pixel between white and (red/green) seems to stay background colour
+        
+#if 0
                 // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
+                for (j = 0; j < 4; j++)
+                {
+                    // don't walk off the beginning of the array
+                    BYTE last, last2;
 
+                    if (i == 0 && j == 0)
+                    {
+                        last = Col.col2;
+                        last2 = Col.col2;
+                    }
+                    else
+                    {
+                        last = *(qch - 1);
+                        last2 = *(qch - 2);
+                    }
+
+                    // EVEN - (unwind the loop for speed)
+
+                    // which bit is this bit position?
+                    int k = (index - (j << 1));
+
+                    // look at that bit
+                    b2 = (u >> k) & 0x1;
+
+                    // supports artifacting
+                    switch (b2 & 0x01)
+                    {
+                    default:
+                        Assert(FALSE);
+                        break;
+
+                    case 0x00:
+                        *qch++ = Col.col2;
+                        break;
+
+                    case 0x01:
+                        if (last == Col.col2)
+                        {
+                            *qch++ = fArtifacting ? red : Col.col1;
+                            if (last2 == red)
+                                *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
+                        }
+                        else
+                        {
+                            *qch++ = Col.col1;
+                            if (last == green)
+                            {
+                                *(qch - 2) = Col.col1; // yellow doesn't seem to work
+                                                   //*(qch - 1) = yellow;
+                            }
+                        }
+                        break;
+                    }
+
+                    // ODD
+
+                    // don't walk off the beginning of the array later on
+                    last = *(qch - 1);
+                    if (i == 0 && j == 0)
+                        last2 = Col.col2;
+                    else
+                        last2 = *(qch - 2);
+
+                    // which bit is this bit position?
+                    k = (index - (j << 1) - 1);
+
+                    // look at that bit
+                    b2 = (u >> k) & 0x1;
+
+                    // supports artifacting
+                    switch (b2 & 0x01)
+                    {
+                    default:
+                        Assert(FALSE);
+                        break;
+
+                    case 0x00:
+                        *qch++ = Col.col2;
+                        break;
+
+                    case 0x01:
+                        if (last == Col.col2)
+                        {
+                            *qch++ = fArtifacting ? green : Col.col1;
+                            if (last2 == green)
+                                *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
+                        }
+                        else
+                        {
+                            *qch++ = Col.col1;
+                            if (last == red)
+                                *(qch - 2) = Col.col1; // shouldn't affect a visible pixel if it's out of range
+                        }
+                        break;
+                    }
+                }
+
+#else
                 u = 0x3FF & (u >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
     // !!! TODO - make this a monitor type you can select
@@ -2591,6 +2690,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                     qch += sizeof(ULONG);
                 }
+#endif
+
             }
             break;
         }
