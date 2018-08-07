@@ -1752,14 +1752,259 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             _fmemset(qch, (sl.fpmg && pmg.fGTIA == 0xc0) ? 0 : bkbk, stop - start);
             break;
 
-            // GR.0 and descended character GR.0
+        // GR.0, much of the code is the same as mode 3 but is separated out for performance, since mode 3 is the rarest mode
+        // and mode 2 is the most common mode
         case 2:
+        {
+            vpix = vpix % 8;
+            
+            Col.col1 = sl.colpf1;
+            Col.col2 = sl.colpf2;
+
+            // !!! This is different than mode 15's artifacting algorithm!
+
+            if (sl.chactl & 4)    // vertical reflect bit
+                vpix = 7 - (vpix & 7);
+
+            for (; i < iTop; i++)
+            {
+                b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
+
+                // non-zero horizontal scroll
+                if (hshift)
+                {
+                    ULONGLONG u, vv;
+                    
+                    // we need to look at 1 or 2 of the characters ending in the current character, depending on how much shift.
+
+                    // sl.chbase is already on a proper page boundary
+                    u = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7f) << 3) + vpix);
+
+                    if (b1 & 0x80)
+                    {
+                        if (sl.chactl & 1)  // blank (blink) flag
+                            u = 0;
+                        if (sl.chactl & 2)  // inverse flag
+                            u = ~u & 0xff;
+                    }
+
+                    // partial shifting means we also need to look at a second character intruding into our space
+                    // do the same exact thing again
+                    BYTE rgb = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));  // the char offscreen to the left
+
+                    // sl.chbase is on a proper page boundary
+                    vv = cpuPeekB(candy, (sl.chbase << 8) + ((rgb & 0x7f) << 3) + vpix);
+
+                    if (rgb & 0x80)
+                    {
+                        if (sl.chactl & 1)  // blank (blink) flag
+                            vv = 0;
+                        if (sl.chactl & 2)  // inverse flag
+                            vv = ~vv & 0xff;
+                    }
+
+                    u |= (vv << 8);
+                    
+                    // now do the shifting
+                    b2 = (BYTE)(u >> hshift);
+
+                }
+                else
+                {
+                    // use sl.chbase not CHBASE because its already anded with $fc or $fe
+                    b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+
+                    if (b1 & 0x80)
+                    {
+                        if (sl.chactl & 1)  // blank (blink) flag
+                            b2 = 0;
+                        if (sl.chactl & 2)  // inverse flag
+                            b2 = ~b2;
+                    }
+                }
+
+                // common case - we are not using undocumented GTIA modes in GR.0
+                if (!pmg.fGTIA)
+                {
+                    // We don't want artifacting (B&W, maybe)
+                    if (!fArtifacting && !fPMGA)
+                    {
+                        ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+
+                        if (sl.fpmg)
+                            *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                        else
+                            *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+
+                        BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+
+                        if (sl.fpmg)
+                            *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                        else
+                            *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+                    }
+
+                    // We do want artifacting
+                    // !!! TODO - make this a monitor type you can select
+                    // !!! We use different strategies for GR.0 and GR.8
+                    // GR.0, See mode 15 for artifacting theory of operation
+                    else
+                    {
+                        // This is the "I have sharp display with minimum pixel bleeding" version
+
+                        ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+                        ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
+
+                        // make note of the artificting colour for this pixel
+                        if (fPMGA)
+                        {
+                            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                            *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                        }
+                        else
+                            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+
+                        BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+                        ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)] | BitsToByteMask[((b2 << 1) & 0xF) | 1];
+
+
+                        if (fPMGA)
+                        {
+                            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                            *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                        }
+                        else
+                            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+                    }
+                }
+            
+                // undocumented GR.9 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+                // but treat them as GR.9 luminences
+                else if (pmg.fGTIA == 0x40)
+                {
+                    Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
+                    Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
+
+                                                                   // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
+                    if (sl.fpmg)
+                    {
+                        Col.col1 &= 0x0f;
+                        Col.col2 &= 0x0f;
+                    }
+
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                }
+
+                // undocumented GR.10 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+                // but treat them as GR.10 indexes
+                else if (pmg.fGTIA == 0x80)
+                {
+                    Col.col1 = (b2 >> 4);
+                    Col.col2 = (b2 & 15);
+
+                    // if PMG are present on this line, we are asked to make a bitfield in the low nibble of which colours we are
+                    // using. That's not possible in GR.10 which has >4 possible colours, so we'll just use our index. If we're not
+                    // in bitfield mode, we'll use the actual colour
+
+                    if (!sl.fpmg)
+                    {
+                        if (Col.col1 < 9)
+                            Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1);
+                        else if (Col.col1 < 12)
+                            Col.col1 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                        else
+                            Col.col1 = *(((BYTE FAR *)&COLPM0) + Col.col1 - 8);    // col. 12-15 are copies of c.4-7
+
+                        if (Col.col2 < 9)
+                            Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2);
+                        else if (Col.col2 < 12)
+                            Col.col2 = *(((BYTE FAR *)&COLPM0) + 8);    // col. 9-11 are copies of c.8
+                        else
+                            Col.col2 = *(((BYTE FAR *)&COLPM0) + Col.col2 - 8);    // col. 12-15 are copies of c.4-7
+                    }
+                    else
+                    {
+                        if (Col.col1 < 9)
+                            ;
+                        else if (Col.col1 < 12)
+                            Col.col1 = 8;            // col. 9-11 are copies of c.8
+                        else
+                            Col.col1 = Col.col1 - 8;    // col. 12-15 are copies of c.4-7
+
+                        if (Col.col2 < 9)
+                            ;
+                        else if (Col.col2 < 12)
+                            Col.col2 = 8;            // col. 9-11 are copies of c.8
+                        else
+                            Col.col2 = Col.col2 - 8;    // col. 12-15 are copies of c.4-7
+                    }
+
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                }
+
+                // undocumented GR.11 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
+                // but treat them as GR.11 chromas
+                else if (pmg.fGTIA == 0xC0)
+                {
+                    Col.col1 = ((b2 >> 4) << 4) | (sl.colbk /* & 15*/);    // lum comes from 712
+                    Col.col2 = ((b2 & 15) << 4) | (sl.colbk /* & 15*/); // keep 712 <16, if not, it deliberately screws up like the real hw
+
+                                                                        // We're in BITFIELD mode because PMG are present, so we can only alter the low nibble.
+                                                                        // we'll shift it back up and put the luma value back in later
+                    if (sl.fpmg)
+                    {
+                        Col.col1 = Col.col1 >> 4;
+                        Col.col2 = Col.col2 >> 4;
+                    }
+
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+                    *qch++ = Col.col1;
+
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                    *qch++ = Col.col2;
+                }
+            }
+
+            break;
+        }
+     
+        // mostly the same as mode 2, but separated out to avoid if's (4% speed improvment)
         case 3:
         {
-            BYTE vpixO = vpix % (sl.modelo == 2 ? 8 : 10);
+            BYTE vpixO = vpix % 10;
 
             // mimic obscure ANTIC behaviour (why not?) Scans 10-15 duplicate 2-7, not 0-5
-            if (sl.modelo == 3 && iscan > 9)
+            if (iscan > 9)
                 vpixO = iscan - 8;
 
             vpix = vpixO;
@@ -1769,14 +2014,11 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
             // !!! This is different than mode 15's artifacting algorithm!
 
-            if ((sl.chactl & 4) && sl.modelo == 2)    // vertical reflect bit
-                vpix = 7 - (vpix & 7);
-
             for (; i < iTop; i++)
             {
                 b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
-                if ((sl.chactl & 4) && sl.modelo == 3)
+                if (sl.chactl & 4)
                 {
                     if ((b1 & 0x7F) < 0x60)
                         vpix = vpixO < 8 ? 7 - vpixO : vpixO;
@@ -1794,8 +2036,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     // we need to look at 1 or 2 of the characters ending in the current character, depending on how much shift.
 
                     // we are not in the blank part of a mode 3 character
-                    if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (b1 & 0x7F) < 0x60) ||
-                        (vpix >= 8 && (b1 & 0x7F) >= 0x60)))
+                    if ((vpix >= 2 && vpix < 8) || (vpix < 2 && (b1 & 0x7F) < 0x60) ||
+                        (vpix >= 8 && (b1 & 0x7F) >= 0x60))
                     {
                         // use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
                         vpix23 = (vpix >= 8 && (b1 & 0x7f) >= 0x60) ? vpix - 8 : vpix;
@@ -1803,10 +2045,10 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         // sl.chbase is already on a proper page boundary
                         vv = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7f) << 3) + vpix23);
                     }
+
                     // we ARE in the blank part
-                    else {
+                    else
                         vv = 0;
-                    }
 
                     // mimic obscure quirky ANTIC behaviour - scans 8 and 9 go missing under these circumstances
                     if ((b1 & 0x7f) < 0x60 && (iscan == 8 || iscan == 9))
@@ -1829,7 +2071,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         int index = 1;
                         BYTE rgb = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF));  // the char offscreen to the left
 
-                        if ((sl.chactl & 4) && sl.modelo == 3)
+                        if (sl.chactl & 4)
                         {
                             if ((rgb & 0x7F) < 0x60)
                                 vpix = vpixO < 8 ? 7 - vpixO : vpixO;
@@ -1837,8 +2079,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                                 vpix = (vpixO > 7) ? (23 - vpixO) : (vpixO > 1 ? 7 - vpixO : vpixO);    // mimic odd ANTIC behaviour
                         }
 
-                        if (sl.modelo == 2 || ((vpix >= 2 && vpix < 8) || (vpix < 2 && (rgb & 0x7F) < 0x60) ||
-                            (vpix >= 8 && (rgb & 0x7F) >= 0x60)))
+                        if ((vpix >= 2 && vpix < 8) || (vpix < 2 && (rgb & 0x7F) < 0x60) ||
+                            (vpix >= 8 && (rgb & 0x7F) >= 0x60))
                         {
                             // use the top two rows of pixels for the bottom 2 scan lines for ANTIC mode 3 descended characters
                             vpix23 = (vpix >= 8 && (rgb & 0x7f) >= 0x60) ? vpix - 8 : vpix;
@@ -1846,10 +2088,10 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                             // sl.chbase is on a proper page boundary
                             vv = cpuPeekB(candy, (sl.chbase << 8) + ((rgb & 0x7f) << 3) + vpix23);
                         }
+
                         // we ARE in the blank part
-                        else {
+                        else
                             vv = 0;
-                        }
 
                         // mimic obscure quirky ANTIC behaviour
                         if (rgb < 0x60 && (iscan == 8 || iscan == 9))
@@ -1872,7 +2114,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                 }
                 else
                 {
-                    if (sl.modelo == 2 || ((vpix >= 2) && (vpix < 8)))
+                    if ((vpix >= 2) && (vpix < 8))
                         // use sl.chbase not CHBASE because its already anded with $fc or $fe
                         b2 = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
                     else if ((vpix < 2) && ((b1 & 0x7f) < 0x60))
@@ -1895,9 +2137,74 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     }
                 }
 
+                // the common case of not doing undocumented GTIA in mode 3.
+                if (!pmg.fGTIA)
+                {
+                    // We don't want artifacting (B&W, maybe)
+                    if (!fArtifacting && !fPMGA)
+                    {
+                        ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+
+                        if (sl.fpmg)
+                            *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                        else
+                            *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+
+                        BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+
+                        if (sl.fpmg)
+                            *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                        else
+                            *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+                    }
+
+                    // We do want artifacting
+                    // !!! TODO - make this a monitor type you can select
+                    // !!! We use different strategies for GR.0 and GR.8
+                    // GR.0, See mode 15 for artifacting theory of operation
+                    else
+                    {
+                        // This is the "I have sharp display with minimum pixel bleeding" version
+
+                        ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
+                        ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
+
+                        // make note of the artificting colour for this pixel
+                        if (fPMGA)
+                        {
+                            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                            *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                        }
+                        else
+                            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+
+                        BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
+                        ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)] | BitsToByteMask[((b2 << 1) & 0xF) | 1];
+
+
+                        if (fPMGA)
+                        {
+                            *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                            *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                        }
+                        else
+                            *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+
+                        qch += sizeof(ULONG);
+                    }
+                }
+
                 // undocumented GR.9 mode based on GR.0 - dereference through a character set to get the bytes to put on the screen,
                 // but treat them as GR.9 luminences
-                if (pmg.fGTIA == 0x40)
+                else if (pmg.fGTIA == 0x40)
                 {
                     Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
                     Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
@@ -2000,46 +2307,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     *qch++ = Col.col2;
                     *qch++ = Col.col2;
                 }
-
-                // GR.0 See mode 15 for artifacting theory of operation
-                else
-                {
-
-                    // !!! TODO - make this a monitor type you can select
-                    // !!! We use different strategies for GR.0 and GR.8
-
-                    // This is the "I have sharp display with minimum pixel bleeding" version
-
-                    ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
-                    ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
-
-                    // make note of the artificting colour for this pixel
-                    if (fPMGA)
-                    {
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
-                                (Fill2 & ~BlendMask);
-                        *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
-                    }
-                    else
-                        *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    qch += sizeof(ULONG);
-
-                    BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
-                    ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)] | BitsToByteMask[((b2 << 1) & 0xF) | 1];
-
-
-                    if (fPMGA)
-                    {
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
-                                (Fill2 & ~BlendMask);
-                        *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
-                    }
-                    else
-                        *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    qch += sizeof(ULONG);
-                }
+                
             }
             break;
         }
@@ -2448,6 +2716,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                 // ATARI can only shift 2 pixels minimum at this resolution
 
+                // Don't change the original vv because it needs to be preserved for the horizontal scrolling to work
                 WORD u = 0x3FF & (vv >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
                 //int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
@@ -2458,12 +2727,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                 // Use the precomputed Fill colours
                 if (!fArtifacting && !fPMGA)
                 {
-                    // This is the "I have sharp display with minimum pixel bleeding" version
-                    // It is the ONLY version that works in black and white mode when artifacting is supposedly off
-
                     ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-                    //ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
-
+                
                     if (sl.fpmg)
                         *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
                     else
@@ -2472,9 +2737,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     qch += sizeof(ULONG);
 
                     BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-                    //BYTE bPeekAhead = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
-                    //ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
-
+                
                     if (sl.fpmg)
                         *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
                     else
