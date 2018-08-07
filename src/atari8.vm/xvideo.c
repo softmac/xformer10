@@ -964,6 +964,8 @@ void PSLPrepare(void *candy)
             //ODS("BEGIN scan 8\n");
             fWait = 0;    // not doing JVB anymore, we reached the top
             fFetch = 1;    // start by grabbing a DLIST instruction
+
+            PrecomputeArtifacting(candy);   // the best way I know to detect a change from color->B&W is to check every frame
         }
 
         // grab a DLIST instruction - if we're not in JVB, we're done the previous instruction, and ANTIC is on.
@@ -1607,13 +1609,12 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
         return;
     
     // PMG can exist outside the visible boundaries of this line, so we need an extra long line to avoid complicating things
-    BYTE rgpix[NTSCx];    // an entire NTSC scan line, including retrace areas, used in PMG bitfield mode
+    BYTE rgpix[NTSCx];   // an entire NTSC scan line, including retrace areas, used in PMG bitfield mode
     
     // rgpix doesn't have enough room to store everything about a pixel, so we need some extra storage
     BYTE rgFifth[X8];    // is fifth player colour present in this pixel in GTIA modes?
     BYTE rgArtifact[X8]; // is artifacting being done on this pixel?
-    BYTE colpf1Save = 0;     // if so, we'll need to remember this
-
+    
     // Based on the graphics mode, fill in a scanline's worth of data. It might be the actual data, or if PMG exist on this line,
     // a bitfield simply saying which playfield is at each pixel so the priority of which should be visible can be worked out later
     // GTIA modes are a kind of hybrid approach since it's not so simple as which playfield colour is visible
@@ -1672,7 +1673,6 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
         {
             sl.colbk = bfBK;
             sl.colpf0 = bfPF0;
-            colpf1Save = sl.colpf1; // remember what this used to be for artifacting
             sl.colpf1 = bfPF1;
             sl.colpf2 = bfPF2;
             sl.colpf3 = bfPF3;
@@ -1721,6 +1721,17 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
         _fmemset(&rgpix[(NTSCx - X8) >> 1] + start, 0, stop - start);
 #endif
 
+    // We want to artifact if we are a colour TV and if the foreground and background are different luminences (otherwise
+    // everything is invisible and it's wrong to artifact, and faster to skip it rather than do calculations that
+    // would just result in nothing showing up). Col.colx might be bitfields, so the only way to see the true colours
+    // is to look at the COLPFx locations. Also, for mode 2-3, we have to make sure we're not in GTIA mode to artifact
+
+    // TRUE if we want artifacting in normal screen memory mode where we write colour data (!sl.fpmg)
+    const BOOL fArtifacting = pvm->bfMon == monColrTV && (COLPF1 & 0xf) != (COLPF2 & 0xf) && !pmg.fGTIA && !sl.fpmg;
+    // TRUE if we want artifacting in PMG mode where we are dealing in bit fields and can't actually do the artifacting
+    // right now (we'll be storing the data for later)
+    const BOOL fPMGA = pvm->bfMon == monColrTV && (COLPF1 & 0xf) != (COLPF2 & 0xf) && !pmg.fGTIA && sl.fpmg; // fill in special array
+
     // nothing to do otherwise
     if (sl.modelo < 2 || iTop > i)
     {
@@ -1756,30 +1767,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             Col.col1 = sl.colpf1;
             Col.col2 = sl.colpf2;
 
-            // just for fun, don't interlace in B&W.
-            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg && ((Col.col1 ^ Col.col2) & 0x0F); // artifact the normal screen memory
-            const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
-
-            // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-            const BYTE phase = ((Col.col1 & 0x0F) < (Col.col2 & 0x0F)) ? 0x80 : 0x00;
-            const BYTE red = fArtifacting ? ((0x40 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE green = fArtifacting ? ((0xc0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE yellow = fArtifacting ? ((0xe0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            yellow; // NYI
-
-            // the real artifact colours, not the bitfield versions
-            const BYTE redPMG = 0x40 | (colpf1Save & 0x0F);
-            const BYTE greenPMG = 0xc0 | (colpf1Save & 0x0F);
-            const BYTE yellowPMG = 0xe0 | (colpf1Save & 0x0F);
-            yellowPMG; // NYI
-
-            // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
-
-            const ULONG FillA = 0x00010001 * (red | (green << 8));
-            const ULONG FillAPMG = 0x00010001 * (redPMG | (greenPMG << 8));
-            const ULONG Fill1 = 0x01010101 * Col.col1;
-            const ULONG Fill1PMG = 0x01010101 * colpf1Save;
-            const ULONG Fill2 = 0x01010101 * Col.col2;
+            // !!! This is different than mode 15's artifacting algorithm!
 
             if ((sl.chactl & 4) && sl.modelo == 2)    // vertical reflect bit
                 vpix = 7 - (vpix & 7);
@@ -2019,53 +2007,38 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                     // !!! TODO - make this a monitor type you can select
                     // !!! We use different strategies for GR.0 and GR.8
-#if 1
-                // This is the "I have sharp display with minimum pixel bleeding" version
+
+                    // This is the "I have sharp display with minimum pixel bleeding" version
 
                     ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
                     ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF] | BitsToByteMask[(b2 >> 3) & 0xF];
 
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
                     // make note of the artificting colour for this pixel
                     if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                    {
+                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                        *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                    }
+                    else
+                        *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
                     qch += sizeof(ULONG);
 
                     BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
                     ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)] | BitsToByteMask[((b2 << 1) & 0xF) | 1];
 
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
                     if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                    {
+                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) |
+                                (Fill2 & ~BlendMask);
+                        *(ULONG *)qch = (((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | (Fill2bf & ~BlendMask);
+                    }
+                    else
+                        *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
 
                     qch += sizeof(ULONG);
-#elif 0
-                // This is the "my cheap TV really sucks" version - "but does not reflect any read hardware" (-Danny)
-
-                    ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
-                    ULONG ColorMask = BitsToByteMask[(b2 >> 5) & 0xF];
-
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    // make note of the artificting colour for this pixel
-                    if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    qch += sizeof(ULONG);
-
-                    BlendMask = BitsToByteMask[((b2 >> 0) & 0xF)];
-                    ColorMask = BitsToByteMask[((b2 >> 1) & 0xF)];
-
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    qch += sizeof(ULONG);
-#endif
                 }
             }
             break;
@@ -2220,12 +2193,12 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     b2 = cpuPeekB(candy, (sl.chbase << 8)
                         + ((b1 & 0x3F) << 3) + vpix);
 
-                    const ULONG Fill1 = 0x01010101 * Col.col1;
+                    const ULONG xFill1 = 0x01010101 * Col.col1;
 
                     ULONG BlendMask = BitsToByteMask[(b2 >> 4) & 0xF];
-                    ULONG PixelsHi = (Fill1 & BlendMask) | (Fill0 & ~BlendMask);
+                    ULONG PixelsHi = (xFill1 & BlendMask) | (Fill0 & ~BlendMask);
                     BlendMask = BitsToByteMask[(b2 >> 0) & 0xF];
-                    ULONG PixelsLo = (Fill1 & BlendMask) | (Fill0 & ~BlendMask);
+                    ULONG PixelsLo = (xFill1 & BlendMask) | (Fill0 & ~BlendMask);
 
                     *qch++ = PixelsHi & 0xff;
                     *qch++ = PixelsHi & 0xff;
@@ -2458,209 +2431,63 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             Col.col1 = sl.colpf1;
             Col.col2 = sl.colpf2;
 
-            // just for fun, don't artifact in B&W
-            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg && ((Col.col1 ^ Col.col2) & 0x0F); // artifact the normal screen memory
-            const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
-
-            // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-            const BYTE phase = ((Col.col1 & 0x0F) < (Col.col2 & 0x0F)) ? 0x80 : 0x00;
-            const BYTE red = fArtifacting ? ((0x40 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE green = fArtifacting ? ((0xc0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE yellow = fArtifacting ? ((0xe0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
-            yellow; // NYI
-
-            // the real artifact colours, not the bitfield versions
-            const BYTE redPMG = 0x40 | (colpf1Save & 0x0F);
-            const BYTE greenPMG = 0xc0 | (colpf1Save & 0x0F);
-            const BYTE yellowPMG = 0xe0 | (colpf1Save & 0x0F);
-            yellowPMG; // NYI
-
-            // generate a 4 pixel wide pattern of col1 and col2 and the artifact pattern
-
-            const ULONG FillA = 0x00010001 * (red | (green << 8));
-            const ULONG FillAPMG = 0x00010001 * (redPMG | (greenPMG << 8));
-            const ULONG Fill1 = 0x01010101 * Col.col1;
-            const ULONG Fill1PMG = 0x01010101 * colpf1Save;
-            const ULONG Fill2 = 0x01010101 * Col.col2;
-
-            WORD u = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
+            WORD vv = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
             for (; i < iTop; i++)
             {
                 b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
-                u = (u << 8) | (BYTE)b2;
+                vv = (vv << 8) | (BYTE)b2;
 
                 // do you have the hang of this by now? Use hshift, not sl.hscrol
                 // what bit position in the WORD u do we start copying from?
                 int index = 7 + hshift;
 
+                if (hshift)
+                    index = index;
+
                 // ATARI can only shift 2 pixels minimum at this resolution
 
-                // THEORY OF OPERATION - INTERLACING
-                // - only even pixels show red, only odd pixels show green (interpolate the empty pixels to be that colour too)
-                // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
-                // - a background pixel between white and (red/green) seems to stay background colour
-        
-#if 0
-                // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
-                for (j = 0; j < 4; j++)
-                {
-                    // don't walk off the beginning of the array
-                    BYTE last, last2;
+                WORD u = 0x3FF & (vv >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
-                    if (i == 0 && j == 0)
-                    {
-                        last = Col.col2;
-                        last2 = Col.col2;
-                    }
-                    else
-                    {
-                        last = *(qch - 1);
-                        last2 = *(qch - 2);
-                    }
+                //int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
 
-                    // EVEN - (unwind the loop for speed)
-
-                    // which bit is this bit position?
-                    int k = (index - (j << 1));
-
-                    // look at that bit
-                    b2 = (u >> k) & 0x1;
-
-                    // supports artifacting
-                    switch (b2 & 0x01)
-                    {
-                    default:
-                        Assert(FALSE);
-                        break;
-
-                    case 0x00:
-                        *qch++ = Col.col2;
-                        break;
-
-                    case 0x01:
-                        if (last == Col.col2)
-                        {
-                            *qch++ = fArtifacting ? red : Col.col1;
-                            if (last2 == red)
-                                *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        else
-                        {
-                            *qch++ = Col.col1;
-                            if (last == green)
-                            {
-                                *(qch - 2) = Col.col1; // yellow doesn't seem to work
-                                                   //*(qch - 1) = yellow;
-                            }
-                        }
-                        break;
-                    }
-
-                    // ODD
-
-                    // don't walk off the beginning of the array later on
-                    last = *(qch - 1);
-                    if (i == 0 && j == 0)
-                        last2 = Col.col2;
-                    else
-                        last2 = *(qch - 2);
-
-                    // which bit is this bit position?
-                    k = (index - (j << 1) - 1);
-
-                    // look at that bit
-                    b2 = (u >> k) & 0x1;
-
-                    // supports artifacting
-                    switch (b2 & 0x01)
-                    {
-                    default:
-                        Assert(FALSE);
-                        break;
-
-                    case 0x00:
-                        *qch++ = Col.col2;
-                        break;
-
-                    case 0x01:
-                        if (last == Col.col2)
-                        {
-                            *qch++ = fArtifacting ? green : Col.col1;
-                            if (last2 == green)
-                                *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        else
-                        {
-                            *qch++ = Col.col1;
-                            if (last == red)
-                                *(qch - 2) = Col.col1; // shouldn't affect a visible pixel if it's out of range
-                        }
-                        break;
-                    }
-                }
-
-#else
-                u = 0x3FF & (u >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
-
-    // !!! TODO - make this a monitor type you can select
+    // !!! TODO - make the artifacting strategy a monitor type you can select?
     // !!! We use different strategies for GR.0 and GR.8
+                
+                // Use the precomputed Fill colours
                 if (!fArtifacting && !fPMGA)
                 {
                     // This is the "I have sharp display with minimum pixel bleeding" version
                     // It is the ONLY version that works in black and white mode when artifacting is supposedly off
 
                     ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-                    ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
+                    //ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
 
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    // make note of the artificting colour for this pixel
-                    if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                    if (sl.fpmg)
+                        *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                    else
+                        *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
 
                     qch += sizeof(ULONG);
 
-                    BYTE bPeekAhead = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
-
                     BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-                    ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
+                    //BYTE bPeekAhead = (cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i + 1) & 0x0FFF)) & 0x80) >> 7;
+                    //ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
 
-                    *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                    if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
+                    if (sl.fpmg)
+                        *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
+                    else
+                        *(ULONG *)qch = (Fill1 & BlendMask) | (Fill2 & ~BlendMask);
 
                     qch += sizeof(ULONG);
                 }
-#if 0
-                // This is the "my cheap TV really sucks" version - "but does not reflect any real hardware" (- Danny)
 
-                ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-                ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF];
-
-                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                // make note of the artificting colour for this pixel
-                if (fPMGA)
-                    *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                qch += sizeof(ULONG);
-
-                BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-                ColorMask = BitsToByteMask[((u >> 1) & 0xF)];
-
-                *(ULONG *)qch = (((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                // make note of the artificting colour for this pixel
-                if (fPMGA)
-                    *(ULONG *)(&rgArtifact[qch - qchStart]) = (((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | (Fill2 & ~BlendMask);
-
-                qch += sizeof(ULONG);
-#endif
-                else  // this algorithm does NOT work when fArtifacting is FALSE or for B&W monitors
+                else  // these algorithms does NOT work when fArtifacting is FALSE (eg for B&W monitors)
                 {
+
+#if 1   // DAREK's algorithm
+
                     // This is the "make the bricks solid in Lode Runner" mode ("Apple II users would disagree!" - Darek)
                     // ("Apple II users were on a hi-res monitor, solid bricks are correct for the TV type we say we emulate!" - Danny)
 
@@ -2668,13 +2495,20 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     ULONG ColorMask = BitsToByteMask[(u >> 5) & 0xF] | BitsToByteMask[(u >> 3) & 0xF];
                     ULONG SolidMask = BitsToByteMask[(u >> 5) & 0xF] & BitsToByteMask[(u >> 3) & 0xF];
 
-                    *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                        ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
-
-                    // make note of the artificting colour for this pixel
+                    // in PMG bitfield mode, use the precomputed bitfield values (and note the real artifacting colours in an
+                    // array to do the artifacting later since artifacting doesn't work in bitfields).
+                    // Not in PMG bitfield mode? Use the regular precomputed colours.
                     if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
-                        ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                    {
+                        *(ULONG *)qch = ((((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | \
+                                            ((((0x80808080 ^ Fill1bf) & SolidMask) | (Fill2bf & ~SolidMask)) & ~BlendMask));
+                        // As well as filling in the bitfield, we need to remember the artifacting colour to use later
+                        *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                    }
+                    else
+                        *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                        ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                     qch += sizeof(ULONG);
 
@@ -2683,17 +2517,145 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
                     SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
 
-                    *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                    
+                    if (fPMGA)
+                    {
+                        *(ULONG *)qch = ((((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | \
+                            ((((0x80808080 ^ Fill1bf) & SolidMask) | (Fill2bf & ~SolidMask)) & ~BlendMask));
+                        // As well as filling in the bitfield, we need to remember the artifacting colour to use later
+                        *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
+                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                    }
+                    else
+                        *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
                         ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
-                    if (fPMGA)
-                        *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillAPMG & ~ColorMask) | (Fill1PMG & ColorMask)) & BlendMask) | \
-                        ((((0x80808080 ^ FillAPMG) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
-
                     qch += sizeof(ULONG);
-                }
-#endif
 
+#else   // DANNY's algorithm
+
+                    // THEORY OF OPERATION - INTERLACING (Danny's algorithm)
+                    // - only even pixels? show red, only odd pixels? show green (interpolate the empty pixels to be that colour too)
+                    // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
+                    // - a background pixel between white and (red/green) seems to stay background colour
+
+                    // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
+                    for (j = 0; j < 4; j++)
+                    {
+                        // don't walk off the beginning of the array
+                        BYTE last, last2;
+
+                        if (i == 0 && j == 0)
+                        {
+                            last = Col.col2;
+                            last2 = Col.col2;
+                        }
+                        else
+                        {
+                            last = *(qch - 1);
+                            last2 = *(qch - 2);
+                        }
+
+                        // EVEN - (unwind the loop for speed)
+
+                        // which bit is this bit position?
+                        int k = (index - (j << 1));
+
+                        // look at that bit
+                        b2 = (u >> k) & 0x1;
+
+                        // supports artifacting
+                        switch (b2 & 0x01)
+                        {
+                        default:
+                            Assert(FALSE);
+                            break;
+
+                        case 0x00:
+                            *qch++ = Col.col2;
+                            // !!! all of these are only necessary if (fPMGA), but it might be slower to test for that
+                            rgArtifact[qchpmg++] = Col.col2;
+                            break;
+
+                        case 0x01:
+                            if (last == Col.col2)
+                            {
+                                *qch++ = red;
+                                rgArtifact[qchpmg++] = redPMG;
+                                if (last2 == red)
+                                {
+                                    *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
+                                    rgArtifact[qchpmg - 2] = redPMG;
+                                }
+                            }
+                            else
+                            {
+                                *qch++ = Col.col1;
+                                rgArtifact[qchpmg++] = Col.col1;
+                                if (last == green)
+                                {
+                                    *(qch - 2) = Col.col1; // yellow doesn't seem to work
+                                                           //*(qch - 1) = yellow;
+                                    rgArtifact[qchpmg - 2] = Col.col1;
+
+                                }
+                            }
+                            break;
+                        }
+
+                        // ODD
+
+                        // don't walk off the beginning of the array later on
+                        last = *(qch - 1);
+                        if (i == 0 && j == 0)
+                            last2 = Col.col2;
+                        else
+                            last2 = *(qch - 2);
+
+                        // which bit is this bit position?
+                        k = (index - (j << 1) - 1);
+
+                        // look at that bit
+                        b2 = (u >> k) & 0x1;
+
+                        // supports artifacting
+                        switch (b2 & 0x01)
+                        {
+                        default:
+                            Assert(FALSE);
+                            break;
+
+                        case 0x00:
+                            *qch++ = Col.col2;
+                            rgArtifact[qchpmg++] = Col.col2;
+                            break;
+
+                        case 0x01:
+                            if (last == Col.col2)
+                            {
+                                *qch++ = green;
+                                rgArtifact[qchpmg++] = greenPMG;
+                                if (last2 == green)
+                                {
+                                    *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
+                                    rgArtifact[qchpmg - 2] = greenPMG;
+                                }
+                            }
+                            else
+                            {
+                                *qch++ = Col.col1;
+                                rgArtifact[qchpmg++] = Col.col1;
+                                if (last == red)
+                                {
+                                    *(qch - 2) = Col.col1; // shouldn't affect a visible pixel if it's out of range
+                                    rgArtifact[qchpmg - 2] = Col.col1;
+                                }
+                            }
+                            break;
+                        }
+                    }
+#endif
+                }
             }
             break;
         }
@@ -2725,10 +2687,10 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         b2 |= ((cpuPeekB(candy, wb2h) & 0x0f) << 4);
                 }
 
-                Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
-                Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
+                Col.col1 = (b2 >> 4) | (sl.colbk /* & 0xf0 */); // let the user screw up the colours if they want, like a real 810
+                Col.col2 = (b2 & 15) | (sl.colbk /* & 0xf0*/);  // they should only POKE 712 with multiples of 16
 
-                                                           // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
+                // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
                 if (sl.fpmg)
                 {
                     Col.col1 &= 0x0f;
@@ -2959,12 +2921,13 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                 // we have an artifacting colour we want to use instead of the regular colour for PF1
                 // and that colour is not just the normal pf1 colour, it's an artifact colour (red or green)
-                // so let it through and make sure artifacts show through PMGs.
+                // so let the artifact chroma show through
                 if (rgArtifact[i] && rgArtifact[i] != sl.colpf1)
                 {
                     colpfX = colpfX & 0xffff00ff | (rgArtifact[i] << 8);
-                    colpmX = 0x01010101 * rgArtifact[i];    // use artifact colour for PMG colours
+                    colpmX = 0x01010101 * rgArtifact[i];    // use artifact colour (chroma + lum) for PMG colours
                 }
+                // There is no red-green artifacting here, do not use the playfield chroma, but use the player chroma like normal
                 else
                 {
                     // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma

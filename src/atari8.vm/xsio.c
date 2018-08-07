@@ -569,7 +569,7 @@ BOOL SIOReadSector(void *candy, int wDrive, BYTE *pchk)
     ck = ck & 0xff;
 
     if (pchk)
-        *pchk = ck;
+        *pchk = (BYTE)ck;
     return TRUE;
 }
 

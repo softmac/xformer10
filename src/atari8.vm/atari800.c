@@ -3396,6 +3396,31 @@ void KillMePleaseBASIC(void *candy)
     }
 }
 
+// When PF1 or PF2 changes (or the monitor type), precompute the values to use for artifacting
+void PrecomputeArtifacting(void *candy)
+{
+    BYTE col2 = COLPF2;
+    if (FGreyFromBf(pvm->bfMon))
+        col2 &= 0xf;
+
+    // In the normal case where the foreground is brighter than the background, even pixels are red, odd are green.
+    // When the background is brighter, it's reversed, because when you write even pixels in a dark colour, it's actually
+    // the odd background pixels you are seeing
+    BYTE red = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0x40 : 0xc0) | (COLPF1 & 0xf);
+    BYTE green = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0xc0 : 0x40) | (COLPF1 & 0xf);
+    BYTE col1 = (col2 & 0xf0) | (COLPF1 & 0xf);
+
+    // precompute a 4 pixel wide pattern of the colours we will use for PF1, PF2 (the background) and artifacting. Both real and bitfield versions
+    FillA = 0x00010001 * (red | (green << 8));
+    
+    Fill1bf = 0x01010101 * bfPF1;   // !!! this could just be a constant
+    Fill1 = 0x01010101 * col1;
+    
+    Fill2bf = 0x01010101 * bfPF2;   // !!! this could just be a constant
+    Fill2 = 0x01010101 * col2;
+}
+
+
 //
 // here are our various PEEK routines, based on address
 //
@@ -3705,8 +3730,13 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
 
         rgbMem[writeGTIA+addr] = b;
 
+        if (addr == 0x17 || addr == 0x18)   // COLPF1 or COLPF2 affects artifacting
+        {
+            PrecomputeArtifacting(candy);
+        }
+
         // When you turn GRACTL off, you continue to use the most recent data
-        if (addr == 0x1d)   // GRACTL
+        else if (addr == 0x1d)   // GRACTL
         {
             // should be no need to ProcessScanLine since we are specifically preventing something from changing
 
@@ -3825,8 +3855,8 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // !!! What should I really do? No known app does this yet.
             if (cSEROUT == 5)
             {
-                Assert(0);
                 cSEROUT = 0;
+                Assert(0);
             }
 
             //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
