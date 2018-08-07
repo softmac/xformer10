@@ -1757,13 +1757,14 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             Col.col2 = sl.colpf2;
 
             // just for fun, don't interlace in B&W.
-            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg;
+            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg && ((Col.col1 ^ Col.col2) & 0x0F); // artifact the normal screen memory
             const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
 
             // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-            const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE green = fArtifacting ? (0xc0 | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE yellow = fArtifacting ? (0xe0 | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE phase = ((Col.col1 & 0x0F) < (Col.col2 & 0x0F)) ? 0x80 : 0x00;
+            const BYTE red = fArtifacting ? ((0x40 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE green = fArtifacting ? ((0xc0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE yellow = fArtifacting ? ((0xe0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
             yellow; // NYI
 
             // the real artifact colours, not the bitfield versions
@@ -2458,13 +2459,14 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             Col.col2 = sl.colpf2;
 
             // just for fun, don't artifact in B&W
-            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg; // artifact the normal screen memory
+            const BOOL fArtifacting = (pvm->bfMon == monColrTV) && !pmg.fGTIA && !sl.fpmg && ((Col.col1 ^ Col.col2) & 0x0F); // artifact the normal screen memory
             const BOOL fPMGA = (pvm->bfMon == monColrTV) && !pmg.fGTIA && sl.fpmg; // fill in special array
 
             // the artifacting colours - !!! this behaves like NTSC, PAL has somewhat random artifacting
-            const BYTE red = fArtifacting ? (0x40 | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE green = fArtifacting ? (0xc0 | (Col.col1 & 0x0F)) : Col.col1;
-            const BYTE yellow = fArtifacting ? (0xe0 | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE phase = ((Col.col1 & 0x0F) < (Col.col2 & 0x0F)) ? 0x80 : 0x00;
+            const BYTE red = fArtifacting ? ((0x40 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE green = fArtifacting ? ((0xc0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
+            const BYTE yellow = fArtifacting ? ((0xe0 ^ phase) | (Col.col1 & 0x0F)) : Col.col1;
             yellow; // NYI
 
             // the real artifact colours, not the bitfield versions
