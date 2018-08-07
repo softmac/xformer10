@@ -2013,7 +2013,6 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             Col.col2 = sl.colpf2;
 
             // !!! This is different than mode 15's artifacting algorithm!
-
             for (; i < iTop; i++)
             {
                 b1 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
@@ -2307,7 +2306,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     *qch++ = Col.col2;
                     *qch++ = Col.col2;
                 }
-                
+
             }
             break;
         }
@@ -2711,24 +2710,21 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                 // what bit position in the WORD u do we start copying from?
                 int index = 7 + hshift;
 
-                if (hshift)
-                    index = index;
-
                 // ATARI can only shift 2 pixels minimum at this resolution
 
-                // Don't change the original vv because it needs to be preserved for the horizontal scrolling to work
+                // don't change the original vv because we need it to preserve horizontal scrolling info
                 WORD u = 0x3FF & (vv >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
 
                 //int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
 
-    // !!! TODO - make the artifacting strategy a monitor type you can select?
-    // !!! We use different strategies for GR.0 and GR.8
-                
-                // Use the precomputed Fill colours
+                // !!! TODO - make the artifacting strategy a monitor type you can select?
+                // !!! We use different strategies for GR.0 and GR.8
+
+                // We don't want artifacting (B&W, maybe)
                 if (!fArtifacting && !fPMGA)
                 {
                     ULONG BlendMask = BitsToByteMask[(u >> 4) & 0xF];
-                
+
                     if (sl.fpmg)
                         *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
                     else
@@ -2737,7 +2733,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     qch += sizeof(ULONG);
 
                     BlendMask = BitsToByteMask[((u >> 0) & 0xF)];
-                
+
                     if (sl.fpmg)
                         *(ULONG *)qch = (Fill1bf & BlendMask) | (Fill2bf & ~BlendMask);
                     else
@@ -2746,7 +2742,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     qch += sizeof(ULONG);
                 }
 
-                else  // these algorithms does NOT work when fArtifacting is FALSE (eg for B&W monitors)
+                else
                 {
 
 #if 1   // DAREK's algorithm
@@ -2764,7 +2760,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     if (fPMGA)
                     {
                         *(ULONG *)qch = ((((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | \
-                                            ((((0x80808080 ^ Fill1bf) & SolidMask) | (Fill2bf & ~SolidMask)) & ~BlendMask));
+                            ((((0x80808080 ^ Fill1bf) & SolidMask) | (Fill2bf & ~SolidMask)) & ~BlendMask));
                         // As well as filling in the bitfield, we need to remember the artifacting colour to use later
                         *(ULONG *)(&rgArtifact[qch - qchStart]) = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
                             ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
@@ -2780,7 +2776,6 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     ColorMask = BitsToByteMask[((u >> 1) & 0xF)] | BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
                     SolidMask = BitsToByteMask[((u >> 1) & 0xF)] & BitsToByteMask[((u << 1) & 0xF) | bPeekAhead];
 
-                    
                     if (fPMGA)
                     {
                         *(ULONG *)qch = ((((Fill1bf & ~ColorMask) | (Fill1bf & ColorMask)) & BlendMask) | \
@@ -2922,6 +2917,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             }
             break;
         }
+
         case 16:
             // GTIA 16 grey mode
 
