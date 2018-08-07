@@ -461,6 +461,13 @@ typedef struct
     BYTE m_fFetch;      // fetch next DL instruction
     WORD m_wAddrOff;    // because of HSCROL, how many bytes forward to actually start the scan line
 
+    // things we precompute for artifacting
+    ULONG m_FillA;
+    ULONG m_Fill1;
+    ULONG m_Fill1bf;
+    ULONG m_Fill2;
+    ULONG m_Fill2bf;
+
     BYTE m_bCartType;   // type of cartridge
     BYTE m_fRAMCart;    // does this cartridge type have a RAM bank?
     WORD m_iBankSize;   // how big banks are on this cartridge
@@ -600,6 +607,11 @@ typedef struct
 #define rgbXLExtMem   CANDY_STATE(rgbXLExtMem)
 #define ANTICBankDifferent   CANDY_STATE(ANTICBankDifferent)
 #define temp          CANDY_STATE(temp)
+#define FillA         CANDY_STATE(FillA)
+#define Fill1bf       CANDY_STATE(Fill1bf)
+#define Fill1         CANDY_STATE(Fill1)
+#define Fill2bf       CANDY_STATE(Fill2bf)
+#define Fill2         CANDY_STATE(Fill2)
 
 #define SELF_SIZE 2048
 #define C000_SIZE 4096
@@ -889,6 +901,7 @@ __inline BYTE *_pbshift(void *candy)
 void KillMePlease(void *);
 void KillMePleaseXE(void *);
 void KillMePleaseBASIC(void *);
+void PrecomputeArtifacting(void *);
 void KillMeSoftlyPlease(void *);
 void SwitchToPAL(void *);
 void Interrupt(void *, BOOL);
