@@ -2146,8 +2146,6 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                     // We do want artifacting
                     // !!! TODO - make this a monitor type you can select
-                    // !!! We use different strategies for GR.0 and GR.8
-                    // GR.0, See mode 15 for artifacting theory of operation
                     else
                     {
 #if 1
@@ -2238,7 +2236,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     Col.col1 = (BYTE)(u >> 4) | (sl.colbk /* & 0xf0 */);    // let the user screw up the colours if they want, like a real 810
                     Col.col2 = (u & 15) | (sl.colbk /* & 0xf0*/); // they should only POKE 712 with multiples of 16
 
-                                                               // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
+                    // we're in BITFIELD mode because PMG are present, so we can only alter the low nibble. We'll put the chroma value back later.
                     if (sl.fpmg)
                     {
                         Col.col1 &= 0x0f;
@@ -2360,22 +2358,15 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                 if (hshift)
                 {
                     // non-zero horizontal scroll
-
                     ULONGLONG u, vv;
 
-                    // see comments for modes 2 & 3
-
-                    vv = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
-                    u = vv;
-
-                    if (hshift % 8)
-                    {
-                        int index = 1;
-                        vv = cpuPeekB(candy, (sl.chbase << 8) +
-                            ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - index) & 0x0FFF)) & 0x7f) << 3) + vpix);
-                        u |= (vv << (index << 3));
-                    }
-
+                    u = cpuPeekB(candy, (sl.chbase << 8) + ((b1 & 0x7F) << 3) + vpix);
+                    
+                    // we also need to see the previous character for hscrol
+                    vv = cpuPeekB(candy, (sl.chbase << 8) +
+                        ((cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF)) & 0x7f) << 3) + vpix);
+                    u |= (vv << 8);
+                  
                     b2 = (BYTE)(u >> hshift);
                 }
                 else
@@ -2730,22 +2721,19 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
             WORD vv = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
+            // !!! danny only
+            int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
+
             for (; i < iTop; i++)
             {
                 b2 = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i) & 0x0FFF));
 
                 vv = (vv << 8) | (BYTE)b2;
 
-                // do you have the hang of this by now? Use hshift, not sl.hscrol
-                // what bit position in the WORD u do we start copying from?
-                int index = 7 + hshift;
-
                 // ATARI can only shift 2 pixels minimum at this resolution
 
                 // don't change the original vv because we need it to preserve horizontal scrolling info
-                WORD u = 0x3FF & (vv >> (index - 7));  // 10-bit mask includes the two previous pixels (only uses one for now)
-
-                //int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
+                WORD u = vv >> hshift;  // 10-bit mask includes the two previous pixels (only uses one for now)
 
                 // !!! TODO - make the artifacting strategy a monitor type you can select?
                 // !!! We use different strategies for GR.0 and GR.8
@@ -2827,6 +2815,8 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     // - odd and even shows orange. even and odd show white. 3 pixels in a row all show white
                     // - a background pixel between white and (red/green) seems to stay background colour
 
+                    int index = 7;
+
                     // copy 2 screen pixel each iteration (odd then even), for 8 pixels written per screen byte in this mode
                     for (j = 0; j < 4; j++)
                     {
@@ -2835,13 +2825,13 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                         if (i == 0 && j == 0)
                         {
-                            last = Col.col2;
-                            last2 = Col.col2;
+                            last = (BYTE)Fill2;
+                            last2 = (BYTE)Fill2;
                         }
                         else
                         {
-                            last = *(qch - 1);
-                            last2 = *(qch - 2);
+                            last = rgArtifact[qchpmg - 1];    // *(qch - 1);
+                            last2 = rgArtifact[qchpmg - 2];   // *(qch - 2);
                         }
 
                         // EVEN - (unwind the loop for speed)
@@ -2862,31 +2852,38 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         case 0x00:
                             *qch++ = Col.col2;
                             // !!! all of these are only necessary if (fPMGA), but it might be slower to test for that
-                            rgArtifact[qchpmg++] = Col.col2;
+                            rgArtifact[qchpmg++] = (BYTE)Fill2;
+                            //if (hshift) ODS("black\n");
                             break;
 
                         case 0x01:
-                            if (last == Col.col2)
+                            if (last == (BYTE)Fill2)
                             {
-                                *qch++ = red;
-                                rgArtifact[qchpmg++] = redPMG;
-                                if (last2 == red)
+                                *qch++ = fArtifacting ? (BYTE)FillA : Col.col1;
+                                rgArtifact[qchpmg++] = (BYTE)FillA;
+                                if (last2 == (BYTE)FillA)
                                 {
-                                    *(qch - 2) = red; // shouldn't affect a visible pixel if it's out of range
-                                    rgArtifact[qchpmg - 2] = redPMG;
+                                    *(qch - 2) = fArtifacting? (BYTE)FillA : Col.col1;
+                                    rgArtifact[qchpmg - 2] = (BYTE)FillA;
+                                    //if (hshift) ODS("red (+ change previous to red)\n");
                                 }
+                                else
+                                    ;//if (hshift) ODS("red\n");
+
                             }
                             else
                             {
                                 *qch++ = Col.col1;
-                                rgArtifact[qchpmg++] = Col.col1;
-                                if (last == green)
+                                rgArtifact[qchpmg++] = (BYTE)Fill1;
+                                if (last == (BYTE)(FillA >> 8))
                                 {
                                     *(qch - 2) = Col.col1; // yellow doesn't seem to work
                                                            //*(qch - 1) = yellow;
-                                    rgArtifact[qchpmg - 2] = Col.col1;
-
+                                    rgArtifact[qchpmg - 2] = (BYTE)Fill1;
+                                    //if (hshift) ODS("white (+ change previous to white\n");
                                 }
+                                else
+                                    ;//if (hshift) ODS("white\n");
                             }
                             break;
                         }
@@ -2894,11 +2891,11 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         // ODD
 
                         // don't walk off the beginning of the array later on
-                        last = *(qch - 1);
+                        last = rgArtifact[qchpmg - 1];  // *(qch - 1);
                         if (i == 0 && j == 0)
-                            last2 = Col.col2;
+                            last2 = (BYTE)Fill2;
                         else
-                            last2 = *(qch - 2);
+                            last2 = rgArtifact[qchpmg - 2]; // *(qch - 2);
 
                         // which bit is this bit position?
                         k = (index - (j << 1) - 1);
@@ -2915,29 +2912,37 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
                         case 0x00:
                             *qch++ = Col.col2;
-                            rgArtifact[qchpmg++] = Col.col2;
+                            rgArtifact[qchpmg++] = (BYTE)Fill2;
+                            //if (hshift) ODS("black\n");
                             break;
 
                         case 0x01:
-                            if (last == Col.col2)
+                            if (last == (BYTE)Fill2)
                             {
-                                *qch++ = green;
-                                rgArtifact[qchpmg++] = greenPMG;
-                                if (last2 == green)
+                                *qch++ = fArtifacting ? (BYTE)(FillA >> 8) : Col.col1;
+                                rgArtifact[qchpmg++] = (BYTE)(FillA >> 8);
+                                if (last2 == (BYTE)(FillA >> 8))
                                 {
-                                    *(qch - 2) = green; // shouldn't affect a visible pixel if it's out of range
-                                    rgArtifact[qchpmg - 2] = greenPMG;
+                                    *(qch - 2) = fArtifacting? (BYTE)(FillA >> 8) : Col.col1;
+                                    rgArtifact[qchpmg - 2] = (BYTE)(FillA >> 8);
+                                    //if (hshift) ODS("green (+ change previous to green)\n");
                                 }
+                                else
+                                    ;//if (hshift) ODS("green\n");
+
                             }
                             else
                             {
                                 *qch++ = Col.col1;
-                                rgArtifact[qchpmg++] = Col.col1;
-                                if (last == red)
+                                rgArtifact[qchpmg++] = (BYTE)Fill1;
+                                if (last == (BYTE)FillA)
                                 {
                                     *(qch - 2) = Col.col1; // shouldn't affect a visible pixel if it's out of range
-                                    rgArtifact[qchpmg - 2] = Col.col1;
+                                    rgArtifact[qchpmg - 2] = (BYTE)Fill1;
+                                    //if (hshift) ODS("white (+ change previous to white)\n");
                                 }
+                                else
+                                    ;//if (hshift) ODS("white\n");
                             }
                             break;
                         }
