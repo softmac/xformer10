@@ -1,0 +1,13 @@
+
+5  REM cycle through artifacted tile patterns
+10 GR.8:CO.1
+20 FOR X = 1 TO 279 STEP 2
+30 PLOT X*1.1,0
+40 DR. X,159
+50 NEXT X
+60 POKE 709,255*RND(0)
+70 F = PEEK(709)
+80 ?F,PEEK(710)
+85 D = SQR(F^3)^1.5
+90 GOTO 60
+
