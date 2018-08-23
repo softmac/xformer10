@@ -3408,8 +3408,8 @@ void PrecomputeArtifacting(void *candy)
     // the odd background pixels you are seeing
     BYTE red = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0x40 : 0xc0) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
     BYTE green = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0xc0 : 0x40) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
-    red += COLPF1 & 0xF0;
-    green += COLPF1 & 0xF0;
+    red += COLPF2 & 0xF0;
+    green += COLPF2 & 0xF0;
     BYTE col1 = (col2 & 0xf0) | (COLPF1 & 0xf);
 
     // precompute a 4 pixel wide pattern of the colours we will use for PF1, PF2 (the background) and artifacting. Both real and bitfield versions
