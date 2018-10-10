@@ -8,6 +8,7 @@
     Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    10/10/2018  darekm      Xformer 10.0 release
     11/30/2008  darekm      Gemulator 9.0 release
     06/17/2012  darekm      Windows 8 / 64-bit / touch fixes
 
@@ -5526,6 +5527,45 @@ break;
 
         default:
 
+            if ((ULONG)(wmId - IDM_WEB_EMULATORS) < 8)
+            {
+                // User selected an online help menu item
+
+                static char const * const rgszWeb[] =
+                {
+                    "www.emulators.com",                // 40100
+                    "",                                 // update page
+                    "",                                 // beta page
+                    "www.emulators.com/download.htm",   // download page
+#ifdef XFORMER
+                    "www.emulators.com/xformer.htm",    // Xformer page
+                    "",
+#elif defined(ATARIST)
+                    "www.emulators.com/gemul8r.htm",    // Gemulator page
+                    "sourceforge.net/projects/emutos/", // EmuTOS page
+#endif
+                    "",
+                };
+
+                char rgch[80];
+
+                if (strncmp("ftp:", rgszWeb[wmId - IDM_WEB_EMULATORS], 4))
+                    strcpy(rgch, "http://");
+                strcat(rgch, rgszWeb[wmId - IDM_WEB_EMULATORS]);
+
+                int ret = ShellExecuteA(NULL,
+                    "open",
+                    rgch,
+                    NULL,
+                    NULL,
+                    SW_SHOWNORMAL);
+
+                if (ret < 32)
+                    MessageBeep(0xFFFFFFFF);
+
+                return TRUE;
+            }
+
             // We have asked to switch to a certain VM? Not allowed when tiling. Remember, there are only 64 at most
             // in the list, so choosing the last menu item chooses at most #63, not the last VM in the machine
 
@@ -8097,17 +8137,16 @@ LRESULT CALLBACK About(
                     "",                                 // update page
                     "",                                 // beta page
                     "www.emulators.com/download.htm",   // download page
+#ifdef XFORMER
+                    "www.emulators.com/xformer.htm",    // Xformer page
+                    "",
+#elif defined(ATARIST)
                     "www.emulators.com/gemul8r.htm",    // Gemulator page
                     "sourceforge.net/projects/emutos/", // EmuTOS page
+#endif
                     "",
                 };
 
-                UINT(__stdcall *pfnSE)();
-                HMODULE hSh32;
-                int ret = 0;
-
-                if ((hSh32 = LoadLibrary("shell32.dll")) &&
-                    (pfnSE = (void *)GetProcAddress(hSh32, "ShellExecuteA")))
                 {
                     char rgch[80];
 
@@ -8115,7 +8154,7 @@ LRESULT CALLBACK About(
                         strcpy(rgch, "http://");
                     strcat(rgch, rgszWeb[wmId - IDM_WEB_EMULATORS]);
 
-                    ret = (*pfnSE)(NULL,
+               int  ret = ShellExecuteA(NULL,
                         "open",
                         rgch,
                         NULL,
