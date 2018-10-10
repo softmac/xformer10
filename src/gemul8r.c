@@ -5565,15 +5565,12 @@ break;
                     strcpy(rgch, "http://");
                 strcat(rgch, rgszWeb[wmId - IDM_WEB_EMULATORS]);
 
-                int ret = ShellExecuteA(NULL,
+                ShellExecuteA(NULL,
                     "open",
                     rgch,
                     NULL,
                     NULL,
                     SW_SHOWNORMAL);
-
-                if (ret < 32)
-                    MessageBeep(0xFFFFFFFF);
 
                 return TRUE;
             }
