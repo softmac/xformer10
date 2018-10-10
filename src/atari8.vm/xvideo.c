@@ -143,20 +143,23 @@ void ShowCountDownLine(void *candy)
         
         BYTE colfg;
 
+        // 352 pixels has room for 352/8 = 44 characters.
+        // Limit text to 42 characters of context with a space on either side
+
         if (cntTick < 5)
             pch = "";
         else if (cntTick < 40)
-            pch = "ALT+F12 - NTSC/PAL    SHIFT+F12 - COLOR/MONO";
+            pch = " ALT+F12 - NTSC/PAL  SHIFT+F12 - COLOR/MONO";
         else if (cntTick < 75)
-            pch = "F6 F7 F8 F9 F10 - HELP START SEL OPT RESET";
+            pch = " F6 F7 F8 F9 F10 - HELP START SEL OPT RESET";
         else if (cntTick < 110)
-            pch = "F5 - TILED/FULL SCREEN";
+            pch = " F5 - TILED/FULL SCREEN";
         else if (cntTick < 145)
-            pch = "ALT+F1 - TURBO/NORMAL SPEED";
+            pch = " ALT+F1 - TURBO/NORMAL SPEED";
         else if (cntTick < 180)
-            pch = "USE CTRL + ARROWS FOR JOYSTICK";
+            pch = " USE CTRL + ARROWS FOR JOYSTICK";
         else if (cntTick < 220)
-            pch = "XFORMER 10 BY DANNY MILLER AND DAREK MIHOCKA";
+            pch = " XFORMER BY DANNY MILLER AND DAREK MIHOCKA";
         else
             pch = (char *)rgszModes[(fPAL ? 6 : 0) + (mdXLXE + ((ramtop == 0xC000) ? 0 : 3))];
 
