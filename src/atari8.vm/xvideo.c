@@ -2744,8 +2744,10 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
             WORD vv = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
+#if 0
             // !!! Danny only
             int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
+#endif
 
             for (; i < iTop; i++)
             {
