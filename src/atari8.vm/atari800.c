@@ -2277,10 +2277,10 @@ BOOL __cdecl InitAtari(void *candy)
 
     pvm->bfMon = monColrTV;
 
-    // by default, use XL and XE built in BASIC, but no BASIC for Atari 800 unless Shift-F10 changes it
+    // by default, use XL without BASIC to see the cute help self test, and the other 2 with BASIC.
     // Install may have a preference and set this already, in which case, don't change it
     if (!ramtop)
-        AlterRamtop(candy, (pvm->bfHW > vmAtari48) ? 0xA000 : 0xC000);
+        AlterRamtop(candy, (pvm->bfHW == vmAtariXL) ? 0xC000 : 0xA000);
     
     switch (pvm->bfHW)
     {
