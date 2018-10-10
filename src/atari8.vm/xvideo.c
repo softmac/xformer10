@@ -30,14 +30,21 @@ const BYTE mppmbw[5] =
     bfPF3,
     };
 
-BYTE const * const rgszModes[6] =
+// Three hardware chipsets * BASIC on/off * PAL/NTSC
+BYTE const * const rgszModes[3*2*2] =
     {
-    (BYTE const * const )" ATARI 800 (NO CARTRIDGE)",
-    (BYTE const * const)" ATARI 800XL (NO CARTRIDGE)",
-    (BYTE const * const)" ATARI 130XE (NO CARTRIDGE)",
-    (BYTE const * const)" ATARI 800 + CARTRIDGE",
-    (BYTE const * const)" ATARI 800XL + CARTRIDGE",
-    (BYTE const * const)" ATARI 130XE + CARTRIDGE",
+    (BYTE const * const )" ATARI 800 (NO CARTRIDGE) (NTSC)",
+    (BYTE const * const)" ATARI 800XL (NO CARTRIDGE) (NTSC)",
+    (BYTE const * const)" ATARI 130XE (NO CARTRIDGE) (NTSC)",
+    (BYTE const * const)" ATARI 800 + CARTRIDGE (NTSC)",
+    (BYTE const * const)" ATARI 800XL + CARTRIDGE (NTSC)",
+    (BYTE const * const)" ATARI 130XE + CARTRIDGE (NTSC)",
+    (BYTE const * const )" ATARI 800 (NO CARTRIDGE) (PAL)",
+    (BYTE const * const)" ATARI 800XL (NO CARTRIDGE) (PAL)",
+    (BYTE const * const)" ATARI 130XE (NO CARTRIDGE) (PAL)",
+    (BYTE const * const)" ATARI 800 + CARTRIDGE (PAL)",
+    (BYTE const * const)" ATARI 800XL + CARTRIDGE (PAL)",
+    (BYTE const * const)" ATARI 130XE + CARTRIDGE (PAL)",
     };
 
 #define vcbScan X8      // NTSC and PAL widths are the same
@@ -136,16 +143,22 @@ void ShowCountDownLine(void *candy)
         
         BYTE colfg;
 
-        if (cntTick < 2)
+        if (cntTick < 5)
             pch = "";
-        else if (cntTick < 80)
-            pch = "F6 - F10 FOR HELP START SEL OPT RESET";
-        else if (cntTick < 156)
-            pch = " USE CTRL + ARROWS FOR JOYSTICK";
-        else if (cntTick < 206)
-            pch = " XFORMER BY DAREK MIHOCKA";
+        else if (cntTick < 40)
+            pch = "ALT+F12 - NTSC/PAL    SHIFT+F12 - COLOR/MONO";
+        else if (cntTick < 75)
+            pch = "F6 F7 F8 F9 F10 - HELP START SEL OPT RESET";
+        else if (cntTick < 110)
+            pch = "F5 - TILED/FULL SCREEN";
+        else if (cntTick < 145)
+            pch = "ALT+F1 - TURBO/NORMAL SPEED";
+        else if (cntTick < 180)
+            pch = "USE CTRL + ARROWS FOR JOYSTICK";
+        else if (cntTick < 220)
+            pch = "XFORMER 10 BY DANNY MILLER AND DAREK MIHOCKA";
         else
-            pch = (char *)rgszModes[mdXLXE + ((ramtop == 0xC000) ? 0 : 3)];
+            pch = (char *)rgszModes[(fPAL ? 6 : 0) + (mdXLXE + ((ramtop == 0xC000) ? 0 : 3))];
 
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
@@ -185,7 +198,12 @@ void ShowCountDownLine(void *candy)
         }
 
         if (i == 7)
-            cntTick--;
+        {
+            cntTickLo -= 64;
+
+            if (cntTickLo < 64)
+                cntTick--;
+        }
 
     }
 }
