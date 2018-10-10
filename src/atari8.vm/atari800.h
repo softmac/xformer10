@@ -384,7 +384,7 @@ typedef struct
     unsigned char    m_srI;
     unsigned char    m_srZ;
     unsigned char    m_srC;
-    unsigned char    m_pad;
+    unsigned char    m_cntTickLo;
 
     short m_wLeft;          // signed, cycles to go can go <0 finishing the last 6502 instruction
     short m_wNMI;    // keep track of wLeft when debugging, needs to be thread safe, but not persisted, and signed like wLeft
@@ -562,6 +562,7 @@ typedef struct
 #define fTrace        CANDY_STATE(fTrace)
 #define mdXLXE        CANDY_STATE(mdXLXE)
 #define cntTick       CANDY_STATE(cntTick)
+#define cntTickLo     CANDY_STATE(cntTickLo)
 #define wFrame        CANDY_STATE(wFrame)
 #define wScan         CANDY_STATE(wScan)
 #define wLeft         CANDY_STATE(wLeft)
