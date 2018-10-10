@@ -638,7 +638,7 @@ ThreadTry:
 
                             // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                             if (!ThreadStuff[cThreads].hGoEvent || !hDoneEvent[cThreads] ||
-                                !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)cThreads,
+                                !(ThreadStuff[cThreads].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)(LONG_PTR)cThreads,
                                     STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
                             {
                                 // don't leave the events existing if the thread doesn't... we might try to wait on it
@@ -750,7 +750,7 @@ ThreadTry:
 
                 // default stack size of 1M wastes tons of memory and limit us to a few VMS only - smallest possible is 64K
                 if (!ThreadStuff[x].hGoEvent || !hDoneEvent[x] ||
-                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)x,
+                    !(ThreadStuff[x].hThread = CreateThread(NULL, 65536, (void *)VMThread, (LPVOID)(LONG_PTR)x,
                             STACK_SIZE_PARAM_IS_A_RESERVATION, NULL)))
                 {
                     // don't leave the events existing if the thread doesn't... we might try to wait on it

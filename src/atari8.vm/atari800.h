@@ -339,8 +339,8 @@ typedef struct
 typedef struct
 {
     ULONGLONG m_ullTimeTravelTime;    // the time stamp of a snapshot
-    char m_cTimeTravelPos; // which is the current snapshot?
     char *m_Time[3];       // 3 time travel saved snapshots, 5 seconds apart, for going back ~13 seconds
+    char m_cTimeTravelPos; // which is the current snapshot?
 
     DRIVE m_rgDrives[MAX_DRIVES];
 
