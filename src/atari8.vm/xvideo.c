@@ -148,15 +148,17 @@ void ShowCountDownLine(void *candy)
 
         if (cntTick < 5)
             pch = "";
-        else if (cntTick < 40)
+        else if (cntTick < 35)
+            pch = " CLICK: HELP ONLINE DOCUMENTATION FOR MORE!";
+        else if (cntTick < 65)
             pch = " ALT+F12 - NTSC/PAL  SHIFT+F12 - COLOR/MONO";
-        else if (cntTick < 75)
+        else if (cntTick < 95)
             pch = " F6 F7 F8 F9 F10 - HELP START SEL OPT RESET";
-        else if (cntTick < 110)
+        else if (cntTick < 125)
             pch = " F5 - TILED/FULL SCREEN";
-        else if (cntTick < 145)
+        else if (cntTick < 155)
             pch = " ALT+F1 - TURBO/NORMAL SPEED";
-        else if (cntTick < 180)
+        else if (cntTick < 185)
             pch = " USE CTRL + ARROWS FOR JOYSTICK";
         else if (cntTick < 220)
             pch = " XFORMER BY DANNY MILLER AND DAREK MIHOCKA";

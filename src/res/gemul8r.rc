@@ -239,7 +239,7 @@ BEGIN
     BEGIN
         MENUITEM "Emulators.com &Home Page",    IDM_WEB_EMULATORS
         MENUITEM "&Emulators.com Downloads",    IDM_WEB_FREE
-        MENUITEM "&Online Help",                IDM_WEB_HELP
+        MENUITEM "&Online Documentation",       IDM_WEB_HELP
         //MENUITEM "EmuTOS open source &TOS",     IDM_WEB_EMUTOS
         //MENUITEM SEPARATOR
         MENUITEM "&About",                      IDM_ABOUT
