@@ -1766,13 +1766,16 @@ int CALLBACK WinMain(
     if (!fSkipLoad && v.fSaveOnExit)
         /* fProps = */ LoadProperties(lpLoad, FALSE);   // don't forget saved window position just because restoring failed!
 
+    BOOL fWantTile = FALSE;
+
     // If we didn't restore/drag any VM's
     if (v.cVM == 0)
     {
         v.iVM = -1; // make sure the current one is invalid
 
-        // we don't need any anymore !!! or is that better than an empty window?
-        //CreateAllVMs();
+        // On first boot, without an .ini file, give them a tile of all possible VMs
+        CreateAllVMs();
+        fWantTile = TRUE;   // we don't know how big to make our window so let a PostMessage later figure it out
 
 #if defined(ATARIST) || defined(SOFTMAC)
         // Now go and prompt the user with First Time Setup if necessary
@@ -1881,6 +1884,15 @@ int CALLBACK WinMain(
 
     ULONGLONG cLastJif = GetCycles();       // initialize the starting guest frame time
     uExecSpeed = 0;                         // initialize execution speed to 0, so the first reading will start the running average
+
+    // we want first boot to come up tiled, but to figure out the right size, we need to go into tiled, out of tiled which
+    // figures out the right size, then back into tiled
+    if (fWantTile)
+    {
+        PostMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+        PostMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+        PostMessage(vi.hWnd, WM_COMMAND, IDM_TILE, 0);
+    }
 
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
