@@ -2742,7 +2742,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
             WORD vv = cpuPeekB(candy, (wAddr & 0xF000) | ((wAddr + wAddrOff + i - 1) & 0x0FFF));
 
-            // !!! danny only
+            // !!! Danny only
             int qchpmg = qchStart ? (int)(qch - qchStart) : 0;  // qchStart is NULL if !pmg
 
             for (; i < iTop; i++)
@@ -3176,8 +3176,6 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             }
     #endif
 
-        //pmg.fHitclr = 0;
-
         // now map the rgpix array to the screen
         if (v.fTiling && !v.fMyVideoCardSucks)
         {
@@ -3197,7 +3195,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
 
         // precompute some things so our loop can be fast. It was the slowest part of the code
 
-        // In fifth player mode, use PF3 unless PF1 also present in which case use the luma of PF1 (special)
+        // In fifth player mode, use PF3 unless PF1 also present and it's hi-res, in which case use the luma of PF1 (special)
         // Both pf3 and pfX have special versions, depending on which we need to use
         const DWORD colpfXNorm = sl.colpfX;
         const BYTE  colpf3Norm = sl.colpf3;
@@ -3226,28 +3224,58 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
             BYTE  colpf3 = colpf3Norm;
             DWORD colpmX = colpmXNorm;
 
-            // use the special version in hires modes with PF1 present
-            // !!! avoiding this if made perf worse but so did obvious improvements. Caching must be hiding the truth?
+            // PF1 is present in hi-res mode
             if (pmg.fHiRes && (b & bfPF1))
             {
-                // If PF3 and PF1 are present, that can only happen in 5th player mode, so alter PF3's colour to match the luma of PF1
+                // In hires modes with PF1 present, we use the special PF3 colour (5th player present)
                 colpfX = colpfXSpec;
                 colpf3 = colpf3Spec;
 
-                // we have an artifacting colour we want to use instead of the regular colour for PF1
+                // We have an artifacting colour we want to use instead of the regular colour for PF1
                 // and that colour is not just the normal pf1 colour, it's an artifact colour (red or green)
-                // so let the artifact chroma show through
+                // The bitfields could not express this, so now it's time to actually do the artifacting.
                 if (rgArtifact[i] && rgArtifact[i] != sl.colpf1)
                 {
+#if 1
                     colpfX = colpfX & 0xffff00ff | (rgArtifact[i] << 8);
-                    colpmX = 0x01010101 * rgArtifact[i];    // use artifact colour (chroma + lum) for PMG colours
+                    colpmX = 0x01010101 * rgArtifact[i];
+#else
+                    // There is a player at this artifacting location as well that has priority enough to be visible
+                    BYTE bNew = (rgPMGMap[(sl.prior << 8) + b]);    // what wins the priority race
+                    if (bNew & (bfPM0 | bfPM1 | bfPM2 | bfPM3))
+                    {
+                        // where a player is showing, the PF1 artifact chroma is supposed to peek through, so show that,
+                        // unless the player and pf1 lum's are the same or the player lum is maxed out. In that case,
+                        // apparently, the artifact colour chroma is not visible.
+                        // !!! this only does P0 and screws up P1-3
+                        if ((pmg.colpm0 & 0xf) != (sl.colpf1 & 0xf) && (pmg.colpm0 & 0xf) < 0xe)
+                        {
+                            // Use the artifact chroma as the PMG colours. The luma should be an average of the fore/background
+                            // but now the background is a player colour not PF2 which was used to calculate the artifact luma.
+                            colpmX = 0x01010101 * ((rgArtifact[i] & 0xf0) | (((sl.colpf1 & 0xf) + (pmg.colpm0 & 0xf)) >> 1));
+                            
+                            // Now if PRIOR=0, the playfield will be OR'd with the player, which will screw it up since
+                            // they might have equal lums but the artifacting changed the player lum, so they will OR to full
+                            // brightness incorrectly. Pretend PF1 is not present anymore.
+                            b &= ~bfPF1;
+                        }
+
+                        else
+                        {
+                            // where a player is visible, it should be the player chroma with PF1 luminence peeking through
+                            colpmX = colpmXSpec;
+                        }
+                    }
+
+                    // where only PF1 is showing, make it the artifact colour we wanted it to have but couldn't.
+                    else
+                        colpfX = colpfX & 0xffff00ff | (rgArtifact[i] << 8);
+#endif
                 }
-                // There is no red-green artifacting here, do not use the playfield chroma, but use the player chroma like normal
+
+                // where a player is visible, it should be the player chroma with PF1 luminence peeking through
                 else
-                {
-                    // in hi-res modes, text is always visible on top of a PMG, because the colour is altered to have PF1's luma
                     colpmX = colpmXSpec;
-                }
             }
 
             if (!pmg.fGTIA)

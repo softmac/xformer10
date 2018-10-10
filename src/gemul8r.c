@@ -1007,7 +1007,6 @@ void FixAllMenus(BOOL fVM)
     EnableMenuItem(vi.hMenu, IDM_WARMSTART, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_DELVM, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_CHANGEVM, (inst >= 0) ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_SAVEAS, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0) ? 0 : MF_GRAYED);
 
     // Initialize the virtual disk menu items to show the associated file path with each drive.
@@ -3082,7 +3081,7 @@ void RenderBitmap()
     RECT rect;
     GetClientRect(vi.hWnd, &rect);
 
-    if (!cThreads)
+    if (!cThreads || v.cVM == 0)
     {
         BitBlt(vi.hdc, 0, 0, rect.right, rect.bottom, NULL, 0, 0, BLACKNESS);
         return;
