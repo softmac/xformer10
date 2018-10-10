@@ -1903,7 +1903,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         }
                         else
                             *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                            ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                         qch += sizeof(ULONG);
 
@@ -1922,7 +1922,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         }
                         else
                             *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                            ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                         qch += sizeof(ULONG);
 #endif
@@ -2221,7 +2221,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         }
                         else
                             *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                            ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                         qch += sizeof(ULONG);
 
@@ -2240,7 +2240,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                         }
                         else
                             *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                            ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                            ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                         qch += sizeof(ULONG);
 #endif
@@ -2803,7 +2803,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     }
                     else
                         *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                        ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                        ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                     qch += sizeof(ULONG);
 
@@ -2822,7 +2822,7 @@ void PSLInternal(void *candy, unsigned start, unsigned stop, unsigned i, unsigne
                     }
                     else
                         *(ULONG *)qch = ((((FillA & ~ColorMask) | (Fill1 & ColorMask)) & BlendMask) | \
-                        ((((0x80808080 ^ FillA) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
+                        ((((_rotl(FillA,8)) & SolidMask) | (Fill2 & ~SolidMask)) & ~BlendMask));
 
                     qch += sizeof(ULONG);
 
