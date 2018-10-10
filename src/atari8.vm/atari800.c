@@ -3406,8 +3406,8 @@ void PrecomputeArtifacting(void *candy)
     // In the normal case where the foreground is brighter than the background, even pixels are red, odd are green.
     // When the background is brighter, it's reversed, because when you write even pixels in a dark colour, it's actually
     // the odd background pixels you are seeing
-    BYTE red = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0x40 : 0xc0) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
-    BYTE green = ((COLPF1 & 0xf) > (COLPF2 & 0xf) ? 0xc0 : 0x40) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
+    BYTE red = ((((COLPF1 & 0xf) - (COLPF2 & 0xf) + 1) & 0x3c) << 2) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
+    BYTE green = ((((COLPF2 & 0xf) - (COLPF1 & 0xf) + 1) & 0x3c) << 2) | (((COLPF1 & 0xf) + (COLPF2 & 0xf)) >> 1);
     red += COLPF2 & 0xF0;
     green += COLPF2 & 0xF0;
     BYTE col1 = (col2 & 0xf0) | (COLPF1 & 0xf);
