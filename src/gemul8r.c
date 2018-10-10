@@ -337,7 +337,7 @@ void DisplayStatus(int iVM)
         strcat(rgch0, rgch);
     }
 
-#if 1
+#ifndef NDEBUG
     // former debug output will give some monitor refresh information, but it interferes with the search string and shouldn't be needed
     sprintf(rgch, " (%ums renders)", /* v.vRefresh, renders, */ lastRenderCost);
     strcat(rgch0, rgch);

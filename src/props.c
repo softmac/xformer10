@@ -9,6 +9,7 @@
     Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    10/10/2018  darekm      Xformer 10.0 release
     11/30/2008  darekm      Gemulator 9.0 release
     03/03/2008  darekm      silent first time autoconfig for EmuTOS
 
@@ -25,7 +26,7 @@
 #ifdef ATARIST
 char const szIniFile[] = "GEM2000.INI";     // Atari ST, Atari 8-bit, maybe Mac
 #else
-char const szIniFile[] = "XF2000.INI";      // Atari 8-bit only
+char const szIniFile[] = "XFORMERX.INI";    // Atari 8-bit only
 #endif // ATARIST
 
 #else  // !XFORMER
