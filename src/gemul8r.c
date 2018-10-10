@@ -3831,11 +3831,27 @@ BOOL SaveATARIDOS(int inst, int drive)
     return fh;
 }
 
+const char *SzFromCpu(USHORT machine)
+{
+    switch (machine)
+    {
+        default: return "Unknown";
+        case 0xAA64: return "ARM64";
+        case 0x01C2: return "ARM";
+        case 0x01C4: return "ARM";
+        case 0x8664: return "X64";
+        case 0x014C: return "X86";
+        case 0x0000:
+        case 0x0001: return "Same as host";
+    }
+}
+
 
 void ShowAbout()
 {
-    char rgch[1120], rgch2[64], rgchVer[32];
+    char rgch[1120], rgch2[64], rgchVer[64];
 
+#if 0
     // !!! Windows lies and says we're 8 because we are not "manifested" for 10
     if (IsWindows10OrGreater())
         strcpy(rgchVer, "Windows 10 or Greater");
@@ -3849,12 +3865,29 @@ void ShowAbout()
         strcpy(rgchVer, "Windows XP");
     else
         strcpy(rgchVer, "Windows archaic");
+#else
+    USHORT guestCPU = 0;
+    USHORT hostCPU = 0;
+
+    rgchVer[0] = 0;
+
+    if (IsWow64Process2(GetCurrentProcess(), &guestCPU, &hostCPU))
+    {
+        sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(hostCPU));
+    }
+
+#endif
 
     sprintf(rgch2, "About %s", vi.szAppName);
 
-    sprintf(rgch, "%s Community Release\n"
-        "Darek's Classic Computer Emulator.\n"
-        "Version 9.96 - built on %s\n"
+    sprintf(rgch, "%s for Windows 10\n"
+#ifdef XFORMER
+        "Atari 8-bit Computer Emulator.\n"
+        "\nLead developer: Danny Miller.\n\n"
+#else
+        "Classic Computer Emulator.\n"
+#endif
+        "Version 10.00.2018.1010 - built on %s\n"
         "%2Id-bit %s release.\n\n"
         "Copyright (C) 1986-2018 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
@@ -3865,10 +3898,11 @@ void ShowAbout()
 #endif
 
         "Many thanks to: "
+        "Steven Noonan, "
         "Ignac Kolenko, "
         "Ed Malkiewicz, "
-        "Bill Huey, "
         "\n"
+        "Bill Huey, "
 #if defined(ATARIST) || defined(SOFTMAC)
         "Christian Bauer, "
         "Simon Biber, "
@@ -3883,12 +3917,11 @@ void ShowAbout()
         "\n"
         "Jim Watters, "
 #endif
-        "Danny Miller, "
         "Robert Birmingham, "
         "and Derek Yenzer.\n\n"
 
 //        "Windows version: %d.%02d (build %d)\n"
-        "Windows platform: %s\n"
+        "%s\n"
         ,
         vi.szAppName,
         __DATE__,
