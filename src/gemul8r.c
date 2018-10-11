@@ -1395,7 +1395,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
             // a disk
             if (VMtype != -1 && MEDIAtype == 1)
             {
-                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
+                if ((iVM = AddVM(VMtype, FALSE, FALSE)) != -1)    // does the FInstalVM for us
                 {
                     strcpy(rgpvm[iVM]->rgvd[0].sz, sFile); // replace disk 1 image with the argument before Init'ing
                     rgpvm[iVM]->rgvd[0].dt = DISK_IMAGE;
@@ -1418,7 +1418,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
             // a cartridge
             else if (VMtype != -1 && MEDIAtype == 2)
             {
-                if ((iVM = AddVM(VMtype, FALSE)) != -1)    // does the FInstalVM for us
+                if ((iVM = AddVM(VMtype, FALSE, FALSE)) != -1)    // does the FInstalVM for us
                 {
                     strcpy(rgpvm[iVM]->rgcart.szName, sFile); // set the cartridge name to the argument
                     rgpvm[iVM]->rgcart.fCartIn = TRUE;
@@ -5119,7 +5119,7 @@ break;
             int vmNew;
 
             // create a new VM of the appropriate type
-            vmNew = AddVM(vmType, TRUE);
+            vmNew = AddVM(vmType, TRUE, FALSE);
 
             BOOL fA = FALSE;
             if (vmNew != -1 && FInitVM(vmNew))

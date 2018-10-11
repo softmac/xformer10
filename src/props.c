@@ -91,8 +91,9 @@ PVMINFO DetermineVMType(int type)
 // before calling Init, ColdStart and CreateNewBitmap
 //
 // fAll says whether we need to fix the menus and threads, or if that would be too slow and unnecessary right now
+// !!! fNoBASIC is a hack to pass the flag to the VM to make sure to create the VM without BASIC, instead of the default state
 
-int AddVM(int type, BOOL fAll)
+int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
 {
     if (v.cVM == MAX_VM)
         return -1;
@@ -122,7 +123,7 @@ int AddVM(int type, BOOL fAll)
 
     BOOL f = FALSE;
     if (rgpvm[iVM]->pvmi)
-        f = FInstallVM(&rgpvmi(iVM)->pPrivate, &rgpvmi(iVM)->iPrivateSize, iVM, rgpvm[iVM]->pvmi, type);
+        f = FInstallVM(&rgpvmi(iVM)->pPrivate, &rgpvmi(iVM)->iPrivateSize, iVM, fNoBASIC ? (PVMINFO)VM_NOBASIC : rgpvm[iVM]->pvmi, type);
 
     if (f)
     {
@@ -261,7 +262,8 @@ BOOL CreateAllVMs()
 
         if (pvmi)
         {
-            if ((vmNew = AddVM(zz, TRUE)) == -1)
+            // !!! hack - for creating the inital 3 VMs on first boot, make the XL one not have BASIC to show the cool help screen
+            if ((vmNew = AddVM(zz, TRUE, zz == 1 ? TRUE : FALSE)) == -1)
                 return FALSE;
 
             f = FALSE;
