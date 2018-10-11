@@ -151,6 +151,8 @@ void SoundDoneCallback(void *candy, int iCurSample)
         // find a buffer to use if we haven't already
         if (sCurBuf == -1)
         {
+            wCONSOL |= 8;  // !!! periodically reset the internal speaker if an app forgets to, so it doesn't distort sound forever
+
             for (int i = 0; i < SNDBUFS; i++)
             {
                 if (pwhdr[i].dwFlags & WHDR_DONE) {
