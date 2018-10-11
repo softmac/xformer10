@@ -3822,7 +3822,6 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
         bOld = rgbMem[writePOKEY + addr];
         rgbMem[writePOKEY+addr] = b;
 
-        // only non-zero values start the timers, OS init code does not
         if (addr == 9)
         {
             // STIMER - grab the new frequency of all the POKEY timers, even if they're disabled. They might be enabled by time 0.
@@ -3961,12 +3960,12 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                     SoundDoneCallback(candy, iCurSample);
             }
 
-            // reset an active timer (irqPokey will be non-zero) that had its frequency changed
-            if (b != bOld)
+            // reset an active timer (irqPokey will be non-zero) whenever AUDCTL changes, and reset any timer
+            // whenever its frequency is set to anything, even the same value again (HARDB and HARDA require this)
             {
                 for (int irq = 0; irq < 4; irq++)
                 {
-                    if (irqPokey[irq] && (addr == 8 || addr == (ADDR)(irq << 1)))
+                    if ((irqPokey[irq] && addr == 8) || addr == (ADDR)(irq << 1))
                         ResetPokeyTimer(candy, irq);
                 }
             }
