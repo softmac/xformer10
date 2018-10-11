@@ -4912,7 +4912,7 @@ break;
                         }
                     }
             } else if (v.cVM) {
-                SelectInstance(v.iVM >= 0 ? v.iVM : 0);    // bring the one with focus up if it exists, else the top one
+                SelectInstance(v.iVM >= 0 ? v.iVM : nFirstVisibleTile);    // bring the one with focus up if it exists, else the top visible one
             }
             FixAllMenus(TRUE);
             DisplayStatus(v.iVM);   // Stretched status may change, for instance
