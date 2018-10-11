@@ -137,6 +137,7 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 #define SAMPLES_PAL  SAMPLE_RATE /  PAL_FPS    // 1/50th of a second, one buffer per VBI
 
 #define VM_CRASHED 1        // special code sent to FInstallVM to say the type we gave you crashed so try something else
+#define VM_NOBASIC 2        // override VM to never use BASIC
 
 //
 // globals used by the app and not persisted, extern ones are visible from other files
@@ -1086,7 +1087,7 @@ void InitProperties(void);
 BOOL LoadProperties(char *, BOOL);
 BOOL SaveProperties(char *);
 BOOL CreateAllVMs();
-int AddVM(int, BOOL);
+int AddVM(int, BOOL, BOOL);
 void DeleteVM(int, BOOL);
 
 // romcard.c

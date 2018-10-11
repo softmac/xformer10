@@ -2120,7 +2120,11 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
 
     WORD initramtop = 0;
 
-    if (pvmi == (PVMINFO)VM_CRASHED)
+    // we want to make sure there's no BASIC for this one
+    if (pvmi == (PVMINFO)VM_NOBASIC)
+        initramtop = 0xc000;
+
+    else if (pvmi == (PVMINFO)VM_CRASHED)
     {
         // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XL w/o BASIC. If XL breaks, try XE w/ BASIC.
         //
@@ -2277,10 +2281,10 @@ BOOL __cdecl InitAtari(void *candy)
 
     pvm->bfMon = monColrTV;
 
-    // by default, use XL without BASIC to see the cute help self test, and the other 2 with BASIC.
+    // !!! Atari 800 must be without BASIC, and the others with BASIC by default for artificial intelligence to work
     // Install may have a preference and set this already, in which case, don't change it
     if (!ramtop)
-        AlterRamtop(candy, (pvm->bfHW == vmAtariXL) ? 0xC000 : 0xA000);
+        AlterRamtop(candy, (pvm->bfHW > vmAtari48) ? 0xA000 : 0xC000);
     
     switch (pvm->bfHW)
     {
