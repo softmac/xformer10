@@ -3864,6 +3864,7 @@ void ShowAbout()
     char rgch[1120], rgch2[64], rgchVer[64];
 
 #if 0
+
     // !!! Windows lies and says we're 8 because we are not "manifested" for 10
     if (IsWindows10OrGreater())
         strcpy(rgchVer, "Windows 10 or Greater");
@@ -3877,29 +3878,72 @@ void ShowAbout()
         strcpy(rgchVer, "Windows XP");
     else
         strcpy(rgchVer, "Windows archaic");
+
 #else
+
+    rgchVer[0] = 0;
+
     USHORT guestCPU = 0;
     USHORT hostCPU = 0;
 
-    rgchVer[0] = 0;
+#if defined(_M_ARM) || defined(_M_ARM64)
+
+    // ARM and ARM64 builds are Windows 10 only
 
     if (IsWow64Process2(GetCurrentProcess(), &guestCPU, &hostCPU))
     {
         sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(hostCPU));
     }
 
+#elif defined(_M_IX86) || defined(_M_AMD64)
+
+    BOOL IsWow = 0;
+
+    if (IsWow64Process(GetCurrentProcess(), &IsWow) && IsWow)
+    {
+        sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x8664));
+    }
+    else
+    {
+        // TODO: delay load IsWow64Process2
+
+        guestCPU; hostCPU;
+
+        int res[4] = { 0 };
+
+        __cpuid(res, 1);
+
+        if (((res[3] & (1 << 19)) == 0) && (((res[3] & (1 << 26)) != 0) && ((res[2] & 0x80201) == 0x080201)))
+        {
+            // CLFLUSH is missing but SSE2 SSE3 SSSE3 SSE4.1 are present
+
+            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0xAA64));
+        }
+        else
+        {
+#if defined(_M_IX86)
+            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x014C));
+#elif defined(_M_AMD64)
+            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x8664));
 #endif
+        }
+    }
+
+#endif
+
+#endif  // if 0
 
     sprintf(rgch2, "About %s", vi.szAppName);
 
     sprintf(rgch, "%s for Windows 10\n"
 #ifdef XFORMER
-        "Atari 8-bit Computer Emulator.\n"
-        "\nLead developer: Danny Miller.\n\n"
+        "Atari 8-bit Computer Emulator.\n\n"
+        "Lead software developer: Danny Miller\n"
+        "Based on Xformer created by: Darek Mihocka\n\n"
 #else
         "Classic Computer Emulator.\n"
 #endif
-        "Version 10.00.2018.1010 - built on %s\n"
+        "Version 10.10.2018.1010 - built on %s\n"
         "%2Id-bit %s release.\n\n"
         "Copyright (C) 1986-2018 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
