@@ -121,6 +121,8 @@ BEGIN
         MENUITEM "Mouse &Wheel Sensitivity High", IDM_WHEELSENS
         MENUITEM SEPARATOR
         MENUITEM "My &Video Cards Sucks", IDM_MYVIDEOCARDSUCKS
+        MENUITEM SEPARATOR
+        MENUITEM "Enable Soun&d\tAlt+S", IDM_TOGGLESOUND
     END
     POPUP "&VM"
     BEGIN
@@ -267,6 +269,8 @@ BEGIN
     VK_F12,            IDM_COLORMONO,           VIRTKEY, SHIFT, NOINVERT
     VK_F12,            IDM_NTSCPAL,             VIRTKEY, ALT, NOINVERT
     VK_PAUSE,          IDM_DEBUGGER,            VIRTKEY, NOINVERT
+
+    "S",               IDM_TOGGLESOUND,         VIRTKEY, ALT, NOINVERT
 
     // legacy
     //VK_F11,         IDM_F11,                VIRTKEY, NOINVERT

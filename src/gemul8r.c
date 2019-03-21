@@ -990,6 +990,7 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_TILE, v.fTiling ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_TURBO, fBrakes ? MF_UNCHECKED : MF_CHECKED);
     CheckMenuItem(vi.hMenu, IDM_WHEELSENS, v.fWheelSensitive ? MF_CHECKED : MF_UNCHECKED);
+    CheckMenuItem(vi.hMenu, IDM_TOGGLESOUND, v.fSilentMode ? MF_UNCHECKED : MF_CHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOKILL, v.fAutoKill ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_LCTRLFIRE, v.fDisableLCTRLFire ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
@@ -5418,6 +5419,11 @@ break;
             sVM = -1;    // the one in focus may be gone
             FixAllMenus(TRUE);
             InitThreads();
+            break;
+
+        case IDM_TOGGLESOUND:
+            v.fSilentMode = !v.fSilentMode;
+            FixAllMenus(FALSE);
             break;
 
 #ifndef NDEBUG
