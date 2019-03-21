@@ -135,7 +135,6 @@ BEGIN
         MENUITEM SEPARATOR
         POPUP "Time Tra&vel..."
         BEGIN
-            MENUITEM "&Enable Time Travel\tPg Up", IDM_ENABLETIMETRAVEL
             MENUITEM "&Use Fixed Time Travel Points", IDM_USETIMETRAVELFIXPOINT
             MENUITEM "Set Time Travel &Fixed Point\tPg Down", IDM_TIMETRAVELFIXPOINT
             MENUITEM "Time Tra&vel (13s)\tPg Up", IDM_TIMETRAVEL

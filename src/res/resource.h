@@ -44,7 +44,6 @@
 #define IDM_COLORMONO                   40189
 #define IDM_PASTEASCII                  40190
 #define IDM_PASTEATASCII                40191
-#define IDM_ENABLETIMETRAVEL            40192
 
 #define IDM_D1                          40200
 #define IDM_D2                          40201
