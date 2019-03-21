@@ -490,7 +490,7 @@ typedef struct
     #define TEMP_SIZE 1024
     BYTE m_temp[TEMP_SIZE];  // some temporary storage for swapping banks
 
-    // !!! Not really used anymore, candidates for removal
+    // !!! Not used anymore, candidates for removal
     WORD m_fJoy, m_fSoundOn, m_fAutoStart;
     ULONG m_clockMult;
     BYTE m_btickByte;   // current value of 18 Hz timer

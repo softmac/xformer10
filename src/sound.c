@@ -214,7 +214,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
             rgvoice[3].volume = 0;    // app hack for MULE, the single bad sample is at the end of the buffer
         }
 
-        if (pvm->fSound)
+        if (!v.fSilentMode) // the only sound flag we listen to is the global one, no per-VM flag
         {
             int pCLK = fPAL ? PAL_CLK : NTSC_CLK;
             int pCLK100 = pCLK * 100;

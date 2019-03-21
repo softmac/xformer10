@@ -502,7 +502,7 @@ typedef struct
     // Common hardware settings
 
     BOOL    _fJoystick;
-    BOOL    _fSTSound;
+    BOOL    fSilentMode;    // was _fSTSound - THIS WE ACTUALLY USE, new feature, old saved states with this == 0 must mean sound ON.
     unsigned _COM;          // 0 = no COM port, 1 = COM1:, etc.
     unsigned _LPT;          // 0 = no LPT port, 1 = LPT1:, etc.
     BOOL    _fShare;        // 0 = hog the printer port, 1 = share it

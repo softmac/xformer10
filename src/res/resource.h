@@ -30,6 +30,7 @@
 #define IDM_WHEELSENS                   40175
 #define IDM_MYVIDEOCARDSUCKS            40176
 #define IDM_LCTRLFIRE                   40177
+#define IDM_TOGGLESOUND                 40178
 
 #define IDM_WARMSTART                   40180
 #define IDM_COLDSTART                   40181
