@@ -1348,19 +1348,19 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
 
 // Open all the files inside this folder or long string of dragged filenames.
 // Provides the instance # of the first VM opened, or -1 if nothing opened successfully
-// Returns a filename if the only file in the list was a .GEM file.
+// Copies a filename to lpLoad if the only file in the list was a .GEM file, otherwise copies an empty string.
 //
-LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
+void OpenFolders(LPSTR lpCmdLine, LPSTR lpLoad, int *piFirstVM)
 {
     if (!piFirstVM)
-        return NULL;
+        return;
 
     *piFirstVM = -1;
+    if (lpLoad)
+        lpLoad[0] = 0;
 
     if (!lpCmdLine)
-        return NULL;
-
-    LPSTR lpLoad = NULL;
+        return;
 
     // make a copy of the cmd line parameters (and remember its starting point) so we can grow it to add dir contents
     int szCmdLineUsed = (int)strlen(lpCmdLine);  // used portion of buffer, not including NULL
@@ -1444,7 +1444,8 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
 
             else if (*piFirstVM == -1 && _stricmp(sFile + len - 3, "gem") == 0)
             {
-                lpLoad = sFile;    // load this .gem file
+                if (lpLoad)
+                    strcpy(lpLoad, sFile); // load this gem file
                 break;    // stop loading more files
             }
         }
@@ -1453,7 +1454,7 @@ LPSTR OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
     if (lpCmdLineStart)
         free(lpCmdLineStart);
 
-    return lpLoad;
+    return;
 }
 
 void CalcIntegerScale()
@@ -1732,7 +1733,7 @@ int CALLBACK WinMain(
     if (!CreateNewBitmaps())
         return FALSE;
 
-    //char test[130] = "\"c:\\danny\\8bit\"";
+    //char test[130] = "\"c:\\danny\\8bit\\Atari\\test.gem\"";
     //lpCmdLine = test;
 
     // load all of the files dragged onto us, including those in all subdirectories of directories!
@@ -1740,8 +1741,9 @@ int CALLBACK WinMain(
     // iVM is the first VM opened so we can select it
 
     int iVMx;
-    char *lpLoad = OpenFolders(lpCmdLine, &iVMx);
-    BOOL fSkipLoad = (iVMx >= 0); // we loaded at list one new thing, no need to load our last state
+    char lpLoad[_MAX_PATH];
+    OpenFolders(lpCmdLine, lpLoad, &iVMx);
+    BOOL fSkipLoad = (iVMx >= 0); // we loaded at least one new thing, no need to load our last state
     
     // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
     // Otherwise, keep the last global settings
@@ -5079,7 +5081,7 @@ break;
             // Do nothing if the only thing in the folder is a .GEM file; that is opened through a separate menu item.
             // Go into TILED mode if opened something new and we now have >1 VM
             int iVMx = 0;
-            OpenFolders(fold, &iVMx);
+            OpenFolders(fold, NULL, &iVMx);
             if (iVMx >= 0)
             {
                 if (v.iVM < 0)
