@@ -995,7 +995,6 @@ void FixAllMenus(BOOL fVM)
     CheckMenuItem(vi.hMenu, IDM_LCTRLFIRE, v.fDisableLCTRLFire ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_AUTOLOAD, v.fSaveOnExit ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_MYVIDEOCARDSUCKS, v.fMyVideoCardSucks ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, inst >= 0 && rgpvm[inst]->fTimeTravelEnabled ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, inst >= 0 && rgpvm[inst]->fTimeTravelFixed ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(vi.hMenu, IDM_NTSCPAL, (inst >= 0 && rgpvm[inst]->fEmuPAL) ? MF_CHECKED : MF_UNCHECKED);
 
@@ -1003,7 +1002,6 @@ void FixAllMenus(BOOL fVM)
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVEL, (inst >= 0 && rgpvm[inst]->fTimeTravelEnabled) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_TIMETRAVELFIXPOINT, (inst >= 0) ? 0 : MF_GRAYED);  // auto-enables
     EnableMenuItem(vi.hMenu, IDM_USETIMETRAVELFIXPOINT, (inst >= 0 && rgpvm[inst]->fTimeTravelEnabled) ? 0 : MF_GRAYED);
-    EnableMenuItem(vi.hMenu, IDM_ENABLETIMETRAVEL, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLORMONO, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_COLDSTART, (inst >= 0) ? 0 : MF_GRAYED);
     EnableMenuItem(vi.hMenu, IDM_WARMSTART, (inst >= 0) ? 0 : MF_GRAYED);
@@ -1048,14 +1046,6 @@ void FixAllMenus(BOOL fVM)
 
         EnableMenuItem(vi.hMenu, IDM_PASTEASCII, 0);
         EnableMenuItem(vi.hMenu, IDM_PASTEATASCII, 0);
-
-        // the hot key only applies if it's off, the hot key won't turn it off
-        if (rgpvm[inst]->fTimeTravelEnabled)
-            sprintf(mNew, "&Enable Time Travel");
-        else
-            sprintf(mNew, "&Enable Time Travel\tPg Up");
-        SetMenuItemInfo(vi.hMenu, IDM_ENABLETIMETRAVEL, FALSE, &mii);
-
     }
 
     // no active instance
@@ -3401,6 +3391,9 @@ void SelectInstance(int iVM)
     // only the main GEM UI cares about the concept of a current instance now! Everything else is thread safe
     // with no concept of "current", but taking an instance as an argument
 
+    // delay this memory hit until the VM is being used
+    if (v.iVM >= 0) rgpvm[v.iVM]->fTimeTravelEnabled = TRUE;
+
     FixAllMenus(TRUE);
 
     // before making threads, figure out the next and previous instance (one of these might be active too, in roulette mode)
@@ -3700,6 +3693,10 @@ void ScrollTiles()
             if (s != sVM)
             {
                 sVM = s;
+                
+                // delay this memory hit until the VM is being used
+                if (sVM >= 0) rgpvm[sVM]->fTimeTravelEnabled = TRUE;
+
 				v.iVM = s;	// !!! They are always in sync, so get rid of sVM!
                 FixAllMenus(FALSE); // VM list is greyed when tiled
                 DisplayStatus(v.iVM);
@@ -4915,6 +4912,9 @@ break;
                         {
                             sVM = s;        // the current tile in focus (may be -1)
                             v.iVM = sVM;    // the "current" vm, the main untiled one, or if tiled, the one in focus
+
+                            // delay this memory hit until the VM is being used
+                            if (sVM >= 0) rgpvm[sVM]->fTimeTravelEnabled = TRUE;
                         }
                     }
             } else if (v.cVM) {
@@ -4980,14 +4980,6 @@ break;
             else
                 FWinMsgVM(v.iVM, vi.hWnd, WM_KEYDOWN, 0x22, 0x01510001);
 
-            break;
-
-        // toggle whether or not to use time travel at all. It's a big memory hog, so we can't do it automatically
-        // for 25,000 VMs
-        case IDM_ENABLETIMETRAVEL:
-            Assert(v.iVM >= 0);
-            rgpvm[v.iVM]->fTimeTravelEnabled = !rgpvm[v.iVM]->fTimeTravelEnabled;
-            FixAllMenus(FALSE);
             break;
 
         // toggle whether or not to use fixed time travel points
@@ -6161,6 +6153,9 @@ break;
             {
                 sVM = s;        // the tile in focus
                 v.iVM = sVM;    // "current" VM is now this
+
+                // delay this memory hit until the VM is being used
+                if (sVM >= 0) rgpvm[sVM]->fTimeTravelEnabled = TRUE;
 
                 FixAllMenus(FALSE); // VM list is greyed out when tiling
                 
