@@ -289,16 +289,12 @@ BOOL CreateAllVMs()
 
 
 //
-// Read properties from INI file and/or save .GEM file
+// Read properties from .INI file (szIn == NULL or empty) and/or saved .GEM file (szIn is the filename)
 //
 // Returns TRUE if at least some valid data was loaded, but maybe not all
 //
-// NULL = save to INI file that becomes the auto-start up file
-//
-// fPropsOnly means we are not auto-loading the previous session, so get the global props, like window size, but no VM data
-// All existing VM data is always erased
-//
-// !fPropsOnly means get just the VM data, but DON'T get the global properties, we'll use what we already have
+// fPropsOnly: load global props only, not VM data. Existing VMs are deleted.
+// (although global props are only read from .ini files, not .gem files).
 //
 BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 {
@@ -306,11 +302,11 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
     char rgch[MAX_PATH];
     char *sz;
     BOOL f = FALSE;
+    BOOL fIni = !szIn || !szIn[0];  // load from .ini or .gem?
 
     sz = szIn;
 
-    // load from an INI
-    if (!szIn)
+    if (fIni)
     {
         GetCurrentDirectory(sizeof(rgch), rgch);
         SetCurrentDirectory(vi.szWindowsDir);    // first try to load from "\users\xxxx\appdata\roaming\emulators", for example
@@ -321,7 +317,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
 
     int h = _open(sz, _O_BINARY | _O_RDONLY);
 
-    // don't hurt the current session if this load fails
+    // don't hurt the current session if this load fails, so use vTmp
     int l;
     if (h != -1)
     {
@@ -330,34 +326,41 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         l = _read(h, &vTmp, l);
     }
 
-    // if INI file contained valid data, use what we can of it, otherwise fail
-    if ((vTmp.cb == sizeof(vTmp) ) && (vTmp.wMagic == v.wMagic)) // check for version difference
+    // the file looks valid and is the current version
+    if ((vTmp.cb == sizeof(vTmp) ) && (vTmp.wMagic == v.wMagic))
     {
 
-        // looks like something valid can be read, now it's safe to delete the old stuff BEFORE we set v
-        int prevcount = v.cVM;
-        for (int z = 0; z < prevcount; z++)
+        if (fPropsOnly) // erase the existing VMs
+        {
+            // looks like something valid can be read, now it's safe to delete the old stuff BEFORE we set v
+            int prevcount = v.cVM;
+            for (int z = 0; z < prevcount; z++)
                 DeleteVM(v.cVM - 1, FALSE); // avoids the compacting loop for faster execution
-        DeleteVM(-1, TRUE); // now do the things we skipped 
-
-        assert(v.cVM == 0);
+            DeleteVM(-1, TRUE); // now do the things we skipped 
+            assert(v.cVM == 0);
+        }
 
         //The important part about a saved .GEM file is the VMs in it, not the global state at the time.
-        // If we're loading a saved .GEM file, do NOT replace our global state, just load in the VMs
+        // If we're loading a saved .GEM file, do NOT replace our global state, just load in the VMs (we might load several in a row).
         // It would be rude to jump you into fullscreen or tiled mode all of a sudden when you choose File/Load...
-        // Also, drag/drop a .GEM file and you'll get the last saved INI global state, but the VMs from the GEM file
-        if (!szIn)
+        // Also, drag/drop .GEM files and you'll get the last saved INI global state, but the VMs from the GEM file, because
+        // if you're dragging regular files that's what happens (they don't have global state to read).
+        int iOldCount = v.cVM;
+        if (fIni)
             v = vTmp;
 
-        // don't use the loaded values, reset to no valid VMs or we'll crash
-        v.cVM = 0;
-        int iInitialVM = v.iVM; // remember which one was current last time
+        // don't use the loaded count, start out as if nothing has been added yet (we'll add them one by one).
+        v.cVM = iOldCount;
+        v.sWheelOffset = 0; // we'll crash if we don't load any VMs but we think the wheel is offset a lot.
+
+        // remember which VM was current in the session we're loading, and make it current when we're done.
+        int iInitialVM = v.iVM;
         v.iVM = -1;
 
         f = TRUE;
 
         // we're loading our .ini file and they didn't want the last session restored, so don't
-        if (!szIn && !v.fSaveOnExit)
+        if (fIni && !v.fSaveOnExit)
             fPropsOnly = TRUE;
 
         BYTE *pPersist = NULL;
@@ -366,7 +369,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
         // non-persistable pointers need to be refreshed
         // and only use VM's that we can handle in this build
 
-        for (int i = 0; i < MAX_VM; i++)
+        for (int i = v.cVM; i < MAX_VM; i++)
         {
             // actually, don't go further
             if (fPropsOnly)

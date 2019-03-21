@@ -849,7 +849,7 @@ void CreateVMMenu()
             continue;
             
         // we're counting backwards, so the first one found goes in as IDM_VM1, the highest identifier.
-        if (iFound == 0)
+        if (iFound == 0)    
         {
             mii.fMask = MIIM_STRING;
             mii.dwTypeData = mNew;
@@ -1147,7 +1147,7 @@ void FixAllMenus(BOOL fVM)
 // If quotes surround the name, remove them.
 //
 // Also, if the next filename is a directory, replace it with all of the contents of that directory so every file in every
-// subdirectory is tried.
+// subdirectory is tried (except for .GEM files, that would be unwieldy).
 //
 // Also return the type of VM that can support this file (or -1 if none) and what kind of media it is, disk or cart (1 or 2)
 //
@@ -1210,6 +1210,10 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
                 continue;
 
             int len = (int)strlen(ffd.cFileName);
+
+            // do not load .gem files inside subdirectories that were not explicitly dragged onto us
+            if (_stricmp(ffd.cFileName + len - 3, "gem") == 0)
+                continue;
 
             // the first one we find becomes a candidate to be returned
             if (fFirst)
@@ -1348,17 +1352,15 @@ char *GetNextFilename(char *sFile, char *lpCmdLine, int *szCmdLineUsed, char **l
 
 // Open all the files inside this folder or long string of dragged filenames.
 // Provides the instance # of the first VM opened, or -1 if nothing opened successfully
-// Copies a filename to lpLoad if the only file in the list was a .GEM file, otherwise copies an empty string.
+// .GEM files are only opened if explicitly dragged, GEM files inside a folder are ignored.
 //
-void OpenFolders(LPSTR lpCmdLine, LPSTR lpLoad, int *piFirstVM)
+void OpenFolders(LPSTR lpCmdLine, int *piFirstVM)
 {
     if (!piFirstVM)
         return;
 
     *piFirstVM = -1;
-    if (lpLoad)
-        lpLoad[0] = 0;
-
+    
     if (!lpCmdLine)
         return;
 
@@ -1439,14 +1441,17 @@ void OpenFolders(LPSTR lpCmdLine, LPSTR lpLoad, int *piFirstVM)
                     lpCmdLine = NULL;   // can only mean out of memory so don't waste time continuing to fail
             }
 
-            // found a .gem file. Only notice it if it's the first/only thing being dragged.
-            // One .gem file in a thousand other files keeping them all from loading would really aggravate a person.
-
-            else if (*piFirstVM == -1 && _stricmp(sFile + len - 3, "gem") == 0)
+            // found a .gem file.
+            else if (_stricmp(sFile + len - 3, "gem") == 0)
             {
-                if (lpLoad)
-                    strcpy(lpLoad, sFile); // load this gem file
-                break;    // stop loading more files
+                f = LoadProperties(sFile, FALSE);
+                if (f && piFirstVM && *piFirstVM == -1)
+                {
+                    *piFirstVM = v.iVM; // if this is the first thing loaded, remember the saved current VM as our new current VM
+                    // if the saved session had no current VM, and something is now loaded, make the first VM current.
+                    if (v.iVM == -1 && v.cVM > 0)
+                        *piFirstVM = 0;
+                }
             }
         }
     }
@@ -1543,7 +1548,8 @@ int CALLBACK WinMain(
 
     // Initialize our global state (PROPS v)
     InitProperties();
-    fProps = LoadProperties(NULL, TRUE); // load our basic props only
+    // Load the global properties from the .ini file. These are always saved/loaded even if they do not save/restore the VMS.
+    fProps = LoadProperties(NULL, TRUE);
 
     // Make room for an initial 128 VMs
     rgpvm = HeapAlloc(GetProcessHeap(), 0, (128 * (sizeof(VM) + sizeof(VMINST))));
@@ -1733,16 +1739,13 @@ int CALLBACK WinMain(
     if (!CreateNewBitmaps())
         return FALSE;
 
-    //char test[130] = "\"c:\\danny\\8bit\\Atari\\test.gem\"";
+    //char test[130] = "\"c:\\danny\\8bit\\Atari\"";
     //lpCmdLine = test;
 
-    // load all of the files dragged onto us, including those in all subdirectories of directories!
-    // if lpLoad is not NULL, that means the first/only thing was was a .GEM file that it wants us to load
+    // load all of the files dragged onto us, including non .GEM files inside subdirectories
     // iVM is the first VM opened so we can select it
-
     int iVMx;
-    char lpLoad[_MAX_PATH];
-    OpenFolders(lpCmdLine, lpLoad, &iVMx);
+    OpenFolders(lpCmdLine, &iVMx);
     BOOL fSkipLoad = (iVMx >= 0); // we loaded at least one new thing, no need to load our last state
     
     // If we drag/dropped more than 1 instance, come up in tiled maximized mode (so you can see the instance names in the title bar)
@@ -1765,9 +1768,9 @@ int CALLBACK WinMain(
         v.sWheelOffset = 0;    // new dragged tiles, not loading an old state - start at the top of the tiles
     }
 
-    // If we were drag and dropped some files, or we didn't save last time, don't load the old VMs
+    // Don't load the .ini VMs if we drag and dropped some files, or we don't want to restore the last session
     if (!fSkipLoad && v.fSaveOnExit)
-        /* fProps = */ LoadProperties(lpLoad, FALSE);   // don't forget saved window position just because restoring failed!
+        /* fProps = */ LoadProperties(NULL, FALSE);
 
     BOOL fWantTile = FALSE;
 
@@ -5077,11 +5080,10 @@ break;
                 CoTaskMemFree(pid);
             }
 
-            // Open everything in that folder and add to the currently open VMs. Select the first new thing opened.
-            // Do nothing if the only thing in the folder is a .GEM file; that is opened through a separate menu item.
-            // Go into TILED mode if opened something new and we now have >1 VM
+            // Open everything in that folder (except .gem files) and add to the currently open VMs. Select the first new thing opened.
+            // Go into TILED mode if we opened something new and we now have >1 VM
             int iVMx = 0;
-            OpenFolders(fold, NULL, &iVMx);
+            OpenFolders(fold, &iVMx);
             if (iVMx >= 0)
             {
                 if (v.iVM < 0)
@@ -5412,7 +5414,8 @@ break;
             f = OpenTheFile(v.iVM, vi.hWnd, chFN, FALSE, 2);
             if (f)
             {
-                f = LoadProperties(chFN, FALSE); // (we do want the VMs loaded too)
+                f = LoadProperties(chFN, TRUE); // erase all current VMs
+                f = LoadProperties(chFN, FALSE); // load VMs from this saved file
                 //if (!f)
                 //    f = CreateAllVMs();
             }
