@@ -5,7 +5,7 @@
 
     - Main window code
 
-    Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2019 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     10/10/2018  darekm      Xformer 10.0 release
@@ -3946,7 +3946,7 @@ void ShowAbout()
 #else
         "Classic Computer Emulator.\n"
 #endif
-        "Version 10.10.2018.1010 - built on %s\n"
+        "Version 10.10.2019.1010 - built on %s\n"
         "%2Id-bit %s release.\n\n"
         "Copyright (C) 1986-2018 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
