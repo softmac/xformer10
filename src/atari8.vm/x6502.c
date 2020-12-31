@@ -4962,7 +4962,7 @@ void __cdecl Go6502(void *candy)
                     UnpackP(candy);   // unpack the I bit being set
                     
                     // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
-                    if (fInVBI && (wFrame - wPALFrame) < 600)   // MULE is a false positive, once every complete theme song
+                    if (fInVBI && wFrame > wPALFrame && (wFrame - wPALFrame) < 600)   // MULE false positive, once every complete theme song
                         SwitchToPAL(candy);                     // switch if it happens twice in 10s
                     else
                     {

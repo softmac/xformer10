@@ -1100,6 +1100,7 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
     else
     {
         bCartType = 0;
+		ramtop = 0xc000;
         goto exitCart;
     }
 
@@ -1402,6 +1403,7 @@ void SwapHelper(void *candy, BYTE *src, BYTE *dest, int size)
 void SwapRAMCart(void *candy, WORD size, BYTE *pb, BYTE iBank)
 {
     Assert(size <= 0x4000);
+    //ODS("Swap to bank %d\n", iBank);
 
     // !!! Sorry, if you swapped BASIC in when your cartridge was out, you're stuck that way until you swap BASIC out
     if (iSwapCart == iNumBanks && ramtop < 0xc000)
@@ -3484,10 +3486,11 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
         
         // (XL) TRIG3 == 1 for cartridge present, which makes a lot of paranoid disk games deliberately hang
         // on 800, TRIG3 is always 1 unless P4 presses the trigger, and these apps always hang (TurboBasic, Barroom Brawl)
+        // Only Kill if we're not running a cartridge, or you'll kill MuleCart.bin which is 800 only, only disk games need this
         // User code reading this within 1sec or so of boot is suspiciously not actually looking for a joystick reading (OS reads it during boot)
         else if (addr == 0xd013)
         {
-            if (mdXLXE == md800 && wFrame < 100 && regPC < ramtop)
+            if (mdXLXE == md800 && bCartType == 0 && wFrame < 100 && regPC < ramtop)
                 KillMePlease(candy);
         }
         
@@ -3859,10 +3862,9 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // Uh oh! They starting sending more data before we were ready for it. Overrun and lose the previous frame
             // !!! What should I really do? No known app does this yet.
             if (cSEROUT == 5)
-            {
                 cSEROUT = 0;
-                Assert(0);
-            }
+            
+			Assert(cSEROUT < 5);	// make sure the compiler still does the cSEROUT=0, this happens in DeathChaseXE and will hang
 
             //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
             rgSIO[cSEROUT] = b;
@@ -4173,7 +4175,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                         wScan < STARTSCAN + Y8)
             {
                 // MULE is a false positive, but only happens once going into attract mode
-                if (wFrame - wPALFrame < 600)   // trigger if twice in 10s
+                if (wFrame > wPALFrame && (wFrame - wPALFrame) < 600)   // trigger if twice in 10s
                     SwitchToPAL(candy);
                 wPALFrame = wFrame;
             }
