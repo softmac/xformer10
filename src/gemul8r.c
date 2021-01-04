@@ -5,7 +5,7 @@
 
     - Main window code
 
-    Copyright (C) 1991-2019 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     10/10/2018  darekm      Xformer 10.0 release
@@ -333,7 +333,7 @@ void DisplayStatus(int iVM)
     // otherwise let them know that when no tile is in focus, they can type to search the tiles
     else if (v.fTiling && !strlen(cGemKeys))
     {
-        sprintf(rgch, " (TYPE TO SEARCH)");
+        sprintf(rgch, " (Alt+Enter for Full Screen, or type to search)");
         strcat(rgch0, rgch);
     }
 
@@ -3946,9 +3946,9 @@ void ShowAbout()
 #else
         "Classic Computer Emulator.\n"
 #endif
-        "Version 10.10.2019.1010 - built on %s\n"
+        "Version 10.10.2021.0101 - built on %s\n"
         "%2Id-bit %s release.\n\n"
-        "Copyright (C) 1986-2018 Darek Mihocka.\n"
+        "Copyright (C) 1986-2021 Darek Mihocka.\n"
         "All Rights Reserved.\n\n"
 
 #ifdef XFORMER
