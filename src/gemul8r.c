@@ -3886,8 +3886,9 @@ void ShowAbout()
 
     rgchVer[0] = 0;
 
-    USHORT guestCPU = 0;
+    USHORT guestCPU = 1;
     USHORT hostCPU = 0;
+    BOOL IsWow = 0;
 
 #if defined(_M_ARM) || defined(_M_ARM64)
 
@@ -3895,44 +3896,50 @@ void ShowAbout()
 
     if (IsWow64Process2(GetCurrentProcess(), &guestCPU, &hostCPU))
     {
-        sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(hostCPU));
+    }
+    else if (IsWow64Process(GetCurrentProcess(), &IsWow) && IsWow)
+    {
+        hostCPU = 0xAA64;
+    }
+    else
+    {
+        hostCPU = 0x01C4;
     }
 
 #elif defined(_M_IX86) || defined(_M_AMD64)
 
-    BOOL IsWow = 0;
+    // Delay load IsWow64Process2 for Windows 7 compatibility.
 
-    if (IsWow64Process(GetCurrentProcess(), &IsWow) && IsWow)
+    BOOL(__stdcall *pfnGetWowProc2)(HANDLE, USHORT *, USHORT*) = NULL;
+    HMODULE hMod;
+
+    if (pfnGetWowProc2 == NULL)
     {
-        sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x8664));
+        hMod = LoadLibrary("kernel32.dll");
+        pfnGetWowProc2 = (void *)GetProcAddress(hMod, "IsWow64Process2");
+    }
+
+    if (pfnGetWowProc2 && (*pfnGetWowProc2)(GetCurrentProcess(), &guestCPU, &hostCPU))
+    {
+    }
+    else if (IsWow64Process(GetCurrentProcess(), &IsWow) && IsWow)
+    {
+        hostCPU = 0x8664;
     }
     else
     {
-        // TODO: delay load IsWow64Process2
-
-        guestCPU; hostCPU;
-
-        int res[4] = { 0 };
-
-        __cpuid(res, 1);
-
-        if (((res[3] & (1 << 19)) == 0) && (((res[3] & (1 << 26)) != 0) && ((res[2] & 0x80201) == 0x080201)))
-        {
-            // CLFLUSH is missing but SSE2 SSE3 SSSE3 SSE4.1 are present
-
-            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0xAA64));
-        }
-        else
-        {
 #if defined(_M_IX86)
-            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x014C));
+        hostCPU = 0x014C;
 #elif defined(_M_AMD64)
-            sprintf(rgchVer, "Native host CPU: %s", SzFromCpu(0x8664));
+        hostCPU = 0x8664;
 #endif
-        }
     }
 
 #endif
+
+    if (guestCPU == 1) guestCPU = hostCPU;
+
+    sprintf(rgchVer, "Native host CPU architecture: %s", SzFromCpu(hostCPU));
 
 #endif  // if 0
 
