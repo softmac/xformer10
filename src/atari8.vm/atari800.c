@@ -844,6 +844,10 @@ void DoVBI(void *candy)
                     if (x == 229) x = 228;  // give 228 a reasonable chance of being chosen
                     if (y == 229) y = 228;
 
+                    // Oops, both XBOX fake paddles and real ATARI paddles through the 2600-dapter are backwards!
+                    x = 228 - x;
+                    y = 228 - y;
+
                     rgbMem[PADDLE0 + (joy << 1)] = (BYTE)x;
                     rgbMem[PADDLE0 + (joy << 1) + 1] = (BYTE)y;
 
