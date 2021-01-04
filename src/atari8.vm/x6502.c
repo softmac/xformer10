@@ -4995,7 +4995,10 @@ void __cdecl Go6502(void *candy)
                     {
                         // this happened last frame too, we're PAL. NTSC programs occasionally do this, like MULE every
                         // 4 frames, but never consecutively like a PAL program would.
-                        if (fDLIinVBI == wFrame - 1)
+                        // I was wrong, catching a wampus in MULECART_FIXED.BIN does a whole slew of these in a row on scanline 8
+                        // !!! Check that a real PAL app doesn't need to be forced into PAL on scanline 8, if so, come up with
+                        // a different MULE hack. I never made a list of PAL apps counting on this hack to test.
+                        if (fDLIinVBI == wFrame - 1 && wScan > STARTSCAN)
                             SwitchToPAL(candy);
                         fDLIinVBI = wFrame;
                     }
