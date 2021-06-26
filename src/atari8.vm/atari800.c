@@ -3947,7 +3947,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
         else if (addr <= 8)
         {
             if (addr == 8 && (b & 6))
-                ODS("HIGH PASS FILTER NYI!\n");
+                ODS("HIGH PASS FILTER NYI!\n"); // !!!
 
             // AUDFx, AUDCx or AUDCTL have changed - write some sound
             // we're (wScan / 262) of the way through the scan lines and our horizontal cycle # is "wCycle"
@@ -4197,7 +4197,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // char lookup starting at 29. So it doesn't have the data it needs to draw at 25 until 30. 5 behind.
             // Also, ANTIC stop fetching at 106. 5 before that is 101, the end of the visibile screen. Coincidence?
             // 5 cycles is 20 pixels.
-            //
+
+            // !!! However, TETRIS won't paint the sample pieces under STATS on the left hand side their correct colour (they will all be green)
+            // unless we make the beam 6 cycles behind antic, 24 pixels, so you'll see three places where "- 24" is used that used to be "- 20"
+            // I tested all the apps mentioned in this comment block to make sure they didn't break, and they don't appear to.
+            // Altirra itself, at breakpoint $352d, visibly showed the beam 32 pixels behind with ANTIC @ cycle 26 and 28 pixels behind one
+            // instruction later with ANTIC @ cycle 36. We match Altirra's cycle 26 at that point, so the only explanation that makes sense
+            // is that the beam must lag at least 24 for TETRIS to draw correctly.
+
             // Worm War and the HARDB Chess board are two of the most cycle precise apps I know of.
             // Worm War changes HPOSP3 while it's being drawn and it must continue with the old parameters.
             // HARDB/CHESS seems to change HPOSP3 after it's completed drawing in the wrong place! If I lag 20 pixels, this
@@ -4231,7 +4238,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             // if we're drawing in the middle (narrow) section of a character mode right now, chances are ANTIC is busy and
             // a STA WSYNC won't resume until cycle 105. At least it works for Tarzan.
             short dma = DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1];
-            short cclock = rgPIXELMap[dma + 1] - 20;
+            short cclock = rgPIXELMap[dma + 1] - 24;
             short wo = 1;
             if (cclock > 48 && cclock < 352 - 48 && sl.modelo > 1 && sl.modelo < 8)
                 wo = 0;

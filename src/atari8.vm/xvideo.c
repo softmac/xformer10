@@ -3483,11 +3483,11 @@ BOOL ProcessScanLine(void *candy)
     // the position of the beginning of the 4th cycle, and add 1 to it when indexing rgPIXELMap to see when the 4th cycle ended.
     // DMAMAP[0] will be the maximum we can index rgPIXELMap, so don't go lower than 1, so we can +1 and still be in a valid
     // index for rgPIXELMap
-    // The beam is 20 pixels behind ANTIC fetching (see WSYNC).
-    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 20;
+    // The beam is 24 pixels behind ANTIC fetching (see WSYNC).
+    short cclock = rgPIXELMap[DMAMAP[wLeft > 4 ? (wLeft - 1 - 3) : 1] + 1] - 24;
     if (cclock < 0)
         cclock = 0;
-    if (cclock == 352 - 20)
+    if (cclock == 352 - 24)
         cclock = 352;
 
     // Don't write off the right side of the bitmap if we are a partially visible tile, why waste time?
