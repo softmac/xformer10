@@ -5,7 +5,7 @@
 
     File manipulation code for Macintosh HFS disks
 
-    Copyright (C) 1998-2018 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1998-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/09/1998  darekm

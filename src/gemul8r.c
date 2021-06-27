@@ -5,7 +5,7 @@
 
     - Main window code
 
-    Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     10/10/2018  darekm      Xformer 10.0 release

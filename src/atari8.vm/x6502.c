@@ -5,7 +5,7 @@
 //
 // 6502 interpreter engine for Atari 800 emulator
 //
-// Copyright (C) 2015-2018 by Darek Mihocka. All Rights Reserved.
+// Copyright (C) 2015-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
 // Branch Always Software. http://www.emulators.com/
 //
 // 09/11/2012   darekm      convert from ASM to C

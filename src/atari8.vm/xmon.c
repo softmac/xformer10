@@ -5,7 +5,7 @@
 
     - 6502 debugger (based on original ST Xformer debugger)
 
-    Copyright (C) 1986-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1986-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     11/30/2008  darekm      open source release

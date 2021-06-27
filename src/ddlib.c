@@ -5,7 +5,7 @@
 
     - DirectX helpers
 
-    Copyright (C) 1991-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     09/07/2001  darekm      update for Windows XP

@@ -6,7 +6,7 @@
     - Dialog handler for Properties, load and save properties
     - Also handles the Disks Properties dialog.
 
-    Copyright (C) 1991-2018 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1991-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
     10/10/2018  darekm      Xformer 10.0 release
