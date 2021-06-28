@@ -1,34 +1,25 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27130.2024
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31410.357
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GEMUL8R", "atari.vcxproj", "{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}"
 EndProject
 Global
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|ARM = Debug|ARM
 		Debug|ARM64 = Debug|ARM64
 		Debug|Win32 = Debug|Win32
 		Debug|x64 = Debug|x64
-		Release|ARM = Release|ARM
 		Release|ARM64 = Release|ARM64
 		Release|Win32 = Release|Win32
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|ARM.ActiveCfg = Debug|ARM
-		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|ARM.Build.0 = Debug|ARM
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|ARM64.ActiveCfg = Debug|ARM64
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|ARM64.Build.0 = Debug|ARM64
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|Win32.ActiveCfg = Debug|Win32
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|Win32.Build.0 = Debug|Win32
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|x64.ActiveCfg = Debug|x64
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Debug|x64.Build.0 = Debug|x64
-		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Release|ARM.ActiveCfg = Release|ARM
-		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Release|ARM.Build.0 = Release|ARM
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Release|ARM64.ActiveCfg = Release|ARM64
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Release|ARM64.Build.0 = Release|ARM64
 		{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}.Release|Win32.ActiveCfg = Release|Win32
@@ -41,5 +32,8 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {9DCB0613-A7B9-4F3C-8CC4-44FDD4F8A56D}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal
