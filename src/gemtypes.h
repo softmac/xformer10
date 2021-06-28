@@ -10,7 +10,7 @@
     Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
-    This file is part Xformer project. It is subject to the MIT license terms
+    This file is part of the Xformer project and subject to the MIT license terms
     in the LICENSE file found in the top-level directory of this distribution.
     No part of Xformer, including this file, may be copied, modified, propagated,
     or distributed except according to the terms contained in the LICENSE file.
@@ -105,10 +105,10 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 
 #include "gemul8r.h"    // build flags
 #include "blocklib\blockdev.h"
-#include "memlib\memlib.h"
 #include "res\resource.h"
 #include "cpu.h"
 #if defined(ATARIST) || defined(SOFTMAC)
+#include "memlib\memlib.h"
 #include "680x0.cpu\68k.h"
 #endif
 

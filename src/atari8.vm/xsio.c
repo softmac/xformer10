@@ -8,6 +8,11 @@
     Copyright (C) 1986-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    This file is part of the Xformer project and subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
+
     11/30/2008  darekm      open source release
     09/27/2000  darekm      last update
 
