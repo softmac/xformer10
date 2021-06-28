@@ -725,7 +725,6 @@
     <ClCompile Include="src\atari8.vm\atarixlc.c" />
     <ClCompile Include="src\atari8.vm\atarixlo.c" />
     <ClCompile Include="src\atari8.vm\x6502.c" />
-    <ClCompile Include="src\atari8.vm\xfcable.c" />
     <ClCompile Include="src\atari8.vm\xkey.c" />
     <ClCompile Include="src\atari8.vm\xlxeram.c" />
     <ClCompile Include="src\atari8.vm\xmon.c" />
