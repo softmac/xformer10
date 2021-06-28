@@ -8,6 +8,11 @@
     Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    This file is part Xformer project. It is subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
+
     09/07/2001  darekm      update for Windows XP
 
 ****************************************************************************/

@@ -8,6 +8,11 @@
     Copyright (C) 1986-2021 by Darek Mihocka and Danny Miller. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    This file is part Xformer project. It is subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
+
     11/30/2008  darekm      open source release
 
 ***************************************************************************/
@@ -59,7 +64,7 @@ VMINFO const vmi800 =
     DumpRegsAtari,
     DumpHWAtari,
     MonAtari,
-    
+
     NULL,
     NULL,
     NULL,
@@ -386,18 +391,18 @@ BYTE    rgbRainbow[256 * 3] =
 // So WIDE looks like this: 9 cycles. 4 invisible cycles. 4 visible wide cycles (that would be black bars in NORMAL width).
 // Then 80 cycles of NORMAL width pixels (320 pixels) then 8 more wide cycles (4 of which are visible).
 // That's the WSYNC point. The end of the invisible extra wide pixels. Then 9 cycles after WSYNC to balance out the first 9.
-// 
+//
 // PMG HPOS = 40 is where you start to be able to see a PMG. Which as explained above is cycle 13. PMG are 1/2 resolution
 // of a hi-res playfield, so 40 PMG pixels is like 80 pixels which means it should be @ 20 CPU cycles not 13. Which means PMG HPOS = 0
 // is at cycle -7, or 28 pixels before CPU cycle 0. 28 pixels on either side would add 56 pixels to the 456 pixel scan line,
 // which is, surprise, surprise, 512. Haven't you always wondered about that?
 //
 // Let's say you do STA WSYNC STA COLPF0. The STA wakes up at the earliest at cycle 114 115 116 117. GTIA is 5 cycles behind ANTIC
-// so the new colour takes effect at the beginning of cycle 113. But cycles 111 -114 are the invisible overscan pixels, so 
+// so the new colour takes effect at the beginning of cycle 113. But cycles 111 -114 are the invisible overscan pixels, so
 // you won't see the new colour, as desired. Therefore ATARI even accounts for more overscan than I'm showing where only 2 cycles are
 // offscreen instead of the 4 that I make offscreen. I'm supposed to do collisions in this extra overscan area too, but I don't
 
-//           < WIDE ><NORMAL><NARROW><NORMAL>< WIDE > 
+//           < WIDE ><NORMAL><NARROW><NORMAL>< WIDE >
 //  0  3     9   13  17      25  ... 89      97  101 105   111.114 (CYCLE)
 //  -  -     -   0   16          ...         336 352 -     -  .   (MY VISIBLE PIXEL # - 0 starts at clock 13, 352 ends at cycle 101)
 //  14 20    32  40  48      64      192     208 216 224   236.242 (PMG HPOS - extends 14 more on either side would make 512 pixels
@@ -671,7 +676,7 @@ void DoVBI(void *candy)
                 rgbMem[PADDLE0 + (joy << 1) + 1] = 228;
                 continue;
             }
-            
+
             JOYINFOEX ji;
             ji.dwSize = sizeof(JOYINFOEX);
             ji.dwFlags = JOY_RETURNALL;
@@ -679,7 +684,7 @@ void DoVBI(void *candy)
 
             MMRESULT mm = joyGetPosEx(vi.rgjn[joy], &ji);
             //ODS("Joy %d: x=%04x y=%04x u=%04x b=%04x\n", joy, ji.dwXpos, ji.dwYpos, ji.dwUpos, ji.dwButtons);
-            
+
             if (mm == 0) {
 
                 // if this axis ever goes non-zero, it's an XBOX joystick and we can use the right joystick safely as a paddle!
@@ -805,7 +810,7 @@ void DoVBI(void *candy)
                         x = (ji.dwXpos - jc.wXmin) * 229 / (jc.wXmax - jc.wXmin);
                         y = (ji.dwYpos - jc.wYmin) * 229 / (jc.wYmax - jc.wYmin);
                     }
-                    
+
                     else if (vi.rgjt[joy] == JT_KEYPAD)
                     {
                         // They write to a port to say which row they are interested in retrieving data for.
@@ -920,7 +925,7 @@ void DoVBI(void *candy)
     if (cPasteBuffer && v.iVM >= 0 && candy == rgpvmi(v.iVM)->pPrivate)
     {
         fBrakes = FALSE;    // this is SLOW so we definitely need turbo mode for this
-        
+
         if (!(iPasteBuffer & 1))    // send both bytes on the EVEN count
         {
             BYTE b = rgPasteBuffer[iPasteBuffer];
@@ -1234,7 +1239,7 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
     }
 
     // unique DIAMOND cartridge - all 8 8K segments are valid with 5 as the boot byte, 1st segment is the main one
-    else if (type == 10 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 5 && 
+    else if (type == 10 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 5 &&
                 !pb[0x3ffc] && pb[0x3ffd] == 5 && !pb[0xfffc] && pb[0xfffd] == 5))
     {
         bCartType = CART_DIAMOND;    // unique DIAMOND cart
@@ -1243,7 +1248,7 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
         iBankSize = 0x2000;
         iNumBanks = 8;
     }
-    
+
     // unique SPARTA cartridge - every 8K segment is valid with 1 as the boot byte
     else if (type == 11 || (type == 0 && cb == 0x10000 && !pb[0x1ffc] && pb[0x1fff] >= 0xa0 && pb[0x1fff] < 0xc0 && pb[0x1ffd] == 1 &&
         !pb[0x3ffc] && pb[0x3ffd] == 1 && !pb[0xfffc] && pb[0xfffd] == 1))
@@ -1302,7 +1307,7 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
         iBankSize = 0x2000;
         iNumBanks = 128;
     }
-    
+
     // ATRAX - 128K and 1st 8K bank is the main one
     else if (type == 17)
     {
@@ -1312,10 +1317,10 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
         iBankSize = 0x2000;
         iNumBanks = 16;
     }
-    
+
     // 128K, 8K banks, 1st bank is the main one, last bank isn't valid - either CART_ATRAX or CART_ATARIMAX1.
     // (I assume it can't be ATRAX if last bank is valid but it might be XEGS)
-    else if (type == 0 && cb == 131072 && !(*(pb + 8188)) && (*(pb + 131068) || *(pb + 131071) < 0xa0 || *(pb + 131071) >= 0xc0) && 
+    else if (type == 0 && cb == 131072 && !(*(pb + 8188)) && (*(pb + 131068) || *(pb + 131071) < 0xa0 || *(pb + 131071) >= 0xc0) &&
         ((*(pb + 8191) >= 0x80 && *(pb + 8191) < 0xC0) || (*(pb + 8187) >= 0x80 && *(pb + 8187) < 0xC0)))
     {
         bCartType = CART_ATARIMAX1_OR_ATRAX;
@@ -1326,7 +1331,7 @@ BOOL ReadCart(void *candy, BOOL fDefaultBank)
     }
 
     // 32K-1MB, 16K banks and 1st bank is the main one and last bank NOT valid 8K segment like XEGS (Star Raiders II) - MEGACART
-    else if ((type >= 27 && type <= 32) || (type == 0 && 
+    else if ((type >= 27 && type <= 32) || (type == 0 &&
             (cb == 0x8000 || cb == 0x10000 || cb == 0x20000 || cb == 0x40000 || cb == 0x80000 || cb == 0x100000) &&
             !(*(pb + 0x3ffc)) && (*(pb + cb - 4) || *(pb + cb - 1) < 0xa0 || *(pb + cb - 1) >= 0xc0) &&
             ((*(pb + 0x3fff) >= 0x80 && *(pb + 0x3fff) < 0xC0) || (*(pb + 0x3ffb) >= 0x80 && *(pb + 0x3ffb) < 0xC0))))
@@ -1478,26 +1483,26 @@ void InitCart(void *candy)
         _fmemcpy(&rgbMem[0xb000], pb, 4096);
         AlterRamtop(candy, 0xa000);   // even though cart starts at 0xb000
     }
-    
+
     else if (bCartType == CART_8K)
     {
         _fmemcpy(&rgbMem[0xC000 - (((cb + 4095) >> 12) << 12)], pb, (((cb + 4095) >> 12) << 12));
         AlterRamtop(candy, 0xa000);
     }
-    
+
     else if (bCartType == CART_16K)
     {
         _fmemcpy(&rgbMem[0x8000], pb, 16384);
         AlterRamtop(candy, 0x8000);
     }
-    
+
     // main bank is the last one
     else if (bCartType == CART_OSSA || bCartType == CART_OSSAX || bCartType == CART_OSSBX || bCartType == CART_OSSBY)
     {
         _fmemcpy(&rgbMem[0xB000], pb + 12288, 4096);
         AlterRamtop(candy, 0xa000);
     }
-    
+
     // main bank is the first one
     else if (bCartType == CART_OSSB)
     {
@@ -1560,7 +1565,7 @@ void InitCart(void *candy)
             AlterRamtop(candy, 0xa000);
         }
     }
-    
+
     // 8K main bank is the first one for ATARIMAX1
     // if we're not sure yet, then iSwapCart won't be the special value
     else if (bCartType == CART_ATARIMAX1 || bCartType == CART_ATARIMAX1_OR_ATRAX)
@@ -2234,7 +2239,7 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
 
     // return our persistable size to GEM
     *pPrivateSize = candysize;
-    
+
     // Remember GEM's persisted and unpersisted data about us, we'll need it
     pvm = pGem;
     pvmin = (PVMINST)(pGem + 1);
@@ -2257,7 +2262,7 @@ BOOL __cdecl UnInstallAtari(void *candy)
         TimeTravelFree(candy);
 
         // GEM is responsible for knowing not to use it anymore
-    
+
         HeapFree(GetProcessHeap(), 0, candy);
     }
 
@@ -2291,7 +2296,7 @@ BOOL __cdecl InitAtari(void *candy)
     // Install may have a preference and set this already, in which case, don't change it
     if (!ramtop)
         AlterRamtop(candy, (pvm->bfHW > vmAtari48) ? 0xA000 : 0xC000);
-    
+
     switch (pvm->bfHW)
     {
     default:
@@ -2386,7 +2391,7 @@ BOOL __cdecl MountAtariDisk(void *candy, int i)
     else
     // I don't recognize this kind of disk... yet
         f =  FALSE;
-    
+
     return f;
 }
 
@@ -2403,7 +2408,7 @@ BOOL __cdecl UninitAtariDisks(void *candy)
 {
     for (int i = 0; i < pvm->ivdMac; i++)
         CloseDrive(candy, i);
-        
+
     return TRUE;
 }
 
@@ -2439,14 +2444,14 @@ void ResetPIA(void *candy)
     if (mdXLXE != md800)
     {
         // this will trigger the swap code to safely swap back to the default banks, keeping the data in the other banks
-        PBCTL = 0;  // PORTB registers are DIRECTIONS 
+        PBCTL = 0;  // PORTB registers are DIRECTIONS
         PokeBAtari(candy, PORTAea + 1, 0);    // all bits INPUT
     }
 
-    // but it also might be a coldstart, and ramtop might have changed, so 
+    // but it also might be a coldstart, and ramtop might have changed, so
     rPADATA = 255;    // the data PORTA will provide if it is in READ mode - defaults to no joysticks moved
     rPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !pvm->rgcart.fCartIn) ? 253 : 255) : 255; // XL: HELP out, BASIC = ??, OS IN
-    
+
     wPADATA = 0;    // the data written to PORTA to be provided in WRITE mode (must default to 0 for Caverns of Mars)
     wPBDATA = (mdXLXE != md800) ? ((ramtop == 0xA000 && !pvm->rgcart.fCartIn) ? 253 : 255) : 0; // XL defaults to OS IN and HELP OUT
 
@@ -2457,7 +2462,7 @@ void ResetPIA(void *candy)
     PORTB = rPBDATA;
 
     PACTL = 0x0; // was 0x3c;    // I/O mode, not SET DIR mode
-    PBCTL = 0x0; // was 0x3c;    // I/O mode, not SET DIR mode    
+    PBCTL = 0x0; // was 0x3c;    // I/O mode, not SET DIR mode
 }
 
 // soft reset
@@ -2482,7 +2487,7 @@ BOOL __cdecl WarmbootAtari(void *candy)
     // notice NTSC/PAL switch
     fPAL = pvm->fEmuPAL;
     PAL = fPAL ? 1 : 15;    // set GTIA register
-    
+
     fInVBI = 0;             // reset PAL variables
     fInDLI = 0;
     fDLIinVBI = 0;
@@ -2523,7 +2528,7 @@ BOOL __cdecl WarmbootAtari(void *candy)
         pmg.hpospPixNewStart[i] = 512;  // !!! should be NTSCx, we can't access that constant
 
     // A self-rebooting tile that isn't ours must not init the joysticks while we are moving a joystick
-    // or we'll think it's a paddle. 
+    // or we'll think it's a paddle.
 
     if (v.iVM >= 0 && candy == rgpvmi(v.iVM)->pPrivate)
         InitJoysticks();    // let somebody hot plug a joystick in and it will work the next warm boot!
@@ -2566,7 +2571,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
             ramtop = 0xa000;
         else
             ramtop = 0xc000;
-    
+
     // 800 resets PIA on cold start only
     if (mdXLXE == md800)
         ResetPIA(candy);
@@ -2596,7 +2601,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
     // if we do it later when memory is full
     ReadCart(candy, TRUE);
     InitCart(candy);
-    
+
     // reset the registers
     cpuReset(candy);
 
@@ -2647,7 +2652,7 @@ BOOL __cdecl ColdbootAtari(void *candy)
     //POT5 = 228;
     //POT6 = 228;
     //POT7 = 228;
-    
+
     SKSTAT = 0xFF;
     IRQST = 0xFF;   // !!! shouldn't warm start do some of this?
     AUDC1 = 0x00;
@@ -2709,7 +2714,7 @@ BOOL __cdecl SaveStateAtari(void *candy)
         AlterRamtop(candy, 0xc000);
         fCartNeedsSwap = TRUE;  // next Execute, swap it back (assumes caller is done with it by then)
     }
-        
+
     return TRUE;
 }
 
@@ -2736,7 +2741,7 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
         // I guess we do need to mount the drive right now and can't wait, we need to read from it
         if (!MountAtariDisks(candy))
             return FALSE;
-        
+
         SIOReadSector(candy, rgSIO[0] - 0x31, NULL);
     }
 
@@ -2894,9 +2899,9 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 {
                     Interrupt(candy, FALSE);
                     regPC = cpuPeekW(candy, 0xFFFE);
-                    
+
                     //ODS("IRQ %02x TIME! @%03x\n", (BYTE)~(IRQST), wScan);
-                    
+
                     // report the key going down at the very moment the IRQ is fired or some apps (Eryus) think the previous key
                     // is the current key. Even Altirra gets this wrong!
                     if (!(IRQST & 0x40))
@@ -2917,12 +2922,12 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             // subtract any extra cycles we spent last time finishing an instruction
             wLeft += (DMAMAP[HCLOCKS] + 1);
             wCycle = DMAMAP[wLeft - 1];
-            
+
             // If we'll need a DLI or a VBI at cycle 10, tell it the value of wLeft that needs the DLI (+ 1 since it's 0-based)
             wNMI = (((sl.modehi & 8) && (iscan == scans || (fWait & 0x08))) || (wScan == STARTSCAN + Y8)) ? DMAMAP[116] + 1 : 0;
 
             // We delayed a POKE to something that needed to wait until the next scan line, so add the 4 cycles
-            // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being 
+            // back that we would have lost. We know it's safe to make wLeft bigger than 114 because it will get back to being
             // <114 as soon as the POKE happens.
             if (fRedoPoke)
             {
@@ -2964,7 +2969,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 // we need to delay the next thing that executes (regular or NMI code) until the WSYNC point
                 if (WSYNC_Waiting)
                 {
-                    
+
                     // + 1 to make it 1-based
                     // + 1 is to restart early at cycle 104
                     // !!! That's not always true, but usually is, especially if the WSYNC happened at the end of the previous scan line,
@@ -2986,7 +2991,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     if (fNMI)
                         wNMI = wLeft - 1;
                 }
-                
+
                 // Uh oh, an NMI was to happen at cycle 10, and we're already there or past it, so trigger it now
                 // unless we've arranged to trigger it soon because now is too soon (fNMI)
                 if (!fNMI && wScan == STARTSCAN + Y8)
@@ -2999,7 +3004,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                         //ODS("special VBI\n");
                         Interrupt(candy, FALSE);
                         regPC = cpuPeekW(candy, 0xFFFA);
-                        
+
                         // We're still in the last VBI? Must be a PAL app that's spoiled by how long these can be
                         if (fInVBI)
                             SwitchToPAL(candy);
@@ -3141,12 +3146,12 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                             fSERIN -= (MAXY - 1);    // never be 0, that means stop
                     }
                 }
-                
+
                 else
                     ODS("UNSUPPORTED SIO command %02x %02x\n", rgSIO[0], rgSIO[1]);
-                
+
             }
-        
+
             // Unlike other interrupts, this interrupt triggers whenever the output shift register is idle and the interrupt is enabled,
             // you don't miss it if you didn't have the interrupt enabled at the exact right moment.
             // !!! Apps need to see the IRQST bit reset even if the IRQ is not enabled, so my trigger an IRQ code, above, is hacked.
@@ -3157,14 +3162,14 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
             }
 
             // SIO - periodically send the next data byte, too fast breaks them
-            if (wScan == fSERIN)    
+            if (wScan == fSERIN)
             {
                 Assert(wScan);  // wScan should not be able to be 0 at this point
 
                 fSERIN = (wScan + SIO_DELAY);    // you have this long to read it before the next bit goes in its place
                 if (fSERIN >= MAXY)
                     fSERIN -= (MAXY - 1);    // never be 0, that means stop
-                
+
                 // They want the interrupt for this, let's give it to them
                 if (IRQEN & 0x20)
                 {
@@ -3173,7 +3178,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                 }
 
                 // !!! Technically, SKSTAT bit 5 (overrun) should be set if the $20 interrupt is enabled and was already low
-                // in IRQST before we set it low above 
+                // in IRQST before we set it low above
 
                 // Now set SERIN to the next input byte. They can read it as many times as they want, but it has to be inside
                 // the correct time window or they'll miss it and another byte will replace it
@@ -3239,7 +3244,7 @@ BOOL __cdecl ExecuteAtari(void *candy, BOOL fStep, BOOL fCont)
                     {
                         dv = rgSIO[0] - 0x31;
                         SIOGetInfo(candy, dv, &sd, &ed, &dd, &wp, NULL);
-                        
+
                         /* b7 = enhanced   b5 = DD/SD  b4 = motor on   b3 = write prot */
                         sectorSIO[0] = ((ed ? 128 : 0) + (dd ? 32 : 0) + (wp ? 8 : 0));;
 
@@ -3364,7 +3369,7 @@ void KillMeSoftlyPlease(void *candy)
 {
     // don't just call KIL, cuz it does nothing if we're not auto-killing bad VMs
     vi.fExecuting = FALSE;  // alert the main thread something is up
- 
+
     // quit the thread as early as possible
     wLeft = 0;  // exit the Go6502 loop
     bp = regPC; // don't do additional scan lines
@@ -3424,10 +3429,10 @@ void PrecomputeArtifacting(void *candy)
 
     // precompute a 4 pixel wide pattern of the colours we will use for PF1, PF2 (the background) and artifacting. Both real and bitfield versions
     FillA = 0x00010001 * (red | (green << 8));
-    
+
     Fill1bf = 0x01010101 * bfPF1;   // !!! this could just be a constant
     Fill1 = 0x01010101 * col1;
-    
+
     Fill2bf = 0x01010101 * bfPF2;   // !!! this could just be a constant
     Fill2 = 0x01010101 * col2;
 }
@@ -3458,7 +3463,7 @@ BYTE __forceinline __fastcall PeekBAtariBS(void *candy, ADDR addr)
     // some don't bank when reading, only writing !!! Which ones?
     if (bCartType != CART_ATRAX)
         BankCart(candy, addr & 0xff, 0);    // cartridge banking
-    
+
     return TRUE;
 }
 
@@ -3484,10 +3489,10 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
 
     case 0xd0:
         addr &= 0xff1f;    // GTIA has 32 registers
-        
+
         if (addr < 0xd010)
             ProcessScanLine(candy);   // reading collision registers needs cycle accuracy
-        
+
         // (XL) TRIG3 == 1 for cartridge present, which makes a lot of paranoid disk games deliberately hang
         // on 800, TRIG3 is always 1 unless P4 presses the trigger, and these apps always hang (TurboBasic, Barroom Brawl)
         // Only Kill if we're not running a cartridge, or you'll kill MuleCart.bin which is 800 only, only disk games need this
@@ -3497,7 +3502,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
             if (mdXLXE == md800 && bCartType == 0 && wFrame < 100 && regPC < ramtop)
                 KillMePlease(candy);
         }
-        
+
         // NTSC/PAL GTIA flag
         else if (addr == 0xd014)
         {
@@ -3517,7 +3522,7 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
             return CONSOL & (0xf8 | ~(wCONSOL & 7));
         }
         break;
-    
+
     case 0xd2:
         addr &= 0xff0f;    // POKEY has 16 registers
 
@@ -3676,7 +3681,7 @@ BOOL __fastcall PokeBAtariBB(void *candy, ADDR addr, BYTE b)
         BankCart(candy, 0, (BYTE)(addr - 0x8ff6));
     if (addr >= 0x9ff6 && addr <= 0x9ff9)
         BankCart(candy, 1, (BYTE)(addr - 0x9ff6));
-    
+
     return TRUE;
 }
 
@@ -3707,7 +3712,7 @@ BOOL __fastcall PokeBAtariBS(void *candy, ADDR addr, BYTE b)
 {
     //printf("addr = %04X, b = %02X\n", addr, b);
     BankCart(candy, addr & 0xff, b);
-    
+
     return TRUE;
 }
 
@@ -3840,14 +3845,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 ResetPokeyTimer(candy, irq);
             }
         }
-        
+
         else if (addr == 10)
         {
             // SKRES
 
             SKSTAT |=0xE0;
         }
-        
+
         else if (addr == 11)
         {
             // POTGO - start counting once per scan line from 0 to 228, which will be the paddle values
@@ -3855,19 +3860,19 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
             POT = 0;
             ALLPOT = 0xff;
         }
-        
+
         else if (addr == 13)
         {
             // SEROUT - if the last 5 bytes have a proper checksum, then they are a valid frame, otherwise keep accepting
             // data until that happens.
-            // I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't 
+            // I can't only let data I recognize through. 221B sends device #$c3 status and hangs if the interrupts don't
             // fire that show we sent that command. Other apps try to talk to the printer, etc.
-            
+
             // Uh oh! They starting sending more data before we were ready for it. Overrun and lose the previous frame
             // !!! What should I really do? No known app does this yet.
             if (cSEROUT == 5)
                 cSEROUT = 0;
-            
+
 			Assert(cSEROUT < 5);	// make sure the compiler still does the cSEROUT=0, this happens in DeathChaseXE and will hang
 
             //ODS("SEROUT #%d = 0x%02x @%03x\n", cSEROUT, b, wScan);
@@ -3915,7 +3920,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
 
             // all the bits they poked OFF (to disable an INT) have to show up here as ON, except for $8
             IRQST |= (~b & (BYTE)~0x08);
-            
+
             //ODS("IRQEN: 0x%02x @%03x\n", b, wScan);
 
             // !!! All of the bits they poke ON have to show up instantly OFF in IRQST, but that's not how I do it right now.
@@ -4029,7 +4034,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 // it is a data register. Update only bits that are marked as write.
 
                 BYTE bMask = cpuPeekB(candy, wPADDIRea + addr);   // which bits are in write mode
-        
+
                 // what is the banking state right now? read bits have the default bank, and write bits have the last data written
                 bOld = (rPBDATA & ~wPBDDIR) | (wPBDATA & wPBDDIR);
 
@@ -4089,18 +4094,18 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 // (They won't always put PORTB in write mode explicitly)
                 // I at least protect against clearing memory with zeros thinking that's an attempt to swap out the OS
                 // by insisting b be non-zero
-                // 
+                //
                 else if (addr == 1 && mdXLXE == md800 && b && (!(b & 1) || ((b & 0x30) != 0x30)))
                 {
                     // 8f/8e swaps out bit 6, which is undefined, so doesn't sound like a real XE bank request
                     // Some Bounty Bob hang in XE so we can't go into XE mode by mistake if they don't mean it
-                    if ((b & 0x30) != 0x30 && b != 0x8f && b != 0x8e)    
+                    if ((b & 0x30) != 0x30 && b != 0x8f && b != 0x8e)
                         KillMePleaseXE(candy);    // need XE w/o BASIC
                     else
                         KillMePlease(candy);      // need XL w/o BASIC
                 }
             }
-            
+
             else
             {
                 // it is a data direction register.
@@ -4109,12 +4114,12 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 // won't swap out the OS accidentally. First POKE PORTB,0 does swap out the OS. Then POKE PBCTL,0 puts the
                 // ports into direction control mode. Then the POKE to the next PORTB shadow sets PORTB to read mode, and
                 // that needs to swap the OS back in (Great American Road Race, some versions)
-                
+
                 // The default banks are found in rPBDATA, set at power up and never changed - HELP out, OS IN, BASIC ???)
                 // The bits marked for writing get whatever bank they were last told to use (wPBDATA)
                 // Therefore, putting all PORTB bits into read mode swaps in the default banks, and putting them back into write mode
                 // restores whatever was there before by seeing if wPBDATA is different than rPBDATA for that bit
-                // 
+                //
                 if (addr == 1 && mdXLXE != md800)
                 {
                     // b contains which bits are in write mode
@@ -4256,7 +4261,7 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
                 // + 1 to make it 1-based
                 // +cT is how many cycles are about to be decremented the moment we return
                 // + wo is to start 1 cycle early at cycle 104 if wo == 1.
-                // 
+                //
                 wLeft = DMAMAP[115] + 1 + cT + wo;
                 wCycle = DMAMAP[wLeft - 1];
 

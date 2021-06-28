@@ -10,6 +10,11 @@
     Copyright (C) 1991-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
 
+    This file is part Xformer project. It is subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
+
     11/30/2008 darekm       Gemulator 9.0 release
     07/13/2007 darekm       updated for Gemulator/SoftMac 9.0
     02/28/2001 darekm       updated for Gemulator/SoftMac 8.1
