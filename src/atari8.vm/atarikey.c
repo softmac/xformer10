@@ -1,4 +1,22 @@
 
+/***************************************************************************
+
+    ATARIKEY.C
+
+    - Implements scan code key map.
+
+    Copyright (C) 1986-2021 by Darek Mihocka. All Rights Reserved.
+    Branch Always Software. http://www.emulators.com/
+
+    This file is part Xformer project. It is subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
+
+    11/30/2008  darekm      open source release
+
+***************************************************************************/
+
 unsigned char rgbMapScans[256*4] =
 {
     0xFF, 0xFF, 0xFF, 0xFF,     // $00

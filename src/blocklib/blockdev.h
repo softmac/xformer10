@@ -7,8 +7,13 @@
     Supports floppy drives, disk images, and SCSI devices.
     Supports Mac HFS and GEMDOS partitions.
 
-    Copyright (C) 1998-2008 by Darek Mihocka. All Rights Reserved.
+    Copyright (C) 1998-2021 by Darek Mihocka. All Rights Reserved.
     Branch Always Software. http://www.emulators.com/
+
+    This file is part Xformer project. It is subject to the MIT license terms
+    in the LICENSE file found in the top-level directory of this distribution.
+    No part of Xformer, including this file, may be copied, modified, propagated,
+    or distributed except according to the terms contained in the LICENSE file.
 
     01/18/1998  darekm
 

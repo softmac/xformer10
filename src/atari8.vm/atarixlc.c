@@ -1,3 +1,14 @@
+
+/***************************************************************************
+
+   ATARIXLC.C
+
+   Hex dump of Atari XL/XE OS overlay ROM at address $C000.
+
+   Atari OS and BASIC used with permission. Copyright (C) 1979-1984 Atari Corp.
+
+***************************************************************************/
+
 const unsigned char rgbXLXEC000[4096] =
 {
     0x11, 0x92, 0x10, 0x05, 0x83, 0x00, 0x42, 0x42, // $C000

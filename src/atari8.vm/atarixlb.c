@@ -1,3 +1,14 @@
+
+/***************************************************************************
+
+   ATARIXLB.C
+
+   Hex dump of Atari XL BASIC.
+
+   Atari OS and BASIC used with permission. Copyright (C) 1979-1984 Atari Corp.
+
+***************************************************************************/
+
 const unsigned char rgbXLXEBAS[8192] =
 {
     0xA5, 0xCA, 0xD0, 0x04, 0xA5, 0x08, 0xD0, 0x45, // $A000

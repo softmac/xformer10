@@ -1,4 +1,14 @@
 
+/***************************************************************************
+
+   ATARIOSB.C
+
+   Hex dump of Atari 800 OS revision B, C version of the ASM file
+
+   Atari OS and BASIC used with permission. Copyright (C) 1979-1984 Atari Corp.
+
+***************************************************************************/
+
 const unsigned char rgbAtariOSB[10240] =
 {
     0x20, 0xA1, 0xDB, 0x20, 0xBB, 0xDB, 0xB0, 0x39, // $D800

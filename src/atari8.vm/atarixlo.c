@@ -1,3 +1,14 @@
+
+/***************************************************************************
+
+   ATARIXLO.C
+
+   Hex dump of Atari XL OS ROM.
+
+   Atari OS and BASIC used with permission. Copyright (C) 1979-1984 Atari Corp.
+
+***************************************************************************/
+
 const unsigned char rgbXLXED800[10240] =
 {
     0x20, 0xA1, 0xDB, 0x20, 0xBB, 0xDB, 0xB0, 0x39, // $D800
