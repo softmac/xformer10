@@ -445,6 +445,7 @@
       <ForceFileOutput>MultiplyDefinedSymbolOnly</ForceFileOutput>
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <AdditionalOptions>/allpdata %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -703,6 +704,7 @@
       <TerminalServerAware>false</TerminalServerAware>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <Profile>true</Profile>
+      <AdditionalOptions>/allpdata %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <Bscmake>
       <PreserveSbr>true</PreserveSbr>
