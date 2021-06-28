@@ -27,7 +27,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectName>GEMUL8R</ProjectName>
+    <ProjectName>Xformer10</ProjectName>
     <ProjectGuid>{A7CC72AB-5197-4EDD-ACF4-08C3CA36FAF6}</ProjectGuid>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
