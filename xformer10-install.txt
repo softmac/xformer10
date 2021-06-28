@@ -1,0 +1,32 @@
+
+XFORMER 10 is a simple drag-and-drop install requiring no special installer, drivers, or registry keys.
+
+Simply drag the appropriate .EXE file to your Windows desktop (or other disk folder of your choice)
+then double-click to launch XFORMER 10.  By default it will initialize and boot into Atari 800 BASIC.
+
+Three versions of the XFORMER 10 binary are provided:
+
+- XFORMER10.EXE is a universal 32-bit x86 build which runs on Windows 7 and later systems.
+  Use this version if you do not know what kind of CPU is on your Windows device.
+
+- XFORMER10-X64.EXE is a 64-bit build optimized for AMD and Intel based PCs running a 64-bit Windows.
+
+- XFORMER10-ARM64.EXE is a 64-bit build for Windows 11 on ARM64 optimized for Qualcomm ARM64 based devices
+  such as ASUS Nova Go, HP Envy X2, Lenovo Miix 630, Samsung Galaybook S, Surface Pro X, and others.
+
+When launched simply select File \ Open Folder to load Atari 8-bit programs into the emulator.  Or even
+simpler, merely drag-and-drop your Atari 8-bit binaries and disk images to the XFORMER 10 icon.  Simple!
+
+As in previous XFORMER releases, an Atari DOS 2.5 floppy disk image is provided.  Clone this to create
+additional Atari 8-bit virtual floppy disks for storing your Atari BASIC programs to.
+
+To uninstall XFORMER10 simply delete the program icon from your desktop (or other installation folder).
+
+NOTE: if you have not previously installed an application built with Visual Studio 2017, you may get an
+error about VCRUNTIME140.DLL not being found.  If this happens, please install the Visual Studio 2017
+C runtime redistributable files from Microsoft's download page:
+
+https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads
+
+
+

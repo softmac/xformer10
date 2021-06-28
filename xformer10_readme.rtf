@@ -1,0 +1,62 @@
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset2 Symbol;}}
+{\*\generator Riched20 10.0.22410}\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\b\f0\fs22\lang9 XFORMER 10 by Danny Miller and Darek Mihocka\b0\par
+October 10 2018\par
+There are two big themes in this major upgrade of the classic ATARI 8-bit emulator \b XFORMER\b0 : \par
+
+\pard{\pntext\f1\'B7\tab}{\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1\b Tiled Mode \b0 - browse thousands of programs at once, each one a playable thumbnail.\par
+{\pntext\f1\'B7\tab}\b "It Just Works" \b0 - auto detection of the exact configuration of an ATARI computer that the program needs, and auto-detection of whatever joystick or other controller you are using. Previously, it might have taken several minutes of manual configuration before a program would run under an emulator... not exactly making it easy to quickly browse a lot of titles to see what you want to play.\par
+
+\pard\sa200\sl276\slmult1 Tiled Mode coupled with "It Just Works" means that instead of being able to look at one program every minute or so, it only takes a couple of seconds to browse hundreds of titles all running simultaneously!\par
+XFORMER 10 now does cycle accurate emulation, cycle accurate ANTIC DMA and much better emulation of the many hardware registers of the ATARI home computers, for a compatibility rate that is better than 99%.\par
+And there are dozens more cool new features as well, that we will briefly describe to get you up and running your favourite ATARI programs on your Windows machine quickly and effortlessly.\par
+\par
+\b STARTING ATARI DISK IMAGES - NEW TILED MODE\par
+\b0 To run a disk image of an ATARI program under our emulator, you can use the \b File/Open Folder \b0 menu item to open either an individual program, or a folder that contains any number of programs that you want to run all at the same time. But it's probably easier and more fun to simply \b drag and drop \b0 a file or a folder onto our icon once you place it on your desktop.\par
+We support \b ATR, XFD, ROM, BIN, CAR, GEM, COM, EXE, XEX \b0 and \b BAS\b0  files. \b CAS\b0  and \b ATX/PRO \b0 file support is coming soon (cassette images and copy protected disk images).\par
+\b F5\b0  toggles between the new \b tiled mode \b0 and using a program full screen. Don't forget that in tiled mode, you can use the \b touch pad \b0 or \b mouse wheel \b0 to scroll the tiles vertically, or if you have a \b touch screen\b0 , scroll with your finger on the screen. In single program mode, you can use the same methods to scroll horizontally between all of the programs you have loaded using the feature we call \b "roulette mode"\b0 .\par
+We support the \b pinch gesture \b0 both on the touchpad and when touching the screen on a touch screen device. Pinching in from full-screen mode (no menu bars) will put you into windowed mode for a single program, and pinching again will take you into tiled mode. \b Zooming\b0  will go in the opposite direction.\par
+It's easy to get lost with thousands of titles loaded at the same time, so with the focus on the title bar, you can type something, and \b only programs whose disk image name starts with that phrase will be shown.\b0  For instance, type "star" and only programs named star something or other will be shown (that still may be a large number; that was a popular phrase for a game title).\par
+Whenever you \b close XFORMER 10\b0 , unless you have unchecked "File/Restore Last Session on Startup", it will \b remember the exact state of every single program \b0 (maybe thousands of them!) and next time you start XFORMER10, you will pick up where you left off. You can also \b save your session \b0 at any time, and keep as many snapshots as you want of as many combinations of programs and their exact states as you like.\par
+\b\par
+TURBO MODE\par
+\b0 Use \b ALT-F1 \b0 to toggle between running your program in real time or as fast as possible, but be warned, our emulator is the fastest available and a single program may run up to \b 100x normal speed \b0 (or even faster) in turbo mode. Turbo mode is great fun in tiled mode, making sure they all boot up quickly so you can see them all in action right away.\par
+\b\par
+"IT JUST WORKS" - finding the right ATARI system for your program\par
+\b0 Many programs need a particular ATARI system to work, either \b a 400/800 XL or XE\b0 , with or without the \b BASIC\b0  cartridge, and either in the North American \b NTSC\b0  or the European \b PAL \b0 video system. That's 12 combinations! Up until now you have always had to manually select the 12 different possible systems until you found one that worked. Our artifical intelligence algorithm will automatically detect what kind of system is needed. You may see the ATARI reboot a couple of times as the program starts, but that is normal. In the rare instance that auto-detect does not work (but out of thousands of test cases auto-detect works 99.5% of the time) you can still manually select the system that you need by turning off \b "Auto-detect VM type" \b0 in the menus and then using \b Alt-F10 or "Change VM type" \b0 to try 400/800 vs XL vs XE, \b Shift-F10 to toggle the BASIC cartridge \b0 and \b ALT-F12 to toggle NTSC/PAL \b0 mode until it works. In rare instances you may need to \b cold start (CTRL-F10)\b0  after switching between NTSC and PAL.\par
+\par
+\b TIME TRAVEL - 13s backwards in time, or to a fixed point in time\par
+\b0 If you die in your favourite game and want another chance, you've got it! Just press \b PAGE UP to enable time travel \b0 in a program. Then, whever you press \b PAGE UP, you will go back in time 13 seconds \b0 or so! Remember, Galaxy Quest fans, 13 seconds has been proven to be the optimal amount of time travel. Are you about to do something especially challenging in a game and you want to \b remember a certain fixed point in time\b0  as the time you want to go back to instead of going back 13 seconds? Just press \b PAGE DOWN\b0  and from now on PAGE UP will return you to the point you were at when you last pressed PAGE DOWN. The menu will allow you to go back to 13 second time travel whenever you want.\par
+\par
+\b GAME CONTROLLERS and SPECIAL KEYS\b0\par
+We support \b ATARI joysticks, paddles, driving controllers, video touch pads and numeric key pad \b0 devices. Just plug them into any USB port using one of the several inexpensive ATARI joystick to USB adapters available. In the "It Just Works" philosophy of XFORMER 10, there are no menu items to select what controllers are plugged in, we will figure it out! Make sure your joystick is centered when you plug it in (and you aren't pushing the stick in any direction). Press 0 or # on the bottom row of the video touch pad for it to be recognized. But other than that, it should just work. If you plug in 4 joysticks for a 4 player game, a little trial and error will figure out which joystick is for which player.\par
+You can play a 1 player game using the keyboard without a joystick. The arrow keys control the direction of the joystick (as do the keys of the numeric key pad, if you have one). Left control, right control, left mouse button and numeric keypad 0 are all the fire button. Most people are used to using the left control button, but occasionally that will interfere with a complex program that both uses the joystick plus allows you to use keystrokes requiring the control key, so there is a menu item to "Disable L-CTRL as Fire".\par
+The \b ATARI inverse video key is the ` or ~ key \b0 on your keyboard. The \b ATARI break key is the END key \b0 on your keyboard. The \b ATARI clear key is the HOME key \b0 on your keyboard.\par
+\b F1 to F4 \b0 on your keyboard are the \b ATARI 1200XL function keys\b0 .\par
+\b F6 is HELP on a XL/XE.\par
+F7 is START.\par
+F8 is SELECT.\par
+F9 is OPTION.\par
+F10 is RESET.\b0\par
+We also emulate a \b light pen\b0 . The \b mouse\b0  will be the position of the light pen, and pressing the \b joystick up \b0 (or using the up arrow key) is the \b light pen/gun trigger\b0 . If you want to emulate the experience of not being able to easily aim the light gun, play the program in \b full screen mode (Alt-Enter)\b0 . The mouse cursor will disappear and it will be harder to aim the light gun.\par
+An \b XBOX controller \b0 makes a great controller for XFORMER 10. It can serve as both a joystick and a paddle. For joystick games, use the usual left most joystick and the \b A button for fire\b0 . For \b paddle\b0  games, use the \b right most joystick\b0 . The \b paddle fire button \b0 is pressed by \b moving the left most joystick to the left\b0 .\par
+\b The START, SELECT, and OPTION \b0 keys are available on the XBOX controller, so that you can play on a tablet that does not have a keyboard connected (and therefore doesn't allow you to press F7, F8 or F9). They are the XBOX controller buttons \b B (START), X (SELECT) \b0 and \b Y (OPTION)\b0 .\par
+\par
+\b ENTERING A PROGRAM BY PASTING (WITHOUT TYPING)\b0\par
+If you \b copy a program listing you find on the internet into the clipboard\b0 , you can simply paste it into XFORMER 10 without having to do any typing! Or you can \b paste a large amount of text from one of your PC files into an ATARI word processor \b0 without having to retype it!\par
+For instance, if it is a BASIC program for an ATARI 800, start a \b new virtual ATARI BASIC machine \b0 with the \b FILE/NEW VM/ATARI 800 \b0 menu option. Then choose \b VM/Toggle BASIC \b0 or press \b SHIFT-F10 to enable BASIC.\b0  Then choose \b VM/Paste Text as ASCII \b0 (or ATASCII) depending on if the text is a regular PC text file, or a special ATARI program in ATASCII (try both if you're not sure).\par
+\b Hint\b0 : POKE 82,0 to move the left margin all the way to the left just in case there are very long lines you are pasting that won't fit otherwise.\par
+\par
+\b SWAPPING DISKS AND CARTRIDGES\b0\par
+To virtually insert a cartridge into the ATARI, choose the \b Disk-Cartridge/Cartridge\b0  menu item. You can also \b remove\b0  it. To virtually insert a disk into a disk drive, choose Disk-Cartridge and either \b D1: or D2:\b0  and click on the disk image file on your computer. Some of the more complicated games filled up several diskettes, so when they ask you to \b swap disks\b0 , you will choose D1: and then choose the disk image of the second part of the program (or whichever disk is being called for). You choose the \b Unmount\b0  option to remove a disk so the virtual disk drive will be empty.\par
+You can also toggle whether or not your virtual drive \b is write protected \b0 or not and will allow you to write to the disk image. Choosing this will emulate putting on or removing the write protect tab on whatever virtual disk is inside that disk drive.\par
+\par
+\b MOVING A DISK IMAGE BACK TO A REAL ATARI\b0\par
+If you have an ATR disk image, you can use it with an ATARI emulator, or use it with the APE ATARI interface to load it into a real ATARI and use the program there without needing an actual ATARI floppy disk with the program on it. However, APE does not work with many of the disk image formats that XFORMER 10 does. So what if you have a disk image of an individual machine language binary (a .XEX file, for example) or an individual BASIC program (a .BAS file, for example)?  You can easily use them on an emulator, but there has never been a way to go back to using it on a real ATARI computer... UNTIL NOW!\par
+\b Load or drag and drop a copy of ATARI DOS \b0 onto XFORMER 10. Inside DOS, mount your ATARI file disk image on D1, and for \b D2:, choose "Create Blank Disk/Single Density"\b0 . Now \b use DOS to duplicate disk 1 to disk 2.\b0\par
+What will happen in this scenario, is that the single file disk image is emulated as if it was an entire disk image, so copying it to a new disk image will create an ATR file out of your XEX, BAS or other disk image. Now you can use APE to run that newly created ATR file on a real ATARI computer.\par
+\par
+\b QUESTIONS? BUG REPORTS? Please email us at "xformer10@gmail.com"\b0\par
+\par
+}
+ 
