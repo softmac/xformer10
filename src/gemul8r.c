@@ -1522,6 +1522,13 @@ int CALLBACK WinMain(
     QueryPerformanceCounter(&qpc);
     vi.qpcCold = qpc.QuadPart;
 
+    // initialize dbgprint output
+
+    HMODULE hNTDLL;
+
+    hNTDLL = LoadLibrary("ntdll.dll");
+    pfnDbgPrint = (void *)GetProcAddress(hNTDLL, "DbgPrint");
+
     // Get paths
 
     GetCurrentDirectory(MAX_PATH, (char *)&vi.szDefaultDir);
@@ -1702,9 +1709,9 @@ int CALLBACK WinMain(
     // this is slow, so only do it once ever. And do it now before we fill memory with VMs and they end up having to be silent
     InitSound();
 
-	// INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
-	// to allow hot-plugging
-	InitJoysticks();
+    // INIT the joysticks, but we can quickly do this again any time we're pretty sure the joystick isn't being moved
+    // to allow hot-plugging
+    InitJoysticks();
 
     // Create a main window for this application instance - 
     // We need to do this before processing drag/drop or restoring our state, as we need an hdc!
@@ -1897,6 +1904,7 @@ int CALLBACK WinMain(
 
     /* Acquire and dispatch messages until a WM_QUIT message is received. */
 
+
     for (;;)
     {
         while (PeekMessage(&msg, // message structure
@@ -1987,6 +1995,8 @@ int CALLBACK WinMain(
                 fNeedTiledBitmap = FALSE;
             else
             {
+                // (*pfnDbgPrint)("CATASTROPHIC\n");
+
                 // This is catastrophic, but instead of closing the app dramatically, just kill a few VMs until
                 // things start working again. That way dragging a zillion apps onto our icon will show as many as it
                 // can instead of failing to do anything
@@ -2059,12 +2069,12 @@ int CALLBACK WinMain(
             }
 
             // wait for them to complete one frame
-			int cT = cThreads;
-			while (cT > 0)
-			{
-				WaitForMultipleObjects(min(cT, MAXIMUM_WAIT_OBJECTS), &hDoneEvent[cThreads - cT], TRUE, INFINITE);
-				cT -= MAXIMUM_WAIT_OBJECTS;
-			}
+            int cT = cThreads;
+            while (cT > 0)
+            {
+                WaitForMultipleObjects(min(cT, MAXIMUM_WAIT_OBJECTS), &hDoneEvent[cThreads - cT], TRUE, INFINITE);
+                cT -= MAXIMUM_WAIT_OBJECTS;
+            }
         }
 
         // not tiled. There's only one or two threads (if not minimized)
@@ -2092,7 +2102,7 @@ int CALLBACK WinMain(
         }
 
         // It's been almost a second since we last used the roulette wheel with the mouse wheel, time to settle down
-        if (sPan && !sGesturing && GetJiffies() - sPanJif > 50)
+        if (sPan && !sGesturing && (GetJiffies() - sPanJif > 50))
         {
             RECT rc;
             int max;
@@ -2225,7 +2235,7 @@ int CALLBACK WinMain(
         // The Macros will ONLY use PAL timing when we're not tiling, tiled PAL gets 60Hz like NTSC
         ULONGLONG ullsec = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? PAL_CLK : NTSC_CLK;
         ULONGLONG ulljif = (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL) ? JIFP : JIFN;
-        
+
         // Don't spin in a tight loop doing nothing while minimized or if there are no threads
         if ((fBrakes || !cThreads || v.swWindowState == SW_SHOWMINIMIZED) && (cCur < ullsec))
         {
@@ -3702,7 +3712,7 @@ void ScrollTiles()
                 // delay this memory hit until the VM is being used
                 if (sVM >= 0) rgpvm[sVM]->fTimeTravelEnabled = TRUE;
 
-				v.iVM = s;	// !!! They are always in sync, so get rid of sVM!
+                v.iVM = s;    // !!! They are always in sync, so get rid of sVM!
                 FixAllMenus(FALSE); // VM list is greyed when tiled
                 DisplayStatus(v.iVM);
             }
@@ -4255,7 +4265,7 @@ LRESULT CALLBACK WndProc(
     // which is the "current" VM? (the tiled one with focus, or the main one when not tiled) or -1 if tiled and nothing in focus
     v.iVM = (v.fTiling && sVM >= 0) ? sVM : (v.fTiling ? -1 : v.iVM);    // use the active tile if there is one
 
-	assert(!v.fTiling || v.iVM == sVM); // find out if we need 2 variables
+    assert(!v.fTiling || v.iVM == sVM); // find out if we need 2 variables
 
     switch (message)
     {
@@ -4867,7 +4877,7 @@ break;
         // toggle tile mode
         case IDM_TILE:
             
-			v.fTiling = !v.fTiling;
+            v.fTiling = !v.fTiling;
             
             // things we need set up for tiled mode
             if (v.fTiling)
@@ -4910,9 +4920,9 @@ break;
                 InitThreads();  // now that we know our offset, make the proper threads
             }
             
-			uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
+            uExecSpeed = 0; // this will change our speed stat, so help it get to the right answer faster
             
-			if (v.cVM && v.fTiling)
+            if (v.cVM && v.fTiling)
             {
                 // now where is the mouse? That tile gets focus
                 POINT pt;
@@ -5966,8 +5976,8 @@ break;
                     iZoomBegin = gi.ullArguments; // how far apart our fingers start
                 }
                 // don't do more than one zoom level at a time, require 20 jiffy delay
-				// which is different than the trackpad pinch delay that works best
-                else if (ullJif - ullGestJif > 20)  // 
+                // which is different than the trackpad pinch delay that works best
+                else if (ullJif - ullGestJif > 20)  //
                 {
                     int iZoom = (int)gi.ullArguments - (int)iZoomBegin; // make it signed
 
@@ -5989,7 +5999,7 @@ break;
                         else if (!v.fTiling && !v.fFullScreen)
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);    // a non-key way to enter fullscreen
                                                                                     // no need to enter fullscreen in tiled mode
-                    
+
                         ullGestJif = ullJif;
                     }
                     else if (iZoom < -100) // zoom out
@@ -6004,11 +6014,11 @@ break;
 
                         else  if (v.fFullScreen)    // don't let a tablet get stuck in fullscreen mode
                             SendMessage(vi.hWnd, WM_COMMAND, IDM_FULLSCREEN, 0);
-                
+
                         ullGestJif = ullJif;
                     }
                 }
-                
+
                 CloseGestureInfoHandle((HGESTUREINFO)lParam);
                 return 0;
             }    // GID_ZOOM
@@ -6143,7 +6153,7 @@ break;
         break;
 
     case WM_MOUSEMOVE:
-        
+
         // !!! if the VM type supports a mouse, how do we figure out when to capture the mouse inside a tile?
         if (v.iVM >= 0)
             FWinMsgVM(v.iVM, hWnd, message, uParam, lParam);    // give mouse move to the VM !!! not listening to whether to eat it

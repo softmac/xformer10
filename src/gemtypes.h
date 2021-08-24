@@ -1186,6 +1186,11 @@ inline void __assume(BOOL condition) {}
 
 #endif // NDEBUG
 
+// Function pointer to ntdll!DbgPrint()
+
+ULONG(__stdcall *pfnDbgPrint)(PCSTR, ...);
+#define DBGPRINT (*pfnDbgPrint)
+
 
 // =============================================
 // Below this line only applies to non ATARI 800
