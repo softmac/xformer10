@@ -41,9 +41,7 @@
 
 #include "..\gemtypes.h"
 
-#define H32BIT
-
-#if defined(_M_IX86) || defined(_M_AMD64)
+#if defined(_M_IX86) || (defined(_M_AMD64) && !defined(_M_ARM64EC))
 
 #pragma intrinsic(__stosb)
 #pragma intrinsic(__movsb)
@@ -61,13 +59,3 @@
 
 #endif
 
-
-//
-// Memory model stuff
-//
-
-#define HUGE
-
-//
-// Debug functions
-//
