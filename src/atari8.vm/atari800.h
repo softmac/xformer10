@@ -93,7 +93,7 @@ extern const BYTE Bin3[128];
 // index 114 holds how many CPU cycles can execute this scan line (wLeft's initial value, 1-based, from 1-114)
 // index 115 holds the WSYNC point (set wLeft to this + 1 when you want to jump to cycle 105)
 // index 116 holds the DLI point (cycle 10), do an NMI when wLeft decrements to this
-BYTE rgDMAMap[19][2][3][2][2][2][2][HCLOCKS + 3];
+BYTE rgDMAMap[20][2][3][2][2][2][2][HCLOCKS + 3 + 11];
 
 // for clock cycle number 0-113 (0 based), what pixel is about to be drawn at the start of that cycle #?
 WORD rgPIXELMap[HCLOCKS];
