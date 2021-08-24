@@ -974,6 +974,8 @@ void DoVBI(void *candy)
 
     // decrement printer timer
 
+#if !defined(XFORMER)
+
     if (vi.cPrintTimeout && pvm->fShare)
     {
         vi.cPrintTimeout--;
@@ -985,6 +987,8 @@ void DoVBI(void *candy)
     }
     else
         FlushToPrinter(0);  // !!! not thread safe, can't pass VM#
+
+#endif
 }
 
 void UpdatePorts(void *candy)
@@ -2133,8 +2137,9 @@ BOOL __cdecl InstallAtari(void **ppPrivate, int *pPrivateSize, PVM pGem, PVMINFO
 
     // we want to make sure there's no BASIC for this one
     if (pvmi == (PVMINFO)VM_NOBASIC)
+    {
         initramtop = 0xc000;
-
+    }
     else if (pvmi == (PVMINFO)VM_CRASHED)
     {
         // Drag/Drop initially tries 800 w/o BASIC. If 800 breaks, try XL w/o BASIC. If XL breaks, try XE w/ BASIC.
@@ -2316,10 +2321,14 @@ BOOL __cdecl InitAtari(void *candy)
 
     pvm->bfRAM = BfFromWfI(pvm->pvmi->wfRAM, mdXLXE);
 
+#if !defined(XFORMER)
+
     if (!FInitSerialPort(pvm->iCOM))
         pvm->iCOM = 0;
     if (!InitPrinter(pvm->iLPT))
         pvm->iLPT = 0;
+
+#endif
 
     // We have per instance and overall sound on/off, right now everything is always on.
     fSoundOn = TRUE;
@@ -2749,12 +2758,13 @@ BOOL __cdecl LoadStateAtari(void *pPersist, void *candy, int cbPersist)
     ReadCart(candy, FALSE);
     InitCart(candy);
 
-#if 0
-    // legacy stuff that doesn't matter for now
+#if !defined(XFORMER)
+
     if (!FInitSerialPort(pvm->iCOM))
         pvm->iCOM = 0;
     if (!InitPrinter(pvm->iLPT))
         pvm->iLPT = 0;
+
 #endif
 
     // 4. Our two paths to creating a VM, cold start or LoadState, both need to reset time travel to create an anchor point
