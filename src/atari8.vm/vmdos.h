@@ -47,38 +47,38 @@ typedef struct _vminfo
     ULONG wfRAM;            // bit vector of supported RAM sizes
     ULONG wfROM;            // bit vector of supported ROM chips
     ULONG wfMon;            // bit vector of supported monitors
-    PFNL pfnInstall;        // VM installation (one time init)
-    PFNL pfnInit;           // VM initialization (switch to this VM)
-    PFNL pfnUnInit;         // VM uninit (switch away from VM)
-    PFNL pfnInitDisks;      // VM disk initialization
+    PFNBPPV pfnInstall;     // VM installation (one time init)
+    PFNB pfnInit;           // VM initialization (switch to this VM)
+    PFNB pfnUnInit;         // VM uninit (switch away from VM)
+    PFNB pfnInitDisks;      // VM disk initialization
 #ifdef HWIN32
-    PFNL pfnMountDisk;      // VM disk initialization
+    PFNB pfnMountDisk;      // VM disk initialization
 #endif
-    PFNL pfnUnInitDisks;    // VM disk uninitialization
+    PFNB pfnUnInitDisks;    // VM disk uninitialization
 #ifdef HWIN32
-    PFNL pfnUnmountDisk;    // VM disk uninitialization
+    PFNB pfnUnmountDisk;    // VM disk uninitialization
 #endif
-    PFNL pfnColdboot;       // VM resets hardware (coldboot)
-    PFNL pfnWarmboot;       // VM resets hardware (warmboot)
-    PFNL pfnExec;           // VM execute code
-    PFNL pfnTrace;          // Execute one single instruction in the VM
-    PFNL pfnWinMsg;         // handles Windows messages
+    PFNB pfnColdboot;       // VM resets hardware (coldboot)
+    PFNB pfnWarmboot;       // VM resets hardware (warmboot)
+    PFNB pfnExec;           // VM execute code
+    PFNB pfnTrace;          // Execute one single instruction in the VM
+    PFNBW pfnWinMsg;        // handles Windows messages
     BOOL (__cdecl *pfnDumpRegs)();  // Display the VM's CPU registers as ASCII
     PFNL pfnDumpHW;         // dumps hardware state
-    PFNL pfnDisasm;         // Disassemble code in VM as ASCII
-    PFNL pfnReadHWByte;     // reads a byte from the VM
-    PFNL pfnReadHWWord;     // reads a word from the VM
-    PFNL pfnReadHWLong;     // reads a long from the VM
-    PFNL pfnWriteHWByte;    // writes a byte to the VM
-    PFNL pfnWriteHWWord;    // writes a word to the VM
-    PFNL pfnWriteHWLong;    // writes a long to the VM
+    PFNB pfnDisasm;         // Disassemble code in VM as ASCII
+    PFNH pfnReadHWByte;     // reads a byte from the VM
+    PFNH pfnReadHWWord;     // reads a word from the VM
+    PFNH pfnReadHWLong;     // reads a long from the VM
+    PFNB pfnWriteHWByte;    // writes a byte to the VM
+    PFNB pfnWriteHWWord;    // writes a word to the VM
+    PFNB pfnWriteHWLong;    // writes a long to the VM
 #ifdef HWIN32
-    PFNL pfnLockBlock;      // lock and returns pointer to memory block in VM
-    PFNL pfnUnlockBlock;    // release memory block in VM
-    PFNP pfnMapAddress;     // convert virtual machine address to flat address
-    PFNP pfnMapAddressRW;   // convert virtual machine address to flat address
-    PFNL pfnSaveState;      // save snapshot to disk
-    PFNL pfnLoadState;      // load snapshot from disk and resume
+    PFNB pfnLockBlock;      // lock and returns pointer to memory block in VM
+    PFNB pfnUnlockBlock;    // release memory block in VM
+    PFNB pfnMapAddress;     // convert virtual machine address to flat address
+    PFNB pfnMapAddressRW;   // convert virtual machine address to flat address
+    PFNB pfnSaveState;      // save snapshot to disk
+    PFNB pfnLoadState;      // load snapshot from disk and resume
 #endif
 } VMINFO, *PVMINFO;
 
@@ -135,6 +135,8 @@ typedef unsigned long int  ADDR;
 typedef unsigned short int  ADDR;
 #endif
 
+
+#if !defined (HWIN32)
 
 //
 // Wrapper functions to hide the VMINFO tables and also perform some
@@ -206,8 +208,6 @@ BOOL __inline FExecVM(int fStep, int fCont)
 {
     return vpvm->pfnExec(fStep, fCont);
 }
-
-#ifdef HWIN32
 
 BOOL __inline FMountDiskVM(int i)
 {

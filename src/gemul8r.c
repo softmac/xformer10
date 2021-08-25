@@ -2154,7 +2154,7 @@ int CALLBACK WinMain(
                     FUnInstallVM(i);
                     rgpvmi(i)->pPrivate = NULL;
                     rgpvmi(i)->iPrivateSize = 0;
-                    if (FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, i, (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
+                    if (FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, rgpvm[i], (PVMINFO)VM_CRASHED, otype))   // VM_CRASHED means this is a BAD type, not the type we want
                         if (FInitVM(i))
                             if (ColdStart(i))
                                 fXOK = TRUE;
@@ -5335,7 +5335,7 @@ break;
                         FUnInstallVM(v.iVM);
                         rgpvmi(v.iVM)->pPrivate = NULL;
                         rgpvmi(v.iVM)->iPrivateSize = 0;
-                        if (FInstallVM(&rgpvmi(v.iVM)->pPrivate, &rgpvmi(v.iVM)->iPrivateSize, v.iVM, pvmi, type))
+                        if (FInstallVM(&rgpvmi(v.iVM)->pPrivate, &rgpvmi(v.iVM)->iPrivateSize, rgpvm[v.iVM], pvmi, type))
                             if (FInitVM(v.iVM))
                                 if (ColdStart(v.iVM))
                                     fOK = TRUE;

@@ -83,9 +83,9 @@ typedef unsigned long int  ADDR;
 // some functions can operate on any instance, and they take a parameter (which instance)
 // and need to look at the state of that instance
 
-BOOL __inline FInstallVM(void **pPrivateX, int *iPrivateSizeX, int iVM, PVMINFO pvmi, int type)
+BOOL __inline FInstallVM(void **pPrivateX, int *iPrivateSizeX, PVM pvm, PVMINFO pvmi, int type)
 {
-    return rgpvm[iVM]->pvmi->pfnInstall(pPrivateX, iPrivateSizeX, rgpvm[iVM], pvmi, type);
+    return pvm->pvmi->pfnInstall(pPrivateX, iPrivateSizeX, pvm, pvmi, type);
 }
 
 BOOL __inline FUnInstallVM(int iVM)

@@ -101,7 +101,9 @@ PVMINFO DetermineVMType(int type)
 int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
 {
     if (v.cVM == MAX_VM)
+    {
         return -1;
+    }
 
     int iVM = v.cVM;
 
@@ -110,7 +112,10 @@ int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
     {
         void * pp = HeapReAlloc(GetProcessHeap(), 0, rgpvm, cpvm * 2 * (sizeof(VM) + sizeof(VMINST)));
         if (!pp)
+        {
             return -1;
+        }
+
         rgpvm = pp;
         cpvm *= 2;
     }
@@ -118,8 +123,11 @@ int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
     // New persistable and unpersistable data
 
     rgpvm[iVM] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(VM) + sizeof(VMINST));
+
     if (!rgpvm[iVM])
+    {
         return -1;
+    }
 
     rgpvm[iVM]->cbSize = sizeof(VM);    // init the size for validity
 
@@ -127,8 +135,11 @@ int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
     rgpvm[iVM]->pvmi = DetermineVMType(type);
 
     BOOL f = FALSE;
+
     if (rgpvm[iVM]->pvmi)
-        f = FInstallVM(&rgpvmi(iVM)->pPrivate, &rgpvmi(iVM)->iPrivateSize, iVM, fNoBASIC ? (PVMINFO)VM_NOBASIC : rgpvm[iVM]->pvmi, type);
+    {
+        f = FInstallVM(&rgpvmi(iVM)->pPrivate, &rgpvmi(iVM)->iPrivateSize, rgpvm[iVM], fNoBASIC ? (PVMINFO)VM_NOBASIC : rgpvm[iVM]->pvmi, type);
+    }
 
     if (f)
     {
@@ -145,7 +156,9 @@ int AddVM(int type, BOOL fAll, BOOL fNoBASIC)
         }
     }    
     else
+    {
         iVM = -1;   // return error
+    }
  
     return iVM;
 }
@@ -269,13 +282,21 @@ BOOL CreateAllVMs()
         {
             // !!! hack - for creating the inital 3 VMs on first boot, make the XL one not have BASIC to show the cool help screen
             if ((vmNew = AddVM(zz, TRUE, zz == 1 ? TRUE : FALSE)) == -1)
+            {
                 return FALSE;
+            }
 
             f = FALSE;
+
             if (FInitVM(vmNew))
+            {
                 f = ColdStart(vmNew);
+            }
+
             if (!f)
+            {
                 DeleteVM(vmNew, TRUE);
+            }
             else
             {
                 if (!fSelected)
@@ -415,7 +436,7 @@ BOOL LoadProperties(char *szIn, BOOL fPropsOnly)
             rgpvm[i]->pvmi = DetermineVMType(c);
 
             // Install and Init the instance
-            f = FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, i, rgpvm[i]->pvmi, c);
+            f = FInstallVM(&rgpvmi(i)->pPrivate, &rgpvmi(i)->iPrivateSize, rgpvm[i], rgpvm[i]->pvmi, c);
 
             if (f)
             {

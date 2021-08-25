@@ -90,7 +90,8 @@
 typedef unsigned long int  ADDR;
 
 typedef BOOL(__cdecl *PFNB)(void *, ...);
-typedef BOOL(__cdecl *PFNBPPV)(void **, ...);
+typedef BOOL(__cdecl *PFNBPPV)(void **, int *, void *, void *, int);
+typedef BOOL(__cdecl *PFNBW)(void *, void *, int, WPARAM, LPARAM);
 typedef ULONG(__cdecl *PFNUL)(void *, ...);
 typedef BYTE *(__cdecl *PFNPB)(void *, ...);
 typedef HRESULT (__cdecl *PFNH)(void *, ...);
@@ -98,7 +99,6 @@ typedef HRESULT (__cdecl *PFNH)(void *, ...);
 typedef LONG(__cdecl *PFNL)(int, ...);
 //typedef void *(__fastcall *PHNDLR)(void *, long);
 //typedef void(__cdecl *PFN) (int x, ...);
-//typedef WORD(__cdecl *PFNW)(int x, ...);
 
 typedef BYTE(__fastcall *PFNREAD)(void *, ADDR);
 typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
@@ -276,7 +276,7 @@ typedef struct _vminfo
     PFNB pfnWarmboot;       // VM resets hardware (warmboot)
     PFNB pfnExec;           // VM execute code
     PFNB pfnTrace;          // Execute one single instruction in the VM
-    PFNB pfnWinMsg;         // handles Windows messages
+    PFNBW pfnWinMsg;        // handles Windows messages
     PFNB pfnDumpRegs;       // Display the VM's CPU registers as ASCII
     PFNB pfnDumpHW;         // dumps hardware state
     PFNB pfnMon;            // A debuggin monitor - someday maybe it can only be the Disassemble code part
