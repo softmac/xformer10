@@ -69,7 +69,7 @@ BOOL __forceinline __fastcall cpuPokeB(void *candy, ADDR addr, BYTE b)
     return TRUE;
 }
 
-__inline WORD cpuPeekW(void *candy, ADDR addr)
+WORD __forceinline cpuPeekW(void *candy, ADDR addr)
 {
     Assert((addr & 0xFFFF0000) == 0);
 
