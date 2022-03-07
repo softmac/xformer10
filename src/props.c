@@ -566,7 +566,7 @@ BOOL SaveProperties(char *szIn)
     {
         GetCurrentDirectory(sizeof(rgch), rgch);
         SetCurrentDirectory(vi.szWindowsDir);    // saves to "users\xxxxx\appdata\roaming\emulators", for example
-        h = _open(szIniFile, _O_BINARY | _O_CREAT | O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
+        h = _open(szIniFile, _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC, _S_IREAD | _S_IWRITE);
     }
     else
     {
