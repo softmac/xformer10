@@ -535,6 +535,14 @@ void CreateDMATables()
                                 // This is what wLeft should start at for this kind of line (plus one, since wLeft is one-based)
                                 rgDMAMap[mode][pf][width][first][player][missile][lms][HCLOCKS] = cycle - 1;
 
+                                // The loop above stops after this line type's N free cycles,
+                                // leaving array[N..HCLOCKS-1] unwritten. Fill the tail so stack
+                                // garbage is never copied into rgDMAMap (a mid-line DMAMAP
+                                // variant switch can index past N; values >= 113 then reads
+                                // past rgPIXELMap and corrupts cclock).
+                                for (int tail = cycle; tail < HCLOCKS; tail++)
+                                    array[tail] = 0;
+
                                 // copy the temp array over to the permanent array
                                 for (cycle = 0; cycle < HCLOCKS; cycle++)
                                 {
