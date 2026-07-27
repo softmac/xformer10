@@ -39,7 +39,7 @@
 // Standard include files
 //
 
-#include "..\gemtypes.h"
+#include "../gemtypes.h"
 
 #if defined(_M_IX86) || (defined(_M_AMD64) && !defined(_M_ARM64EC))
 

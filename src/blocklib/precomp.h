@@ -2,7 +2,9 @@
 
 #pragma once
 
+#ifdef _WIN32
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
+#endif
 
 // #undef  _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE
 // #define _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE 1
@@ -37,8 +39,13 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
+#ifdef _WIN32
 #include <windows.h>
 #include <winioctl.h>
+#else
+#include "compat_win.h"
+#include "compat_winfile.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -72,7 +79,7 @@
 #ifndef NDEBUG
 #define Assert(f) _blk_assert((f), __FILE__, __LINE__)
 
-static __inline void _blk_assert(int f, char *file, int line)
+static inline void _blk_assert(int f, char *file, int line)
 {
     char sz[99];
 
@@ -89,7 +96,7 @@ static __inline void _blk_assert(int f, char *file, int line)
             }
         else if (ret == 4)
             {
-#if (_MSC_VER >= 1300) || defined(__MINGW32__)
+#if (_MSC_VER >= 1300) || defined(__MINGW32__) || defined(__GNUC__)
             __debugbreak();
 #else
             __asm { int 3 };

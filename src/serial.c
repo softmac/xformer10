@@ -24,7 +24,9 @@
 
 
 HANDLE hComm = INVALID_HANDLE_VALUE;
+#ifdef _WIN32
 DCB    dcb;
+#endif
 DWORD  dwEventMask;
 int    i;
 
@@ -34,6 +36,7 @@ int    i;
 
 BOOL FWriteSerialPort(BYTE b)
 {
+#ifdef _WIN32
     int cch;
     COMSTAT ComStat;
     int dummy;
@@ -55,6 +58,9 @@ BOOL FWriteSerialPort(BYTE b)
         DebugStr("ComStat = %08X, %08X, %d, %d\n", dummy, *(int *)&ComStat, ComStat.cbInQue, ComStat.cbOutQue);
         }
     return cch;
+#else
+    (void)b; return FALSE; // LATER:
+#endif
 }
 
 
@@ -64,6 +70,7 @@ BOOL FWriteSerialPort(BYTE b)
 
 int CchSerialPending()
 {
+#ifdef _WIN32
     COMSTAT ComStat;
     int dummy;
 
@@ -78,6 +85,9 @@ int CchSerialPending()
     ComStat.cbInQue &= 2047;
 //    DebugStr("CchSerialPending returning %d\n", ComStat.cbInQue);
     return (vi.cchserial = ComStat.cbInQue);
+#else
+    vi.cchserial = 0; return 0; // LATER:
+#endif
 }
 
 
@@ -87,17 +97,22 @@ int CchSerialPending()
 
 BOOL CchSerialRead(char *rgb, int cchRead)
 {
+#ifdef _WIN32
     int    cch = 0;
     BOOL f = ReadFile(hComm, rgb, cchRead, (LPDWORD)&cch, NULL);
     if (!f)
         return 0;
     DebugStr("CchSerialRead returning %d %02X\n", cch, rgb[0]);
     return cch;
+#else
+    (void)rgb; (void)cchRead; return 0; // LATER:
+#endif
 }
 
 
 void __inline CheckError(BOOL f, int iCOM, HANDLE hComm2, char *pch)
 {
+#ifdef _WIN32
     char rgch[256];
     char rgchErr[256];
 
@@ -115,6 +130,9 @@ void __inline CheckError(BOOL f, int iCOM, HANDLE hComm2, char *pch)
     sprintf(rgch, "%s\nh = %p\nerror = %08X", pch, hComm2, GetLastError());
     if (!f)
         MessageBox(GetFocus(), rgch, rgchErr, MB_OK|MB_ICONHAND);
+#else
+    (void)f; (void)iCOM; (void)hComm2; (void)pch; // LATER:
+#endif
 }
 
 //
@@ -124,6 +142,7 @@ void __inline CheckError(BOOL f, int iCOM, HANDLE hComm2, char *pch)
 
 BOOL FInitSerialPort(int iCOM)
 {
+#ifdef _WIN32
     char rgch[] = "COMx";
     BOOL f;
 
@@ -256,6 +275,9 @@ BOOL FInitSerialPort(int iCOM)
     SetDTR(TRUE);
 
     return TRUE;
+#else
+    (void)iCOM; return FALSE; // LATER:
+#endif
 }
 
 
@@ -265,6 +287,7 @@ BOOL FInitSerialPort(int iCOM)
 
 BOOL FSetBaudRate(int tsr, int ucr, int tddr, int tcdcr)
 {
+#ifdef _WIN32
     BOOL f;
 
     if (hComm == INVALID_HANDLE_VALUE)
@@ -377,24 +400,35 @@ BOOL FSetBaudRate(int tsr, int ucr, int tddr, int tcdcr)
     ClearCommError(hComm, &dwEventMask, NULL);
     SetCommMask(hComm, EV_RXCHAR);
     return f;
+#else
+    (void)tsr; (void)ucr; (void)tddr; (void)tcdcr; return FALSE; // LATER:
+#endif
 }
 
 
 void SetRTS(BOOL f)
 {
+#ifdef _WIN32
     if (hComm == INVALID_HANDLE_VALUE)
         return;
 
     EscapeCommFunction(hComm, f ? SETRTS : CLRRTS);
+#else
+    (void)f; // LATER:
+#endif
 }
 
 
 void SetDTR(BOOL f)
 {
+#ifdef _WIN32
     if (hComm == INVALID_HANDLE_VALUE)
         return;
 
     EscapeCommFunction(hComm, f ? SETDTR : CLRDTR);
+#else
+    (void)f; // LATER:
+#endif
 }
 
 ULONG GetModemStatus()
@@ -408,6 +442,7 @@ ULONG GetModemStatus()
 // set with the above bits, and the lower 8 bits (AL) being
 // the bits which should trigger an interrupt
 
+#ifdef _WIN32
     BYTE new = 0xFF, changed;
     static BYTE old;
     int l;
@@ -434,4 +469,7 @@ ULONG GetModemStatus()
     changed = old ^ new;
     old = new;
     return (new << 8) | changed;
+#else
+    return 0; // LATER:
+#endif
 }

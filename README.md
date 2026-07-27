@@ -1,4 +1,13 @@
 # xformer10
+
+> **Linux / Raspberry Pi port** — This fork adapts Darek Mihocka's xformer10
+> for Linux (Raspberry Pi OS aarch64), maintained on the `linux-port` branch.
+> Prebuilt `.deb`: see the [GitHub Releases](../../releases) page.
+> Read [why this port exists](PORTING.md).
+> To build from source, see the
+> [Building on Linux / Raspberry Pi](#building-on-linux--raspberry-pi) section below.
+> The original Windows README continues below.
+
 Xformer 10, the Atari 800 emulator for Windows 10, 7, and now 11!
 
 It is the 10th generation of the Xformer (pronouned "Transformer") series of
@@ -25,4 +34,45 @@ older releases (with source) for Atari ST, MS-DOS, and Windows 95 are at:
 If you have any questions email us at:
 
    xformer10@gmail.com.
+
+## Building on Linux / Raspberry Pi
+
+This port targets Raspberry Pi OS (aarch64) and was built from the `linux-port` branch.
+
+### Build dependencies
+
+```
+sudo apt install cmake build-essential libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
+```
+
+### Build
+
+```
+cmake -B build-linux -S . && cmake --build build-linux -j$(nproc)
+```
+
+### Run from the build tree
+
+```
+./build-linux/xformer10
+```
+
+### System install
+
+```
+sudo cmake --install build-linux
+```
+
+### Produce and install a .deb package
+
+```
+(cd build-linux && cpack -G DEB)
+sudo apt install ./build-linux/xformer10_*.deb
+```
+
+Runtime dependencies pulled in automatically: `libsdl2-2.0-0`, `libsdl2-ttf-2.0-0`, `fonts-dejavu-core`.
+
+### Settings
+
+User settings are stored in `~/.config/xformer`.
 

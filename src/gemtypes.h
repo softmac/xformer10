@@ -25,6 +25,8 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
+#ifdef _WIN32
+
 #define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
 // #undef  _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE
 // #define _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE 1
@@ -63,15 +65,9 @@
 #include <winuser.h>
 #include <excpt.h>
 #include <objbase.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
 #include <conio.h>
 #include <io.h>
 #include <dos.h>
-#include <fcntl.h>
-#include <time.h>
 #include <commdlg.h>    // includes common dialog functionality
 #include <dlgs.h>       // includes common dialog template defines
 #include <cderr.h>      // includes the common dialog error codes
@@ -84,6 +80,20 @@
 
 #pragma intrinsic(memcpy)
 #pragma intrinsic(memset)
+
+#else /* !_WIN32 */
+
+#include "compat_win.h"
+#include "compat_winfile.h"
+
+#endif /* _WIN32 */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <fcntl.h>
+#include <time.h>
 
 // each type of VM installed into Gem has a function table we can call
 
@@ -104,12 +114,12 @@ typedef BYTE(__fastcall *PFNREAD)(void *, ADDR);
 typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 
 #include "gemul8r.h"    // build flags
-#include "blocklib\blockdev.h"
-#include "res\resource.h"
+#include "blocklib/blockdev.h"
+#include "res/resource.h"
 #include "cpu.h"
 #if defined(ATARIST) || defined(SOFTMAC)
-#include "memlib\memlib.h"
-#include "680x0.cpu\68k.h"
+#include "memlib/memlib.h"
+#include "680x0.cpu/68k.h"
 #endif
 
 // only one of these should be set at any one time
@@ -150,6 +160,10 @@ typedef BOOL(__fastcall *PFNWRITE)(void *, ADDR, BYTE);
 
 int sTilesPerRow;           // how many tiles we are currently fitting per row
 extern int sVM;             // which tile you're hovering over, -1 means none so this must be signed
+extern int cThreads;
+extern int nFirstVisibleTile;
+extern int sTilesPerRow;
+extern int sMaxTiles;
 POINT sTileSize;            // the size of the tiles, we have to pick one when mixing VM types
 int sMaxTiles;              // how many can possibly fit on all multimons when maximized?
 
@@ -1133,6 +1147,9 @@ void UnlockSurface();
 void ClearSurface();
 BOOL FChangePaletteEntries(BYTE iPalette, int count, RGBQUAD *ppq);
 BOOL FCyclePalette(BOOL fForward);
+#ifndef _WIN32
+void RenderBitmap_SDL(void);
+#endif
 
 //
 // Debug functions
@@ -1141,7 +1158,7 @@ BOOL FCyclePalette(BOOL fForward);
 #ifndef NDEBUG
 #define Assert(f) _gem_assert((f), __FILE__, __LINE__)
 
-static __inline void _gem_assert(int f, char *file, int line)
+static inline void _gem_assert(int f, char *file, int line)
 {
     char sz[99];
 
@@ -1185,6 +1202,13 @@ inline void __assume(BOOL condition) {}
 #define Assert(f) __assume(f)
 
 #endif // NDEBUG
+
+#ifdef LINUX_PORT
+/* Phase 1: make Assert a true no-op so it doesn't generate symbol refs to
+   static-inline functions (PeekBAtari etc.) that are private to other TUs. */
+#undef Assert
+#define Assert(f) ((void)0)
+#endif
 
 // Function pointer to ntdll!DbgPrint()
 

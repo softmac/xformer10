@@ -535,6 +535,17 @@ void CreateDMATables()
                                 // This is what wLeft should start at for this kind of line (plus one, since wLeft is one-based)
                                 rgDMAMap[mode][pf][width][first][player][missile][lms][HCLOCKS] = cycle - 1;
 
+                                // On DMA-contended lines the loop above breaks after only N free cycles,
+                                // leaving array[N..HCLOCKS-1] unwritten (stack garbage). A mid-line DMAMAP
+                                // variant switch (iscan/DMACTL changes after wLeft was set from a roomier
+                                // variant) can index that tail; garbage bytes >= 113 then read past the end
+                                // of rgPIXELMap and produce cclock values like 4088 that defeat the PSL
+                                // completion guards, double-firing PSLPostpare and losing a scan line.
+                                // A wLeft beyond this variant's budget means the beam hasn't reached the
+                                // first free cycle yet, so map it to clock 0 (nothing drawn yet).
+                                for (int tail = cycle; tail < HCLOCKS; tail++)
+                                    array[tail] = 0;
+
                                 // copy the temp array over to the permanent array
                                 for (cycle = 0; cycle < HCLOCKS; cycle++)
                                 {
@@ -1180,7 +1191,7 @@ void PSLPrepare(void *candy)
         {
             sl.fVscrol = FALSE;
             // why is somebody setting the high bits of this sometimes?
-            scans = VSCROL & 0x0f;    // the first mode line after a VSCROL area is truncated, ending at VSCROL
+            scans = (VSCROL & 0x0f) ? (VSCROL & 0x0f) - 1 : 0;  // post-VSCROL: show VSCROL lines (0..VSCROL-1)
             //ODS("%d FINISH: scans=%d\n", wScan, scans);
         }
 
@@ -3517,7 +3528,12 @@ BOOL ProcessScanLine(void *candy)
     // what part of the scan line were we on last time?
     short cclockPrev = PSL;
 
-    PSL = cclock;    // next time we're called, start from here
+    // Once PSL has reached wSLEnd, this scan line is complete and PSLPostpare already advanced iscan.
+    // Don't let a late call (register write in the last few cycles, after a segment round-up pushed PSL
+    // to the end) rewind PSL below wSLEnd, or the finish-up call would redraw to the end and fire
+    // PSLPostpare a second time, double-incrementing iscan and shifting every later DLI up a scan line.
+    if (PSL < (short)wSLEnd)
+        PSL = cclock;    // next time we're called, start from here
 
     // We may need to draw more than asked for, to draw an integer # of bytes of a scan mode at a time (!!! current limitation)
     // Figure out i & iTop, the beginning and ending pixel we have to draw to (iTop may be > cclock which will have to grow)
@@ -3558,7 +3574,13 @@ BOOL ProcessScanLine(void *candy)
             if (newTop > cclock)
             {
                 cclock = newTop;
-                PSL = cclock;
+                // Same no-rewind rule as the PSL assignment above: once the line is complete
+                // (PSL reached wSLEnd and PSLPostpare advanced iscan), a late register write must
+                // not drag PSL back below wSLEnd, or the finish-up call would redraw to the end
+                // and fire PSLPostpare a second time, double-incrementing iscan (one scan line
+                // lost; DLIs shift up or get skipped → Protector II red band flashing).
+                if (PSL < (short)wSLEnd)
+                    PSL = cclock;
             }
         }
     }

@@ -28,7 +28,9 @@ WinAspiCommand pfnSendASPI32Command;
 // NT disk sector I/O code
 //
 
+#ifdef _WIN32
 #include <winioctl.h>
+#endif
 
 
 BOOL GetDiskGeometry(HANDLE hDisk, PDISK_GEOMETRY lpGeometry)

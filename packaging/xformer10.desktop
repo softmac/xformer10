@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Xformer 10
+Comment=Atari 800/XL/XE emulator
+Exec=xformer10
+Icon=xformer10
+Terminal=false
+Categories=Game;Emulator;

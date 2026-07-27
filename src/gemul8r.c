@@ -72,8 +72,10 @@
 
 #include <sys/stat.h>
 #include "gemtypes.h" // main include file
+#ifdef _WIN32
 #include <VersionHelpers.h>
 #include <windowsx.h>
+#endif
 
 #pragma warning(disable:4706) // assignment within conditional expression
 #pragma warning(disable:4152) // function/data pointer conversion
@@ -178,7 +180,9 @@ WORD rgAtasciiToScan[256] = {
     0x2d, 0x15, 0x2c, 0x227, 0x12b, 0x203, 0xe053, 0xe052   // 120-127
 };
 
+#ifdef _WIN32
 #include "shellapi.h"
+#endif
 
 // My printf that uses OutputDebugString to send to the VS output tab
 // Normal printf will go to the debug monitor, or nowhere if there is none
@@ -568,7 +572,7 @@ ThreadTry:
 
             ThreadStuff = malloc(sMaxTiles * sizeof(ThreadStuffS)); // not sure how many are visible yet, but that's an upper bound
             if (ThreadStuff)
-                memset(ThreadStuff, 0, sizeof(ThreadStuffS));
+                memset(ThreadStuff, 0, sMaxTiles * sizeof(ThreadStuffS));
 
             hDoneEvent = malloc(sMaxTiles * sizeof(HANDLE));
             if (!ThreadStuff || !hDoneEvent)
@@ -601,6 +605,14 @@ ThreadTry:
                 iVM = row * nx;
             }
 
+            // Guard: sWheelOffset was scrolled past the last VM row â€” reset to top
+            if (iVM >= v.cVM) {
+                v.sWheelOffset = 0;
+                y = 0;
+                nFirstVisibleTile = 0;
+                iVM = 0;
+            }
+
             for (; y < rect.bottom; y += sTileSize.y /* * vi.fYscale*/)
             {
                 for (int x = 0; x < nx * sTileSize.x; x += sTileSize.x /* * vi.fXscale*/)
@@ -626,6 +638,8 @@ ThreadTry:
                         // But only give it a thread if it's visible
                         if (fOK && y + sTileSize.y > 0)
                         {
+                            if (cThreads >= sMaxTiles) { y = rect.bottom; break; }
+
                             // We found the actual first visible tile
                             if (nFirstVisibleTile == -1)
                                 nFirstVisibleTile = iVM;
@@ -1503,6 +1517,7 @@ void CalcIntegerScale()
         returns the conventional value NULL.
 
 ****************************************************************************/
+#ifdef _WIN32
 int CALLBACK WinMain(
     HINSTANCE hInstance,
     HINSTANCE hPrevInstance,
@@ -2322,6 +2337,7 @@ int CALLBACK WinMain(
 
     return (int)(INT_PTR)(msg.wParam); // Returns the value from PostQuitMessage
 }
+#endif /* _WIN32 - WinMain */
 
 int PrintScreenStats()
 {
@@ -2651,7 +2667,7 @@ BOOL CreateNewBitmaps()
 
     // !!! Only makes bitmaps suitable for ATARI 8 bit VMs right now
 
-    vvmhw.fMono = FMonoFromBf(monColrTV);   // !!! 
+    vvmhw.fMono = FMonoFromBf(monColrTV);   // !!!
     vvmhw.fGrey = FGreyFromBf(monColrTV);
 
     if (vvmhw.fMono)
@@ -3755,7 +3771,11 @@ BOOL SaveATARIDOS(int inst, int drive)
         if (ij == 0)
             fB = CreateDirectory(szDir, NULL); // error OK, it may already exist
 
+#ifndef _WIN32
+        strcat(szDir, "/");
+#else
         strcat(szDir, "\\");                    // add '\'
+#endif
         strcat(szDir, pdi->pfd[ij % pdi->cfd].cFileName);    // add the filename
         if (ij >= pdi->cfd)
             // 2nd time around, save everything as text, with _, a character not supported by ATARI
@@ -4255,6 +4275,7 @@ void ChangeDisplay(int x, int y)
 ****************************************************************************/
 
 
+#ifdef _WIN32
 LRESULT CALLBACK WndProc(
         HWND hWnd,     // window handle
         UINT message,      // type of message
@@ -5589,7 +5610,7 @@ break;
                     "Alle ungesicherten Atari Daten gehen verloren.\n"
                     "Wirklich beenden?\n",
 #elif _FRANCAIS
-                    "Tous les fichiers Atari non sauvegardés seront perdus.\n"
+                    "Tous les fichiers Atari non sauvegardï¿½s seront perdus.\n"
                     "Etes vous certain de vouloir quitter?",
 #elif
 #error
@@ -6363,6 +6384,466 @@ Lhib:
 
     return (DefWindowProc(hWnd, message, uParam, lParam));
 }
+#endif /* _WIN32 - WndProc */
+
+#ifndef _WIN32
+#include <stdio.h>
+#include <string.h>
+#include <glob.h>
+#include <pwd.h>
+#include "sdl_filebrowser.h"
+#include "ddlib_sdl.h"
+
+/* Open url in the session user's browser (handles running-as-root case). */
+static void LinuxOpenURL(const char *url)
+{
+    char rdir[256] = "";
+    char user[64]  = "";
+    glob_t gl;
+
+    if (glob("/run/user/[0-9]*", GLOB_NOSORT, NULL, &gl) == 0) {
+        for (size_t i = 0; i < gl.gl_pathc; i++) {
+            const char *p = strrchr(gl.gl_pathv[i], '/');
+            if (!p) continue;
+            uid_t uid = (uid_t)atoi(p + 1);
+            if (uid == 0) continue;           /* skip root's own runtime dir */
+            struct passwd *pw = getpwuid(uid);
+            if (!pw) continue;
+            strncpy(rdir, gl.gl_pathv[i], sizeof(rdir) - 1);
+            strncpy(user, pw->pw_name,    sizeof(user)  - 1);
+            break;
+        }
+        globfree(&gl);
+    }
+
+    char cmd[512];
+    if (user[0] && rdir[0]) {
+        snprintf(cmd, sizeof cmd,
+            "runuser -u %s -- env XDG_RUNTIME_DIR=%s WAYLAND_DISPLAY=wayland-0"
+            " xdg-open '%s' &",
+            user, rdir, url);
+    } else {
+        snprintf(cmd, sizeof cmd, "xdg-open '%s' &", url);
+    }
+    system(cmd);
+}
+
+static BOOL LinuxPickFile(char *out, int sz)
+{
+    return (BOOL)SDL_FileBrowserRun(GetSDLRenderer(), GetSDLWindow(),
+                                    out, out, sz);
+}
+
+extern BOOL TimeTravel(void *candy);
+extern BOOL TimeTravelFixPoint(void *candy);
+
+void LinuxDoCommand(int idm)
+{
+    switch (idm)
+    {
+    case IDM_TURBO:
+        fBrakes = !fBrakes;
+        uExecSpeed = 0;
+        DisplayStatus(v.iVM);
+        break;
+
+    case IDM_STRETCH:
+        v.fZoomColor = !v.fZoomColor;
+        DisplayStatus(v.iVM);
+        break;
+
+    case IDM_AUTOKILL:
+        v.fAutoKill = !v.fAutoKill;
+        break;
+
+    case IDM_LCTRLFIRE:
+        v.fDisableLCTRLFire = !v.fDisableLCTRLFire;
+        break;
+
+    case IDM_WHEELSENS:
+        v.fWheelSensitive = !v.fWheelSensitive;
+        break;
+
+    case IDM_MYVIDEOCARDSUCKS:
+        v.fMyVideoCardSucks = !v.fMyVideoCardSucks;
+        break;
+
+    case IDM_TOGGLESOUND:
+        v.fSilentMode = !v.fSilentMode;
+        break;
+
+    case IDM_FULLSCREEN:
+        v.fFullScreen = !v.fFullScreen;
+        SDL_SetWindowFullscreen(GetSDLWindow(),
+            v.fFullScreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        break;
+
+    case IDM_TILE:
+        v.fTiling = v.fTiling ? 0 : 1;  /* avoid signed 1-bit bitfield becoming -1 */
+#ifndef _WIN32
+        /* Linux has no pTiledBits (no DirectDraw); force per-tile pvBits path */
+        if (v.fTiling) v.fMyVideoCardSucks = TRUE;
+#endif
+        if (v.fTiling) {
+            sVM = -1;
+            v.sWheelOffset = 0;
+            {   /* recalculate sTilesPerRow from current window */
+                RECT rc; GetClientRect(vi.hWnd, &rc);
+                if ((int)sTileSize.x <= 0) break;
+                int nx = rc.right > 0 ? (rc.right * 10 / (int)sTileSize.x + 5) / 10 : 1;
+                sTilesPerRow = nx;
+            }
+            InitThreads();
+        } else {
+            /* leaving tiled mode: select the VM that was in focus */
+            sVM = -1;
+            SelectInstance(v.iVM >= 0 ? v.iVM : (nFirstVisibleTile >= 0 ? nFirstVisibleTile : 0));
+        }
+        DisplayStatus(v.iVM);
+        break;
+
+    case IDM_NTSCPAL:
+        if (v.iVM >= 0)
+        {
+            rgpvm[v.iVM]->fEmuPAL = !rgpvm[v.iVM]->fEmuPAL;
+            DisplayStatus(v.iVM);
+        }
+        break;
+
+    case IDM_TOGGLEBASIC:
+        if (v.iVM >= 0)
+        {
+            rgpvmi(v.iVM)->fKillMePlease = 5;
+            if (!ColdStart(v.iVM))
+            {
+                rgpvmi(v.iVM)->fKillMePlease = 0;
+                DeleteVM(v.iVM, TRUE);
+            }
+        }
+        break;
+
+    case IDM_COLORMONO:
+        if (v.iVM >= 0)
+            FToggleMonitor(v.iVM);
+        break;
+
+    case IDM_CHANGEVM:
+        if (v.iVM >= 0)
+        {
+            int type = rgpvm[v.iVM]->bfHW;
+            int otype = 0;
+            while (type >>= 1)
+                otype++;
+            type = ((otype + 1) & 0x1f);
+            for (int zz = 0; zz < 32; zz++)
+            {
+                if (type == otype)
+                    break;
+                PVMINFO pvmi = DetermineVMType(type);
+                if (pvmi)
+                {
+                    BOOL fOK = FALSE;
+                    FUnInitVM(v.iVM);
+                    FUnInstallVM(v.iVM);
+                    rgpvmi(v.iVM)->pPrivate = NULL;
+                    rgpvmi(v.iVM)->iPrivateSize = 0;
+                    if (FInstallVM(&rgpvmi(v.iVM)->pPrivate, &rgpvmi(v.iVM)->iPrivateSize, rgpvm[v.iVM], pvmi, type))
+                        if (FInitVM(v.iVM))
+                            if (ColdStart(v.iVM))
+                                fOK = TRUE;
+                    if (!fOK)
+                        DeleteVM(v.iVM, TRUE);
+                    DisplayStatus(v.iVM);
+                    break;
+                }
+                type = ((type + 1) & 0x1f);
+            }
+        }
+        break;
+
+    case IDM_SAVEINI:
+        SaveProperties(NULL);
+        break;
+
+    case IDM_PASTEASCII:
+    case IDM_PASTEATASCII:
+        if (v.iVM >= 0)
+        {
+            char *pClip = SDL_GetClipboardText();
+            if (pClip && *pClip)
+            {
+                PasteAsciiAtascii(pClip, idm == IDM_PASTEATASCII);
+                SDL_free(pClip);
+            }
+        }
+        break;
+
+    case IDM_TIMETRAVEL:
+        if (v.iVM >= 0)
+            TimeTravel(rgpvmi(v.iVM)->pPrivate);
+        break;
+
+    case IDM_TIMETRAVELFIXPOINT:
+        if (v.iVM >= 0)
+            TimeTravelFixPoint(rgpvmi(v.iVM)->pPrivate);
+        break;
+
+    case IDM_USETIMETRAVELFIXPOINT:
+        if (v.iVM >= 0)
+            rgpvm[v.iVM]->fTimeTravelFixed = !rgpvm[v.iVM]->fTimeTravelFixed;
+        break;
+
+    case IDM_D1:
+        if (v.iVM >= 0) {
+            char path[MAX_PATH];
+            strncpy(path, rgpvm[v.iVM]->rgvd[0].sz, MAX_PATH - 1);
+            path[MAX_PATH - 1] = '\0';
+            if (LinuxPickFile(path, MAX_PATH)) {
+                strncpy(rgpvm[v.iVM]->rgvd[0].sz, path, MAX_PATH - 1);
+                rgpvm[v.iVM]->rgvd[0].sz[MAX_PATH - 1] = '\0';
+                rgpvm[v.iVM]->rgvd[0].dt = DISK_IMAGE;
+                if (!FMountDiskVM(v.iVM, 0)) {
+                    FUnmountDiskVM(v.iVM, 0);
+                    rgpvm[v.iVM]->rgvd[0].sz[0] = '\0';
+                    rgpvm[v.iVM]->rgvd[0].dt = DISK_NONE;
+                }
+            }
+        }
+        break;
+
+    case IDM_D2:
+        if (v.iVM >= 0) {
+            char path[MAX_PATH];
+            strncpy(path, rgpvm[v.iVM]->rgvd[1].sz, MAX_PATH - 1);
+            path[MAX_PATH - 1] = '\0';
+            if (LinuxPickFile(path, MAX_PATH)) {
+                strncpy(rgpvm[v.iVM]->rgvd[1].sz, path, MAX_PATH - 1);
+                rgpvm[v.iVM]->rgvd[1].sz[MAX_PATH - 1] = '\0';
+                rgpvm[v.iVM]->rgvd[1].dt = DISK_IMAGE;
+                if (!FMountDiskVM(v.iVM, 1)) {
+                    FUnmountDiskVM(v.iVM, 1);
+                    rgpvm[v.iVM]->rgvd[1].sz[0] = '\0';
+                    rgpvm[v.iVM]->rgvd[1].dt = DISK_NONE;
+                }
+            }
+        }
+        break;
+
+    case IDM_D1U:
+        if (v.iVM >= 0) {
+            FUnmountDiskVM(v.iVM, 0);
+            rgpvm[v.iVM]->rgvd[0].sz[0] = '\0';
+            rgpvm[v.iVM]->rgvd[0].dt = DISK_NONE;
+        }
+        break;
+
+    case IDM_D2U:
+        if (v.iVM >= 0) {
+            FUnmountDiskVM(v.iVM, 1);
+            rgpvm[v.iVM]->rgvd[1].sz[0] = '\0';
+            rgpvm[v.iVM]->rgvd[1].dt = DISK_NONE;
+        }
+        break;
+
+    case IDM_NEW:
+    {
+        int prevcount = v.cVM;
+        for (int z = 0; z < prevcount; z++)
+            DeleteVM(v.cVM - 1, FALSE);
+        DeleteVM(-1, TRUE);
+        CreateAllVMs();
+        v.sWheelOffset = 0;
+        break;
+    }
+    case IDM_DELVM:
+        if (v.iVM >= 0)
+            DeleteVM(v.iVM, TRUE);
+        break;
+    case IDM_AUTOLOAD:
+        v.fSaveOnExit = !v.fSaveOnExit;
+        DisplayStatus(v.iVM);
+        break;
+    case IDM_ADDVM1:
+    {
+        int vmNew = AddVM(0, TRUE, FALSE);
+        if (vmNew >= 0)
+        {
+            if (FInitVM(vmNew) && ColdStart(vmNew))
+                SelectInstance(vmNew);
+            else
+                DeleteVM(vmNew, TRUE);
+        }
+        break;
+    }
+    case IDM_NEXTVM:
+        if (v.cVM > 1)
+            SelectInstance(v.iVM + 1);
+        break;
+    case IDM_PREVVM:
+        if (v.cVM > 1)
+            SelectInstance(-1);
+        break;
+    case IDM_OPENFOLDER:
+    {
+        char fold[MAX_PATH];
+        fold[0] = '\0';
+        if (SDL_FileBrowserRunEx(GetSDLRenderer(), GetSDLWindow(),
+                                 v.lpCurrentDir[0] ? v.lpCurrentDir : NULL,
+                                 fold, MAX_PATH, "", 1))
+        {
+            int iVMx = -1;
+            OpenFolders(fold, &iVMx);
+            if (iVMx >= 0)
+                SelectInstance(iVMx);
+            InitThreads();
+        }
+        break;
+    }
+    case IDM_LOAD:
+    {
+        char chFN[MAX_PATH];
+        chFN[0] = '\0';
+        if (SDL_FileBrowserRunEx(GetSDLRenderer(), GetSDLWindow(),
+                                 NULL, chFN, MAX_PATH, ".gem", 0))
+        {
+            LoadProperties(chFN, TRUE);
+            LoadProperties(chFN, FALSE);
+            v.sWheelOffset = 0;
+            sVM = -1;
+            InitThreads();
+        }
+        break;
+    }
+    case IDM_SAVEAS:
+    {
+        char chFN[MAX_PATH];
+        chFN[0] = '\0';
+        if (SDL_FileBrowserRunEx(GetSDLRenderer(), GetSDLWindow(),
+                                 NULL, chFN, MAX_PATH, ".gem", 2)) {
+            size_t n = strlen(chFN);
+            if (n < 4 || strcmp(chFN + n - 4, ".gem") != 0)
+                strncat(chFN, ".gem", MAX_PATH - n - 1);
+            SaveProperties(chFN);
+        }
+        break;
+    }
+    case IDM_CART:
+        if (v.iVM >= 0) {
+            char path[MAX_PATH];
+            strncpy(path, rgpvm[v.iVM]->rgcart.szName, MAX_PATH - 1);
+            path[MAX_PATH - 1] = '\0';
+            if (SDL_FileBrowserRunEx(GetSDLRenderer(), GetSDLWindow(),
+                                     path[0] ? path : NULL,
+                                     path, MAX_PATH, ".rom,.bin,.car", 0)) {
+                strncpy(rgpvm[v.iVM]->rgcart.szName, path, MAX_PATH - 1);
+                rgpvm[v.iVM]->rgcart.szName[MAX_PATH - 1] = '\0';
+                rgpvm[v.iVM]->rgcart.fCartIn = TRUE;
+                FUnInitVM(v.iVM);
+                if (!FInitVM(v.iVM) || !ColdStart(v.iVM)) {
+                    rgpvm[v.iVM]->rgcart.fCartIn = FALSE;
+                    rgpvm[v.iVM]->rgcart.szName[0] = '\0';
+                    FInitVM(v.iVM);
+                }
+            }
+        }
+        break;
+    case IDM_NOCART:
+        if (v.iVM >= 0) {
+            rgpvm[v.iVM]->rgcart.fCartIn = FALSE;
+            rgpvm[v.iVM]->rgcart.szName[0] = '\0';
+            FUnInitVM(v.iVM);
+            BOOL f = FALSE;
+            if (FInitVM(v.iVM))
+                f = ColdStart(v.iVM);
+            if (!f)
+                DeleteVM(v.iVM, TRUE);
+        }
+        break;
+    case IDM_WP1:
+        if (v.iVM >= 0) {
+            BOOL fWP = FWriteProtectDiskVM(v.iVM, 0, FALSE, FALSE);
+            FWriteProtectDiskVM(v.iVM, 0, TRUE, !fWP);
+        }
+        break;
+    case IDM_WP2:
+        if (v.iVM >= 0) {
+            BOOL fWP = FWriteProtectDiskVM(v.iVM, 1, FALSE, FALSE);
+            FWriteProtectDiskVM(v.iVM, 1, TRUE, !fWP);
+        }
+        break;
+    case IDM_D1BLANKSD:
+    case IDM_D2BLANKSD:
+    {
+        if (v.iVM < 0) break;
+        int disk = idm - IDM_D1BLANKSD;
+        char path[MAX_PATH];
+        path[0] = '\0';
+        if (SDL_FileBrowserRunEx(GetSDLRenderer(), GetSDLWindow(),
+                                 NULL, path, MAX_PATH, ".atr", 2)) {
+            size_t _n = strlen(path);
+            if (_n < 4 || strcmp(path + _n - 4, ".atr") != 0)
+                strncat(path, ".atr", MAX_PATH - _n - 1);
+            int h = _open(path,
+                          _O_BINARY | _O_CREAT | _O_WRONLY | _O_TRUNC,
+                          _S_IREAD | _S_IWRITE);
+            if (h != -1) {
+                BYTE header[5] = {0x96, 0x02, 0x80, 0x16, 0x80};
+                BYTE zero = 0x00;
+                int ok = (_write(h, header, 5) == 5);
+                ok = ok && (_lseek(h, 92175, SEEK_SET) == 92175);
+                ok = ok && (_write(h, &zero, 1) == 1);
+                _close(h);
+                if (ok) {
+                    strncpy(rgpvm[v.iVM]->rgvd[disk].sz, path, MAX_PATH - 1);
+                    rgpvm[v.iVM]->rgvd[disk].sz[MAX_PATH - 1] = '\0';
+                    rgpvm[v.iVM]->rgvd[disk].dt = DISK_IMAGE;
+                    if (!FMountDiskVM(v.iVM, disk)) {
+                        FUnmountDiskVM(v.iVM, disk);
+                        rgpvm[v.iVM]->rgvd[disk].sz[0] = '\0';
+                        rgpvm[v.iVM]->rgvd[disk].dt = DISK_NONE;
+                    }
+                }
+            }
+        }
+        break;
+    }
+    case IDM_IMPORTDOS1:
+    case IDM_IMPORTDOS2:
+        if (v.iVM >= 0)
+            SaveATARIDOS(v.iVM, idm - IDM_IMPORTDOS1);
+        break;
+    case IDM_WEB_EMULATORS:
+    case IDM_WEB_FREE:
+    case IDM_WEB_HELP:
+    {
+        const char *url =
+            (idm == IDM_WEB_EMULATORS) ? "http://www.emulators.com/" :
+            (idm == IDM_WEB_FREE)      ? "https://github.com/softmac/xformer10" :
+                                         "http://www.emulators.com/xformer.htm";
+        LinuxOpenURL(url);
+        break;
+    }
+    case IDM_ABOUT:
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,
+            "About Xformer",
+            "Xformer 10\n"
+            "Atari 8-bit Emulator\n"
+            "\n"
+            "Copyright (C) Darek Mihocka\n"
+            "http://www.emulators.com/\n"
+            "\n"
+            "-------------------------\n"
+            "XFormer 10 Pi OS Version\n"
+            "\n"
+            "Vibe ported by Derek Nelson and Claude Code\n"
+            "\n"
+            "Claude Code versions used:\n"
+            "  Claude Sonnet 4.6 (Phases 1-13+)",
+            GetSDLWindow());
+        break;
+    }
+}
+#endif /* !_WIN32 */
 
 //
 //   FUNCTION: OpenTheFile(HWND hwnd, HWND hwndEdit)
@@ -7763,11 +8244,11 @@ BOOL FVerifyMenuOption()
         "Door het wijzigen van de instellingen moet GEM opnieuw gestart worden.\n"
         "Kies OK om opnieuw te starten of annuleer om deze wijzigingen ongedaan te maken.",
 #elif _DEUTSCH
-        "Die geänderteten Einstellungen erfordern einen Neustart von GEM.\n"
-        "Wählen Sie OK zum Neustart oder Abbruch um die Änderungen zu verwerfen.",
+        "Die geï¿½nderteten Einstellungen erfordern einen Neustart von GEM.\n"
+        "Wï¿½hlen Sie OK zum Neustart oder Abbruch um die ï¿½nderungen zu verwerfen.",
 #elif _FRANCAIS
-        "Les réglages que vous modifiez nécessite le redémarrage du GEM.\n"
-        "Appuyez sur OK pour redémarrer ou sur Annuler pour ignorer ces modifications.",
+        "Les rï¿½glages que vous modifiez nï¿½cessite le redï¿½marrage du GEM.\n"
+        "Appuyez sur OK pour redï¿½marrer ou sur Annuler pour ignorer ces modifications.",
 #elif
 #error
 #endif
@@ -9032,7 +9513,7 @@ LRESULT CALLBACK About(
                 "Alle ungesicherten Atari Daten gehen verloren.\n"
                 "Wirklich beenden?\n",
 #elif _FRANCAIS
-                "Tous les fichiers Atari non sauvegardés seront perdus.\n"
+                "Tous les fichiers Atari non sauvegardï¿½s seront perdus.\n"
                 "Etes vous certain de vouloir quitter?",
 #elif
 #error

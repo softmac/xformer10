@@ -1,0 +1,11 @@
+*.c text eol=lf
+*.h text eol=lf
+CMakeLists.txt text eol=lf
+*.txt text eol=lf
+*.asm binary
+*.rom binary
+*.png binary
+*.bmp binary
+*.ico binary
+*.rc text
+*.rtf binary

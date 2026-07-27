@@ -19,13 +19,22 @@
 
 ****************************************************************************/
 
+#ifndef _WIN32
+#include <SDL2/SDL.h>
+#endif
 #include "gemtypes.h" // main include file
 #ifdef XFORMER
 #include "atari8.vm/atari800.h"
 #endif
 
+#ifdef _WIN32
 HWAVEOUT hWave;
-WAVEFORMATEX pcmwf;
+#else
+static SDL_AudioDeviceID gAudioDev;
+static volatile int gSndWriteIdx;
+static volatile int gSndReadIdx;
+static BOOL gAudioAvail = FALSE;
+#endif
 //FILE *fp; // for debug printing of the wave buffer
 
 // These are globals, not per-instance. Only 1 instance is controlling sound at a time, even tiled, and it only switches when all
@@ -97,6 +106,7 @@ __inline int SqrOfPhase(ULONG x)
 
 #endif
 
+#ifdef _WIN32
 void CALLBACK MyWaveOutProc(
     HWAVEOUT  hwo,
     UINT      uMsg,
@@ -125,6 +135,7 @@ void CALLBACK MyWaveOutProc(
     }
 #endif
 }
+#endif /* _WIN32 */
 
 // WRITE SOME AUDIO TO THE WAVE BUFFER
 // This is OK not being thread safe, because only one thread is allowed in at a time, and we never switch which
@@ -158,6 +169,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
         {
             wCONSOL |= 8;  // !!! periodically reset the internal speaker if an app forgets to, so it doesn't distort sound forever
 
+#ifdef _WIN32
             for (int i = 0; i < SNDBUFS; i++)
             {
                 if (pwhdr[i].dwFlags & WHDR_DONE) {
@@ -165,6 +177,12 @@ void SoundDoneCallback(void *candy, int iCurSample)
                     sOldSample = 0;    // start writing at the beginning of it
                 }
             }
+#else
+            if ((gSndWriteIdx - gSndReadIdx) < SNDBUFS) {
+                sCurBuf = gSndWriteIdx % SNDBUFS;
+                sOldSample = 0;
+            }
+#endif
         }
 
         // uh oh, no free buffers to write into (this will happen naturally when tiling or without brakes)
@@ -175,12 +193,15 @@ void SoundDoneCallback(void *candy, int iCurSample)
         }
 
         // we should never try to go back in time
+#ifdef _WIN32
         assert(iCurSample >= sOldSample);
+#endif
 
         //fprintf(fp, "SOUND[0] %d-%d f=%d v=%d d=%d\n", sOldSample, iCurSample, AUDF1, AUDC1 & 0x0f, AUDC1 >> 4);
 
-        // nothing to write (make sure sOldSample is reset to 0 when iCurSample == SAMPLES_PER_VOICE)
-        if (iCurSample == sOldSample) {
+        // nothing to write; on Linux, scan-line boundary integer division can also
+        // produce a slightly smaller iCurSample — treat both as "nothing to do here"
+        if (iCurSample <= sOldSample) {
             //ODS("Wow, Sound changed so fast we dropped a sample!\n");
             goto SaveAud;    // at least remember the new values
         }
@@ -427,7 +448,12 @@ void SoundDoneCallback(void *candy, int iCurSample)
         if (iCurSample == SAMPLES_PER_VOICE)
         {
             pwhdr[sCurBuf].dwFlags &= ~WHDR_DONE;
+#ifdef _WIN32
             waveOutWrite(hWave, &pwhdr[sCurBuf], sizeof(WAVEHDR));
+#else
+            SDL_MemoryBarrierRelease();
+            ++gSndWriteIdx;
+#endif
 
             //ODS("Write (%d) %08x @ %llu\n", sCurBuf, &pwhdr[sCurBuf], GetJiffies());
 
@@ -897,7 +923,7 @@ void SoundDoneCallback(void *candy, int iCurSample)
 
 void UninitSound()
 {
-// #if !defined(_M_ARM)
+#ifdef _WIN32
     if (hWave)
         {
         int iHdr;
@@ -910,36 +936,54 @@ void UninitSound()
             waveOutUnprepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
         }
         waveOutClose(hWave);
-        //fclose(fp);
         }
-// #endif
 
     hWave = NULL;
+#else
+    if (gAudioAvail) {
+        if (gAudioDev) { SDL_CloseAudioDevice(gAudioDev); gAudioDev = 0; }
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        gAudioAvail = FALSE;
+    }
+#endif
     vi.fWaveOutput = FALSE;
 }
+
+#ifndef _WIN32
+static void SDLAudioCallback(void *ud, Uint8 *stream, int len)
+{
+    (void)ud;
+    if (gSndWriteIdx > gSndReadIdx) {
+        SDL_MemoryBarrierAcquire();
+        int idx = gSndReadIdx % SNDBUFS;
+        int bufBytes = SAMPLES_NTSC * 2;
+        int copy = len < bufBytes ? len : bufBytes;
+        memcpy(stream, vi.rgbSndBufN[idx], copy);
+        if (copy < len)
+            memset(stream + copy, 0, len - copy);
+        ++gSndReadIdx;
+    } else {
+        memset(stream, 0, len);
+    }
+}
+#endif
 
 //
 void InitSound()
 {
+    UninitSound();
+
+#ifdef _WIN32
+    {
     WAVEOUTCAPS woc;
     int i, iMac = 0;
 
-    UninitSound();
-
-// figure out a real way to turn sound on/off if you want to, probably not per-vm?
-
-// #if !defined(_M_ARM)
     iMac = waveOutGetNumDevs();
 
     for (i = 0; i < iMac; i++)
         {
-        //DebugStr("querying output device %d\n", i);
-
         if (!waveOutGetDevCaps(i, &woc, sizeof(woc)))
             {
-
-            // !!! surely everybody supports 48K Stereo 16bit these days
-            // I count on that much resolution to make the pitches accurate
             if (woc.dwFormats & WAVE_FORMAT_48M16)
                 {
                 if (!vi.fWaveOutput)
@@ -952,35 +996,24 @@ void InitSound()
             }
         }
 
-    if (vi.fWaveOutput)
-        {
-        //printf("Selected wave device #%d\n", vi.iWaveOutput);
-        }
-    else
-        {
+    if (!vi.fWaveOutput)
         return;
-        }
 
     if ((vi.woc.wChannels != 1))
-        vi.woc.wChannels = 1;    // don't use any fancy surround sound or multi-channel
+        vi.woc.wChannels = 1;
 
+    WAVEFORMATEX pcmwf;
     pcmwf.wFormatTag = WAVE_FORMAT_PCM;
     pcmwf.nChannels  = vi.woc.wChannels;
     pcmwf.nSamplesPerSec = SAMPLE_RATE;
     pcmwf.wBitsPerSample = 16;
     pcmwf.nAvgBytesPerSec = SAMPLE_RATE * vi.woc.wChannels * pcmwf.wBitsPerSample / 8;
     pcmwf.nBlockAlign = vi.woc.wChannels * pcmwf.wBitsPerSample / 8;
-
     pcmwf.cbSize = 0;
 
     if (!waveOutOpen(&hWave, vi.iWaveOutput, &pcmwf, (DWORD_PTR)MyWaveOutProc, 0, CALLBACK_FUNCTION))
     {
         int iHdr;
-
-#ifndef NDEBUG
-        //printf("opened wave device, handle = %08x\n", hWave);
-        //printf("Device name %s %d %08X\n", vi.woc.szPname, vi.woc.wChannels, vi.woc.dwFormats);
-#endif
 
         for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
         {
@@ -995,34 +1028,68 @@ void InitSound()
             vi.rgwhdrP[iHdr].dwBytesRecorded = 0;
             vi.rgwhdrP[iHdr].dwFlags = 0;
             vi.rgwhdrP[iHdr].dwLoops = 0;
-            
-            // !!! no error checking, what would I do?
 
             waveOutPrepareHeader(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
             waveOutPrepareHeader(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
 
             if (iHdr < 2)
             {
-                // we only go into 50fps for a solo PAL VM
                 if (!v.fTiling && v.iVM >= 0 && rgpvm[v.iVM]->fEmuPAL)
-                    waveOutWrite(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
+                    waveOutWrite(hWave, &vi.rgwhdrP[iHdr], sizeof(WAVEHDR));
                 else
-                    waveOutWrite(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));    // start with 2 buffers of silence to prevent glitching
+                    waveOutWrite(hWave, &vi.rgwhdrN[iHdr], sizeof(WAVEHDR));
             }
-
             else
             {
-                vi.rgwhdrN[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
-                vi.rgwhdrP[iHdr].dwFlags |= WHDR_DONE; // OK to use these now
+                vi.rgwhdrN[iHdr].dwFlags |= WHDR_DONE;
+                vi.rgwhdrP[iHdr].dwFlags |= WHDR_DONE;
             }
         }
     }
-    
-    //fp = fopen("waveout.txt", "wt");
-// #endif
+    }
+#else
+    {
+        int iHdr;
+        for (iHdr = 0; iHdr < SNDBUFS; iHdr++)
+        {
+            vi.rgwhdrN[iHdr].lpData = vi.rgbSndBufN[iHdr];
+            vi.rgwhdrN[iHdr].dwBufferLength = SAMPLES_NTSC * 2;
+            vi.rgwhdrN[iHdr].dwFlags = WHDR_DONE;
+            vi.rgwhdrP[iHdr].lpData = vi.rgbSndBufP[iHdr];
+            vi.rgwhdrP[iHdr].dwBufferLength = SAMPLES_PAL * 2;
+            vi.rgwhdrP[iHdr].dwFlags = WHDR_DONE;
+        }
+        gSndWriteIdx = 0;
+        gSndReadIdx  = 0;
+        if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+            fprintf(stderr, "SDL audio init failed: %s -- audio disabled\n",
+                    SDL_GetError());
+            gAudioAvail = FALSE;
+            return;
+        }
+        gAudioAvail = TRUE;
+        SDL_AudioSpec want, have;
+        SDL_zero(want);
+        want.freq = SAMPLE_RATE;
+        want.format = AUDIO_S16SYS;
+        want.channels = 1;
+        want.samples = SAMPLES_NTSC;
+        want.callback = SDLAudioCallback;
+        gAudioDev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+        if (gAudioDev)
+        {
+            vi.fWaveOutput = TRUE;
+            SDL_PauseAudioDevice(gAudioDev, 0);
+        }
+        else
+        {
+            fprintf(stderr, "SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+        }
+    }
+#endif
 }
 
-// do we really want to allow each VM to independently decide to do MIDI or not?
+// LATER: MIDI support
 void InitMIDI(void *candy)
 {
     MIDIINCAPS  mic;

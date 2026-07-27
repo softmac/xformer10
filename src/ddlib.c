@@ -24,11 +24,13 @@
   DirectDraw Globals
  **************************************************************************/
 
+#ifdef _WIN32
 IDirectDraw            *dd;     // The entire dd library
 //IDirectDrawSurface     *PrimarySurface;
 //IDirectDrawSurface     *SecondarySurface;
 IDirectDrawPalette     *Palette;
 DDSURFACEDESC ddsd;             // The DirectDraw surface description
+#endif /* _WIN32 */
 
 /**************************************************************************
   BMSDK Globals
@@ -39,7 +41,9 @@ int dwcLock;                    // A lock counter, so lock and unlock can be cal
 /**************************************************************************
     The Palette
  **************************************************************************/
+#ifdef _WIN32
 PALETTEENTRY ape[256]; // The actual Windows palette structure
+#endif /* _WIN32 */
 BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
 {
         0,      0,      0,              8,      8,      8,              16,     16,     16,             24,     24,     24,             31,     31,     31,
@@ -96,6 +100,7 @@ BYTE const abRainbow[3][256]= // The Atari800 Rainbow Palette NOTE: MAX=64
         59,     54,     40,
 };
 
+#ifdef _WIN32
 #ifndef NDEBUG
 int CheckDDERR(HRESULT hRet)
 {
@@ -120,7 +125,9 @@ int CheckDDERR(HRESULT hRet)
 #else
 #define CheckDDERR(hRet) (hRet)
 #endif
+#endif /* _WIN32 */
 
+#ifdef _WIN32
 HRESULT Restore(IDirectDrawSurface *lpdds)
 {
     return lpdds->lpVtbl->Restore(lpdds);
@@ -339,6 +346,12 @@ void UnlockSurface()
         }
     }
 }
+
+#else /* !_WIN32 */
+
+/* SDL2 implementation in ddlib_sdl.c */
+
+#endif /* _WIN32 */
 
 #if 0
 BOOL FCyclePalette(BOOL fForward)
