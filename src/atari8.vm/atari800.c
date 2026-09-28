@@ -3455,7 +3455,7 @@ void PrecomputeArtifacting(void *candy)
 //
 
 // This is how Bounty Bob bank selects
-BYTE __forceinline __fastcall PeekBAtariBB(void *candy, ADDR addr)
+BYTE BUSSLOWPATH __fastcall PeekBAtariBB(void *candy, ADDR addr)
 {
     Assert(bCartType == CART_BOB);
 
@@ -3468,7 +3468,7 @@ BYTE __forceinline __fastcall PeekBAtariBB(void *candy, ADDR addr)
 }
 
 // This is how other cartridges bank select
-BYTE __forceinline __fastcall PeekBAtariBS(void *candy, ADDR addr)
+BYTE BUSSLOWPATH __fastcall PeekBAtariBS(void *candy, ADDR addr)
 {
     Assert((addr & 0xff00) == 0xd500);
 
@@ -3482,7 +3482,7 @@ BYTE __forceinline __fastcall PeekBAtariBS(void *candy, ADDR addr)
 // this is for shadowing the HW registers at $d0, $d2, $d3 and $d4
 // !!! Why all the noinline? Let's be consistent
 __declspec(noinline)
-BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
+BYTE BUSSLOWPATH __fastcall PeekBAtariHW(void *candy, ADDR addr)
 {
     // implement SHADOW or MIRROR registers instantly yet quickly without any memcpy!
 
@@ -3602,38 +3602,6 @@ BYTE __forceinline __fastcall PeekBAtariHW(void *candy, ADDR addr)
     return cpuPeekB(candy, addr);
 }
 
-// the non-jump table version of the code just switches the proper routine
-BYTE __forceinline __fastcall PeekBAtari(void *candy, ADDR addr)
-{
-    switch (addr >> 8)
-    {
-    default:
-        return cpuPeekB(candy, addr);
-
-    case 0xc0:
-    case 0xd0:
-    case 0xd2:
-    case 0xd3:
-    case 0xd4:
-        return PeekBAtariHW(candy, addr);
-
-    case 0xd5:
-        return PeekBAtariBS(candy, addr);
-
-    case 0x8f:
-    case 0x9f:
-        if (bCartType == CART_BOB)
-            return PeekBAtariBB(candy, addr);
-        return cpuPeekB(candy, addr);
-    }
-}
-
-// for some reason the monitor can't call the __fastcall __forceinline version
-BYTE PeekBAtariMON(void *candy, ADDR addr)
-{
-    return PeekBAtari(candy, addr);
-}
-
 // currently not used, and can't be
 //
 WORD __cdecl PeekWAtari(void *candy, ADDR addr)
@@ -3730,7 +3698,7 @@ BOOL __fastcall PokeBAtariBS(void *candy, ADDR addr, BYTE b)
 
 // used for $d0 - $d4
 __declspec(noinline)
-BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
+BOOL BUSSLOWPATH __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
 {
     BYTE bOld;
     Assert(addr < 65536);
@@ -4321,99 +4289,14 @@ BOOL __forceinline __fastcall PokeBAtariHW(void *candy, ADDR addr, BYTE b)
     return TRUE;
 }
 
-// the non-jump table version just switches to the right function
-BOOL __forceinline __fastcall PokeBAtari(void *candy, ADDR addr, BYTE b)
+#ifdef _MSC_VER
+#include "atari800bus.h"    // PeekBAtari/PokeBAtari; see atari800.h for other compilers
+#endif
+
+// for some reason the monitor can't call the __fastcall __forceinline version
+BYTE PeekBAtariMON(void *candy, ADDR addr)
 {
-    BYTE ba = (BYTE)(addr >> 8);
-    switch (ba)
-    {
-    default:
-        if (addr < ramtop)
-        {
-            // writes to screen memory being drawn right now need to be trapped (Turmoil)
-            if (addr >= wAddr && addr < (WORD)(wAddr + cbWidth) && rgbMem[addr] != b)
-                ProcessScanLine(candy);
-            return cpuPokeB(candy, addr, b);
-        }
-        else if (bCartType == CART_BOB && (ba == 0x8f || ba == 0x9f))
-            return PokeBAtariBB(candy, addr, b);
-        else
-            return TRUE;
-
-    case 0xc0:
-    case 0xc1:
-    case 0xc2:
-    case 0xc3:
-    case 0xc4:
-    case 0xc5:
-    case 0xc6:
-    case 0xc7:
-    case 0xc8:
-    case 0xc9:
-    case 0xca:
-    case 0xcb:
-    case 0xcc:
-    case 0xcd:
-    case 0xce:
-    case 0xcf:
-        return PokeBAtariOS(candy, addr, b);
-
-    case 0xd0:
-    case 0xd1:
-    case 0xd2:
-    case 0xd3:
-    case 0xd4:
-        return PokeBAtariHW(candy, addr, b);
-
-    case 0xd5:
-        return PokeBAtariBS(candy, addr, b);
-
-    case 0xd6:
-    case 0xd7:
-        return PokeBAtariHW(candy, addr, b);  // was TRUE; $d680 binary loader hack
-
-    case 0xd8:
-    case 0xd9:
-    case 0xda:
-    case 0xdb:
-    case 0xdc:
-    case 0xdd:
-    case 0xde:
-    case 0xdf:
-    case 0xe0:
-    case 0xe1:
-    case 0xe2:
-    case 0xe3:
-    case 0xe4:
-    case 0xe5:
-    case 0xe6:
-    case 0xe7:
-    case 0xe8:
-    case 0xe9:
-    case 0xea:
-    case 0xeb:
-    case 0xec:
-    case 0xed:
-    case 0xee:
-    case 0xef:
-    case 0xf0:
-    case 0xf1:
-    case 0xf2:
-    case 0xf3:
-    case 0xf4:
-    case 0xf5:
-    case 0xf6:
-    case 0xf7:
-    case 0xf8:
-    case 0xf9:
-    case 0xfa:
-    case 0xfb:
-    case 0xfc:
-    case 0xfd:
-    case 0xfe:
-    case 0xff:
-        return PokeBAtariOS(candy, addr, b);
-    }
+    return PeekBAtari(candy, addr);
 }
 
 // for some reason the monitor can't call the __fastcall __forceinline version

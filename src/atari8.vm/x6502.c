@@ -91,12 +91,17 @@ __inline uint8_t READ_BYTE(void *candy, uint32_t ea)
 {
     //printf("READ_BYTE: %04X returning %02X\n", ea, rgbMem[ea]);
 
+#ifdef _MSC_VER
     Assert(pfnPeekB == PeekBAtari);  // compiler hint
 
 //    if ((0x04000000u >> (ea >> 11)) & 1)
         return (*pfnPeekB)(candy, ea);
 //    else
 //        return cpuPeekB(candy, ea);
+#else
+    // no __assume hint here (Assert is a no-op), so call the inline dispatcher directly (see atari800.h)
+    return PeekBAtari(candy, ea);
+#endif
 }
 #endif
 
@@ -109,9 +114,13 @@ __inline void WRITE_BYTE(void *candy, uint32_t ea, uint8_t val)
 {
     //printf("WRITE_BYTE:%04X writing %02X\n", ea, val);
 
+#ifdef _MSC_VER
     Assert(pfnPokeB == PokeBAtari);  // compiler hint
 
     (*pfnPokeB)(candy, ea, val);
+#else
+    PokeBAtari(candy, ea, val);
+#endif
 }
 #endif
 

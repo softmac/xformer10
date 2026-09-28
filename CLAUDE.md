@@ -99,7 +99,7 @@ The live C source list is the `add_executable(xformer10 ...)` block in **`CMakeL
 | `src/ui/ui_cocoa.m` | Native macOS backend: NSMenu in the system menu bar, NSOpenPanel/NSSavePanel |
 | `src/platform_macos.m` / `.h` | macOS process setup outside SDL: momentum scrolling on, trackpad pixel deltas for the tile view |
 | `src/keymap_sdl.c` | SDL scancode → PS/2 scan code mapping |
-| `src/stubs_linux.c` | Win32 stubs that are no-ops on Linux |
+| `src/atari8.vm/atari800bus.h` | `PeekBAtari`/`PokeBAtari` bus dispatchers, moved out of `atari800.c` so non-MSVC builds inline them into `x6502.c` (MSVC relies on an `__assume` hint that the port's no-op `Assert` loses) |
 | `src/compat_win.h` | Win32 type/macro compatibility layer |
 | `src/compat_winfile.h` | Win32 file API compatibility |
 

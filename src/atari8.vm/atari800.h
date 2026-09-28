@@ -993,24 +993,36 @@ ULONG __cdecl PeekLAtari(void *, ADDR addr);
 BOOL  __cdecl PokeLAtari(void *, ADDR addr, ULONG l);
 BOOL  __cdecl PokeWAtari(void *, ADDR addr, WORD w);
 
-// all the possible PEEK routines, based on address, for the jump table version
-BYTE __forceinline __fastcall PeekBAtariHW(void *, ADDR addr); // d0, d2, d3, d4
-BYTE __forceinline __fastcall PeekBAtariBB(void *, ADDR addr); // 8f, 9f for BountyBob bank select
-BYTE __forceinline __fastcall PeekBAtariBS(void *, ADDR addr); // d5 for other cartridge bank select
+// PeekBAtari/PokeBAtari (atari800bus.h) are the 6502 core's memory bus and must inline into x6502.c.
+// MSVC gets there with __forceinline plus the Assert(pfnPeekB == PeekBAtari) hint in x6502.c. Elsewhere
+// __forceinline means static inline and Assert is a no-op, so the dispatchers are defined in every TU
+// (atari800bus.h is included at the bottom of this file) and the slow paths they call need external linkage.
+#ifdef _MSC_VER
+#define BUSDISPATCH __forceinline
+#define BUSSLOWPATH __forceinline
+#else
+#define BUSDISPATCH static inline __attribute__((always_inline))
+#define BUSSLOWPATH
+#endif
 
-BYTE __forceinline __fastcall PeekBAtari(void *, ADDR addr);   // non-jump table single entry point
+// all the possible PEEK routines, based on address, for the jump table version
+BYTE BUSSLOWPATH __fastcall PeekBAtariHW(void *, ADDR addr); // d0, d2, d3, d4
+BYTE BUSSLOWPATH __fastcall PeekBAtariBB(void *, ADDR addr); // 8f, 9f for BountyBob bank select
+BYTE BUSSLOWPATH __fastcall PeekBAtariBS(void *, ADDR addr); // d5 for other cartridge bank select
+
+BYTE BUSDISPATCH __fastcall PeekBAtari(void *, ADDR addr);   // non-jump table single entry point
 
 BYTE PeekBAtariMON(void *, ADDR addr);   // something the monitor is allowed to call
 
 // all the possible POKE routines, based on address, for the jump table version
-BOOL  __forceinline __fastcall PokeBAtariDL(void *, ADDR, BYTE);   // screen RAM
-BOOL  __forceinline __fastcall PokeBAtariBB(void *, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
-BOOL  __forceinline __fastcall PokeBAtariNULL(void *, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
-BOOL  __forceinline __fastcall PokeBAtariOS(void *, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
-BOOL  __forceinline __fastcall PokeBAtariHW(void *, ADDR, BYTE);   // d000-d4ff
-BOOL  __forceinline __fastcall PokeBAtariBS(void *, ADDR, BYTE);   // d500-d5ff
+BOOL  BUSSLOWPATH __fastcall PokeBAtariDL(void *, ADDR, BYTE);   // screen RAM
+BOOL  BUSSLOWPATH __fastcall PokeBAtariBB(void *, ADDR, BYTE);   // $8fxx or $9fxx bank select for BountyBob cartridge
+BOOL  BUSSLOWPATH __fastcall PokeBAtariNULL(void *, ADDR, BYTE); // above ramtop until $c000, $d500 to $d7ff
+BOOL  BUSSLOWPATH __fastcall PokeBAtariOS(void *, ADDR, BYTE);   // $c000 to $cfff and $d800 and above
+BOOL  BUSSLOWPATH __fastcall PokeBAtariHW(void *, ADDR, BYTE);   // d000-d4ff
+BOOL  BUSSLOWPATH __fastcall PokeBAtariBS(void *, ADDR, BYTE);   // d500-d5ff
 
-BOOL  __forceinline __fastcall PokeBAtari(void *, ADDR, BYTE);     // non-jump table single entry point
+BOOL  BUSDISPATCH __fastcall PokeBAtari(void *, ADDR, BYTE);     // non-jump table single entry point
 
 BOOL  PokeBAtariMON(void *, ADDR, BYTE); // something the monitor is allowed to call
 
@@ -1056,4 +1068,8 @@ BOOL  PokeBAtariMON(void *, ADDR, BYTE); // something the monitor is allowed to 
 #define Assert(f) _800_assert((f), __FILE__, __LINE__, candy)
 void _800_assert(int f, char *file, int line, void *);
 #endif
+#endif
+
+#ifndef _MSC_VER
+#include "atari800bus.h"
 #endif

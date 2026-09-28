@@ -162,7 +162,6 @@ add_executable(xformer10
     src/romcard.c
     src/keymap_sdl.c
     src/main_linux.c
-    src/stubs_linux.c
     src/font_sdl.c
     src/ui/ui_common.c
 )
